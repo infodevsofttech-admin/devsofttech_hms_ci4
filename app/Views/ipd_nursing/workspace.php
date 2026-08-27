@@ -566,13 +566,12 @@ $admNote = (string) ($latestAdmissionEntry['general_note'] ?? '');
                         <div class="col-md-12"><button type="submit" class="btn btn-primary btn-sm">Save Vitals</button></div>
                     </form>
                 </div>
-
                 <div class="nursing-tab-pane d-none" id="nursing_tab_fluid">
                     <form class="row g-2 nursing-form" data-save-url="<?= esc($saveUrl) ?>">
                         <?= csrf_field() ?>
                         <input type="hidden" name="entry_type" value="fluid">
-                        <div class="col-md-3"><label class="form-label">Recorded At</label><input type="datetime-local" class="form-control" name="recorded_at" value="<?= date('Y-m-d\\TH:i') ?>"></div>
-                        <div class="col-md-4">
+                        <div class="col-md-3"><label class="form-label">Recorded At</label><input type="datetime-local" class="form-control" name="recorded_at" value="<?= date('Y-m-d\TH:i') ?>"></div>
+                        <div class="col-md-3">
                             <label class="form-label">Nursing Staff (ID / Name)</label>
                             <select name="recorded_by_nurse_id" class="form-select">
                                 <option value="0">-- Select Nursing Staff --</option>
@@ -583,10 +582,31 @@ $admNote = (string) ($latestAdmissionEntry['general_note'] ?? '');
                                 <?php endforeach; ?>
                             </select>
                         </div>
-                        <div class="col-md-2"><label class="form-label">Direction</label><select class="form-select" name="fluid_direction"><option value="intake">Intake</option><option value="output">Output</option></select></div>
-                        <div class="col-md-2"><label class="form-label">Route</label><input type="text" class="form-control" name="fluid_route"></div>
-                        <div class="col-md-2"><label class="form-label">Amount (ml)</label><input type="number" class="form-control" name="fluid_amount_ml" required></div>
-                        <div class="col-md-12"><label class="form-label">Nursing Note</label><textarea class="form-control" name="general_note" rows="2"></textarea></div>
+                        <div class="col-md-2">
+                            <label class="form-label">Direction</label>
+                            <select class="form-select" name="fluid_direction" id="nursing_fluid_direction">
+                                <option value="intake">Intake (In)</option>
+                                <option value="output">Output (Out)</option>
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Select Route</label>
+                            <select class="form-select" id="nursing_fluid_route_select">
+                                <!-- Dynamically populated based on direction -->
+                            </select>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Route Detail / Custom</label>
+                            <input type="text" class="form-control" name="fluid_route" id="nursing_fluid_route_input" placeholder="e.g. IV / Foley" required>
+                        </div>
+                        <div class="col-md-2">
+                            <label class="form-label">Amount (ml) <span class="text-danger">*</span></label>
+                            <input type="number" class="form-control" name="fluid_amount_ml" required placeholder="ml">
+                        </div>
+                        <div class="col-md-10">
+                            <label class="form-label">Nursing Note / Observations</label>
+                            <textarea class="form-control" name="general_note" rows="2" placeholder="e.g. Clear urine, fluid color, IV site condition"></textarea>
+                        </div>
                         <div class="col-md-12"><button type="submit" class="btn btn-primary btn-sm">Save Fluid Entry</button></div>
                     </form>
                 </div>
@@ -1456,6 +1476,90 @@ $admNote = (string) ($latestAdmissionEntry['general_note'] ?? '');
             }
         }
     }
+
+    var fluidRoutesMap = {
+        intake: [
+            'IV (Intravenous)',
+            'Oral / PO (Per Os)',
+            'NG Tube (Nasogastric)',
+            'PEG / G-Tube',
+            'J-Tube (Jejunostomy)',
+            'Blood / Plasma Transfusion',
+            'TPN (Total Parenteral Nutrition)',
+            'Subcutaneous (Hypodermoclysis)',
+            'Peritoneal Dialysis Infusion',
+            'Other / Custom'
+        ],
+        output: [
+            'Urine (Foley Catheter)',
+            'Urine (Voided)',
+            'Urine (Suprapubic / Nephrostomy)',
+            'NG Aspirate / Vomitus',
+            'Surgical Drain (JP / Hemovac)',
+            'Chest Tube / ICD Drain',
+            'Stoma / Ileostomy Output',
+            'Diarrhea / Stool Output',
+            'Ascitic / Abdominal Drain',
+            'Bile Drain (T-Tube)',
+            'CSF / EVD Drain',
+            'Other / Custom'
+        ]
+    };
+
+    function syncFluidRoutes() {
+        var dirSelect = document.getElementById('nursing_fluid_direction');
+        var routeSelect = document.getElementById('nursing_fluid_route_select');
+        var routeInput = document.getElementById('nursing_fluid_route_input');
+        if (!dirSelect || !routeSelect || !routeInput) return;
+
+        var direction = dirSelect.value || 'intake';
+        var routes = fluidRoutesMap[direction] || fluidRoutesMap.intake;
+
+        var currentVal = routeInput.value;
+        routeSelect.innerHTML = '';
+        routes.forEach(function (r) {
+            var opt = document.createElement('option');
+            opt.value = r;
+            opt.textContent = r;
+            routeSelect.appendChild(opt);
+        });
+
+        if (!currentVal) {
+            routeInput.value = routes[0];
+            routeSelect.value = routes[0];
+        } else {
+            var matched = routes.indexOf(currentVal) !== -1;
+            if (matched) {
+                routeSelect.value = currentVal;
+            } else {
+                routeSelect.value = 'Other / Custom';
+            }
+        }
+    }
+
+    var dirSelect = document.getElementById('nursing_fluid_direction');
+    var routeSelect = document.getElementById('nursing_fluid_route_select');
+    var routeInput = document.getElementById('nursing_fluid_route_input');
+
+    if (dirSelect) {
+        dirSelect.addEventListener('change', function() {
+            routeInput.value = '';
+            syncFluidRoutes();
+        });
+    }
+
+    if (routeSelect) {
+        routeSelect.addEventListener('change', function() {
+            if (this.value === 'Other / Custom') {
+                routeInput.value = '';
+                routeInput.focus();
+            } else {
+                routeInput.value = this.value;
+            }
+        });
+    }
+
+    syncFluidRoutes();
 
     forms.forEach(function (form) {
         var recordedAtInput = form.querySelector('input[name="recorded_at"]');
