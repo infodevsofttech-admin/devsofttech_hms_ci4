@@ -406,8 +406,8 @@ class DoctorApi extends BaseController
                        p.p_fname as fname, p.p_rname as rname, p.p_code as uhid, p.mphone1, p.gender, p.age, p.age_in_month, p.estimate_dob, p.dob,
                        concat('Bed No :', coalesce(b.bed_number, b.bed_code, 'N/A'), ' [', coalesce(w.ward_name, 'General Ward'), ']') as Bed_Desc,
                        b.bed_code, b.bed_number, w.ward_name,
-                       ipd_doc_list.doc_name as assigned_doctors,
-                       ipd_doc_list.doc_list as doc_list
+                       coalesce(ipd_doc_list.doc_name, concat('Dr. ', i.r_doc_name)) as assigned_doctors,
+                       coalesce(ipd_doc_list.doc_list, cast(i.r_doc_id as char)) as doc_list
                 FROM ipd_master i
                 JOIN patient_master p ON i.p_id = p.id
                 LEFT JOIN (
@@ -424,18 +424,14 @@ class DoctorApi extends BaseController
                     join doctor_master d on i.doc_id = d.id
                     group by i.ipd_id
                 ) ipd_doc_list ON i.id = ipd_doc_list.ipd_id
-                WHERE i.ipd_status = 0";
-
-        if ($docId > 0) {
-            $sql .= " AND (FIND_IN_SET(" . (int) $docId . ", coalesce(ipd_doc_list.doc_list, '')) OR i.r_doc_id = " . (int) $docId . " OR i.r_doc_id IS NULL OR i.r_doc_id = 0)";
-        }
-
-        $sql .= " ORDER BY i.id DESC";
+                WHERE i.ipd_status = 0
+                ORDER BY i.id DESC";
 
         $query = $db->query($sql);
-        $patients = $query->getResultArray();
+        $allPatients = $query->getResultArray();
 
-        foreach ($patients as &$r) {
+        $myPatients = [];
+        foreach ($allPatients as &$r) {
             $ageDisplay = 'N/A';
             if (function_exists('get_age_1')) {
                 $ageDisplay = get_age_1($r['dob'] ?? null, $r['age'] ?? '', $r['age_in_month'] ?? '', $r['estimate_dob'] ?? '');
@@ -451,12 +447,23 @@ class DoctorApi extends BaseController
             $r['gender_label'] = ((int)($r['gender'] ?? 1) === 1) ? 'Male' : 'Female';
             $r['patient_display_name'] = $r['fname'] ?? 'Patient';
             $r['bed_label'] = ! empty($r['Bed_Desc']) ? $r['Bed_Desc'] : (! empty($r['ward_name']) ? ($r['ward_name'] . ' - Bed ' . ($r['bed_number'] ?? '')) : 'General Ward');
+
+            $docListArray = array_filter(explode(',', (string) ($r['doc_list'] ?? '')));
+            $isMine = ($docId <= 0)
+                || (int)($r['r_doc_id'] ?? 0) === $docId
+                || in_array((string)$docId, $docListArray, true);
+
+            $r['is_mine'] = $isMine ? 1 : 0;
+            if ($isMine) {
+                $myPatients[] = $r;
+            }
         }
 
         return $this->response->setJSON([
             'status' => 1,
             'doctor_id' => $docId,
-            'patients' => $patients,
+            'patients' => (count($myPatients) > 0) ? $myPatients : $allPatients,
+            'all_patients' => $allPatients,
         ]);
     }
 
