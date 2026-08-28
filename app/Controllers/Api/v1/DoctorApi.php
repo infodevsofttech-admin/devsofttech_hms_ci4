@@ -167,43 +167,54 @@ class DoctorApi extends BaseController
         $db = db_connect();
         helper('common');
 
-        $sql = "SELECT o.opd_id, o.opd_code, o.opd_no, o.opd_status, o.apointment_date,
-                       o.opd_fee_desc, o.opd_fee_amount, o.payment_status, o.opd_fee_type,
-                       coalesce(o.running_opd, 0) as running_opd,
-                       p.id as p_id, p.p_code, p.p_fname as P_name, p.gender, p.age, p.age_in_month, p.estimate_dob, p.dob, p.mphone1,
-                       (CASE
-                           WHEN (coalesce(o.running_opd,0)=1 OR o.opd_fee_type=3 OR UPPER(coalesce(o.opd_fee_desc,'')) LIKE '%RUNNING%') THEN 'Running'
-                           WHEN o.payment_mode=4 THEN 'Credit to ECHS'
-                           WHEN o.payment_status=1 AND o.payment_mode=0 THEN 'No Cost'
-                           WHEN o.payment_mode=1 THEN 'Cash'
-                           WHEN o.payment_mode=2 THEN 'Bank Card'
-                           ELSE 'Pending'
-                       END) as opd_type,
-                       IF(pr.id IS NULL, 0, 1) as has_prescription,
-                       coalesce(pr.queue_no, 0) as queue_no
-                FROM opd_master o
-                JOIN patient_master p ON o.p_id = p.id
-                LEFT JOIN opd_prescription pr ON o.opd_id = pr.opd_id";
+        $dateMode = $this->request->getGet('date_mode') ?? 'today'; // 'today' or 'all'
+
+        $baseSql = "SELECT o.opd_id, o.opd_code, o.opd_no, o.opd_status, o.apointment_date,
+                           o.opd_fee_desc, o.opd_fee_amount, o.payment_status, o.opd_fee_type,
+                           coalesce(o.running_opd, 0) as running_opd,
+                           p.id as p_id, p.p_code, p.p_fname as P_name, p.gender, p.age, p.age_in_month, p.estimate_dob, p.dob, p.mphone1,
+                           (CASE
+                               WHEN (coalesce(o.running_opd,0)=1 OR o.opd_fee_type=3 OR UPPER(coalesce(o.opd_fee_desc,'')) LIKE '%RUNNING%') THEN 'Running'
+                               WHEN o.payment_mode=4 THEN 'Credit to ECHS'
+                               WHEN o.payment_status=1 AND o.payment_mode=0 THEN 'No Cost'
+                               WHEN o.payment_mode=1 THEN 'Cash'
+                               WHEN o.payment_mode=2 THEN 'Bank Card'
+                               ELSE 'Pending'
+                           END) as opd_type,
+                           IF(pr.id IS NULL, 0, 1) as has_prescription,
+                           coalesce(pr.queue_no, 0) as queue_no
+                    FROM opd_master o
+                    JOIN patient_master p ON o.p_id = p.id
+                    LEFT JOIN opd_prescription pr ON o.opd_id = pr.opd_id
+                    WHERE 1=1";
 
         if ($docId > 0) {
-            $sql .= " WHERE o.doc_id = " . (int) $docId;
+            $baseSql .= " AND o.doc_id = " . (int) $docId;
         }
 
-        $sql .= " ORDER BY o.opd_id DESC LIMIT 100";
+        $sqlToday = $baseSql . " AND DATE(o.apointment_date) = CURDATE() ORDER BY o.opd_id DESC LIMIT 100";
+        $sqlAll   = $baseSql . " ORDER BY o.opd_id DESC LIMIT 100";
 
-        $query = $db->query($sql);
-        $allRows = $query->getResultArray();
+        $queryToday = $db->query($sqlToday);
+        $todayRows = $queryToday->getResultArray();
+
+        $queryAll = $db->query($sqlAll);
+        $allRows = $queryAll->getResultArray();
+
+        $targetRows = ($dateMode === 'today') ? $todayRows : $allRows;
 
         $appointments = [];
         $counts = [
-            'all' => count($allRows),
+            'all' => count($targetRows),
             'booked' => 0,
             'waiting' => 0,
             'visited' => 0,
             'cancelled' => 0,
+            'today_total' => count($todayRows),
+            'all_total' => count($allRows),
         ];
 
-        foreach ($allRows as $r) {
+        foreach ($targetRows as $r) {
             $statusInt = (int) ($r['opd_status'] ?? 0);
             $statusText = 'waiting';
             if ($statusInt === 0) {
@@ -245,6 +256,7 @@ class DoctorApi extends BaseController
         return $this->response->setJSON([
             'status' => 1,
             'doctor_id' => $docId,
+            'date_mode' => $dateMode,
             'counts' => $counts,
             'appointments' => $appointments,
         ]);

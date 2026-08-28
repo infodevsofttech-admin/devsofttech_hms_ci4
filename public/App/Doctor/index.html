@@ -284,10 +284,15 @@
 
         function DoctorApp() {
             const [doctors, setDoctors] = useState([]);
-            const [ipdPatients, setIpdPatients] = useState([]);
+            const [myIpdPatients, setMyIpdPatients] = useState([]);
+            const [allIpdPatients, setAllIpdPatients] = useState([]);
+            const [ipdViewMode, setIpdViewMode] = useState('mine'); // 'mine' or 'all'
+
             const [opdAppointments, setOpdAppointments] = useState([]);
             const [opdCounts, setOpdCounts] = useState({ all: 0, waiting: 0, visited: 0, booked: 0, cancelled: 0 });
             const [opdFilter, setOpdFilter] = useState('all');
+            const [opdDateMode, setOpdDateMode] = useState('today'); // 'today' or 'all'
+
             const [loading, setLoading] = useState(true);
             const [searchQuery, setSearchQuery] = useState('');
             const [mainTab, setMainTab] = useState('opd');
@@ -362,7 +367,8 @@
                     const res = await fetch(`/api/v1/doctor/ipd/list/${docId || 0}`);
                     const json = await res.json();
                     if (json.status === 1) {
-                        setIpdPatients(json.patients || []);
+                        setAllIpdPatients(json.all_patients || json.patients || []);
+                        setMyIpdPatients(json.patients || []);
                     }
                 } catch (err) {
                     console.error('Failed to load IPD patients', err);
@@ -371,9 +377,10 @@
                 }
             };
 
-            const fetchOpdAppointments = async (docId) => {
+            const fetchOpdAppointments = async (docId, dateModeOverride) => {
                 try {
-                    const res = await fetch(`/api/v1/doctor/opd/list/${docId || 0}`);
+                    const mode = dateModeOverride || opdDateMode;
+                    const res = await fetch(`/api/v1/doctor/opd/list/${docId || 0}?date_mode=${mode}`);
                     const json = await res.json();
                     if (json.status === 1) {
                         setOpdAppointments(json.appointments || []);
@@ -394,7 +401,7 @@
                         if (parsed && parsed.doctor && parsed.expires_at > Date.now()) {
                             setAuthenticatedDoctor(parsed.doctor);
                             fetchIpdPatients(parsed.doctor.id);
-                            fetchOpdAppointments(parsed.doctor.id);
+                            fetchOpdAppointments(parsed.doctor.id, opdDateMode);
                         } else {
                             localStorage.removeItem(DOC_DEVICE_AUTH_KEY);
                         }
@@ -447,7 +454,7 @@
                         localStorage.setItem(DOC_DEVICE_AUTH_KEY, JSON.stringify(deviceAuthObj));
                         setPinInput('');
                         fetchIpdPatients(json.doctor.id);
-                        fetchOpdAppointments(json.doctor.id);
+                        fetchOpdAppointments(json.doctor.id, opdDateMode);
                     } else if (json.status === 2) {
                         setIsSettingNewPin(true);
                     } else {
@@ -605,7 +612,7 @@
                     if (json.status === 1) {
                         alert(json.message || 'Prescription saved & OPD Visit completed!');
                         setActiveOpd(null);
-                        fetchOpdAppointments(authenticatedDoctor ? authenticatedDoctor.id : 0);
+                        fetchOpdAppointments(authenticatedDoctor ? authenticatedDoctor.id : 0, opdDateMode);
                     } else {
                         alert(json.message || 'Failed to save prescription');
                     }
@@ -648,7 +655,8 @@
                 return matchesFilter && matchesSearch;
             });
 
-            const filteredIpdPatients = ipdPatients.filter(pat => {
+            const activeIpdSource = (ipdViewMode === 'mine') ? myIpdPatients : allIpdPatients;
+            const filteredIpdPatients = activeIpdSource.filter(pat => {
                 const q = searchQuery.toLowerCase();
                 const name = (pat.patient_display_name || pat.fname || '').toLowerCase();
                 const uhid = (pat.uhid || '').toLowerCase();
@@ -773,7 +781,7 @@
                             </div>
                         </div>
                         <div className="d-flex align-items-center gap-2">
-                            <button className="btn btn-sm btn-outline-light rounded-circle p-2" style={{width: '36px', height: '36px'}} onClick={() => { fetchOpdAppointments(authenticatedDoctor.id); fetchIpdPatients(authenticatedDoctor.id); }} title="Refresh Queue">
+                            <button className="btn btn-sm btn-outline-light rounded-circle p-2" style={{width: '36px', height: '36px'}} onClick={() => { fetchOpdAppointments(authenticatedDoctor.id, opdDateMode); fetchIpdPatients(authenticatedDoctor.id); }} title="Refresh Queue">
                                 <i className="bi bi-arrow-clockwise"></i>
                             </button>
                             <button className="btn btn-sm btn-danger px-3 py-1 fw-bold rounded-pill" onClick={handleLogout} title="Lock Device Access">
@@ -792,12 +800,33 @@
                                         <i className="bi bi-calendar-check-fill me-2"></i> OPD Appointments ({opdAppointments.length})
                                     </button>
                                     <button className={`segmented-tab ${mainTab === 'ipd' ? 'active' : ''}`} onClick={() => setMainTab('ipd')}>
-                                        <i className="bi bi-hospital-fill me-2"></i> Admitted IPDs ({ipdPatients.length})
+                                        <i className="bi bi-hospital-fill me-2"></i> Admitted IPDs ({activeIpdSource.length})
                                     </button>
                                 </div>
 
                                 {mainTab === 'opd' ? (
                                     <div>
+                                        {/* Date Filter Segmented Bar (Current Date vs All Dates) */}
+                                        <div className="d-flex align-items-center justify-content-between mb-3 bg-white p-2 rounded-4 border shadow-sm flex-wrap gap-2">
+                                            <div className="d-flex gap-1 bg-light p-1 rounded-pill border">
+                                                <button 
+                                                    className={`btn btn-sm rounded-pill px-3 py-1 fw-bold ${opdDateMode === 'today' ? 'btn-primary shadow-sm' : 'btn-light text-secondary'}`}
+                                                    onClick={() => { setOpdDateMode('today'); fetchOpdAppointments(authenticatedDoctor.id, 'today'); }}
+                                                >
+                                                    <i className="bi bi-calendar-event me-1"></i> Today's OPDs ({opdCounts.today_total || 0})
+                                                </button>
+                                                <button 
+                                                    className={`btn btn-sm rounded-pill px-3 py-1 fw-bold ${opdDateMode === 'all' ? 'btn-primary shadow-sm' : 'btn-light text-secondary'}`}
+                                                    onClick={() => { setOpdDateMode('all'); fetchOpdAppointments(authenticatedDoctor.id, 'all'); }}
+                                                >
+                                                    <i className="bi bi-calendar3 me-1"></i> All Dates ({opdCounts.all_total || 0})
+                                                </button>
+                                            </div>
+                                            <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 rounded-pill small" style={{fontSize: '11px'}}>
+                                                {opdDateMode === 'today' ? '● Current Date Only' : '● All Appointments'}
+                                            </span>
+                                        </div>
+
                                         {/* Status Filter Pills Bar */}
                                         <div className="d-flex gap-2 mb-3 overflow-auto no-scrollbar pb-1">
                                             <button 
@@ -848,7 +877,9 @@
                                             {filteredOpdAppointments.length === 0 ? (
                                                 <div className="text-center text-muted py-5 bg-white rounded-4 border shadow-sm">
                                                     <i className="bi bi-person-x fs-1 text-secondary opacity-50 d-block mb-2"></i>
-                                                    No OPD appointments found for selected filter.
+                                                    {opdDateMode === 'today' 
+                                                        ? "No OPD appointments registered for today's date." 
+                                                        : "No OPD appointments found for selected filter."}
                                                 </div>
                                             ) : (
                                                 filteredOpdAppointments.map(app => {
@@ -969,9 +1000,30 @@
                                     </div>
                                 ) : (
                                     /* -------------------------------------------------------------
-                                       ADMITTED IPD PATIENTS LIST (ASSIGNED TO DOCTOR)
+                                       ADMITTED IPD PATIENTS LIST (ASSIGNED TO DOCTOR / ALL ADMISSIONS)
                                        ------------------------------------------------------------- */
                                     <div>
+                                        {/* IPD Admission View Mode Segmented Bar */}
+                                        <div className="d-flex align-items-center justify-content-between mb-3 bg-white p-2 rounded-4 border shadow-sm flex-wrap gap-2">
+                                            <div className="d-flex gap-1 bg-light p-1 rounded-pill border">
+                                                <button 
+                                                    className={`btn btn-sm rounded-pill px-3 py-1 fw-bold ${ipdViewMode === 'mine' ? 'btn-success text-white shadow-sm' : 'btn-light text-secondary'}`}
+                                                    onClick={() => setIpdViewMode('mine')}
+                                                >
+                                                    <i className="bi bi-person-check-fill me-1"></i> My Assigned Patients ({myIpdPatients.length})
+                                                </button>
+                                                <button 
+                                                    className={`btn btn-sm rounded-pill px-3 py-1 fw-bold ${ipdViewMode === 'all' ? 'btn-success text-white shadow-sm' : 'btn-light text-secondary'}`}
+                                                    onClick={() => setIpdViewMode('all')}
+                                                >
+                                                    <i className="bi bi-hospital-fill me-1"></i> All Hospital Admissions ({allIpdPatients.length})
+                                                </button>
+                                            </div>
+                                            <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill small" style={{fontSize: '11px'}}>
+                                                {ipdViewMode === 'mine' ? '● Doctor Assignments' : '● Hospital Wide IPDs'}
+                                            </span>
+                                        </div>
+
                                         {/* Search Input Bar */}
                                         <div className="input-group mb-3 shadow-sm rounded-pill overflow-hidden bg-white border">
                                             <span className="input-group-text bg-white border-0 ps-3 text-secondary"><i className="bi bi-search"></i></span>
@@ -1019,6 +1071,9 @@
                                                                     </span>
                                                                     <span className="badge bg-rose-50 text-danger border border-danger-subtle px-2 py-1" style={{fontSize: '11px'}}>
                                                                         <i className="bi bi-card-text me-1"></i>{pat.uhid}
+                                                                    </span>
+                                                                    <span className="badge bg-light text-dark border px-2 py-1" style={{fontSize: '11px'}}>
+                                                                        <i className="bi bi-person-badge me-1"></i>{pat.assigned_doctors || pat.r_doc_name || `Dr. ${authenticatedDoctor.name}`}
                                                                     </span>
                                                                 </div>
                                                             </div>
