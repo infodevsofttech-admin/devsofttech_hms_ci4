@@ -232,9 +232,12 @@
 
             // OPD Patients State
             const [opdAppointments, setOpdAppointments] = useState([]);
-            const [opdCounts, setOpdCounts] = useState({ all: 0, waiting: 0, visited: 0, booked: 0, cancelled: 0 });
+            const [opdCounts, setOpdCounts] = useState({ all: 0, waiting: 0, visited: 0, booked: 0, cancelled: 0, pending_vitals: 0, done_vitals: 0 });
             const [opdFilter, setOpdFilter] = useState('all');
             const [opdDateMode, setOpdDateMode] = useState('today');
+            const [doctors, setDoctors] = useState([]);
+            const [selectedDoctorId, setSelectedDoctorId] = useState('0');
+            const [vitalsFilter, setVitalsFilter] = useState('all'); // 'all', 'pending', 'done'
 
             // Modals & Action State
             const [activeOpdForVitals, setActiveOpdForVitals] = useState(null);
@@ -287,10 +290,25 @@
                 }
             };
 
-            const fetchOpdAppointments = async (dateModeOverride) => {
+            const fetchDoctors = async () => {
                 try {
-                    const mode = dateModeOverride || opdDateMode;
-                    const res = await fetch(`/api/v1/nursing/opd/list?date_mode=${mode}`);
+                    const res = await fetch('/api/v1/doctor/list');
+                    const json = await res.json();
+                    if (json.status === 1 && json.data) {
+                        setDoctors(json.data);
+                    }
+                } catch (err) {
+                    console.error('Failed to load doctors', err);
+                }
+            };
+
+            const fetchOpdAppointments = async (dateModeOverride, docIdOverride, vitalsOverride) => {
+                try {
+                    const mode = dateModeOverride !== undefined ? dateModeOverride : opdDateMode;
+                    const docId = docIdOverride !== undefined ? docIdOverride : selectedDoctorId;
+                    const vFilter = vitalsOverride !== undefined ? vitalsOverride : vitalsFilter;
+
+                    const res = await fetch(`/api/v1/nursing/opd/list?date_mode=${mode}&doctor_id=${docId}&vitals_status=${vFilter}`);
                     const json = await res.json();
                     if (json.status === 1) {
                         setOpdAppointments(json.appointments || []);
@@ -332,7 +350,7 @@
                         if (parsed && parsed.nurse && parsed.expires_at > Date.now()) {
                             setAuthenticatedNurse(parsed.nurse);
                             fetchBeds();
-                            fetchOpdAppointments(opdDateMode);
+                            fetchOpdAppointments(opdDateMode, selectedDoctorId, vitalsFilter);
                         } else {
                             localStorage.removeItem(DEVICE_AUTH_KEY);
                         }
@@ -340,6 +358,7 @@
                 }
                 fetchBeds();
                 fetchNurses();
+                fetchDoctors();
             }, []);
 
             const handleVerifyPin = async () => {
@@ -825,18 +844,18 @@
                                        OPD PATIENTS TAB (VITALS & DOCUMENT SCANNING)
                                        ------------------------------------------------------------- */
                                     <div>
-                                        {/* Date Mode Segmented Controller */}
+                                        {/* Date Mode Segmented Controller & Filters */}
                                         <div className="d-flex align-items-center justify-content-between mb-3 bg-white p-2 rounded-4 border shadow-sm flex-wrap gap-2">
                                             <div className="d-flex gap-1 bg-light p-1 rounded-pill border">
                                                 <button 
                                                     className={`btn btn-sm rounded-pill px-3 py-1 fw-bold ${opdDateMode === 'today' ? 'btn-primary shadow-sm' : 'btn-light text-secondary'}`}
-                                                    onClick={() => { setOpdDateMode('today'); fetchOpdAppointments('today'); }}
+                                                    onClick={() => { setOpdDateMode('today'); fetchOpdAppointments('today', selectedDoctorId, vitalsFilter); }}
                                                 >
                                                     <i className="bi bi-calendar-event me-1"></i> Today's OPDs ({opdCounts.today_total || 0})
                                                 </button>
                                                 <button 
                                                     className={`btn btn-sm rounded-pill px-3 py-1 fw-bold ${opdDateMode === 'all' ? 'btn-primary shadow-sm' : 'btn-light text-secondary'}`}
-                                                    onClick={() => { setOpdDateMode('all'); fetchOpdAppointments('all'); }}
+                                                    onClick={() => { setOpdDateMode('all'); fetchOpdAppointments('all', selectedDoctorId, vitalsFilter); }}
                                                 >
                                                     <i className="bi bi-calendar3 me-1"></i> All Dates ({opdCounts.all_total || 0})
                                                 </button>
@@ -846,16 +865,67 @@
                                             </span>
                                         </div>
 
-                                        {/* Status Filters */}
+                                        {/* Doctor Filter & Vitals Filter Controls Box */}
+                                        <div className="bg-white p-3 mb-3 rounded-4 border shadow-sm">
+                                            <div className="row g-2 align-items-center">
+                                                <div className="col-12 col-md-6">
+                                                    <label className="form-label small fw-bold text-dark mb-1">
+                                                        <i className="bi bi-person-badge text-primary me-1"></i> Filter by Doctor
+                                                    </label>
+                                                    <select 
+                                                        className="form-select form-select-sm rounded-pill fw-semibold"
+                                                        value={selectedDoctorId}
+                                                        onChange={(e) => {
+                                                            const val = e.target.value;
+                                                            setSelectedDoctorId(val);
+                                                            fetchOpdAppointments(opdDateMode, val, vitalsFilter);
+                                                        }}
+                                                    >
+                                                        <option value="0">-- All Hospital Doctors --</option>
+                                                        {doctors.map(d => (
+                                                            <option key={d.id} value={d.id}>{d.name}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+
+                                                <div className="col-12 col-md-6">
+                                                    <label className="form-label small fw-bold text-dark mb-1">
+                                                        <i className="bi bi-heart-pulse-fill text-danger me-1"></i> Vitals Status Filter
+                                                    </label>
+                                                    <div className="d-flex gap-1">
+                                                        <button 
+                                                            className={`btn btn-sm flex-fill rounded-pill py-1 fw-bold ${vitalsFilter === 'all' ? 'btn-primary shadow-sm' : 'btn-light border text-secondary'}`}
+                                                            onClick={() => { setVitalsFilter('all'); fetchOpdAppointments(opdDateMode, selectedDoctorId, 'all'); }}
+                                                        >
+                                                            All ({opdCounts.all})
+                                                        </button>
+                                                        <button 
+                                                            className={`btn btn-sm flex-fill rounded-pill py-1 fw-bold ${vitalsFilter === 'pending' ? 'btn-warning text-dark shadow-sm' : 'btn-light border text-secondary'}`}
+                                                            onClick={() => { setVitalsFilter('pending'); fetchOpdAppointments(opdDateMode, selectedDoctorId, 'pending'); }}
+                                                        >
+                                                            ⚠️ Pending ({opdCounts.pending_vitals || 0})
+                                                        </button>
+                                                        <button 
+                                                            className={`btn btn-sm flex-fill rounded-pill py-1 fw-bold ${vitalsFilter === 'done' ? 'btn-success text-white shadow-sm' : 'btn-light border text-secondary'}`}
+                                                            onClick={() => { setVitalsFilter('done'); fetchOpdAppointments(opdDateMode, selectedDoctorId, 'done'); }}
+                                                        >
+                                                            ✅ Filled ({opdCounts.done_vitals || 0})
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        {/* Visit Status Filter Pills */}
                                         <div className="d-flex gap-2 mb-3 overflow-auto no-scrollbar pb-1">
                                             <button className={`btn btn-sm rounded-pill px-3 ${opdFilter === 'all' ? 'btn-primary fw-bold' : 'btn-white bg-white text-secondary border'}`} onClick={() => setOpdFilter('all')}>
-                                                All ({opdCounts.all})
+                                                All Visits
                                             </button>
                                             <button className={`btn btn-sm rounded-pill px-3 ${opdFilter === 'waiting' ? 'btn-primary fw-bold' : 'btn-white bg-white text-secondary border'}`} onClick={() => setOpdFilter('waiting')}>
-                                                Waiting ({opdCounts.waiting})
+                                                Waiting
                                             </button>
                                             <button className={`btn btn-sm rounded-pill px-3 ${opdFilter === 'visited' ? 'btn-info text-dark fw-bold' : 'btn-white bg-white text-secondary border'}`} onClick={() => setOpdFilter('visited')}>
-                                                Visited ({opdCounts.visited})
+                                                Visited
                                             </button>
                                         </div>
 

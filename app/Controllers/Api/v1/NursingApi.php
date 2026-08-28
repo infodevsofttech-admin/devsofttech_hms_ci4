@@ -247,16 +247,17 @@ class NursingApi extends BaseController
 
         $dateMode = $this->request->getGet('date_mode') ?? 'today';
         $docId = (int) ($this->request->getGet('doctor_id') ?? 0);
+        $vitalsFilter = $this->request->getGet('vitals_status') ?? 'all'; // 'all', 'pending', 'done'
 
         $whereClause = "WHERE 1=1";
         if ($dateMode === 'today') {
-            $whereClause .= " AND DATE(o.date_of_assign) = CURDATE()";
+            $whereClause .= " AND DATE(o.apointment_date) = CURDATE()";
         }
         if ($docId > 0) {
             $whereClause .= " AND o.doc_id = " . $docId;
         }
 
-        $sql = "SELECT o.opd_id, o.opd_code, o.opd_no, o.p_id, o.doc_id, o.date_of_assign, o.opd_status, o.opd_type,
+        $sql = "SELECT o.opd_id, o.opd_code, o.opd_no, o.p_id, o.doc_id, o.apointment_date, o.opd_status, coalesce(o.opd_fee_type, 'Cash') as opd_type,
                        p.p_fname as fname, p.p_rname as rname, p.p_code as uhid, p.mphone1, p.gender, p.age, p.age_in_month, p.estimate_dob, p.dob,
                        concat('Dr. ', d.p_fname, ' ', coalesce(d.p_lname, '')) as doctor_name,
                        pr.temp, pr.pulse, pr.bp, pr.diastolic, pr.spo2, pr.weight, pr.height, pr.rr_min
@@ -270,10 +271,14 @@ class NursingApi extends BaseController
         $query = $db->query($sql);
         $records = $query->getResultArray();
 
-        $todayTotalCount = (int) $db->query("SELECT count(*) as c FROM opd_master WHERE DATE(date_of_assign) = CURDATE()")->getRow()->c;
+        $todayTotalCount = (int) $db->query("SELECT count(*) as c FROM opd_master WHERE DATE(apointment_date) = CURDATE()")->getRow()->c;
         $allTotalCount = (int) $db->query("SELECT count(*) as c FROM opd_master")->getRow()->c;
 
-        $counts = ['all' => 0, 'waiting' => 0, 'visited' => 0, 'booked' => 0, 'cancelled' => 0, 'today_total' => $todayTotalCount, 'all_total' => $allTotalCount];
+        $counts = [
+            'all' => 0, 'waiting' => 0, 'visited' => 0, 'booked' => 0, 'cancelled' => 0,
+            'today_total' => $todayTotalCount, 'all_total' => $allTotalCount,
+            'pending_vitals' => 0, 'done_vitals' => 0
+        ];
         $appointments = [];
 
         foreach ($records as $r) {
@@ -291,6 +296,21 @@ class NursingApi extends BaseController
                 $statusLabel = 'Booked';
             }
 
+            $hasVitals = !empty($r['temp']) || !empty($r['pulse']) || !empty($r['bp']) || !empty($r['spo2']) || !empty($r['weight']);
+
+            if ($hasVitals) {
+                $counts['done_vitals']++;
+            } else {
+                $counts['pending_vitals']++;
+            }
+
+            if ($vitalsFilter === 'pending' && $hasVitals) {
+                continue;
+            }
+            if ($vitalsFilter === 'done' && !$hasVitals) {
+                continue;
+            }
+
             $counts['all']++;
             if (isset($counts[$statusKey])) {
                 $counts[$statusKey]++;
@@ -302,8 +322,6 @@ class NursingApi extends BaseController
             } elseif (! empty($r['age'])) {
                 $ageDisplay = $r['age'] . ' Year';
             }
-
-            $hasVitals = !empty($r['temp']) || !empty($r['pulse']) || !empty($r['bp']) || !empty($r['spo2']) || !empty($r['weight']);
 
             $r['status_key'] = $statusKey;
             $r['status_label'] = $statusLabel;
