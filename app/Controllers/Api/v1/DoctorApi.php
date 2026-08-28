@@ -261,6 +261,31 @@ class DoctorApi extends BaseController
             ->get()
             ->getRowArray() ?? [];
 
+        $medicines = [];
+        if (! empty($prescRow['id'])) {
+            $medRows = $db->table('opd_prescrption_prescribed')
+                ->where('opd_pre_id', $prescRow['id'])
+                ->get()
+                ->getResultArray();
+
+            foreach ($medRows as $mr) {
+                $medicines[] = [
+                    'drug_name' => $mr['med_name'] ?? '',
+                    'dosage' => $mr['dosage'] ?? '1 Tab',
+                    'frequency' => $mr['dosage_freq_str'] ?? '1-0-1',
+                    'duration' => $mr['no_of_days'] ?? '5 Days',
+                    'instructions' => $mr['remark'] ?? 'After Food',
+                ];
+            }
+        }
+
+        if (! empty($prescRow)) {
+            $prescRow['chief_complaints'] = $prescRow['complaints'] ?? '';
+            $prescRow['provisional_diagnosis'] = $prescRow['diagnosis'] ?? $prescRow['Provisional_diagnosis'] ?? '';
+            $prescRow['bp_systolic'] = $prescRow['bp'] ?? '';
+            $prescRow['bp_diastolic'] = $prescRow['diastolic'] ?? '';
+        }
+
         return $this->response->setJSON([
             'status' => 1,
             'opd' => [
@@ -274,6 +299,7 @@ class DoctorApi extends BaseController
                 'opd_status' => (int) $opdRow['opd_status'],
             ],
             'prescription' => $prescRow,
+            'medicines' => $medicines,
         ]);
     }
 
@@ -293,40 +319,51 @@ class DoctorApi extends BaseController
         $docId = (int) ($post['doctor_id'] ?? $opdRow['doc_id']);
         $pId = (int) ($opdRow['p_id'] ?? 0);
 
-        $vitals = [
+        $prescData = [
+            'opd_id' => $opdId,
+            'doc_id' => $docId,
+            'p_id' => $pId,
+            'date_opd_visit' => date('Y-m-d'),
             'temp' => trim((string) ($post['temp'] ?? '')),
             'pulse' => trim((string) ($post['pulse'] ?? '')),
             'bp' => trim((string) ($post['bp_systolic'] ?? '')),
             'diastolic' => trim((string) ($post['bp_diastolic'] ?? '')),
             'spo2' => trim((string) ($post['spo2'] ?? '')),
             'weight' => trim((string) ($post['weight'] ?? '')),
+            'complaints' => trim((string) ($post['chief_complaints'] ?? '')),
+            'diagnosis' => trim((string) ($post['provisional_diagnosis'] ?? '')),
+            'advice' => trim((string) ($post['advice'] ?? '')),
+            'investigation' => trim((string) ($post['investigation'] ?? '')),
+            'next_visit' => trim((string) ($post['next_visit'] ?? '')),
         ];
 
-        $chiefComplaints = trim((string) ($post['chief_complaints'] ?? ''));
-        $provisionalDiagnosis = trim((string) ($post['provisional_diagnosis'] ?? ''));
-        $advice = trim((string) ($post['advice'] ?? ''));
-        $investigation = trim((string) ($post['investigation'] ?? ''));
-        $nextVisit = trim((string) ($post['next_visit'] ?? ''));
-        $jsonMedicines = is_array($post['medicines'] ?? null) ? json_encode($post['medicines']) : (string) ($post['medicines'] ?? '[]');
-
-        $prescData = array_merge($vitals, [
-            'opd_id' => $opdId,
-            'doc_id' => $docId,
-            'p_id' => $pId,
-            'date' => date('Y-m-d'),
-            'chief_complaints' => $chiefComplaints,
-            'provisional_diagnosis' => $provisionalDiagnosis,
-            'advice' => $advice,
-            'investigation' => $investigation,
-            'next_visit' => $nextVisit,
-            'json_medicines' => $jsonMedicines,
-        ]);
-
         $existing = $db->table('opd_prescription')->where('opd_id', $opdId)->get()->getRowArray();
+        $opdPreId = 0;
         if ($existing) {
             $db->table('opd_prescription')->where('opd_id', $opdId)->update($prescData);
+            $opdPreId = (int) $existing['id'];
         } else {
             $db->table('opd_prescription')->insert($prescData);
+            $opdPreId = (int) $db->insertID();
+        }
+
+        $medRaw = $post['medicines'] ?? null;
+        $medArray = is_array($medRaw) ? $medRaw : json_decode((string)$medRaw, true);
+        if ($opdPreId > 0 && is_array($medArray)) {
+            $db->table('opd_prescrption_prescribed')->where('opd_pre_id', $opdPreId)->delete();
+            foreach ($medArray as $m) {
+                $drugName = trim((string) ($m['drug_name'] ?? ''));
+                if ($drugName !== '') {
+                    $db->table('opd_prescrption_prescribed')->insert([
+                        'opd_pre_id' => $opdPreId,
+                        'med_name' => $drugName,
+                        'dosage' => trim((string) ($m['dosage'] ?? '1 Tab')),
+                        'dosage_freq_str' => trim((string) ($m['frequency'] ?? '1-0-1')),
+                        'no_of_days' => trim((string) ($m['duration'] ?? '5 Days')),
+                        'remark' => trim((string) ($m['instructions'] ?? 'After Food')),
+                    ]);
+                }
+            }
         }
 
         // Update OPD status to Visited (2)
@@ -334,7 +371,7 @@ class DoctorApi extends BaseController
 
         return $this->response->setJSON([
             'status' => 1,
-            'message' => 'Prescription saved & OPD Visit marked completed successfully',
+            'message' => 'Prescription saved & OPD Visit completed successfully',
         ]);
     }
 
