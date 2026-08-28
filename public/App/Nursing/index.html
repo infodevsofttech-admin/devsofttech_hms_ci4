@@ -3,14 +3,17 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Nursing Care PWA App</title>
+    <title>Nursing Care EMR & Bedside PWA App</title>
     <link rel="manifest" href="/App/Nursing/manifest.json">
-    <meta name="theme-color" content="#2563eb">
+    <meta name="theme-color" content="#0f172a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3304/3304567.png">
     
-    <!-- Bootstrap 5 CSS & Icons -->
+    <!-- Google Fonts & Bootstrap 5 CSS & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     
@@ -22,84 +25,167 @@
     <style>
         :root {
             --primary-bg: #0f172a;
-            --card-bg: #1e293b;
+            --card-bg: #ffffff;
             --accent-blue: #2563eb;
-            --accent-green: #10b981;
-            --accent-amber: #f59e0b;
-            --accent-red: #ef4444;
+            --accent-cyan: #0891b2;
+            --accent-green: #16a34a;
+            --accent-amber: #d97706;
+            --accent-red: #dc2626;
+            --slate-800: #1e293b;
+            --slate-900: #0f172a;
         }
 
         body {
-            background-color: #f8fafc;
-            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            background-color: #f1f5f9;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             margin: 0;
             padding: 0;
             user-select: none;
             -webkit-user-select: none;
+            overflow-x: hidden;
+            color: #334155;
         }
 
+        /* Topbar Header */
         .nursing-header {
             background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
             color: #ffffff;
             padding: 12px 16px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-shadow: 0 4px 20px rgba(15, 23, 42, 0.25);
             position: sticky;
             top: 0;
             z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
 
+        .avatar-circle {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #10b981 0%, #059669 100%);
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            box-shadow: 0 2px 8px rgba(16, 185, 129, 0.3);
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+
+        .patient-avatar-circle {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: #eff6ff;
+            color: #2563eb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 15px;
+            border: 1.5px solid #dbeafe;
+            flex-shrink: 0;
+        }
+
+        /* Segmented Tabs */
+        .segmented-tabs {
+            background: #e2e8f0;
+            border-radius: 12px;
+            padding: 4px;
+            display: flex;
+            gap: 4px;
+        }
+
+        .segmented-tab {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 10px 14px;
+            border-radius: 9px;
+            font-weight: 600;
+            font-size: 13px;
+            color: #64748b;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .segmented-tab.active {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(5, 150, 105, 0.25);
+        }
+
+        .segmented-tab.active-blue {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+        }
+
+        /* Bed Cards */
         .bed-card {
             border: 1px solid #e2e8f0;
-            border-radius: 12px;
+            border-radius: 16px;
             background: #ffffff;
-            transition: all 0.2s ease-in-out;
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
             cursor: pointer;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
+            position: relative;
+            overflow: hidden;
         }
 
         .bed-card:hover, .bed-card:active {
             transform: translateY(-2px);
-            box-shadow: 0 8px 16px rgba(37,99,235,0.12);
-            border-color: #2563eb;
+            box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.12);
+            border-color: #cbd5e1;
         }
 
-        .bed-status-available { border-top: 4px solid var(--accent-green); }
-        .bed-status-occupied { border-top: 4px solid var(--accent-blue); }
-        .bed-status-cleaning { border-top: 4px solid var(--accent-amber); }
-        .bed-status-maintenance { border-top: 4px solid var(--accent-red); }
+        .bed-status-available { border-top: 5px solid #16a34a; }
+        .bed-status-occupied { border-top: 5px solid #2563eb; }
+        .bed-status-cleaning { border-top: 5px solid #d97706; }
+        .bed-status-maintenance { border-top: 5px solid #dc2626; }
 
-        .badge-soft-green { background: #d1fae5; color: #065f46; }
-        .badge-soft-blue { background: #dbeafe; color: #1e40af; }
-        .badge-soft-amber { background: #fef3c7; color: #92400e; }
-        .badge-soft-red { background: #fee2e2; color: #991b1b; }
-
-        .nav-pills .nav-link {
-            border-radius: 8px;
-            font-weight: 500;
-            color: #64748b;
+        .mobile-patient-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 14px;
+            box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
+            border-left: 6px solid var(--accent-blue);
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
         }
 
-        .nav-pills .nav-link.active {
-            background-color: var(--accent-blue);
-            color: #ffffff;
-        }
-
-        .install-pwa-banner {
-            background: linear-gradient(90deg, #2563eb, #3b82f6);
-            color: white;
-            padding: 10px 16px;
-            font-size: 14px;
-        }
-
-        .equipment-chip {
+        /* Status Pills */
+        .status-pill {
             font-size: 11px;
-            padding: 2px 6px;
-            border-radius: 4px;
-            background: #f1f5f9;
-            color: #475569;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
         }
 
-        /* Lock Screen Styling */
+        .status-pill.waiting { background-color: #eff6ff; color: #1d4ed8; border: 1px solid #bfdbfe; }
+        .status-pill.visited { background-color: #ecfeff; color: #0e7490; border: 1px solid #a5f3fc; }
+        .status-pill.booked { background-color: #f8fafc; color: #475569; border: 1px solid #cbd5e1; }
+
+        .queue-badge {
+            background: #0f172a;
+            color: #ffffff;
+            font-weight: 800;
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.2);
+        }
+
+        /* Lock Screen Overlay */
         .lock-screen-overlay {
             position: fixed;
             top: 0; left: 0; right: 0; bottom: 0;
@@ -113,12 +199,15 @@
 
         .lock-card {
             background: #ffffff;
-            border-radius: 16px;
+            border-radius: 20px;
             width: 100%;
             max-width: 400px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
             overflow: hidden;
         }
+
+        .no-scrollbar::-webkit-scrollbar { display: none; }
+        .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
 </head>
 <body>
@@ -131,6 +220,7 @@
         const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
         function NursingApp() {
+            const [mainTab, setMainTab] = useState('ipd'); // 'ipd' or 'opd'
             const [beds, setBeds] = useState([]);
             const [loading, setLoading] = useState(true);
             const [selectedWard, setSelectedWard] = useState('all');
@@ -138,10 +228,27 @@
             const [activeBed, setActiveBed] = useState(null);
             const [activeTab, setActiveTab] = useState('vitals');
             const [workspaceData, setWorkspaceData] = useState([]);
-            const [installPrompt, setInstallPrompt] = useState(null);
             const [nurses, setNurses] = useState([]);
 
-            // Authentication & Security State
+            // OPD Patients State
+            const [opdAppointments, setOpdAppointments] = useState([]);
+            const [opdCounts, setOpdCounts] = useState({ all: 0, waiting: 0, visited: 0, booked: 0, cancelled: 0 });
+            const [opdFilter, setOpdFilter] = useState('all');
+            const [opdDateMode, setOpdDateMode] = useState('today');
+
+            // Modals & Action State
+            const [activeOpdForVitals, setActiveOpdForVitals] = useState(null);
+            const [opdVitalsForm, setOpdVitalsForm] = useState({
+                temp: '', pulse: '', bp_systolic: '', bp_diastolic: '', spo2: '', weight: '', height: '', rr_min: ''
+            });
+
+            const [scanTarget, setScanTarget] = useState(null); // OPD or IPD object
+            const [scanType, setScanType] = useState('opd'); // 'opd' or 'ipd'
+            const [scanDocCategory, setScanDocCategory] = useState('Paper Document');
+            const [scanImageBase64, setScanImageBase64] = useState('');
+            const [scanImagePreview, setScanImagePreview] = useState('');
+
+            // Auth State
             const [authenticatedNurse, setAuthenticatedNurse] = useState(null);
             const [authNurseId, setAuthNurseId] = useState(0);
             const [pinInput, setPinInput] = useState('');
@@ -150,7 +257,7 @@
             const [newPin, setNewPin] = useState('');
             const [confirmPin, setConfirmPin] = useState('');
 
-            // Form state for workspace
+            // Workspace Forms (IPD)
             const [vitalsForm, setVitalsForm] = useState({
                 temperature_f: '', pulse_rate: '', resp_rate: '',
                 bp_systolic: '', bp_diastolic: '', spo2: '', weight_kg: '', general_note: ''
@@ -165,7 +272,6 @@
                 treatment_text: '', general_note: ''
             });
 
-            // Fetch live bed list from CI4 API
             const fetchBeds = async () => {
                 try {
                     setLoading(true);
@@ -181,7 +287,22 @@
                 }
             };
 
-            // Fetch active nurses
+            const fetchOpdAppointments = async (dateModeOverride) => {
+                try {
+                    const mode = dateModeOverride || opdDateMode;
+                    const res = await fetch(`/api/v1/nursing/opd/list?date_mode=${mode}`);
+                    const json = await res.json();
+                    if (json.status === 1) {
+                        setOpdAppointments(json.appointments || []);
+                        if (json.counts) {
+                            setOpdCounts(json.counts);
+                        }
+                    }
+                } catch (err) {
+                    console.error('Failed to load OPD appointments', err);
+                }
+            };
+
             const fetchNurses = async () => {
                 try {
                     const res = await fetch('/api/v1/nursing/nurses');
@@ -189,7 +310,6 @@
                     if (json.status === 1 && json.data) {
                         setNurses(json.data);
 
-                        // Check URL query parameters for nurse_code (QR Code scan or Direct URL)
                         const params = new URLSearchParams(window.location.search);
                         const codeParam = params.get('nurse_code');
                         if (codeParam) {
@@ -204,7 +324,6 @@
                 }
             };
 
-            // Restore 30-day device authentication from localStorage
             useEffect(() => {
                 const savedAuth = localStorage.getItem(DEVICE_AUTH_KEY);
                 if (savedAuth) {
@@ -212,6 +331,8 @@
                         const parsed = JSON.parse(savedAuth);
                         if (parsed && parsed.nurse && parsed.expires_at > Date.now()) {
                             setAuthenticatedNurse(parsed.nurse);
+                            fetchBeds();
+                            fetchOpdAppointments(opdDateMode);
                         } else {
                             localStorage.removeItem(DEVICE_AUTH_KEY);
                         }
@@ -219,25 +340,11 @@
                 }
                 fetchBeds();
                 fetchNurses();
-
-                // PWA Install Prompt Listener
-                window.addEventListener('beforeinstallprompt', (e) => {
-                    e.preventDefault();
-                    setInstallPrompt(e);
-                });
-
-                // Service worker registration
-                if ('serviceWorker' in navigator) {
-                    navigator.serviceWorker.register('/App/Nursing/sw.js')
-                        .then(() => console.log('Nursing PWA Service Worker Registered'))
-                        .catch(err => console.error('SW failed', err));
-                }
             }, []);
 
-            // Authenticate Nurse with Security PIN & Save 30-Day Device Auth
             const handleVerifyPin = async () => {
                 if (!authNurseId || authNurseId === '0') {
-                    setPinError('Please select your Nursing Staff ID / Profile.');
+                    setPinError('Please select your Nursing Staff Profile.');
                     return;
                 }
                 if (!pinInput || pinInput.length < 4) {
@@ -260,25 +367,24 @@
 
                     if (json.status === 1 && json.nurse) {
                         setAuthenticatedNurse(json.nurse);
-                        
-                        // Save 30-day persistent device authentication in localStorage
                         const deviceAuthObj = {
                             nurse: json.nurse,
                             expires_at: Date.now() + THIRTY_DAYS_MS
                         };
                         localStorage.setItem(DEVICE_AUTH_KEY, JSON.stringify(deviceAuthObj));
                         setPinInput('');
+                        fetchBeds();
+                        fetchOpdAppointments(opdDateMode);
                     } else if (json.status === 2) {
                         setIsSettingNewPin(true);
                     } else {
-                        setPinError(json.message || 'Invalid Security PIN');
+                        setPinError(json.message || 'Incorrect Security PIN');
                     }
                 } catch (err) {
                     setPinError('Connection error verifying PIN.');
                 }
             };
 
-            // Set Initial PIN or Change PIN
             const handleSaveNewPin = async () => {
                 if (!newPin || newPin.length < 4) {
                     setPinError('PIN must be 4 to 6 numeric digits.');
@@ -322,79 +428,209 @@
                 setActiveBed(null);
             };
 
-            // Fetch patient workspace entries
-            const fetchWorkspace = async (ipdId) => {
+            const openWorkspace = async (bed) => {
+                if (!bed.ipd_id || bed.status !== 'occupied') return;
+                setActiveBed(bed);
                 try {
-                    const res = await fetch(`/api/v1/nursing/workspace/${ipdId}`);
+                    const res = await fetch(`/api/v1/nursing/workspace/${bed.ipd_id}`);
                     const json = await res.json();
                     if (json.status === 1) {
                         setWorkspaceData(json.entries || []);
                     }
                 } catch (err) {
-                    console.error('Failed to load workspace data', err);
+                    console.error('Failed to load workspace', err);
                 }
             };
 
-            const openBedWorkspace = (bed) => {
-                setActiveBed(bed);
-                if (bed.current_ipd_id) {
-                    fetchWorkspace(bed.current_ipd_id);
-                } else {
-                    setWorkspaceData([]);
-                }
-            };
-
-            const handleSaveEntry = async (entryType, formData) => {
-                if (!activeBed || !activeBed.current_ipd_id) {
-                    alert('Please select an occupied bed to save entries.');
-                    return;
-                }
-
-                const body = new URLSearchParams();
-                body.append('entry_type', entryType);
-                body.append('recorded_by_id', authenticatedNurse ? authenticatedNurse.id : 0);
-                body.append('recorded_by', authenticatedNurse ? `[${authenticatedNurse.nurse_code}] ${authenticatedNurse.name}` : 'Staff');
-                Object.keys(formData).forEach(key => body.append(key, formData[key]));
+            const handleSaveIpdEntry = async (entryType, formData) => {
+                if (!activeBed || !activeBed.ipd_id) return;
 
                 try {
-                    const res = await fetch(`/api/v1/nursing/entry/save/${activeBed.current_ipd_id}`, {
+                    const payload = {
+                        entry_type: entryType,
+                        recorded_by: authenticatedNurse ? authenticatedNurse.name : 'Staff Nurse',
+                        recorded_by_id: authenticatedNurse ? authenticatedNurse.id : 0,
+                        ...formData
+                    };
+
+                    const res = await fetch(`/api/v1/nursing/entry/save/${activeBed.ipd_id}`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: body.toString()
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
                     });
                     const json = await res.json();
                     if (json.status === 1) {
-                        alert(json.message || 'Saved successfully');
-                        fetchWorkspace(activeBed.current_ipd_id);
+                        alert(json.message || 'Saved successfully!');
+                        openWorkspace(activeBed);
                     } else {
-                        alert(json.message || 'Failed to save');
+                        alert(json.message || 'Failed to save entry');
                     }
                 } catch (err) {
-                    alert('Error submitting entry');
+                    alert('Error saving nursing entry');
                 }
             };
 
-            const uniqueWards = ['all', ...new Set(beds.map(b => b.ward_name).filter(Boolean))];
+            // Open OPD Vitals Modal
+            const openOpdVitalsModal = (app) => {
+                setActiveOpdForVitals(app);
+                setOpdVitalsForm({
+                    temp: app.temp || '',
+                    pulse: app.pulse || '',
+                    bp_systolic: app.bp || '',
+                    bp_diastolic: app.diastolic || '',
+                    spo2: app.spo2 || '',
+                    weight: app.weight || '',
+                    height: app.height || '',
+                    rr_min: app.rr_min || ''
+                });
+            };
 
+            const handleSaveOpdVitals = async () => {
+                if (!activeOpdForVitals) return;
+
+                try {
+                    const payload = {
+                        nurse_id: authenticatedNurse ? authenticatedNurse.id : 0,
+                        nurse_name: authenticatedNurse ? authenticatedNurse.name : 'Nurse',
+                        ...opdVitalsForm
+                    };
+
+                    const res = await fetch(`/api/v1/nursing/opd/vitals/save/${activeOpdForVitals.opd_id}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const json = await res.json();
+                    if (json.status === 1) {
+                        alert(json.message || 'OPD Patient Vitals saved successfully!');
+                        setActiveOpdForVitals(null);
+                        fetchOpdAppointments(opdDateMode);
+                    } else {
+                        alert(json.message || 'Failed to save vitals');
+                    }
+                } catch (err) {
+                    alert('Error saving OPD Vitals');
+                }
+            };
+
+            // Open Document Scan Modal (OPD / IPD)
+            const openScanModal = (targetObj, targetType) => {
+                setScanTarget(targetObj);
+                setScanType(targetType);
+                setScanDocCategory('Paper Document');
+                setScanImageBase64('');
+                setScanImagePreview('');
+            };
+
+            const handleScanImageCapture = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    setScanImageBase64(event.target.result);
+                    setScanImagePreview(event.target.result);
+                };
+                reader.readAsDataURL(file);
+            };
+
+            const handleSaveScanDocument = async () => {
+                if (!scanTarget || !scanImageBase64) {
+                    alert('Please capture or select a document photo.');
+                    return;
+                }
+
+                try {
+                    const payload = {
+                        nurse_id: authenticatedNurse ? authenticatedNurse.id : 0,
+                        nurse_name: authenticatedNurse ? authenticatedNurse.name : 'Nurse',
+                        document_type: scanDocCategory,
+                        image_base64: scanImageBase64
+                    };
+
+                    const url = scanType === 'opd' 
+                        ? `/api/v1/nursing/opd/scan/save/${scanTarget.opd_id}`
+                        : `/api/v1/nursing/ipd/scan/save/${scanTarget.ipd_id || scanTarget.id}`;
+
+                    const res = await fetch(url, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const json = await res.json();
+                    if (json.status === 1) {
+                        alert(json.message || 'Scanned Document uploaded successfully!');
+                        setScanTarget(null);
+                        if (scanType === 'opd') fetchOpdAppointments(opdDateMode);
+                        if (scanType === 'ipd' && activeBed) openWorkspace(activeBed);
+                    } else {
+                        alert(json.message || 'Failed to save document scan');
+                    }
+                } catch (err) {
+                    alert('Error saving document scan');
+                }
+            };
+
+            const getInitials = (nameStr) => {
+                if (!nameStr) return 'N';
+                const parts = nameStr.trim().split(' ');
+                if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+                return nameStr.substring(0, 2).toUpperCase();
+            };
+
+            const renderNoteContent = (entry) => {
+                const text = entry.treatment_text || entry.general_note || '';
+                const match = text.match(/\[IMAGE_ATTACHMENT:(.*?)\]/);
+                const cleanText = text.replace(/\[IMAGE_ATTACHMENT:.*?\]/, '').replace('[Doctor Note] ', '');
+
+                return (
+                    <div>
+                        {cleanText && <div className="small fw-semibold">{cleanText}</div>}
+                        {match && match[1] && (
+                            <div className="mt-2">
+                                <span className="badge bg-primary mb-1 d-inline-flex align-items-center gap-1" style={{fontSize: '10px'}}>
+                                    <i className="bi bi-paperclip"></i> Attached Document / Photo
+                                </span>
+                                <a href={match[1]} target="_blank" rel="noreferrer">
+                                    <img src={match[1]} alt="Attached Document" className="img-fluid rounded-3 border shadow-sm d-block mt-1" style={{maxHeight: '220px', objectFit: 'cover'}} />
+                                </a>
+                            </div>
+                        )}
+                    </div>
+                );
+            };
+
+            // Filtered lists
             const filteredBeds = beds.filter(bed => {
                 const matchesWard = selectedWard === 'all' || bed.ward_name === selectedWard;
+                const q = searchQuery.toLowerCase();
                 const matchesSearch = searchQuery === '' || 
-                    (bed.bed_code && bed.bed_code.toLowerCase().includes(searchQuery.toLowerCase())) ||
-                    (bed.ward_name && bed.ward_name.toLowerCase().includes(searchQuery.toLowerCase()));
+                    (bed.bed_number || '').toLowerCase().includes(q) ||
+                    (bed.patient_name || '').toLowerCase().includes(q) ||
+                    (bed.uhid || '').toLowerCase().includes(q);
                 return matchesWard && matchesSearch;
             });
 
+            const filteredOpdAppointments = opdAppointments.filter(app => {
+                const matchesFilter = opdFilter === 'all' || app.status_key === opdFilter;
+                const q = searchQuery.toLowerCase();
+                const name = (app.patient_display_name || '').toLowerCase();
+                const uhid = (app.uhid || '').toLowerCase();
+                const opdCode = (app.opd_code || '').toLowerCase();
+                const docName = (app.doctor_name || '').toLowerCase();
+                return matchesFilter && (searchQuery === '' || name.includes(q) || uhid.includes(q) || opdCode.includes(q) || docName.includes(q));
+            });
+
             // -------------------------------------------------------------
-            // RENDER: LOCK SCREEN (PIN AUTHENTICATION)
+            // LOCK SCREEN
             // -------------------------------------------------------------
             if (!authenticatedNurse) {
                 return (
                     <div className="lock-screen-overlay">
                         <div className="lock-card">
-                            <div className="p-4 text-center bg-primary text-white">
-                                <i className="bi bi-shield-lock-fill display-4 d-block mb-2"></i>
-                                <h5 className="fw-bold mb-0">Nursing Care PWA App</h5>
-                                <small className="opacity-75">30-Day Device Authentication Security</small>
+                            <div className="p-4 text-center text-white" style={{background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)'}}>
+                                <i className="bi bi-shield-lock-fill display-4 d-block mb-2 text-success"></i>
+                                <h5 className="fw-bold mb-1">Nursing Care Mobile App</h5>
+                                <small className="opacity-75">30-Day Device Security Authentication</small>
                             </div>
 
                             <div className="p-4">
@@ -405,11 +641,11 @@
                                         <div className="mb-3">
                                             <label className="form-label fw-bold small">Select Nursing Staff Profile</label>
                                             <select 
-                                                className="form-select"
+                                                className="form-select form-select-lg fs-6"
                                                 value={authNurseId}
                                                 onChange={(e) => setAuthNurseId(e.target.value)}
                                             >
-                                                <option value="0">-- Choose Nursing Staff --</option>
+                                                <option value="0">-- Choose Nurse Profile --</option>
                                                 {nurses.map(n => (
                                                     <option key={n.id} value={n.id}>[{n.nurse_code}] {n.name}</option>
                                                 ))}
@@ -421,7 +657,7 @@
                                             <input 
                                                 type="password" 
                                                 maxLength="6"
-                                                className="form-control text-center fs-4"
+                                                className="form-control text-center fs-3"
                                                 placeholder="••••"
                                                 value={pinInput}
                                                 onChange={(e) => setPinInput(e.target.value)}
@@ -432,21 +668,21 @@
                                             </small>
                                         </div>
 
-                                        <button className="btn btn-primary w-100 py-2 fw-bold" onClick={handleVerifyPin}>
-                                            <i className="bi bi-unlock-fill me-1"></i> Unlock Device Access
+                                        <button className="btn btn-success btn-lg w-100 py-3 fw-bold shadow-sm" onClick={handleVerifyPin}>
+                                            <i className="bi bi-unlock-fill me-2"></i> Unlock Nursing App
                                         </button>
                                     </div>
                                 ) : (
                                     <div>
                                         <div className="alert alert-info py-2 small mb-3">
-                                            Initial PIN Setup for selected nurse. Set a 4-6 digit Security PIN.
+                                            Initial PIN Setup for Nurse Profile. Set a 4-6 digit Security PIN.
                                         </div>
                                         <div className="mb-3">
                                             <label className="form-label fw-bold small">New Security PIN</label>
                                             <input 
                                                 type="password" 
                                                 maxLength="6"
-                                                className="form-control text-center fs-4"
+                                                className="form-control text-center fs-3"
                                                 placeholder="••••"
                                                 value={newPin}
                                                 onChange={(e) => setNewPin(e.target.value)}
@@ -457,14 +693,14 @@
                                             <input 
                                                 type="password" 
                                                 maxLength="6"
-                                                className="form-control text-center fs-4"
+                                                className="form-control text-center fs-3"
                                                 placeholder="••••"
                                                 value={confirmPin}
                                                 onChange={(e) => setConfirmPin(e.target.value)}
                                             />
                                         </div>
-                                        <button className="btn btn-success w-100 py-2 fw-bold" onClick={handleSaveNewPin}>
-                                            <i className="bi bi-check-circle-fill me-1"></i> Save PIN &amp; Unlock
+                                        <button className="btn btn-primary btn-lg w-100 py-3 fw-bold shadow-sm" onClick={handleSaveNewPin}>
+                                            <i className="bi bi-check-circle-fill me-2"></i> Save PIN &amp; Unlock
                                         </button>
                                     </div>
                                 )}
@@ -475,251 +711,424 @@
             }
 
             // -------------------------------------------------------------
-            // RENDER: UNLOCKED PWA APP DASHBOARD
+            // UNLOCKED NURSING PWA APP
             // -------------------------------------------------------------
             return (
                 <div>
-                    {/* PWA Install Banner */}
-                    {installPrompt && (
-                        <div className="install-pwa-banner d-flex justify-content-between align-items-center">
-                            <span><i className="bi bi-download me-2"></i> Install Nursing App on your device home screen</span>
-                            <button className="btn btn-sm btn-light text-primary fw-bold" onClick={() => installPrompt.prompt()}>Install App</button>
-                        </div>
-                    )}
-
-                    {/* Top Nursing Header */}
+                    {/* Header Topbar */}
                     <header className="nursing-header d-flex justify-content-between align-items-center">
-                        <div className="d-flex align-items-center">
-                            <i className="bi bi-heart-pulse-fill text-danger fs-4 me-2"></i>
+                        <div className="d-flex align-items-center gap-2">
+                            <div className="avatar-circle">
+                                {getInitials(authenticatedNurse.name)}
+                            </div>
                             <div>
-                                <h6 className="mb-0 fw-bold">NursingCare PWA</h6>
-                                <small className="text-light opacity-75">Staff: <strong>[{authenticatedNurse.nurse_code}] {authenticatedNurse.name}</strong> <span className="badge bg-success ms-1" style={{fontSize: '9px'}}>30-Day Device Auth</span></small>
+                                <h6 className="mb-0 fw-bold">{authenticatedNurse.name}</h6>
+                                <small className="text-light opacity-75" style={{fontSize: '11px'}}>
+                                    {authenticatedNurse.designation || 'Staff Nurse'} <span className="badge bg-success ms-1" style={{fontSize: '9px'}}>● Active</span>
+                                </small>
                             </div>
                         </div>
                         <div className="d-flex align-items-center gap-2">
-                            <button className="btn btn-sm btn-outline-light" onClick={fetchBeds} title="Refresh Beds">
+                            <button className="btn btn-sm btn-outline-light rounded-circle p-2" style={{width: '36px', height: '36px'}} onClick={() => { fetchBeds(); fetchOpdAppointments(opdDateMode); }} title="Refresh">
                                 <i className="bi bi-arrow-clockwise"></i>
                             </button>
-                            <button className="btn btn-sm btn-danger" onClick={handleLogout} title="Lock Device Access">
-                                <i className="bi bi-lock-fill me-1"></i> Lock
+                            <button className="btn btn-sm btn-outline-danger rounded-circle p-2" style={{width: '36px', height: '36px'}} onClick={handleLogout} title="Lock Access">
+                                <i className="bi bi-lock-fill"></i>
                             </button>
                         </div>
                     </header>
 
-                    {/* Main Container */}
-                    <main className="container-fluid py-3">
+                    <main className="container-fluid py-3 px-2 px-md-3">
                         {!activeBed ? (
                             <div>
-                                {/* Filter Bar */}
-                                <div className="row g-2 mb-3 align-items-center">
-                                    <div className="col-md-4 col-12">
-                                        <div className="input-group">
-                                            <span className="input-group-text bg-white"><i className="bi bi-search"></i></span>
+                                {/* Segmented Tab Controller: IPD Admitted vs OPD Patients */}
+                                <div className="segmented-tabs mb-3">
+                                    <button className={`segmented-tab ${mainTab === 'ipd' ? 'active' : ''}`} onClick={() => setMainTab('ipd')}>
+                                        <i className="bi bi-hospital-fill me-2"></i> Admitted IPDs ({beds.filter(b => b.status === 'occupied').length})
+                                    </button>
+                                    <button className={`segmented-tab ${mainTab === 'opd' ? 'active-blue' : ''}`} onClick={() => setMainTab('opd')}>
+                                        <i className="bi bi-calendar-check-fill me-2"></i> OPD Patients ({opdAppointments.length})
+                                    </button>
+                                </div>
+
+                                {mainTab === 'ipd' ? (
+                                    /* -------------------------------------------------------------
+                                       ADMITTED IPD PATIENTS & BEDS
+                                       ------------------------------------------------------------- */
+                                    <div>
+                                        <div className="row g-2 mb-3 align-items-center">
+                                            <div className="col-12 col-md-6">
+                                                <div className="input-group shadow-sm rounded-pill overflow-hidden bg-white border">
+                                                    <span className="input-group-text bg-white border-0 ps-3 text-secondary"><i className="bi bi-search"></i></span>
+                                                    <input 
+                                                        type="text" 
+                                                        className="form-control border-0 py-2 shadow-none" 
+                                                        placeholder="Search Bed No, Patient Name, UHID..." 
+                                                        value={searchQuery}
+                                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                                    />
+                                                </div>
+                                            </div>
+                                            <div className="col-12 col-md-6">
+                                                <select 
+                                                    className="form-select rounded-pill shadow-sm py-2"
+                                                    value={selectedWard}
+                                                    onChange={(e) => setSelectedWard(e.target.value)}
+                                                >
+                                                    <option value="all">All Wards / Units</option>
+                                                    {Array.from(new Set(beds.map(b => b.ward_name))).filter(Boolean).map(w => (
+                                                        <option key={w} value={w}>{w}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                        </div>
+
+                                        <div className="row g-3">
+                                            {filteredBeds.map(bed => (
+                                                <div key={bed.id} className="col-6 col-md-4 col-lg-3">
+                                                    <div 
+                                                        className={`bed-card p-3 bed-status-${bed.status}`}
+                                                        onClick={() => openWorkspace(bed)}
+                                                    >
+                                                        <div className="d-flex justify-content-between align-items-start mb-2">
+                                                            <span className="fw-bold text-dark fs-5">Bed {bed.bed_number}</span>
+                                                            <span className={`badge ${bed.status === 'occupied' ? 'bg-primary' : 'bg-success'} text-uppercase`} style={{fontSize: '9px'}}>
+                                                                {bed.status}
+                                                            </span>
+                                                        </div>
+                                                        <small className="text-muted d-block mb-2" style={{fontSize: '11px'}}>{bed.ward_name || 'General Ward'}</small>
+
+                                                        {bed.patient_name ? (
+                                                            <div>
+                                                                <div className="fw-bold text-primary text-truncate">{bed.patient_name}</div>
+                                                                <small className="text-muted d-block" style={{fontSize: '11px'}}>UHID: {bed.uhid || 'N/A'}</small>
+                                                                <small className="text-dark fw-semibold d-block mt-1" style={{fontSize: '11px'}}>IPD: {bed.ipd_code}</small>
+                                                            </div>
+                                                        ) : (
+                                                            <div className="text-success small fw-semibold py-2">Available for Admission</div>
+                                                        )}
+
+                                                        {bed.status === 'occupied' && (
+                                                            <div className="mt-3 pt-2 border-top d-flex gap-1">
+                                                                <button className="btn btn-sm btn-outline-primary w-100 py-1 fw-bold" style={{fontSize: '11px'}}>
+                                                                    <i className="bi bi-heart-pulse me-1"></i> Care Workspace
+                                                                </button>
+                                                            </div>
+                                                        )}
+                                                    </div>
+                                                </div>
+                                            ))}
+                                        </div>
+                                    </div>
+                                ) : (
+                                    /* -------------------------------------------------------------
+                                       OPD PATIENTS TAB (VITALS & DOCUMENT SCANNING)
+                                       ------------------------------------------------------------- */
+                                    <div>
+                                        {/* Date Mode Segmented Controller */}
+                                        <div className="d-flex align-items-center justify-content-between mb-3 bg-white p-2 rounded-4 border shadow-sm flex-wrap gap-2">
+                                            <div className="d-flex gap-1 bg-light p-1 rounded-pill border">
+                                                <button 
+                                                    className={`btn btn-sm rounded-pill px-3 py-1 fw-bold ${opdDateMode === 'today' ? 'btn-primary shadow-sm' : 'btn-light text-secondary'}`}
+                                                    onClick={() => { setOpdDateMode('today'); fetchOpdAppointments('today'); }}
+                                                >
+                                                    <i className="bi bi-calendar-event me-1"></i> Today's OPDs ({opdCounts.today_total || 0})
+                                                </button>
+                                                <button 
+                                                    className={`btn btn-sm rounded-pill px-3 py-1 fw-bold ${opdDateMode === 'all' ? 'btn-primary shadow-sm' : 'btn-light text-secondary'}`}
+                                                    onClick={() => { setOpdDateMode('all'); fetchOpdAppointments('all'); }}
+                                                >
+                                                    <i className="bi bi-calendar3 me-1"></i> All Dates ({opdCounts.all_total || 0})
+                                                </button>
+                                            </div>
+                                            <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 rounded-pill small" style={{fontSize: '11px'}}>
+                                                {opdDateMode === 'today' ? '● Current Date' : '● All Appointments'}
+                                            </span>
+                                        </div>
+
+                                        {/* Status Filters */}
+                                        <div className="d-flex gap-2 mb-3 overflow-auto no-scrollbar pb-1">
+                                            <button className={`btn btn-sm rounded-pill px-3 ${opdFilter === 'all' ? 'btn-primary fw-bold' : 'btn-white bg-white text-secondary border'}`} onClick={() => setOpdFilter('all')}>
+                                                All ({opdCounts.all})
+                                            </button>
+                                            <button className={`btn btn-sm rounded-pill px-3 ${opdFilter === 'waiting' ? 'btn-primary fw-bold' : 'btn-white bg-white text-secondary border'}`} onClick={() => setOpdFilter('waiting')}>
+                                                Waiting ({opdCounts.waiting})
+                                            </button>
+                                            <button className={`btn btn-sm rounded-pill px-3 ${opdFilter === 'visited' ? 'btn-info text-dark fw-bold' : 'btn-white bg-white text-secondary border'}`} onClick={() => setOpdFilter('visited')}>
+                                                Visited ({opdCounts.visited})
+                                            </button>
+                                        </div>
+
+                                        {/* Search Input */}
+                                        <div className="input-group mb-3 shadow-sm rounded-pill overflow-hidden bg-white border">
+                                            <span className="input-group-text bg-white border-0 ps-3 text-secondary"><i className="bi bi-search"></i></span>
                                             <input 
                                                 type="text" 
-                                                className="form-control" 
-                                                placeholder="Search Bed Code or Ward..." 
+                                                className="form-control border-0 py-2 shadow-none" 
+                                                placeholder="Search Patient Name, Doctor Name, UHID, OPD Code..." 
                                                 value={searchQuery}
                                                 onChange={(e) => setSearchQuery(e.target.value)}
                                             />
                                         </div>
-                                    </div>
-                                    <div className="col-md-8 col-12 d-flex gap-2 overflow-auto">
-                                        {uniqueWards.map(ward => (
-                                            <button 
-                                                key={ward}
-                                                className={`btn btn-sm text-nowrap ${selectedWard === ward ? 'btn-primary' : 'btn-outline-secondary'}`}
-                                                onClick={() => setSelectedWard(ward)}
-                                            >
-                                                {ward === 'all' ? 'All Wards' : ward}
-                                            </button>
-                                        ))}
-                                    </div>
-                                </div>
 
-                                {/* Bed Matrix */}
-                                {loading ? (
-                                    <div className="text-center py-5">
-                                        <div className="spinner-border text-primary" role="status"></div>
-                                        <p className="mt-2 text-muted">Loading Hospital Bed Matrix...</p>
-                                    </div>
-                                ) : (
-                                    <div className="row g-3">
-                                        {filteredBeds.map(bed => {
-                                            const statusClass = `bed-status-${bed.bed_status || 'available'}`;
-                                            const badgeClass = bed.bed_status === 'occupied' ? 'badge-soft-blue' 
-                                                : bed.bed_status === 'available' ? 'badge-soft-green' 
-                                                : bed.bed_status === 'cleaning' ? 'badge-soft-amber' : 'badge-soft-red';
-
-                                            return (
-                                                <div key={bed.id} className="col-lg-3 col-md-4 col-sm-6 col-12">
-                                                    <div className={`card p-3 bed-card ${statusClass}`} onClick={() => openBedWorkspace(bed)}>
-                                                        <div className="d-flex justify-content-between align-items-start mb-2">
-                                                            <div>
-                                                                <h5 className="fw-bold mb-0 text-dark">{bed.bed_code || bed.bed_number}</h5>
-                                                                <small className="text-muted">{bed.ward_name || 'General Ward'}</small>
+                                        {/* OPD Patients Cards List */}
+                                        <div>
+                                            {filteredOpdAppointments.length === 0 ? (
+                                                <div className="text-center text-muted py-5 bg-white rounded-4 border shadow-sm">
+                                                    <i className="bi bi-person-x fs-1 text-secondary opacity-50 d-block mb-2"></i>
+                                                    No OPD appointments found for selected filter.
+                                                </div>
+                                            ) : (
+                                                filteredOpdAppointments.map(app => (
+                                                    <div key={app.opd_id} className="mobile-patient-card">
+                                                        <div className="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                                                            <div className="d-flex align-items-center gap-2">
+                                                                <span className="queue-badge">Q #{app.queue_no || app.opd_no || '1'}</span>
+                                                                <span className={`status-pill ${app.status_key}`}>● {app.status_label}</span>
                                                             </div>
-                                                            <span className={`badge ${badgeClass} text-uppercase`}>
-                                                                {bed.bed_status || 'Available'}
-                                                            </span>
+                                                            <code className="fw-bold text-dark fs-6">{app.opd_code}</code>
                                                         </div>
-                                                        
-                                                        {bed.current_ipd_id ? (
-                                                            <div className="mt-2 pt-2 border-top">
-                                                                <span className="badge bg-primary me-1">IPD #{bed.current_ipd_id}</span>
-                                                                <small className="text-muted">Patient Admitted</small>
+
+                                                        <div className="d-flex align-items-start gap-3 mb-3">
+                                                            <div className="patient-avatar-circle">
+                                                                {getInitials(app.patient_display_name)}
                                                             </div>
-                                                        ) : (
-                                                            <small className="text-success mt-2 d-block"><i className="bi bi-check-circle-fill me-1"></i> Ready for Admission</small>
+                                                            <div className="flex-grow-1">
+                                                                <h5 className="fw-bold text-slate-900 mb-1" style={{fontSize: '16px'}}>
+                                                                    {app.patient_display_name}
+                                                                </h5>
+                                                                <small className="text-muted d-block mb-2" style={{fontSize: '12px'}}>
+                                                                    {app.age_display} • {app.gender_label} | UHID: {app.uhid}
+                                                                </small>
+                                                                <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1" style={{fontSize: '11px'}}>
+                                                                    <i className="bi bi-person-badge me-1"></i>{app.doctor_name || 'Doctor'}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        {/* Vitals Summary Pill if recorded */}
+                                                        {app.has_vitals && (
+                                                            <div className="alert alert-success py-1.5 px-3 mb-3 small rounded-3 d-flex align-items-center justify-content-between" style={{fontSize: '12px'}}>
+                                                                <span><i className="bi bi-heart-pulse-fill text-danger me-1"></i> <strong>Vitals:</strong> BP {app.bp || '-'}/{app.diastolic || '-'} | Pulse {app.pulse || '-'} | Temp {app.temp || '-'}°F</span>
+                                                                <span className="badge bg-success">Vitals ✓</span>
+                                                            </div>
                                                         )}
 
-                                                        <div className="d-flex gap-1 mt-2 flex-wrap">
-                                                            {bed.has_oxygen == 1 && <span className="equipment-chip"><i className="bi bi-wind text-info"></i> O2</span>}
-                                                            {bed.has_suction == 1 && <span className="equipment-chip"><i className="bi bi-funnel text-primary"></i> Suction</span>}
-                                                            {bed.has_monitor == 1 && <span className="equipment-chip"><i className="bi bi-activity text-danger"></i> Monitor</span>}
+                                                        {/* Nursing Action Buttons: [ Fill Vitals ] & [ Scan Document ] */}
+                                                        <div className="d-flex gap-2">
+                                                            <button 
+                                                                className={`btn ${app.has_vitals ? 'btn-success' : 'btn-outline-success'} w-50 py-2 fw-bold rounded-3 shadow-sm`}
+                                                                onClick={() => openOpdVitalsModal(app)}
+                                                            >
+                                                                <i className="bi bi-heart-pulse me-1"></i> {app.has_vitals ? 'Vitals ✓' : 'Fill Vitals'}
+                                                            </button>
+
+                                                            <button 
+                                                                className="btn btn-outline-primary w-50 py-2 fw-bold rounded-3 shadow-sm"
+                                                                onClick={() => openScanModal(app, 'opd')}
+                                                            >
+                                                                <i className="bi bi-camera me-1"></i> Scan / Photo
+                                                            </button>
                                                         </div>
                                                     </div>
-                                                </div>
-                                            );
-                                        })}
+                                                ))
+                                            )}
+                                        </div>
                                     </div>
                                 )}
                             </div>
                         ) : (
-                            /* Bedside Patient Workspace */
+                            /* -------------------------------------------------------------
+                               IPD BEDSIDE WORKSPACE FOR NURSING STAFF
+                               ------------------------------------------------------------- */
                             <div>
-                                <button className="btn btn-sm btn-outline-dark mb-3" onClick={() => setActiveBed(null)}>
-                                    <i className="bi bi-arrow-left me-1"></i> Back to Bed Matrix
-                                </button>
+                                <div className="d-flex justify-content-between align-items-center mb-3">
+                                    <button className="btn btn-sm btn-outline-dark rounded-pill px-3" onClick={() => setActiveBed(null)}>
+                                        <i className="bi bi-arrow-left me-1"></i> Back to Bed List
+                                    </button>
+                                    <button className="btn btn-sm btn-outline-primary fw-bold rounded-pill px-3" onClick={() => openScanModal(activeBed, 'ipd')}>
+                                        <i className="bi bi-camera me-1"></i> Scan Paper Doc
+                                    </button>
+                                </div>
 
-                                <div className="card shadow-sm mb-3 border-0">
-                                    <div className="card-body bg-light rounded d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                        <div>
-                                            <h5 className="fw-bold mb-1 text-primary">Bed: {activeBed.bed_code}</h5>
-                                            <span className="badge bg-secondary me-2">{activeBed.ward_name}</span>
-                                            {activeBed.current_ipd_id ? (
-                                                <span className="badge bg-primary">IPD ID: #{activeBed.current_ipd_id}</span>
-                                            ) : (
-                                                <span className="badge bg-success">Unoccupied Bed</span>
-                                            )}
+                                <div className="card shadow-sm mb-3 border-0 bg-primary text-white rounded-4" style={{background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)'}}>
+                                    <div className="card-body p-3">
+                                        <h5 className="fw-bold mb-1">{activeBed.patient_name}</h5>
+                                        <div className="d-flex flex-wrap gap-2 opacity-90 small mt-2">
+                                            <span className="badge bg-white text-dark">Bed {activeBed.bed_number} ({activeBed.ward_name})</span>
+                                            <span className="badge bg-white text-danger">UHID: {activeBed.uhid}</span>
+                                            <span className="badge bg-white text-primary">IPD: {activeBed.ipd_code}</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Tabs */}
-                                <ul className="nav nav-pills mb-3 gap-2">
-                                    <li className="nav-item">
-                                        <button className={`nav-link ${activeTab === 'vitals' ? 'active' : ''}`} onClick={() => setActiveTab('vitals')}>
-                                            <i className="bi bi-activity me-1"></i> Vitals Entry
+                                {/* Form Tabs for Bedside Care */}
+                                <ul className="nav nav-pills mb-3 bg-white p-1 rounded-3 border">
+                                    <li className="nav-item flex-fill text-center">
+                                        <button className={`nav-link w-100 ${activeTab === 'vitals' ? 'active' : ''}`} onClick={() => setActiveTab('vitals')}>
+                                            <i className="bi bi-heart-pulse me-1"></i> Vitals
                                         </button>
                                     </li>
-                                    <li className="nav-item">
-                                        <button className={`nav-link ${activeTab === 'fluid' ? 'active' : ''}`} onClick={() => setActiveTab('fluid')}>
-                                            <i className="bi bi-droplet me-1"></i> Fluid Intake / Output
+                                    <li className="nav-item flex-fill text-center">
+                                        <button className={`nav-link w-100 ${activeTab === 'fluid' ? 'active' : ''}`} onClick={() => setActiveTab('fluid')}>
+                                            <i className="bi bi-droplet me-1"></i> Fluid I/O
                                         </button>
                                     </li>
-                                    <li className="nav-item">
-                                        <button className={`nav-link ${activeTab === 'treatment' ? 'active' : ''}`} onClick={() => setActiveTab('treatment')}>
-                                            <i className="bi bi-prescription2 me-1"></i> Treatment Note
+                                    <li className="nav-item flex-fill text-center">
+                                        <button className={`nav-link w-100 ${activeTab === 'treatment' ? 'active' : ''}`} onClick={() => setActiveTab('treatment')}>
+                                            <i className="bi bi-clipboard2-pulse me-1"></i> Treatment
                                         </button>
                                     </li>
                                 </ul>
 
-                                {/* Tab Content */}
-                                <div className="card p-3 shadow-sm border-0">
-                                    {activeTab === 'vitals' && (
-                                        <div>
-                                            <h6 className="fw-bold mb-3"><i className="bi bi-heart-pulse text-danger me-1"></i> Log Patient Vitals</h6>
+                                {activeTab === 'vitals' && (
+                                    <div className="card p-3 shadow-sm border-0 mb-3 rounded-4">
+                                        <h6 className="fw-bold mb-3"><i className="bi bi-heart-pulse-fill text-danger me-1"></i> Bedside Vitals Entry</h6>
+                                        <div className="row g-2 mb-3">
+                                            <div className="col-6"><label className="form-label small mb-1">BP Sys/Dia</label><div className="input-group input-group-sm"><input type="number" className="form-control" placeholder="120" value={vitalsForm.bp_systolic} onChange={e => setVitalsForm({...vitalsForm, bp_systolic: e.target.value})} /><span className="input-group-text">/</span><input type="number" className="form-control" placeholder="80" value={vitalsForm.bp_diastolic} onChange={e => setVitalsForm({...vitalsForm, bp_diastolic: e.target.value})} /></div></div>
+                                            <div className="col-6"><label className="form-label small mb-1">Pulse Rate</label><input type="number" className="form-control form-control-sm" placeholder="72 bpm" value={vitalsForm.pulse_rate} onChange={e => setVitalsForm({...vitalsForm, pulse_rate: e.target.value})} /></div>
+                                            <div className="col-6"><label className="form-label small mb-1">SpO2 %</label><input type="number" className="form-control form-control-sm" placeholder="98%" value={vitalsForm.spo2} onChange={e => setVitalsForm({...vitalsForm, spo2: e.target.value})} /></div>
+                                            <div className="col-6"><label className="form-label small mb-1">Temp °F</label><input type="number" step="0.1" className="form-control form-control-sm" placeholder="98.6" value={vitalsForm.temperature_f} onChange={e => setVitalsForm({...vitalsForm, temperature_f: e.target.value})} /></div>
+                                            <div className="col-6"><label className="form-label small mb-1">Resp Rate</label><input type="number" className="form-control form-control-sm" placeholder="18/min" value={vitalsForm.resp_rate} onChange={e => setVitalsForm({...vitalsForm, resp_rate: e.target.value})} /></div>
+                                            <div className="col-6"><label className="form-label small mb-1">Weight (kg)</label><input type="number" className="form-control form-control-sm" placeholder="70" value={vitalsForm.weight_kg} onChange={e => setVitalsForm({...vitalsForm, weight_kg: e.target.value})} /></div>
+                                        </div>
+                                        <button className="btn btn-success fw-bold py-2 w-100 rounded-3 shadow-sm" onClick={() => handleSaveIpdEntry('vitals', vitalsForm)}>
+                                            <i className="bi bi-check-circle-fill me-1"></i> Save Bedside Vitals
+                                        </button>
+                                    </div>
+                                )}
+
+                                {activeTab === 'treatment' && (
+                                    <div className="card p-3 shadow-sm border-0 mb-3 rounded-4">
+                                        <h6 className="fw-bold mb-2"><i className="bi bi-journal-check text-primary me-1"></i> Nursing Procedure &amp; Notes</h6>
+                                        <textarea className="form-control mb-3 rounded-3" rows="3" placeholder="Enter nursing procedure given or medication administered..." value={treatmentForm.treatment_text} onChange={e => setTreatmentForm({...treatmentForm, treatment_text: e.target.value})}></textarea>
+                                        <button className="btn btn-primary fw-bold py-2 w-100 rounded-3 shadow-sm" onClick={() => handleSaveIpdEntry('treatment', treatmentForm)}>
+                                            <i className="bi bi-send-fill me-1"></i> Save Procedure Note
+                                        </button>
+                                    </div>
+                                )}
+
+                                {/* Bedside Log Entries */}
+                                <div className="card p-3 shadow-sm border-0 rounded-4">
+                                    <h6 className="fw-bold mb-3"><i className="bi bi-clock-history me-1"></i> Patient Bedside History Log</h6>
+                                    {workspaceData.map(e => (
+                                        <div key={e.id} className="p-3 border rounded-3 bg-light mb-2">
+                                            <div className="d-flex justify-content-between align-items-center mb-1">
+                                                <span className="badge bg-secondary" style={{fontSize: '10px'}}>{e.entry_type}</span>
+                                                <small className="text-muted" style={{fontSize: '10px'}}>{e.recorded_at} - by {e.recorded_by}</small>
+                                            </div>
+                                            {renderNoteContent(e)}
+                                        </div>
+                                    ))}
+                                </div>
+                            </div>
+                        )}
+
+                        {/* -------------------------------------------------------------
+                           MODAL: FILL OPD VITALS
+                           ------------------------------------------------------------- */}
+                        {activeOpdForVitals && (
+                            <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
+                                <div className="modal-dialog modal-dialog-centered">
+                                    <div className="modal-content rounded-4 border-0 shadow-lg">
+                                        <div className="modal-header bg-success text-white">
+                                            <h6 className="modal-title fw-bold">
+                                                <i className="bi bi-heart-pulse-fill me-2"></i> Fill OPD Patient Vitals
+                                            </h6>
+                                            <button className="btn-close btn-close-white" onClick={() => setActiveOpdForVitals(null)}></button>
+                                        </div>
+                                        <div className="modal-body p-3">
+                                            <div className="alert alert-light border py-2 mb-3 small">
+                                                <strong>{activeOpdForVitals.patient_display_name}</strong> ({activeOpdForVitals.age_display} • {activeOpdForVitals.gender_label})
+                                                <br /><small className="text-muted">UHID: {activeOpdForVitals.uhid} | OPD Code: {activeOpdForVitals.opd_code}</small>
+                                            </div>
+
                                             <div className="row g-2">
-                                                <div className="col-md-2 col-6"><label className="form-label small">Temp °F</label><input type="number" step="0.1" className="form-control" value={vitalsForm.temperature_f} onChange={e => setVitalsForm({...vitalsForm, temperature_f: e.target.value})} /></div>
-                                                <div className="col-md-2 col-6"><label className="form-label small">Pulse</label><input type="number" className="form-control" value={vitalsForm.pulse_rate} onChange={e => setVitalsForm({...vitalsForm, pulse_rate: e.target.value})} /></div>
-                                                <div className="col-md-2 col-6"><label className="form-label small">Resp</label><input type="number" className="form-control" value={vitalsForm.resp_rate} onChange={e => setVitalsForm({...vitalsForm, resp_rate: e.target.value})} /></div>
-                                                <div className="col-md-2 col-6"><label className="form-label small">SBP</label><input type="number" className="form-control" value={vitalsForm.bp_systolic} onChange={e => setVitalsForm({...vitalsForm, bp_systolic: e.target.value})} /></div>
-                                                <div className="col-md-2 col-6"><label className="form-label small">DBP</label><input type="number" className="form-control" value={vitalsForm.bp_diastolic} onChange={e => setVitalsForm({...vitalsForm, bp_diastolic: e.target.value})} /></div>
-                                                <div className="col-md-2 col-6"><label className="form-label small">SpO2 %</label><input type="number" className="form-control" value={vitalsForm.spo2} onChange={e => setVitalsForm({...vitalsForm, spo2: e.target.value})} /></div>
-                                                <div className="col-12"><label className="form-label small">Nursing Observation</label><textarea className="form-control" rows="2" value={vitalsForm.general_note} onChange={e => setVitalsForm({...vitalsForm, general_note: e.target.value})}></textarea></div>
-                                                <div className="col-12 mt-3">
-                                                    <button className="btn btn-primary" onClick={() => handleSaveEntry('vitals', vitalsForm)}>Save Vitals Entry</button>
+                                                <div className="col-6">
+                                                    <label className="form-label small fw-bold mb-1">BP Sys/Dia</label>
+                                                    <div className="input-group input-group-sm">
+                                                        <input type="number" className="form-control text-center" placeholder="120" value={opdVitalsForm.bp_systolic} onChange={e => setOpdVitalsForm({...opdVitalsForm, bp_systolic: e.target.value})} />
+                                                        <span className="input-group-text">/</span>
+                                                        <input type="number" className="form-control text-center" placeholder="80" value={opdVitalsForm.bp_diastolic} onChange={e => setOpdVitalsForm({...opdVitalsForm, bp_diastolic: e.target.value})} />
+                                                    </div>
+                                                </div>
+                                                <div className="col-6">
+                                                    <label className="form-label small fw-bold mb-1">Pulse Rate (bpm)</label>
+                                                    <input type="number" className="form-control form-control-sm text-center" placeholder="72" value={opdVitalsForm.pulse} onChange={e => setOpdVitalsForm({...opdVitalsForm, pulse: e.target.value})} />
+                                                </div>
+                                                <div className="col-6">
+                                                    <label className="form-label small fw-bold mb-1">SpO2 %</label>
+                                                    <input type="number" className="form-control form-control-sm text-center" placeholder="98" value={opdVitalsForm.spo2} onChange={e => setOpdVitalsForm({...opdVitalsForm, spo2: e.target.value})} />
+                                                </div>
+                                                <div className="col-6">
+                                                    <label className="form-label small fw-bold mb-1">Temp °F</label>
+                                                    <input type="number" step="0.1" className="form-control form-control-sm text-center" placeholder="98.6" value={opdVitalsForm.temp} onChange={e => setOpdVitalsForm({...opdVitalsForm, temp: e.target.value})} />
+                                                </div>
+                                                <div className="col-6">
+                                                    <label className="form-label small fw-bold mb-1">Weight (kg)</label>
+                                                    <input type="number" className="form-control form-control-sm text-center" placeholder="70" value={opdVitalsForm.weight} onChange={e => setOpdVitalsForm({...opdVitalsForm, weight: e.target.value})} />
+                                                </div>
+                                                <div className="col-6">
+                                                    <label className="form-label small fw-bold mb-1">Height (cm)</label>
+                                                    <input type="number" className="form-control form-control-sm text-center" placeholder="165" value={opdVitalsForm.height} onChange={e => setOpdVitalsForm({...opdVitalsForm, height: e.target.value})} />
                                                 </div>
                                             </div>
                                         </div>
-                                    )}
-
-                                    {activeTab === 'fluid' && (
-                                        <div>
-                                            <h6 className="fw-bold mb-3"><i className="bi bi-droplet text-primary me-1"></i> Log Fluid Intake / Output</h6>
-                                            <div className="row g-2">
-                                                <div className="col-md-3 col-6">
-                                                    <label className="form-label small">Direction</label>
-                                                    <select className="form-select" value={fluidForm.fluid_direction} onChange={e => setFluidForm({...fluidForm, fluid_direction: e.target.value})}>
-                                                        <option value="intake">Intake (In)</option>
-                                                        <option value="output">Output (Out)</option>
-                                                    </select>
-                                                </div>
-                                                <div className="col-md-4 col-6">
-                                                    <label className="form-label small">Route</label>
-                                                    <input type="text" className="form-control" value={fluidForm.fluid_route} onChange={e => setFluidForm({...fluidForm, fluid_route: e.target.value})} />
-                                                </div>
-                                                <div className="col-md-3 col-6">
-                                                    <label className="form-label small">Amount (ml)</label>
-                                                    <input type="number" className="form-control" value={fluidForm.fluid_amount_ml} onChange={e => setFluidForm({...fluidForm, fluid_amount_ml: e.target.value})} />
-                                                </div>
-                                                <div className="col-12"><label className="form-label small">Observation</label><textarea className="form-control" rows="2" value={fluidForm.general_note} onChange={e => setFluidForm({...fluidForm, general_note: e.target.value})}></textarea></div>
-                                                <div className="col-12 mt-3">
-                                                    <button className="btn btn-primary" onClick={() => handleSaveEntry('fluid', fluidForm)}>Save Fluid Entry</button>
-                                                </div>
-                                            </div>
+                                        <div className="modal-footer p-2 bg-light">
+                                            <button className="btn btn-secondary btn-sm" onClick={() => setActiveOpdForVitals(null)}>Cancel</button>
+                                            <button className="btn btn-success btn-sm fw-bold px-3" onClick={handleSaveOpdVitals}>
+                                                <i className="bi bi-check-circle-fill me-1"></i> Save Vitals for Doctor
+                                            </button>
                                         </div>
-                                    )}
+                                    </div>
+                                </div>
+                            </div>
+                        )}
 
-                                    {activeTab === 'treatment' && (
-                                        <div>
-                                            <h6 className="fw-bold mb-3"><i className="bi bi-prescription2 text-warning me-1"></i> Log Treatment / Procedure Note</h6>
-                                            <div className="row g-2">
-                                                <div className="col-12"><label className="form-label small">Treatment Given</label><textarea className="form-control" rows="3" value={treatmentForm.treatment_text} onChange={e => setTreatmentForm({...treatmentForm, treatment_text: e.target.value})}></textarea></div>
-                                                <div className="col-12"><label className="form-label small">Additional Note</label><textarea className="form-control" rows="2" value={treatmentForm.general_note} onChange={e => setTreatmentForm({...treatmentForm, general_note: e.target.value})}></textarea></div>
-                                                <div className="col-12 mt-3">
-                                                    <button className="btn btn-primary" onClick={() => handleSaveEntry('treatment', treatmentForm)}>Save Treatment Note</button>
-                                                </div>
-                                            </div>
+                        {/* -------------------------------------------------------------
+                           MODAL: SCAN / PHOTO UPLOAD FOR PAPER DOCUMENTS
+                           ------------------------------------------------------------- */}
+                        {scanTarget && (
+                            <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.5)'}}>
+                                <div className="modal-dialog modal-dialog-centered">
+                                    <div className="modal-content rounded-4 border-0 shadow-lg">
+                                        <div className="modal-header bg-primary text-white">
+                                            <h6 className="modal-title fw-bold">
+                                                <i className="bi bi-camera-fill me-2"></i> Scan / Photo Paper Document
+                                            </h6>
+                                            <button className="btn-close btn-close-white" onClick={() => setScanTarget(null)}></button>
                                         </div>
-                                    )}
+                                        <div className="modal-body p-3">
+                                            <div className="mb-3">
+                                                <label className="form-label small fw-bold">Document Type / Category</label>
+                                                <select className="form-select form-select-sm" value={scanDocCategory} onChange={e => setScanDocCategory(e.target.value)}>
+                                                    <option value="Paper Document">Paper Document (General)</option>
+                                                    <option value="Vitals Sheet">Vitals Sheet / Chart</option>
+                                                    <option value="Lab Test Report">Lab / Pathology Report</option>
+                                                    <option value="Handwritten Doctor Note">Handwritten Doctor Note</option>
+                                                    <option value="Consent Form">Signed Consent Form</option>
+                                                </select>
+                                            </div>
 
-                                    {/* Workspace Entries Table */}
-                                    <div className="mt-4 border-top pt-3">
-                                        <h6 className="fw-bold mb-2">Live Entries History ({workspaceData.length})</h6>
-                                        <div className="table-responsive">
-                                            <table className="table table-sm table-striped">
-                                                <thead>
-                                                    <tr>
-                                                        <th>Recorded At</th>
-                                                        <th>Type</th>
-                                                        <th>Staff</th>
-                                                        <th>Summary</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {workspaceData.length === 0 ? (
-                                                        <tr><td colSpan="4" className="text-center text-muted py-3">No nursing entries found for this admission.</td></tr>
-                                                    ) : (
-                                                        workspaceData.map(entry => (
-                                                            <tr key={entry.id}>
-                                                                <td><small>{entry.recorded_at}</small></td>
-                                                                <td><span className="badge bg-secondary text-uppercase">{entry.entry_type}</span></td>
-                                                                <td><small>{entry.recorded_by || 'Staff'}</small></td>
-                                                                <td>
-                                                                    <small>
-                                                                        {entry.entry_type === 'vitals' && `T: ${entry.temperature_c ? ((entry.temperature_c * 9/5) + 32).toFixed(1) + '°F' : '-'}, P: ${entry.pulse_rate || '-'}, BP: ${entry.bp_systolic || '-'}/${entry.bp_diastolic || '-'}, SpO2: ${entry.spo2 || '-'}`}
-                                                                        {entry.entry_type === 'fluid' && `${entry.fluid_direction?.toUpperCase()} - ${entry.fluid_route}: ${entry.fluid_amount_ml}ml`}
-                                                                        {entry.entry_type === 'treatment' && entry.treatment_text}
-                                                                        {entry.general_note && ` (${entry.general_note})`}
-                                                                    </small>
-                                                                </td>
-                                                            </tr>
-                                                        ))
-                                                    )}
-                                                </tbody>
-                                            </table>
+                                            <div className="mb-3 text-center">
+                                                <label className="btn btn-primary btn-lg w-100 py-3 fw-bold rounded-3 shadow-sm">
+                                                    <i className="bi bi-camera me-2"></i> Take Photo / Choose File
+                                                    <input type="file" accept="image/*" capture="environment" className="d-none" onChange={handleScanImageCapture} />
+                                                </label>
+                                            </div>
+
+                                            {scanImagePreview && (
+                                                <div className="position-relative p-2 border rounded-3 bg-light text-center">
+                                                    <span className="badge bg-success position-absolute top-0 start-0 m-2"><i className="bi bi-check-circle me-1"></i> Document Photo Captured</span>
+                                                    <img src={scanImagePreview} alt="Document Scan Preview" className="img-fluid rounded-3 border shadow-sm" style={{maxHeight: '220px', objectFit: 'contain'}} />
+                                                </div>
+                                            )}
+                                        </div>
+                                        <div className="modal-footer p-2 bg-light">
+                                            <button className="btn btn-secondary btn-sm" onClick={() => setScanTarget(null)}>Cancel</button>
+                                            <button className="btn btn-success btn-sm fw-bold px-3" onClick={handleSaveScanDocument} disabled={!scanImageBase64}>
+                                                <i className="bi bi-cloud-upload-fill me-1"></i> Save Document to Chart
+                                            </button>
                                         </div>
                                     </div>
                                 </div>

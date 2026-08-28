@@ -1577,6 +1577,10 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1'], static funct
     $routes->post('nursing/auth/set-pin', 'NursingApi::setPin');
     $routes->get('nursing/workspace/(:num)', 'NursingApi::workspace/$1');
     $routes->post('nursing/entry/save/(:num)', 'NursingApi::saveEntry/$1');
+    $routes->get('nursing/opd/list', 'NursingApi::opdList');
+    $routes->post('nursing/opd/vitals/save/(:num)', 'NursingApi::saveOpdVitals/$1');
+    $routes->post('nursing/opd/scan/save/(:num)', 'NursingApi::saveOpdScan/$1');
+    $routes->post('nursing/ipd/scan/save/(:num)', 'NursingApi::saveIpdScan/$1');
 
     // Doctor PWA APIs
     $routes->get('doctor/list', 'DoctorApi::doctors');

@@ -236,4 +236,262 @@ class NursingApi extends BaseController
             'message' => $msg,
         ]);
     }
+
+    /**
+     * GET api/v1/nursing/opd/list
+     */
+    public function opdList()
+    {
+        $db = db_connect();
+        helper('common');
+
+        $dateMode = $this->request->getGet('date_mode') ?? 'today';
+        $docId = (int) ($this->request->getGet('doctor_id') ?? 0);
+
+        $whereClause = "WHERE 1=1";
+        if ($dateMode === 'today') {
+            $whereClause .= " AND DATE(o.date_of_assign) = CURDATE()";
+        }
+        if ($docId > 0) {
+            $whereClause .= " AND o.doc_id = " . $docId;
+        }
+
+        $sql = "SELECT o.opd_id, o.opd_code, o.opd_no, o.p_id, o.doc_id, o.date_of_assign, o.opd_status, o.opd_type,
+                       p.p_fname as fname, p.p_rname as rname, p.p_code as uhid, p.mphone1, p.gender, p.age, p.age_in_month, p.estimate_dob, p.dob,
+                       concat('Dr. ', d.p_fname, ' ', coalesce(d.p_lname, '')) as doctor_name,
+                       pr.temp, pr.pulse, pr.bp, pr.diastolic, pr.spo2, pr.weight, pr.height, pr.rr_min
+                FROM opd_master o
+                JOIN patient_master p ON o.p_id = p.id
+                LEFT JOIN doctor_master d ON o.doc_id = d.id
+                LEFT JOIN opd_prescription pr ON o.opd_id = pr.opd_id
+                {$whereClause}
+                ORDER BY o.opd_id DESC";
+
+        $query = $db->query($sql);
+        $records = $query->getResultArray();
+
+        $todayTotalCount = (int) $db->query("SELECT count(*) as c FROM opd_master WHERE DATE(date_of_assign) = CURDATE()")->getRow()->c;
+        $allTotalCount = (int) $db->query("SELECT count(*) as c FROM opd_master")->getRow()->c;
+
+        $counts = ['all' => 0, 'waiting' => 0, 'visited' => 0, 'booked' => 0, 'cancelled' => 0, 'today_total' => $todayTotalCount, 'all_total' => $allTotalCount];
+        $appointments = [];
+
+        foreach ($records as $r) {
+            $statusKey = 'waiting';
+            $statusLabel = 'Waiting';
+            $st = (int) ($r['opd_status'] ?? 0);
+            if ($st === 2) {
+                $statusKey = 'visited';
+                $statusLabel = 'Visited';
+            } elseif ($st === 3) {
+                $statusKey = 'cancelled';
+                $statusLabel = 'Cancelled';
+            } elseif ($st === 1) {
+                $statusKey = 'booked';
+                $statusLabel = 'Booked';
+            }
+
+            $counts['all']++;
+            if (isset($counts[$statusKey])) {
+                $counts[$statusKey]++;
+            }
+
+            $ageDisplay = 'N/A';
+            if (function_exists('get_age_1')) {
+                $ageDisplay = get_age_1($r['dob'] ?? null, $r['age'] ?? '', $r['age_in_month'] ?? '', $r['estimate_dob'] ?? '');
+            } elseif (! empty($r['age'])) {
+                $ageDisplay = $r['age'] . ' Year';
+            }
+
+            $hasVitals = !empty($r['temp']) || !empty($r['pulse']) || !empty($r['bp']) || !empty($r['spo2']) || !empty($r['weight']);
+
+            $r['status_key'] = $statusKey;
+            $r['status_label'] = $statusLabel;
+            $r['age_display'] = $ageDisplay;
+            $r['gender_label'] = ((int)($r['gender'] ?? 1) === 1) ? 'Male' : 'Female';
+            $r['patient_display_name'] = $r['fname'] ?? 'Patient';
+            $r['has_vitals'] = $hasVitals;
+
+            $appointments[] = $r;
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'counts' => $counts,
+            'date_mode' => $dateMode,
+            'appointments' => $appointments,
+        ]);
+    }
+
+    /**
+     * POST api/v1/nursing/opd/vitals/save/(:num)
+     */
+    public function saveOpdVitals(int $opdId)
+    {
+        $db = db_connect();
+        $json = $this->request->getJSON(true);
+        $post = $this->request->getPost() ?: [];
+        $dataInput = ! empty($json) ? $json : $post;
+
+        $opdRow = $db->table('opd_master')->where('opd_id', $opdId)->get()->getRowArray();
+        if (! $opdRow) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'OPD record not found']);
+        }
+
+        $vitalsData = [
+            'opd_id' => $opdId,
+            'doc_id' => (int) ($opdRow['doc_id'] ?? 0),
+            'p_id' => (int) ($opdRow['p_id'] ?? 0),
+            'date_opd_visit' => date('Y-m-d'),
+            'temp' => trim((string) ($dataInput['temp'] ?? '')),
+            'pulse' => trim((string) ($dataInput['pulse'] ?? '')),
+            'bp' => trim((string) ($dataInput['bp_systolic'] ?? '')),
+            'diastolic' => trim((string) ($dataInput['bp_diastolic'] ?? '')),
+            'spo2' => trim((string) ($dataInput['spo2'] ?? '')),
+            'weight' => trim((string) ($dataInput['weight'] ?? '')),
+            'height' => trim((string) ($dataInput['height'] ?? '')),
+            'rr_min' => trim((string) ($dataInput['rr_min'] ?? '')),
+        ];
+
+        $existing = $db->table('opd_prescription')->where('opd_id', $opdId)->get()->getRowArray();
+        if ($existing) {
+            $db->table('opd_prescription')->where('opd_id', $opdId)->update($vitalsData);
+        } else {
+            $db->table('opd_prescription')->insert($vitalsData);
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'message' => 'Patient Vitals saved successfully by Nursing Staff',
+        ]);
+    }
+
+    /**
+     * POST api/v1/nursing/opd/scan/save/(:num)
+     */
+    public function saveOpdScan(int $opdId)
+    {
+        $db = db_connect();
+        $json = $this->request->getJSON(true);
+        $post = $this->request->getPost() ?: [];
+        $dataInput = ! empty($json) ? $json : $post;
+
+        $imageBase64 = $dataInput['image_base64'] ?? null;
+        if (empty($imageBase64)) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Scan photo required']);
+        }
+
+        $docType = trim((string) ($dataInput['document_type'] ?? 'Paper Document'));
+        $nurseName = trim((string) ($dataInput['nurse_name'] ?? 'Nursing Staff'));
+
+        $imgData = $imageBase64;
+        $ext = 'jpg';
+        if (preg_match('/^data:image\/(\w+);base64,/', $imageBase64, $type)) {
+            $imgData = substr($imageBase64, strpos($imageBase64, ',') + 1);
+            $ext = strtolower($type[1]);
+            if ($ext === 'jpeg') $ext = 'jpg';
+        }
+        $imgData = str_replace(' ', '+', $imgData);
+        $binary = base64_decode($imgData);
+
+        if ($binary === false || strlen($binary) === 0) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Failed to process document image']);
+        }
+
+        $uploadDir = FCPATH . 'uploads/nursing_scans/';
+        if (! is_dir($uploadDir)) {
+            @mkdir($uploadDir, 0777, true);
+        }
+        $filename = 'nursing_opd_doc_' . $opdId . '_' . time() . '_' . rand(100, 999) . '.' . $ext;
+        file_put_contents($uploadDir . $filename, $binary);
+        $imageUrl = '/uploads/nursing_scans/' . $filename;
+
+        // Append attachment to OPD prescription advice/investigation
+        $existing = $db->table('opd_prescription')->where('opd_id', $opdId)->get()->getRowArray();
+        $attachmentText = '[Nursing Scan: ' . $docType . ' by ' . $nurseName . '] [IMAGE_ATTACHMENT:' . $imageUrl . ']';
+
+        if ($existing) {
+            $newAdvice = trim(($existing['advice'] ?? '') . "\n" . $attachmentText);
+            $db->table('opd_prescription')->where('opd_id', $opdId)->update(['advice' => $newAdvice]);
+        } else {
+            $opdRow = $db->table('opd_master')->where('opd_id', $opdId)->get()->getRowArray();
+            $db->table('opd_prescription')->insert([
+                'opd_id' => $opdId,
+                'doc_id' => (int) ($opdRow['doc_id'] ?? 0),
+                'p_id' => (int) ($opdRow['p_id'] ?? 0),
+                'date_opd_visit' => date('Y-m-d'),
+                'advice' => $attachmentText,
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'message' => 'OPD Scanned Document saved successfully',
+            'image_url' => $imageUrl,
+        ]);
+    }
+
+    /**
+     * POST api/v1/nursing/ipd/scan/save/(:num)
+     */
+    public function saveIpdScan(int $ipdId)
+    {
+        $json = $this->request->getJSON(true);
+        $post = $this->request->getPost() ?: [];
+        $dataInput = ! empty($json) ? $json : $post;
+
+        $imageBase64 = $dataInput['image_base64'] ?? null;
+        if (empty($imageBase64)) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Scan photo required']);
+        }
+
+        $docType = trim((string) ($dataInput['document_type'] ?? 'Paper Document'));
+        $nurseId = (int) ($dataInput['nurse_id'] ?? 0);
+        $nurseName = trim((string) ($dataInput['nurse_name'] ?? 'Nursing Staff'));
+
+        $imgData = $imageBase64;
+        $ext = 'jpg';
+        if (preg_match('/^data:image\/(\w+);base64,/', $imageBase64, $type)) {
+            $imgData = substr($imageBase64, strpos($imageBase64, ',') + 1);
+            $ext = strtolower($type[1]);
+            if ($ext === 'jpeg') $ext = 'jpg';
+        }
+        $imgData = str_replace(' ', '+', $imgData);
+        $binary = base64_decode($imgData);
+
+        if ($binary === false || strlen($binary) === 0) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Failed to process document image']);
+        }
+
+        $uploadDir = FCPATH . 'uploads/nursing_scans/';
+        if (! is_dir($uploadDir)) {
+            @mkdir($uploadDir, 0777, true);
+        }
+        $filename = 'nursing_ipd_doc_' . $ipdId . '_' . time() . '_' . rand(100, 999) . '.' . $ext;
+        file_put_contents($uploadDir . $filename, $binary);
+        $imageUrl = '/uploads/nursing_scans/' . $filename;
+
+        $fullNoteText = '[Nursing Scanned Document: ' . $docType . '] [IMAGE_ATTACHMENT:' . $imageUrl . ']';
+
+        $data = [
+            'ipd_id' => $ipdId,
+            'entry_type' => 'treatment',
+            'recorded_at' => date('Y-m-d H:i:s'),
+            'treatment_text' => $fullNoteText,
+            'general_note' => 'Scanned Document: ' . $docType . ' (' . $imageUrl . ')',
+            'recorded_by' => '[Nurse] ' . $nurseName,
+            'recorded_by_id' => $nurseId,
+            'created_at' => date('Y-m-d H:i:s'),
+            'updated_at' => date('Y-m-d H:i:s'),
+        ];
+
+        $this->ipdNursingEntryModel->insert($data);
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'message' => 'IPD Scanned Document uploaded successfully to Patient Chart',
+            'image_url' => $imageUrl,
+        ]);
+    }
 }
+
