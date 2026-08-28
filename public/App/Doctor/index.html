@@ -302,6 +302,9 @@
             const [activeOpd, setActiveOpd] = useState(null);
             const [workspaceEntries, setWorkspaceEntries] = useState([]);
             const [newTreatmentNote, setNewTreatmentNote] = useState('');
+            const [noteImageBase64, setNoteImageBase64] = useState('');
+            const [noteImagePreview, setNoteImagePreview] = useState('');
+
             const [installPrompt, setInstallPrompt] = useState(null);
 
             // Auth state
@@ -511,6 +514,7 @@
 
             const openIpdWorkspace = async (patient) => {
                 setActivePatient(patient);
+                clearCapturedImage();
                 try {
                     const res = await fetch(`/api/v1/doctor/ipd/workspace/${patient.ipd_id}`);
                     const json = await res.json();
@@ -522,14 +526,36 @@
                 }
             };
 
+            const handleImageCapture = (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                const reader = new FileReader();
+                reader.onload = (event) => {
+                    setNoteImageBase64(event.target.result);
+                    setNoteImagePreview(event.target.result);
+                };
+                reader.readAsDataURL(file);
+            };
+
+            const clearCapturedImage = () => {
+                setNoteImageBase64('');
+                setNoteImagePreview('');
+            };
+
             const handleSaveTreatmentNote = async () => {
-                if (!activePatient || !newTreatmentNote.trim()) return;
+                if (!activePatient || (!newTreatmentNote.trim() && !noteImageBase64)) {
+                    alert('Please enter clinical observations or take a picture of your handwritten note.');
+                    return;
+                }
 
                 try {
                     const body = new URLSearchParams();
                     body.append('doctor_id', authenticatedDoctor ? authenticatedDoctor.id : 0);
                     body.append('doctor_name', authenticatedDoctor ? authenticatedDoctor.name : 'Doctor');
                     body.append('treatment_text', newTreatmentNote);
+                    if (noteImageBase64) {
+                        body.append('image_base64', noteImageBase64);
+                    }
 
                     const res = await fetch(`/api/v1/doctor/ipd/treatment/save/${activePatient.ipd_id}`, {
                         method: 'POST',
@@ -538,8 +564,9 @@
                     });
                     const json = await res.json();
                     if (json.status === 1) {
-                        alert(json.message || 'Clinical treatment note saved successfully!');
+                        alert(json.message || 'Clinical note / handwritten note saved successfully!');
                         setNewTreatmentNote('');
+                        clearCapturedImage();
                         openIpdWorkspace(activePatient);
                     } else {
                         alert(json.message || 'Failed to save treatment note');
@@ -551,6 +578,7 @@
 
             const openOpdConsultation = async (app) => {
                 setActiveOpd(app);
+                clearCapturedImage();
                 try {
                     const res = await fetch(`/api/v1/doctor/opd/prescription/${app.opd_id}`);
                     const json = await res.json();
@@ -602,6 +630,9 @@
                     body.append('doctor_id', authenticatedDoctor ? authenticatedDoctor.id : 0);
                     Object.keys(prescForm).forEach(k => body.append(k, prescForm[k]));
                     body.append('medicines', JSON.stringify(medicines));
+                    if (noteImageBase64) {
+                        body.append('image_base64', noteImageBase64);
+                    }
 
                     const res = await fetch(`/api/v1/doctor/opd/prescription/save/${activeOpd.opd_id}`, {
                         method: 'POST',
@@ -612,6 +643,7 @@
                     if (json.status === 1) {
                         alert(json.message || 'Prescription saved & OPD Visit completed!');
                         setActiveOpd(null);
+                        clearCapturedImage();
                         fetchOpdAppointments(authenticatedDoctor ? authenticatedDoctor.id : 0, opdDateMode);
                     } else {
                         alert(json.message || 'Failed to save prescription');
@@ -670,6 +702,28 @@
                 const parts = nameStr.trim().split(' ');
                 if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
                 return nameStr.substring(0, 2).toUpperCase();
+            };
+
+            const renderNoteContent = (entry) => {
+                const text = entry.treatment_text || entry.general_note || '';
+                const match = text.match(/\[IMAGE_ATTACHMENT:(.*?)\]/);
+                const cleanText = text.replace(/\[IMAGE_ATTACHMENT:.*?\]/, '').replace('[Doctor Note] ', '');
+
+                return (
+                    <div>
+                        {cleanText && <div className="small fw-semibold">{cleanText}</div>}
+                        {match && match[1] && (
+                            <div className="mt-2">
+                                <span className="badge bg-primary mb-1 d-inline-flex align-items-center gap-1" style={{fontSize: '10px'}}>
+                                    <i className="bi bi-paperclip"></i> Doctor Handwritten Note Photo
+                                </span>
+                                <a href={match[1]} target="_blank" rel="noreferrer">
+                                    <img src={match[1]} alt="Doctor Handwritten Note" className="img-fluid rounded-3 border shadow-sm d-block mt-1" style={{maxHeight: '240px', objectFit: 'cover'}} />
+                                </a>
+                            </div>
+                        )}
+                    </div>
+                );
             };
 
             // -------------------------------------------------------------
@@ -784,8 +838,8 @@
                             <button className="btn btn-sm btn-outline-light rounded-circle p-2" style={{width: '36px', height: '36px'}} onClick={() => { fetchOpdAppointments(authenticatedDoctor.id, opdDateMode); fetchIpdPatients(authenticatedDoctor.id); }} title="Refresh Queue">
                                 <i className="bi bi-arrow-clockwise"></i>
                             </button>
-                            <button className="btn btn-sm btn-danger px-3 py-1 fw-bold rounded-pill" onClick={handleLogout} title="Lock Device Access">
-                                <i className="bi bi-lock-fill me-1"></i> Lock
+                            <button className="btn btn-sm btn-outline-danger rounded-circle p-2" style={{width: '36px', height: '36px'}} onClick={handleLogout} title="Lock Device Access">
+                                <i className="bi bi-lock-fill"></i>
                             </button>
                         </div>
                     </header>
@@ -1179,12 +1233,30 @@
                                     </div>
                                 </div>
 
-                                {/* Write Doctor Round Note / Treatment Order */}
+                                {/* Write Doctor Round Note / Take Picture of Handwritten Note */}
                                 <div className="card p-3 shadow-sm border-0 mb-3 rounded-4">
-                                    <label className="form-label fw-bold small text-dark mb-2"><i className="bi bi-pencil-square text-primary me-1"></i> Write Doctor Round Clinical Note / Treatment Order</label>
+                                    <div className="d-flex justify-content-between align-items-center mb-2">
+                                        <label className="form-label fw-bold small text-dark mb-0"><i className="bi bi-pencil-square text-primary me-1"></i> Write Clinical Round Note or Attach Photo</label>
+                                        <label className="btn btn-sm btn-outline-primary rounded-pill px-3 py-1 fw-bold" style={{fontSize: '11px'}}>
+                                            <i className="bi bi-camera-fill me-1"></i> Take Photo / Attach
+                                            <input type="file" accept="image/*" capture="environment" className="d-none" onChange={handleImageCapture} />
+                                        </label>
+                                    </div>
+
+                                    {/* Image Preview Box if picture taken */}
+                                    {noteImagePreview && (
+                                        <div className="position-relative mb-2 p-2 border rounded-3 bg-light text-center">
+                                            <span className="badge bg-primary position-absolute top-0 start-0 m-2"><i className="bi bi-camera me-1"></i> Handwritten Note Attached</span>
+                                            <img src={noteImagePreview} alt="Handwritten Note Preview" className="img-fluid rounded-3 border shadow-sm" style={{maxHeight: '180px', objectFit: 'contain'}} />
+                                            <button className="btn btn-sm btn-danger position-absolute top-0 end-0 m-2 rounded-circle p-1" style={{width: '28px', height: '28px'}} onClick={clearCapturedImage} title="Remove Photo">
+                                                <i className="bi bi-x-lg"></i>
+                                            </button>
+                                        </div>
+                                    )}
+
                                     <textarea className="form-control mb-2 rounded-3" rows="3" placeholder="Enter clinical observations, daily round progress note, or bedside treatment instructions..." value={newTreatmentNote} onChange={e => setNewTreatmentNote(e.target.value)}></textarea>
                                     <button className="btn btn-action-primary btn-sm fw-bold align-self-end px-4" onClick={handleSaveTreatmentNote}>
-                                        <i className="bi bi-send-fill me-1"></i> Save Round Note
+                                        <i className="bi bi-send-fill me-1"></i> Save Round Note &amp; Share with Nursing
                                     </button>
                                 </div>
 
@@ -1200,7 +1272,7 @@
                                                     <span className="badge bg-secondary" style={{fontSize: '10px'}}>{e.entry_type}</span>
                                                     <small className="text-muted" style={{fontSize: '10px'}}>{e.recorded_at} - by {e.recorded_by}</small>
                                                 </div>
-                                                <div className="small fw-semibold">{e.treatment_text || e.general_note}</div>
+                                                {renderNoteContent(e)}
                                             </div>
                                         ))
                                     )}
@@ -1208,7 +1280,7 @@
                             </div>
                         ) : activeOpd ? (
                             /* -------------------------------------------------------------
-                               OPD CONSULTATION & PRESCRIPTION FORM (NATIVE CONTROLS COPY)
+                               OPD CONSULTATION & PRESCRIPTION FORM
                                ------------------------------------------------------------- */
                             <div>
                                 <div className="d-flex justify-content-between align-items-center mb-3">
@@ -1240,6 +1312,31 @@
                                             <span className="queue-badge fs-6">Q #{activeOpd.queue_no || '1'}</span>
                                         </div>
                                     </div>
+                                </div>
+
+                                {/* Camera / Photo Attach Handwritten Prescription Option */}
+                                <div className="card p-3 shadow-sm border-0 mb-3 rounded-4 bg-primary-subtle border-primary-subtle">
+                                    <div className="d-flex justify-content-between align-items-center">
+                                        <div>
+                                            <h6 className="fw-bold mb-0 text-primary"><i className="bi bi-camera-fill me-1"></i> Attach Photo of Handwritten Rx Note</h6>
+                                            <small className="text-muted d-block" style={{fontSize: '11px'}}>Snap a picture of your paper prescription to send to Pharmacy / Patient</small>
+                                        </div>
+                                        <label className="btn btn-sm btn-primary rounded-pill px-3 py-1.5 fw-bold">
+                                            <i className="bi bi-camera me-1"></i> Snap Photo
+                                            <input type="file" accept="image/*" capture="environment" className="d-none" onChange={handleImageCapture} />
+                                        </label>
+                                    </div>
+
+                                    {/* Preview if image captured */}
+                                    {noteImagePreview && (
+                                        <div className="position-relative mt-2 p-2 border rounded-3 bg-white text-center">
+                                            <span className="badge bg-success position-absolute top-0 start-0 m-2"><i className="bi bi-check-circle me-1"></i> Rx Photo Attached</span>
+                                            <img src={noteImagePreview} alt="Handwritten Rx Preview" className="img-fluid rounded-3 border shadow-sm" style={{maxHeight: '200px', objectFit: 'contain'}} />
+                                            <button className="btn btn-sm btn-danger position-absolute top-0 end-0 m-2 rounded-circle p-1" style={{width: '28px', height: '28px'}} onClick={clearCapturedImage} title="Remove Photo">
+                                                <i className="bi bi-x-lg"></i>
+                                            </button>
+                                        </div>
+                                    )}
                                 </div>
 
                                 {/* Vitals Entry Bar */}

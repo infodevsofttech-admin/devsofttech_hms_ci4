@@ -347,6 +347,31 @@ class DoctorApi extends BaseController
         $docId = (int) ($post['doctor_id'] ?? $opdRow['doc_id']);
         $pId = (int) ($opdRow['p_id'] ?? 0);
 
+        $imageBase64 = $post['image_base64'] ?? null;
+        $imageUrl = '';
+        if (! empty($imageBase64)) {
+            if (preg_match('/^data:image\/(\w+);base64,/', $imageBase64, $type)) {
+                $imgData = substr($imageBase64, strpos($imageBase64, ',') + 1);
+                $ext = strtolower($type[1]);
+                if ($ext === 'jpeg') $ext = 'jpg';
+                $binary = base64_decode($imgData);
+                if ($binary !== false) {
+                    $uploadDir = FCPATH . 'uploads/doctor_notes/';
+                    if (! is_dir($uploadDir)) {
+                        @mkdir($uploadDir, 0777, true);
+                    }
+                    $filename = 'opd_rx_' . $opdId . '_' . time() . '_' . rand(100, 999) . '.' . $ext;
+                    file_put_contents($uploadDir . $filename, $binary);
+                    $imageUrl = '/uploads/doctor_notes/' . $filename;
+                }
+            }
+        }
+
+        $adviceText = trim((string) ($post['advice'] ?? ''));
+        if (! empty($imageUrl)) {
+            $adviceText .= ($adviceText ? "\n" : '') . '[Handwritten Rx Photo: ' . $imageUrl . ']';
+        }
+
         $prescData = [
             'opd_id' => $opdId,
             'doc_id' => $docId,
@@ -363,7 +388,7 @@ class DoctorApi extends BaseController
             'complaints' => trim((string) ($post['chief_complaints'] ?? '')),
             'Finding_Examinations' => trim((string) ($post['finding_examinations'] ?? '')),
             'diagnosis' => trim((string) ($post['provisional_diagnosis'] ?? '')),
-            'advice' => trim((string) ($post['advice'] ?? '')),
+            'advice' => $adviceText,
             'investigation' => trim((string) ($post['investigation'] ?? '')),
             'next_visit' => trim((string) ($post['next_visit'] ?? '')),
         ];
@@ -500,20 +525,45 @@ class DoctorApi extends BaseController
     {
         $post = $this->request->getPost() ?: ($this->request->getJSON(true) ?? []);
         $treatmentText = trim((string) ($post['treatment_text'] ?? ''));
+        $imageBase64 = $post['image_base64'] ?? null;
 
-        if ($treatmentText === '') {
-            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Doctor treatment note / order is required']);
+        $imageUrl = '';
+        if (! empty($imageBase64)) {
+            if (preg_match('/^data:image\/(\w+);base64,/', $imageBase64, $type)) {
+                $imgData = substr($imageBase64, strpos($imageBase64, ',') + 1);
+                $ext = strtolower($type[1]);
+                if ($ext === 'jpeg') $ext = 'jpg';
+                $binary = base64_decode($imgData);
+                if ($binary !== false) {
+                    $uploadDir = FCPATH . 'uploads/doctor_notes/';
+                    if (! is_dir($uploadDir)) {
+                        @mkdir($uploadDir, 0777, true);
+                    }
+                    $filename = 'note_ipd_' . $ipdId . '_' . time() . '_' . rand(100, 999) . '.' . $ext;
+                    file_put_contents($uploadDir . $filename, $binary);
+                    $imageUrl = '/uploads/doctor_notes/' . $filename;
+                }
+            }
+        }
+
+        if ($treatmentText === '' && empty($imageUrl)) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Please enter clinical notes or attach a handwritten note photo']);
         }
 
         $docId = (int) ($post['doctor_id'] ?? 0);
         $doctorName = trim((string) ($post['doctor_name'] ?? 'Doctor'));
 
+        $fullNoteText = '[Doctor Note] ' . $treatmentText;
+        if (! empty($imageUrl)) {
+            $fullNoteText .= ' [IMAGE_ATTACHMENT:' . $imageUrl . ']';
+        }
+
         $data = [
             'ipd_id' => $ipdId,
             'entry_type' => 'treatment',
             'recorded_at' => date('Y-m-d H:i:s'),
-            'treatment_text' => '[Doctor Note] ' . $treatmentText,
-            'general_note' => (string) ($post['general_note'] ?? ''),
+            'treatment_text' => $fullNoteText,
+            'general_note' => $imageUrl ? ('Attachment: ' . $imageUrl) : (string) ($post['general_note'] ?? ''),
             'recorded_by' => 'Dr. ' . $doctorName,
             'recorded_by_id' => $docId,
             'created_at' => date('Y-m-d H:i:s'),
@@ -524,7 +574,8 @@ class DoctorApi extends BaseController
 
         return $this->response->setJSON([
             'status' => 1,
-            'message' => 'Doctor clinical note / treatment saved successfully',
+            'message' => 'Doctor clinical note / handwritten photo saved successfully',
+            'image_url' => $imageUrl,
         ]);
     }
 }
