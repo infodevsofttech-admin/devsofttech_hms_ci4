@@ -1583,6 +1583,8 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1'], static funct
     $routes->post('doctor/auth/verify-pin', 'DoctorApi::verifyPin');
     $routes->post('doctor/auth/set-pin', 'DoctorApi::setPin');
     $routes->get('doctor/opd/list/(:num)', 'DoctorApi::opdList/$1');
+    $routes->get('doctor/opd/prescription/(:num)', 'DoctorApi::getOpdPrescription/$1');
+    $routes->post('doctor/opd/prescription/save/(:num)', 'DoctorApi::saveOpdPrescription/$1');
     $routes->get('doctor/ipd/list/(:num)', 'DoctorApi::ipdList/$1');
     $routes->get('doctor/ipd/workspace/(:num)', 'DoctorApi::patientWorkspace/$1');
     $routes->post('doctor/ipd/treatment/save/(:num)', 'DoctorApi::saveTreatmentNote/$1');

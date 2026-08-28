@@ -24,7 +24,6 @@
             --primary-bg: #0f172a;
             --card-bg: #1e293b;
             --accent-blue: #0d6efd;
-            --accent-indigo: #6610f2;
             --accent-green: #198754;
             --accent-amber: #ffc107;
             --accent-red: #dc3545;
@@ -97,13 +96,21 @@
             overflow: hidden;
         }
 
-        .vitals-pill {
-            font-size: 12px;
-            padding: 4px 10px;
-            border-radius: 20px;
-            background: #f1f5f9;
+        .chip-btn {
+            font-size: 11px;
+            padding: 3px 8px;
+            border-radius: 14px;
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
             color: #334155;
-            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+
+        .chip-btn:hover, .chip-btn.active {
+            background: #0d6efd;
+            color: #ffffff;
+            border-color: #0d6efd;
         }
     </style>
 </head>
@@ -120,12 +127,17 @@
             const [doctors, setDoctors] = useState([]);
             const [ipdPatients, setIpdPatients] = useState([]);
             const [opdAppointments, setOpdAppointments] = useState([]);
+            const [opdCounts, setOpdCounts] = useState({ all: 0, waiting: 0, visited: 0, booked: 0, cancelled: 0 });
+            const [opdFilter, setOpdFilter] = useState('all');
             const [loading, setLoading] = useState(true);
             const [searchQuery, setSearchQuery] = useState('');
-            const [mainTab, setMainTab] = useState('ipd'); // 'ipd', 'opd', 'discharge'
+            const [mainTab, setMainTab] = useState('opd'); // Default to OPD Appointments as requested!
+            
+            // Active IPD / OPD Workspace state
             const [activePatient, setActivePatient] = useState(null);
+            const [activeOpd, setActiveOpd] = useState(null);
             const [workspaceData, setWorkspaceData] = useState([]);
-            const [emrTab, setEmrTab] = useState('vitals'); // 'vitals', 'progress', 'rx', 'lab'
+            const [emrTab, setEmrTab] = useState('vitals');
             const [installPrompt, setInstallPrompt] = useState(null);
 
             // Auth state
@@ -137,15 +149,31 @@
             const [newPin, setNewPin] = useState('');
             const [confirmPin, setConfirmPin] = useState('');
 
-            // Clinical Progress Note Form
-            const [doctorNote, setDoctorNote] = useState('');
-            const [doctorAdvice, setDoctorAdvice] = useState('');
+            // OPD Prescription Consultation Form State (Optimized for Mobile Screens)
+            const [prescForm, setPrescForm] = useState({
+                chief_complaints: '',
+                provisional_diagnosis: '',
+                investigation: '',
+                advice: '',
+                next_visit: '',
+                temp: '',
+                pulse: '',
+                bp_systolic: '',
+                bp_diastolic: '',
+                spo2: '',
+                weight: ''
+            });
 
-            // Quick E-Rx Form
-            const [rxForm, setRxForm] = useState({ drug_name: '', dosage: '', frequency: '1-0-1', duration: '5 days', instructions: '' });
+            // Medicines Repeater Array
+            const [medicines, setMedicines] = useState([
+                { drug_name: '', dosage: '1 Tab', frequency: '1-0-1', duration: '5 Days', instructions: 'After Food' }
+            ]);
 
-            // Lab Order Form
-            const [labOrderText, setLabOrderText] = useState('');
+            // Quick Chips presets for Mobile Typing
+            const COMPLAINT_CHIPS = ['Fever', 'Cough', 'Swelling', 'Joint Pain', 'Headache', 'Back Ache', 'Nausea / Vomiting', 'Weakness'];
+            const DIAGNOSIS_CHIPS = ['Acute Rheumatic Fever', 'Viral Infection', 'Hypertension', 'Type 2 Diabetes', 'GERD', 'Bronchitis', 'Osteoarthritis'];
+            const DRUG_CHIPS = ['Paracetamol 500mg', 'Amoxicillin 500mg', 'Pantoprazole 40mg', 'Cetirizine 10mg', 'Ibuprofen 400mg', 'Azithromycin 500mg', 'Multivitamin'];
+            const LAB_CHIPS = ['CBC', 'Serum Creatinine', 'LFT', 'KFT', 'Chest X-Ray PA', 'ECG', 'Urine RE'];
 
             // Fetch doctors list
             const fetchDoctors = async () => {
@@ -155,7 +183,6 @@
                     if (json.status === 1 && json.data) {
                         setDoctors(json.data);
 
-                        // Check URL query parameters for doctor_id (QR scan or link)
                         const params = new URLSearchParams(window.location.search);
                         const docIdParam = params.get('doctor_id');
                         if (docIdParam) {
@@ -190,22 +217,12 @@
                     const json = await res.json();
                     if (json.status === 1) {
                         setOpdAppointments(json.appointments || []);
+                        if (json.counts) {
+                            setOpdCounts(json.counts);
+                        }
                     }
                 } catch (err) {
                     console.error('Failed to load OPD appointments', err);
-                }
-            };
-
-            // Fetch patient bedside workspace
-            const fetchWorkspace = async (ipdId) => {
-                try {
-                    const res = await fetch(`/api/v1/doctor/ipd/workspace/${ipdId}`);
-                    const json = await res.json();
-                    if (json.status === 1) {
-                        setWorkspaceData(json.entries || []);
-                    }
-                } catch (err) {
-                    console.error('Failed to load patient workspace', err);
                 }
             };
 
@@ -265,7 +282,6 @@
                     if (json.status === 1 && json.doctor) {
                         setAuthenticatedDoctor(json.doctor);
                         
-                        // Save 30-day device authentication
                         const deviceAuthObj = {
                             doctor: json.doctor,
                             expires_at: Date.now() + THIRTY_DAYS_MS
@@ -284,7 +300,6 @@
                 }
             };
 
-            // Set Doctor PIN
             const handleSaveNewPin = async () => {
                 if (!newPin || newPin.length < 4) {
                     setPinError('PIN must be 4 to 6 numeric digits.');
@@ -308,7 +323,7 @@
                     const json = await res.json();
 
                     if (json.status === 1) {
-                        alert('Security PIN set successfully! You can now login with your PIN.');
+                        alert('Security PIN set successfully! Enter your PIN to unlock.');
                         setIsSettingNewPin(false);
                         setNewPin('');
                         setConfirmPin('');
@@ -326,118 +341,116 @@
                 localStorage.removeItem(DOC_DEVICE_AUTH_KEY);
                 setPinInput('');
                 setActivePatient(null);
+                setActiveOpd(null);
             };
 
-            const openPatientWorkspace = (patient) => {
-                setActivePatient(patient);
-                fetchWorkspace(patient.id);
-            };
-
-            // Save Doctor Daily Rounds / Treatment Note
-            const handleSaveDoctorTreatmentNote = async () => {
-                if (!activePatient) return;
-                if (!doctorNote.trim()) {
-                    alert('Please enter doctor treatment / daily progress note.');
-                    return;
-                }
-
+            // Open OPD Consultation / Prescription View
+            const openOpdConsultation = async (app) => {
+                setActiveOpd(app);
                 try {
-                    const body = new URLSearchParams();
-                    body.append('doctor_id', authenticatedDoctor ? authenticatedDoctor.id : 0);
-                    body.append('doctor_name', authenticatedDoctor ? authenticatedDoctor.name : 'Doctor');
-                    body.append('treatment_text', doctorNote);
-                    body.append('general_note', doctorAdvice);
-
-                    const res = await fetch(`/api/v1/doctor/ipd/treatment/save/${activePatient.id}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: body.toString()
-                    });
+                    const res = await fetch(`/api/v1/doctor/opd/prescription/${app.opd_id}`);
                     const json = await res.json();
-                    if (json.status === 1) {
-                        alert(json.message || 'Doctor note saved');
-                        setDoctorNote('');
-                        setDoctorAdvice('');
-                        fetchWorkspace(activePatient.id);
+                    if (json.status === 1 && json.prescription) {
+                        const pr = json.prescription;
+                        setPrescForm({
+                            chief_complaints: pr.chief_complaints || '',
+                            provisional_diagnosis: pr.provisional_diagnosis || '',
+                            investigation: pr.investigation || '',
+                            advice: pr.advice || '',
+                            next_visit: pr.next_visit || '',
+                            temp: pr.temp || '',
+                            pulse: pr.pulse || '',
+                            bp_systolic: pr.bp || '',
+                            bp_diastolic: pr.diastolic || '',
+                            spo2: pr.spo2 || '',
+                            weight: pr.weight || ''
+                        });
+                        if (pr.json_medicines) {
+                            try {
+                                const parsedMeds = JSON.parse(pr.json_medicines);
+                                if (Array.isArray(parsedMeds) && parsedMeds.length > 0) {
+                                    setMedicines(parsedMeds);
+                                }
+                            } catch (e) {}
+                        }
                     } else {
-                        alert(json.message || 'Failed to save note');
+                        setPrescForm({
+                            chief_complaints: '', provisional_diagnosis: '', investigation: '', advice: '', next_visit: '',
+                            temp: '', pulse: '', bp_systolic: '', bp_diastolic: '', spo2: '', weight: ''
+                        });
+                        setMedicines([{ drug_name: '', dosage: '1 Tab', frequency: '1-0-1', duration: '5 Days', instructions: 'After Food' }]);
                     }
                 } catch (err) {
-                    alert('Error submitting note');
+                    console.error('Failed to load OPD prescription', err);
                 }
             };
 
-            // Save Quick E-Prescription Order
-            const handleSaveQuickRx = async () => {
-                if (!activePatient) return;
-                if (!rxForm.drug_name.trim()) {
-                    alert('Please enter Drug / Medicine Name.');
-                    return;
-                }
-
-                const rxText = `Rx: ${rxForm.drug_name} | Dosage: ${rxForm.dosage} | Freq: ${rxForm.frequency} | Duration: ${rxForm.duration} ${rxForm.instructions ? '(' + rxForm.instructions + ')' : ''}`;
+            // Save OPD Prescription & Mark Visited
+            const handleSaveOpdPrescription = async () => {
+                if (!activeOpd) return;
 
                 try {
                     const body = new URLSearchParams();
                     body.append('doctor_id', authenticatedDoctor ? authenticatedDoctor.id : 0);
-                    body.append('doctor_name', authenticatedDoctor ? authenticatedDoctor.name : 'Doctor');
-                    body.append('treatment_text', rxText);
+                    Object.keys(prescForm).forEach(k => body.append(k, prescForm[k]));
+                    body.append('medicines', JSON.stringify(medicines));
 
-                    const res = await fetch(`/api/v1/doctor/ipd/treatment/save/${activePatient.id}`, {
+                    const res = await fetch(`/api/v1/doctor/opd/prescription/save/${activeOpd.opd_id}`, {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
                         body: body.toString()
                     });
                     const json = await res.json();
                     if (json.status === 1) {
-                        alert('E-Prescription order added to patient record!');
-                        setRxForm({ drug_name: '', dosage: '', frequency: '1-0-1', duration: '5 days', instructions: '' });
-                        fetchWorkspace(activePatient.id);
+                        alert(json.message || 'Prescription saved & OPD Visit completed!');
+                        setActiveOpd(null);
+                        fetchOpdAppointments(authenticatedDoctor ? authenticatedDoctor.id : 0);
+                    } else {
+                        alert(json.message || 'Failed to save prescription');
                     }
                 } catch (err) {
-                    alert('Error submitting prescription');
+                    alert('Error saving OPD consultation');
                 }
             };
 
-            // Save Lab Test Order
-            const handleSaveLabOrder = async () => {
-                if (!activePatient || !labOrderText.trim()) {
-                    alert('Please enter Lab / Pathology / Radiology test orders.');
-                    return;
-                }
+            // Add/Remove Medicine Repeater Rows
+            const addMedicineRow = (drugName = '') => {
+                setMedicines([...medicines, { drug_name: drugName, dosage: '1 Tab', frequency: '1-0-1', duration: '5 Days', instructions: 'After Food' }]);
+            };
 
-                const labText = `Lab & Diagnostics Order: ${labOrderText}`;
+            const removeMedicineRow = (idx) => {
+                if (medicines.length === 1) return;
+                setMedicines(medicines.filter((_, i) => i !== idx));
+            };
 
-                try {
-                    const body = new URLSearchParams();
-                    body.append('doctor_id', authenticatedDoctor ? authenticatedDoctor.id : 0);
-                    body.append('doctor_name', authenticatedDoctor ? authenticatedDoctor.name : 'Doctor');
-                    body.append('treatment_text', labText);
+            const updateMedicineRow = (idx, field, val) => {
+                const updated = [...medicines];
+                updated[idx][field] = val;
+                setMedicines(updated);
+            };
 
-                    const res = await fetch(`/api/v1/doctor/ipd/treatment/save/${activePatient.id}`, {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: body.toString()
-                    });
-                    const json = await res.json();
-                    if (json.status === 1) {
-                        alert('Lab & Diagnostic order submitted!');
-                        setLabOrderText('');
-                        fetchWorkspace(activePatient.id);
-                    }
-                } catch (err) {
-                    alert('Error submitting lab order');
+            // Quick Chip Appenders
+            const appendChipText = (field, text) => {
+                const current = prescForm[field];
+                if (!current) {
+                    setPrescForm({ ...prescForm, [field]: text });
+                } else if (!current.includes(text)) {
+                    setPrescForm({ ...prescForm, [field]: `${current}, ${text}` });
                 }
             };
 
-            const filteredIpdPatients = ipdPatients.filter(p => {
-                const name = `${p.fname || ''} ${p.lname || ''}`.toLowerCase();
+            const filteredOpdAppointments = opdAppointments.filter(app => {
+                const matchesFilter = opdFilter === 'all' || app.status_key === opdFilter;
                 const q = searchQuery.toLowerCase();
-                return name.includes(q) || (p.uhid && p.uhid.toLowerCase().includes(q)) || (p.bed_code && p.bed_code.toLowerCase().includes(q));
+                const name = (app.patient_display_name || '').toLowerCase();
+                const uhid = (app.uhid || '').toLowerCase();
+                const opdCode = (app.opd_code || '').toLowerCase();
+                const matchesSearch = searchQuery === '' || name.includes(q) || uhid.includes(q) || opdCode.includes(q);
+                return matchesFilter && matchesSearch;
             });
 
             // -------------------------------------------------------------
-            // RENDER: LOCK SCREEN (DOCTOR PIN AUTHENTICATION)
+            // RENDER: LOCK SCREEN (PIN AUTHENTICATION)
             // -------------------------------------------------------------
             if (!authenticatedDoctor) {
                 return (
@@ -531,14 +544,6 @@
             // -------------------------------------------------------------
             return (
                 <div>
-                    {/* PWA Install Banner */}
-                    {installPrompt && (
-                        <div className="install-pwa-banner d-flex justify-content-between align-items-center">
-                            <span><i className="bi bi-download me-2"></i> Install Doctor EMR App on your home screen</span>
-                            <button className="btn btn-sm btn-light text-primary fw-bold" onClick={() => installPrompt.prompt()}>Install App</button>
-                        </div>
-                    )}
-
                     {/* Top Doctor Header */}
                     <header className="doctor-header d-flex justify-content-between align-items-center">
                         <div className="d-flex align-items-center">
@@ -549,7 +554,7 @@
                             </div>
                         </div>
                         <div className="d-flex align-items-center gap-2">
-                            <button className="btn btn-sm btn-outline-light" onClick={() => fetchIpdPatients(authenticatedDoctor.id)} title="Refresh">
+                            <button className="btn btn-sm btn-outline-light" onClick={() => fetchOpdAppointments(authenticatedDoctor.id)} title="Refresh">
                                 <i className="bi bi-arrow-clockwise"></i>
                             </button>
                             <button className="btn btn-sm btn-danger" onClick={handleLogout} title="Lock Device Access">
@@ -560,241 +565,287 @@
 
                     {/* Main Container */}
                     <main className="container-fluid py-3">
-                        {!activePatient ? (
+                        {!activeOpd && !activePatient ? (
                             <div>
                                 {/* Top Main Tabs */}
                                 <ul className="nav nav-pills mb-3 gap-2">
                                     <li className="nav-item">
-                                        <button className={`nav-link ${mainTab === 'ipd' ? 'active' : ''}`} onClick={() => setMainTab('ipd')}>
-                                            <i className="bi bi-hospital me-1"></i> Admitted IPD Patients ({ipdPatients.length})
+                                        <button className={`nav-link ${mainTab === 'opd' ? 'active' : ''}`} onClick={() => setMainTab('opd')}>
+                                            <i className="bi bi-calendar-check-fill me-1"></i> OPD Appointments ({opdAppointments.length})
                                         </button>
                                     </li>
                                     <li className="nav-item">
-                                        <button className={`nav-link ${mainTab === 'opd' ? 'active' : ''}`} onClick={() => setMainTab('opd')}>
-                                            <i className="bi bi-calendar-event me-1"></i> OPD Appointments ({opdAppointments.length})
+                                        <button className={`nav-link ${mainTab === 'ipd' ? 'active' : ''}`} onClick={() => setMainTab('ipd')}>
+                                            <i className="bi bi-hospital me-1"></i> Admitted IPDs ({ipdPatients.length})
                                         </button>
                                     </li>
                                 </ul>
-
-                                {/* Search Bar */}
-                                <div className="input-group mb-3">
-                                    <span className="input-group-text bg-white"><i className="bi bi-search"></i></span>
-                                    <input 
-                                        type="text" 
-                                        className="form-control" 
-                                        placeholder="Search patient by name, UHID, or Bed Code..." 
-                                        value={searchQuery}
-                                        onChange={(e) => setSearchQuery(e.target.value)}
-                                    />
-                                </div>
-
-                                {mainTab === 'ipd' && (
-                                    loading ? (
-                                        <div className="text-center py-5">
-                                            <div className="spinner-border text-primary" role="status"></div>
-                                            <p className="mt-2 text-muted">Loading Admitted IPD Patients...</p>
-                                        </div>
-                                    ) : (
-                                        <div className="row g-3">
-                                            {filteredIpdPatients.length === 0 ? (
-                                                <div className="col-12 text-center py-4 text-muted">No admitted IPD patients found.</div>
-                                            ) : (
-                                                filteredIpdPatients.map(patient => (
-                                                    <div key={patient.id} className="col-lg-4 col-md-6 col-12">
-                                                        <div className="card p-3 patient-card" onClick={() => openPatientWorkspace(patient)}>
-                                                            <div className="d-flex justify-content-between align-items-start mb-2">
-                                                                <div>
-                                                                    <h5 className="fw-bold mb-0 text-primary">{patient.fname} {patient.lname}</h5>
-                                                                    <small className="text-muted">UHID: {patient.uhid || 'N/A'} | {patient.gender}, {patient.age || 'N/A'}</small>
-                                                                </div>
-                                                                <span className="badge bg-primary fs-6">
-                                                                    {patient.bed_code || patient.bed_number || 'Bed N/A'}
-                                                                </span>
-                                                            </div>
-                                                            <div className="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
-                                                                <span className="badge bg-secondary-subtle text-dark">Ward: {patient.ward_name || 'General Ward'}</span>
-                                                                <small className="text-muted">IPD #{patient.id}</small>
-                                                            </div>
-                                                        </div>
-                                                    </div>
-                                                ))
-                                            )}
-                                        </div>
-                                    )
-                                )}
 
                                 {mainTab === 'opd' && (
-                                    <div className="card shadow-sm border-0">
-                                        <div className="card-body p-0 table-responsive">
-                                            <table className="table table-hover align-middle mb-0">
-                                                <thead className="table-light">
-                                                    <tr>
-                                                        <th>UHID</th>
-                                                        <th>Patient Name</th>
-                                                        <th>Gender / Age</th>
-                                                        <th>Mobile</th>
-                                                    </tr>
-                                                </thead>
-                                                <tbody>
-                                                    {opdAppointments.length === 0 ? (
-                                                        <tr><td colSpan="4" className="text-center text-muted py-4">No OPD appointments found for today.</td></tr>
-                                                    ) : (
-                                                        opdAppointments.map(app => (
-                                                            <tr key={app.id}>
-                                                                <td><code>{app.uhid || '-'}</code></td>
-                                                                <td className="fw-bold text-primary">{app.fname} {app.lname}</td>
-                                                                <td>{app.gender}, {app.age}</td>
-                                                                <td>{app.mphone1 || '-'}</td>
-                                                            </tr>
-                                                        ))
-                                                    )}
-                                                </tbody>
-                                            </table>
+                                    <div>
+                                        {/* Status Filter Badges (Matching HMS Screen) */}
+                                        <div className="d-flex gap-1 mb-3 overflow-auto pb-1">
+                                            <button 
+                                                className={`btn btn-sm text-nowrap ${opdFilter === 'all' ? 'btn-primary' : 'btn-outline-primary'}`}
+                                                onClick={() => setOpdFilter('all')}
+                                            >
+                                                All <span className="badge bg-white text-primary ms-1">{opdCounts.all}</span>
+                                            </button>
+                                            <button 
+                                                className={`btn btn-sm text-nowrap ${opdFilter === 'waiting' ? 'btn-primary' : 'btn-outline-primary'}`}
+                                                onClick={() => setOpdFilter('waiting')}
+                                            >
+                                                Waiting <span className="badge bg-white text-primary ms-1">{opdCounts.waiting}</span>
+                                            </button>
+                                            <button 
+                                                className={`btn btn-sm text-nowrap ${opdFilter === 'visited' ? 'btn-info text-dark' : 'btn-outline-info'}`}
+                                                onClick={() => setOpdFilter('visited')}
+                                            >
+                                                Visited <span className="badge bg-white text-dark ms-1">{opdCounts.visited}</span>
+                                            </button>
+                                            <button 
+                                                className={`btn btn-sm text-nowrap ${opdFilter === 'booked' ? 'btn-secondary' : 'btn-outline-secondary'}`}
+                                                onClick={() => setOpdFilter('booked')}
+                                            >
+                                                Booked <span className="badge bg-white text-secondary ms-1">{opdCounts.booked}</span>
+                                            </button>
                                         </div>
-                                    </div>
-                                )}
-                            </div>
-                        ) : (
-                            /* Doctor Bedside EMR Workspace */
-                            <div>
-                                <button className="btn btn-sm btn-outline-dark mb-3" onClick={() => setActivePatient(null)}>
-                                    <i className="bi bi-arrow-left me-1"></i> Back to Patient List
-                                </button>
 
-                                <div className="card shadow-sm mb-3 border-0">
-                                    <div className="card-body bg-light rounded d-flex justify-content-between align-items-center flex-wrap gap-2">
-                                        <div>
-                                            <h4 className="fw-bold mb-1 text-primary">{activePatient.fname} {activePatient.lname}</h4>
-                                            <span className="badge bg-secondary me-2">UHID: {activePatient.uhid || 'N/A'}</span>
-                                            <span className="badge bg-info text-dark me-2">Gender/Age: {activePatient.gender}, {activePatient.age || 'N/A'}</span>
-                                            <span className="badge bg-primary">Bed: {activePatient.bed_code || 'N/A'} ({activePatient.ward_name || 'General Ward'})</span>
+                                        {/* Search Input */}
+                                        <div className="input-group mb-3">
+                                            <span className="input-group-text bg-white"><i className="bi bi-search"></i></span>
+                                            <input 
+                                                type="text" 
+                                                className="form-control" 
+                                                placeholder="Search Patient Name, UHID, OPD No..." 
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                            />
                                         </div>
-                                    </div>
-                                </div>
 
-                                {/* EMR Tabs */}
-                                <ul className="nav nav-pills mb-3 gap-2">
-                                    <li className="nav-item">
-                                        <button className={`nav-link ${emrTab === 'vitals' ? 'active' : ''}`} onClick={() => setEmrTab('vitals')}>
-                                            <i className="bi bi-activity me-1"></i> Vitals &amp; Nursing Records
-                                        </button>
-                                    </li>
-                                    <li className="nav-item">
-                                        <button className={`nav-link ${emrTab === 'progress' ? 'active' : ''}`} onClick={() => setEmrTab('progress')}>
-                                            <i className="bi bi-journal-medical me-1"></i> Daily Progress Note / Orders
-                                        </button>
-                                    </li>
-                                    <li className="nav-item">
-                                        <button className={`nav-link ${emrTab === 'rx' ? 'active' : ''}`} onClick={() => setEmrTab('rx')}>
-                                            <i className="bi bi-capsule me-1"></i> E-Prescription Order
-                                        </button>
-                                    </li>
-                                    <li className="nav-item">
-                                        <button className={`nav-link ${emrTab === 'lab' ? 'active' : ''}`} onClick={() => setEmrTab('lab')}>
-                                            <i className="bi bi-file-earmark-medical me-1"></i> Lab &amp; Diagnostic Order
-                                        </button>
-                                    </li>
-                                </ul>
-
-                                {/* EMR Tab Content */}
-                                <div className="card p-3 shadow-sm border-0">
-                                    {emrTab === 'vitals' && (
-                                        <div>
-                                            <h6 className="fw-bold mb-3"><i className="bi bi-activity text-danger me-1"></i> Bedside Vitals &amp; Fluid History</h6>
-                                            <div className="table-responsive">
-                                                <table className="table table-sm table-striped">
-                                                    <thead>
+                                        {/* OPD Table / Mobile List */}
+                                        <div className="card shadow-sm border-0">
+                                            <div className="card-body p-0 table-responsive">
+                                                <table className="table table-hover align-middle mb-0" style={{minWidth: '650px'}}>
+                                                    <thead className="table-light">
                                                         <tr>
-                                                            <th>Recorded At</th>
-                                                            <th>Type</th>
-                                                            <th>Staff</th>
-                                                            <th>Summary</th>
+                                                            <th>Status</th>
+                                                            <th>OPD No.</th>
+                                                            <th>Current Patient</th>
+                                                            <th>Q No.</th>
+                                                            <th>UHID</th>
+                                                            <th>OPD Type</th>
+                                                            <th className="text-center">Action</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
-                                                        {workspaceData.length === 0 ? (
-                                                            <tr><td colSpan="4" className="text-center text-muted py-3">No nursing entries logged for this admission yet.</td></tr>
+                                                        {filteredOpdAppointments.length === 0 ? (
+                                                            <tr>
+                                                                <td colSpan="7" className="text-center text-muted py-4">
+                                                                    No OPD appointments found for selected filter.
+                                                                </td>
+                                                            </tr>
                                                         ) : (
-                                                            workspaceData.map(entry => (
-                                                                <tr key={entry.id}>
-                                                                    <td><small>{entry.recorded_at}</small></td>
-                                                                    <td><span className="badge bg-secondary text-uppercase">{entry.entry_type}</span></td>
-                                                                    <td><small>{entry.recorded_by || 'Staff'}</small></td>
-                                                                    <td>
-                                                                        <small>
-                                                                            {entry.entry_type === 'vitals' && `T: ${entry.temperature_c ? ((entry.temperature_c * 9/5) + 32).toFixed(1) + '°F' : '-'}, P: ${entry.pulse_rate || '-'}, BP: ${entry.bp_systolic || '-'}/${entry.bp_diastolic || '-'}, SpO2: ${entry.spo2 || '-'}`}
-                                                                            {entry.entry_type === 'fluid' && `${entry.fluid_direction?.toUpperCase()} - ${entry.fluid_route}: ${entry.fluid_amount_ml}ml`}
-                                                                            {entry.entry_type === 'treatment' && entry.treatment_text}
-                                                                            {entry.general_note && ` (${entry.general_note})`}
-                                                                        </small>
-                                                                    </td>
-                                                                </tr>
-                                                            ))
+                                                            filteredOpdAppointments.map(app => {
+                                                                const statusBadgeClass = app.status_key === 'waiting' ? 'bg-primary' 
+                                                                    : app.status_key === 'visited' ? 'bg-info text-dark' 
+                                                                    : app.status_key === 'booked' ? 'bg-secondary' : 'bg-danger';
+
+                                                                return (
+                                                                    <tr key={app.opd_id}>
+                                                                        <td>
+                                                                            <span className={`badge ${statusBadgeClass} text-uppercase`}>
+                                                                                {app.status_label}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td><strong className="text-dark">{app.opd_code}</strong></td>
+                                                                        <td>
+                                                                            <div className="fw-bold text-primary">{app.patient_display_name}</div>
+                                                                            <small className="text-muted">({app.age || 'N/A'} Year / {app.gender_label})</small>
+                                                                        </td>
+                                                                        <td><span className="badge bg-secondary-subtle text-dark fs-6">{app.queue_no || app.opd_no || '1'}</span></td>
+                                                                        <td><code>{app.uhid || '-'}</code></td>
+                                                                        <td><small className="text-muted">{app.opd_type || 'Cash'}</small></td>
+                                                                        <td className="text-center">
+                                                                            <button 
+                                                                                className="btn btn-sm btn-outline-primary fw-bold me-1"
+                                                                                onClick={() => openOpdConsultation(app)}
+                                                                            >
+                                                                                <i className="bi bi-file-earmark-medical me-1"></i> Consult
+                                                                            </button>
+                                                                        </td>
+                                                                    </tr>
+                                                                );
+                                                            })
                                                         )}
                                                     </tbody>
                                                 </table>
                                             </div>
                                         </div>
-                                    )}
-
-                                    {emrTab === 'progress' && (
-                                        <div>
-                                            <h6 className="fw-bold mb-3"><i className="bi bi-journal-medical text-primary me-1"></i> Doctor Daily Rounds Note &amp; Clinical Orders</h6>
-                                            <div className="row g-2">
-                                                <div className="col-12">
-                                                    <label className="form-label small fw-bold">Daily Progress / Treatment Orders <span className="text-danger">*</span></label>
-                                                    <textarea className="form-control" rows="3" placeholder="Enter clinical progress note, diagnosis adjustments, or bedside instructions..." value={doctorNote} onChange={e => setDoctorNote(e.target.value)}></textarea>
-                                                </div>
-                                                <div className="col-12">
-                                                    <label className="form-label small fw-bold">Additional Advice / Instructions to Nursing Staff</label>
-                                                    <textarea className="form-control" rows="2" placeholder="e.g. Keep head elevated 30 deg, monitor BP q4h..." value={doctorAdvice} onChange={e => setDoctorAdvice(e.target.value)}></textarea>
-                                                </div>
-                                                <div className="col-12 mt-3">
-                                                    <button className="btn btn-primary" onClick={handleSaveDoctorTreatmentNote}>
-                                                        <i className="bi bi-check-circle-fill me-1"></i> Save Doctor Progress Note
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {emrTab === 'rx' && (
-                                        <div>
-                                            <h6 className="fw-bold mb-3"><i className="bi bi-capsule text-success me-1"></i> Quick E-Prescription Bedside Order</h6>
-                                            <div className="row g-2">
-                                                <div className="col-md-5 col-12"><label className="form-label small">Medicine / Drug Name <span className="text-danger">*</span></label><input type="text" className="form-control" placeholder="e.g. Paracetamol 500mg" value={rxForm.drug_name} onChange={e => setRxForm({...rxForm, drug_name: e.target.value})} /></div>
-                                                <div className="col-md-3 col-6"><label className="form-label small">Dosage</label><input type="text" className="form-control" placeholder="e.g. 1 Tablet" value={rxForm.dosage} onChange={e => setRxForm({...rxForm, dosage: e.target.value})} /></div>
-                                                <div className="col-md-2 col-6"><label className="form-label small">Frequency</label><input type="text" className="form-control" value={rxForm.frequency} onChange={e => setRxForm({...rxForm, frequency: e.target.value})} /></div>
-                                                <div className="col-md-2 col-6"><label className="form-label small">Duration</label><input type="text" className="form-control" value={rxForm.duration} onChange={e => setRxForm({...rxForm, duration: e.target.value})} /></div>
-                                                <div className="col-12"><label className="form-label small">Instructions</label><input type="text" className="form-control" placeholder="e.g. After meals" value={rxForm.instructions} onChange={e => setRxForm({...rxForm, instructions: e.target.value})} /></div>
-                                                <div className="col-12 mt-3">
-                                                    <button className="btn btn-success" onClick={handleSaveQuickRx}>
-                                                        <i className="bi bi-plus-circle me-1"></i> Submit E-Prescription Order
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-
-                                    {emrTab === 'lab' && (
-                                        <div>
-                                            <h6 className="fw-bold mb-3"><i className="bi bi-file-earmark-medical text-warning me-1"></i> Lab &amp; Diagnostic Test Orders</h6>
-                                            <div className="row g-2">
-                                                <div className="col-12">
-                                                    <label className="form-label small fw-bold">Required Tests <span className="text-danger">*</span></label>
-                                                    <textarea className="form-control" rows="3" placeholder="e.g. CBC, Serum Creatinine, Chest X-Ray PA view..." value={labOrderText} onChange={e => setLabOrderText(e.target.value)}></textarea>
-                                                </div>
-                                                <div className="col-12 mt-3">
-                                                    <button className="btn btn-warning text-dark fw-bold" onClick={handleSaveLabOrder}>
-                                                        <i className="bi bi-send me-1"></i> Submit Diagnostic Orders
-                                                    </button>
-                                                </div>
-                                            </div>
-                                        </div>
-                                    )}
-                                </div>
+                                    </div>
+                                )}
                             </div>
-                        )}
+                        ) : activeOpd ? (
+                            /* -------------------------------------------------------------
+                               MOBILE-OPTIMIZED OPD CONSULTATION & PRESCRIPTION FORM
+                               ------------------------------------------------------------- */
+                            <div>
+                                <div className="d-flex justify-content-between align-items-center mb-3">
+                                    <button className="btn btn-sm btn-outline-dark" onClick={() => setActiveOpd(null)}>
+                                        <i className="bi bi-arrow-left me-1"></i> Back to Appointments
+                                    </button>
+                                    <button className="btn btn-sm btn-success fw-bold" onClick={handleSaveOpdPrescription}>
+                                        <i className="bi bi-check-circle-fill me-1"></i> Save &amp; Complete Visit
+                                    </button>
+                                </div>
+
+                                {/* Patient Header Card */}
+                                <div className="card shadow-sm mb-3 border-0 bg-primary text-white">
+                                    <div className="card-body p-3">
+                                        <div className="d-flex justify-content-between align-items-start">
+                                            <div>
+                                                <h5 className="fw-bold mb-1">{activeOpd.patient_display_name}</h5>
+                                                <small className="opacity-75 me-2">UHID: {activeOpd.uhid}</small>
+                                                <small className="opacity-75">OPD No: {activeOpd.opd_code}</small>
+                                            </div>
+                                            <span className="badge bg-white text-primary fs-6">Q #{activeOpd.queue_no || '1'}</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Vitals Entry Bar */}
+                                <div className="card p-3 shadow-sm border-0 mb-3">
+                                    <h6 className="fw-bold mb-2 text-danger small"><i className="bi bi-heart-pulse-fill me-1"></i> Patient Vitals</h6>
+                                    <div className="row g-2">
+                                        <div className="col-4 col-md-2">
+                                            <label className="form-label small mb-1" style={{fontSize: '11px'}}>BP Sys/Dia</label>
+                                            <div className="input-group input-group-sm">
+                                                <input type="number" className="form-control px-1 text-center" placeholder="120" value={prescForm.bp_systolic} onChange={e => setPrescForm({...prescForm, bp_systolic: e.target.value})} />
+                                                <span className="input-group-text px-1">/</span>
+                                                <input type="number" className="form-control px-1 text-center" placeholder="80" value={prescForm.bp_diastolic} onChange={e => setPrescForm({...prescForm, bp_diastolic: e.target.value})} />
+                                            </div>
+                                        </div>
+                                        <div className="col-4 col-md-2">
+                                            <label className="form-label small mb-1" style={{fontSize: '11px'}}>Pulse</label>
+                                            <input type="number" className="form-control form-control-sm text-center" placeholder="72" value={prescForm.pulse} onChange={e => setPrescForm({...prescForm, pulse: e.target.value})} />
+                                        </div>
+                                        <div className="col-4 col-md-2">
+                                            <label className="form-label small mb-1" style={{fontSize: '11px'}}>SpO2 %</label>
+                                            <input type="number" className="form-control form-control-sm text-center" placeholder="98" value={prescForm.spo2} onChange={e => setPrescForm({...prescForm, spo2: e.target.value})} />
+                                        </div>
+                                        <div className="col-6 col-md-2">
+                                            <label className="form-label small mb-1" style={{fontSize: '11px'}}>Temp °F</label>
+                                            <input type="number" step="0.1" className="form-control form-control-sm text-center" placeholder="98.6" value={prescForm.temp} onChange={e => setPrescForm({...prescForm, temp: e.target.value})} />
+                                        </div>
+                                        <div className="col-6 col-md-2">
+                                            <label className="form-label small mb-1" style={{fontSize: '11px'}}>Weight (kg)</label>
+                                            <input type="number" className="form-control form-control-sm text-center" placeholder="70" value={prescForm.weight} onChange={e => setPrescForm({...prescForm, weight: e.target.value})} />
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Chief Complaints */}
+                                <div className="card p-3 shadow-sm border-0 mb-3">
+                                    <label className="form-label fw-bold small text-dark mb-1"><i className="bi bi-chat-square-text text-primary me-1"></i> Chief Complaints</label>
+                                    <div className="d-flex gap-1 flex-wrap mb-2">
+                                        {COMPLAINT_CHIPS.map(c => (
+                                            <button key={c} type="button" className="chip-btn" onClick={() => appendChipText('chief_complaints', c)}>+ {c}</button>
+                                        ))}
+                                    </div>
+                                    <textarea className="form-control form-control-sm" rows="2" placeholder="Enter chief complaints..." value={prescForm.chief_complaints} onChange={e => setPrescForm({...prescForm, chief_complaints: e.target.value})}></textarea>
+                                </div>
+
+                                {/* Provisional Diagnosis */}
+                                <div className="card p-3 shadow-sm border-0 mb-3">
+                                    <label className="form-label fw-bold small text-dark mb-1"><i className="bi bi-stethoscope text-primary me-1"></i> Provisional Diagnosis</label>
+                                    <div className="d-flex gap-1 flex-wrap mb-2">
+                                        {DIAGNOSIS_CHIPS.map(d => (
+                                            <button key={d} type="button" className="chip-btn" onClick={() => appendChipText('provisional_diagnosis', d)}>+ {d}</button>
+                                        ))}
+                                    </div>
+                                    <textarea className="form-control form-control-sm" rows="2" placeholder="Enter diagnosis..." value={prescForm.provisional_diagnosis} onChange={e => setPrescForm({...prescForm, provisional_diagnosis: e.target.value})}></textarea>
+                                </div>
+
+                                {/* Medicines Rx Repeater (Mobile Friendly) */}
+                                <div className="card p-3 shadow-sm border-0 mb-3">
+                                    <div className="d-flex justify-content-between align-items-center mb-2">
+                                        <label className="form-label fw-bold small text-dark mb-0"><i className="bi bi-capsule text-success me-1"></i> Prescribed Medicines (Rx)</label>
+                                        <button className="btn btn-sm btn-outline-success py-0 px-2 fw-bold" style={{fontSize: '11px'}} onClick={() => addMedicineRow()}>+ Add Drug</button>
+                                    </div>
+
+                                    {/* Quick Drug Add Chips */}
+                                    <div className="d-flex gap-1 flex-wrap mb-2">
+                                        {DRUG_CHIPS.map(drug => (
+                                            <button key={drug} type="button" className="chip-btn" onClick={() => addMedicineRow(drug)}>+ {drug}</button>
+                                        ))}
+                                    </div>
+
+                                    {medicines.map((med, idx) => (
+                                        <div key={idx} className="p-2 border rounded bg-light mb-2">
+                                            <div className="d-flex justify-content-between align-items-center mb-1">
+                                                <span className="badge bg-secondary" style={{fontSize: '10px'}}>Item #{idx + 1}</span>
+                                                {medicines.length > 1 && (
+                                                    <button className="btn btn-sm btn-link text-danger p-0" onClick={() => removeMedicineRow(idx)}><i className="bi bi-trash"></i> Remove</button>
+                                                )}
+                                            </div>
+                                            <div className="row g-2">
+                                                <div className="col-12 col-md-4">
+                                                    <input type="text" className="form-control form-control-sm" placeholder="Medicine / Drug Name" value={med.drug_name} onChange={e => updateMedicineRow(idx, 'drug_name', e.target.value)} />
+                                                </div>
+                                                <div className="col-4 col-md-2">
+                                                    <input type="text" className="form-control form-control-sm" placeholder="Dosage (1 Tab)" value={med.dosage} onChange={e => updateMedicineRow(idx, 'dosage', e.target.value)} />
+                                                </div>
+                                                <div className="col-4 col-md-3">
+                                                    <select className="form-select form-select-sm" value={med.frequency} onChange={e => updateMedicineRow(idx, 'frequency', e.target.value)}>
+                                                        <option value="1-0-1">1-0-1 (BD)</option>
+                                                        <option value="1-1-1">1-1-1 (TID)</option>
+                                                        <option value="1-0-0">1-0-0 (OD Morning)</option>
+                                                        <option value="0-0-1">0-0-1 (OD Night)</option>
+                                                        <option value="SOS">SOS (When needed)</option>
+                                                        <option value="STAT">STAT (Immediately)</option>
+                                                    </select>
+                                                </div>
+                                                <div className="col-4 col-md-3">
+                                                    <select className="form-select form-select-sm" value={med.duration} onChange={e => updateMedicineRow(idx, 'duration', e.target.value)}>
+                                                        <option value="3 Days">3 Days</option>
+                                                        <option value="5 Days">5 Days</option>
+                                                        <option value="7 Days">7 Days</option>
+                                                        <option value="15 Days">15 Days</option>
+                                                        <option value="1 Month">1 Month</option>
+                                                    </select>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    ))}
+                                </div>
+
+                                {/* Lab Investigations & Advice */}
+                                <div className="card p-3 shadow-sm border-0 mb-3">
+                                    <label className="form-label fw-bold small text-dark mb-1"><i className="bi bi-file-earmark-medical text-warning me-1"></i> Lab Investigations Order</label>
+                                    <div className="d-flex gap-1 flex-wrap mb-2">
+                                        {LAB_CHIPS.map(lab => (
+                                            <button key={lab} type="button" className="chip-btn" onClick={() => appendChipText('investigation', lab)}>+ {lab}</button>
+                                        ))}
+                                    </div>
+                                    <textarea className="form-control form-control-sm mb-3" rows="2" placeholder="Lab / Pathology / Radiology tests..." value={prescForm.investigation} onChange={e => setPrescForm({...prescForm, investigation: e.target.value})}></textarea>
+
+                                    <label className="form-label fw-bold small text-dark mb-1"><i className="bi bi-card-text me-1"></i> General Advice &amp; Instructions</label>
+                                    <textarea className="form-control form-control-sm mb-3" rows="2" placeholder="Doctor's advice to patient..." value={prescForm.advice} onChange={e => setPrescForm({...prescForm, advice: e.target.value})}></textarea>
+
+                                    <label className="form-label fw-bold small text-dark mb-1"><i className="bi bi-calendar-event me-1"></i> Follow-up Next Visit</label>
+                                    <div className="d-flex gap-1 mb-2">
+                                        {['After 3 Days', 'After 7 Days', 'After 15 Days', 'After 1 Month'].map(d => (
+                                            <button key={d} type="button" className="chip-btn" onClick={() => setPrescForm({...prescForm, next_visit: d})}>{d}</button>
+                                        ))}
+                                    </div>
+                                    <input type="text" className="form-control form-control-sm" placeholder="Follow-up advice" value={prescForm.next_visit} onChange={e => setPrescForm({...prescForm, next_visit: e.target.value})} />
+                                </div>
+
+                                <button className="btn btn-success btn-lg w-100 fw-bold py-2 shadow-sm mb-4" onClick={handleSaveOpdPrescription}>
+                                    <i className="bi bi-check-circle-fill me-1"></i> Save Prescription &amp; Mark Visited
+                                </button>
+                            </div>
+                        ) : null}
                     </main>
                 </div>
             );
