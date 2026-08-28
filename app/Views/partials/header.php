@@ -391,6 +391,20 @@
         }
     }
 
+    function showAppsModal() {
+        var modalEl = document.getElementById('hmsAppsLauncherModal');
+        if (modalEl) {
+            if (modalEl.parentElement !== document.body) {
+                document.body.appendChild(modalEl);
+            }
+            if (window.bootstrap && window.bootstrap.Modal) {
+                window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            } else if (typeof $ !== 'undefined' && $.fn && $.fn.modal) {
+                $(modalEl).modal('show');
+            }
+        }
+    }
+
     function openAppsModal() {
         var apiUrl = '<?= base_url('api/v1/nursing/nurses') ?>';
         fetch(apiUrl)
@@ -409,25 +423,11 @@
                     }
                 }
                 updateHdrAppDetails();
-                var modalEl = document.getElementById('hmsAppsLauncherModal');
-                if (modalEl) {
-                    if (window.bootstrap && window.bootstrap.Modal) {
-                        window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
-                    } else if (typeof $ !== 'undefined' && $.fn && $.fn.modal) {
-                        $(modalEl).modal('show');
-                    }
-                }
+                showAppsModal();
             })
             .catch(function(err) {
                 updateHdrAppDetails();
-                var modalEl = document.getElementById('hmsAppsLauncherModal');
-                if (modalEl) {
-                    if (window.bootstrap && window.bootstrap.Modal) {
-                        window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
-                    } else if (typeof $ !== 'undefined' && $.fn && $.fn.modal) {
-                        $(modalEl).modal('show');
-                    }
-                }
+                showAppsModal();
             });
     }
 
