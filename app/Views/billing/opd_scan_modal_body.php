@@ -22,6 +22,19 @@
         <div id="opd_scan_resolution" class="small text-muted mt-1">Camera: detecting resolution...</div>
         <canvas id="opd_scan_canvas" style="display:none;"></canvas>
         <input type="hidden" id="opd_scan_opdid" value="<?= esc((int) ($opdid ?? 0)) ?>">
+        <div class="mt-2 mb-2 bg-light p-2 rounded border">
+            <label for="opd_scan_document_type" class="form-label mb-1 small fw-bold text-dark">
+                <i class="bi bi-folder2-open text-primary me-1"></i> Document Type
+            </label>
+            <select id="opd_scan_document_type" class="form-select form-select-sm border-primary-subtle">
+                <option value="Paper Document">Paper Document (General)</option>
+                <option value="Vitals Sheet">Vitals Sheet / Chart</option>
+                <option value="Lab Test Report">Lab / Pathology Report</option>
+                <option value="Handwritten Doctor Note">Handwritten Doctor Note</option>
+                <option value="Signed Consent Form">Signed Consent Form</option>
+            </select>
+        </div>
+
         <div class="mt-2 d-flex gap-2">
             <button type="button" id="opd_scan_capture_btn" class="btn btn-warning btn-sm">Capture</button>
             <button type="button" id="opd_scan_stop_btn" class="btn btn-outline-secondary btn-sm">Stop</button>
@@ -572,6 +585,11 @@
 
     function submitScanFormData(formData) {
         // Common upload handler used by both camera capture and file upload.
+        var docType = $('#opd_scan_document_type').val() || 'Paper Document';
+        if (formData && !formData.has('document_type')) {
+            formData.append('document_type', docType);
+        }
+
         $.ajax({
             url: '<?= base_url('Opd/save_image') ?>/' + opdid,
             type: 'POST',

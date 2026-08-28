@@ -25,8 +25,9 @@
                     </div>
 
                     <div class="d-flex justify-content-between align-items-center mt-2" style="position:relative;z-index:3;">
-                        <div class="small text-muted">
-                            Uploaded: <?= esc($item['insert_date'] ?? '') ?>
+                        <div class="small">
+                            <span class="badge bg-primary me-2"><i class="bi bi-file-earmark-medical me-1"></i><?= esc(!empty($item['document_type']) ? $item['document_type'] : 'Scanned Document') ?></span>
+                            <span class="text-muted">Uploaded: <?= esc($item['insert_date'] ?? '') ?></span>
                         </div>
                         <?php if ((int) ($item['can_delete_limited'] ?? $item['can_delete_today'] ?? 0) === 1) : ?>
                             <button

@@ -6364,6 +6364,11 @@ class Opd extends BaseController
 
         $scanType = $this->detectScanType((string) $filename);
 
+        $docType = trim((string) ($this->request->getPost('document_type') ?? 'Paper Document'));
+        if (empty($docType)) {
+            $docType = 'Paper Document';
+        }
+
         if ($insertId > 0 && $this->db->tableExists('file_upload_data')) {
             $fields = $this->db->getFieldNames('file_upload_data');
             $update = [];
@@ -6371,7 +6376,7 @@ class Opd extends BaseController
                 $update['scan_type'] = $scanType;
             }
             if (in_array('document_type', $fields, true)) {
-                $update['document_type'] = '';
+                $update['document_type'] = $docType;
             }
             if (in_array('content_description', $fields, true)) {
                 $update['content_description'] = 'Queued for AI analysis';
