@@ -549,18 +549,17 @@
                 }
 
                 try {
-                    const body = new URLSearchParams();
-                    body.append('doctor_id', authenticatedDoctor ? authenticatedDoctor.id : 0);
-                    body.append('doctor_name', authenticatedDoctor ? authenticatedDoctor.name : 'Doctor');
-                    body.append('treatment_text', newTreatmentNote);
-                    if (noteImageBase64) {
-                        body.append('image_base64', noteImageBase64);
-                    }
+                    const payload = {
+                        doctor_id: authenticatedDoctor ? authenticatedDoctor.id : 0,
+                        doctor_name: authenticatedDoctor ? authenticatedDoctor.name : 'Doctor',
+                        treatment_text: newTreatmentNote,
+                        image_base64: noteImageBase64 || ''
+                    };
 
                     const res = await fetch(`/api/v1/doctor/ipd/treatment/save/${activePatient.ipd_id}`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: body.toString()
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
                     });
                     const json = await res.json();
                     if (json.status === 1) {
@@ -626,18 +625,17 @@
                 if (!activeOpd) return;
 
                 try {
-                    const body = new URLSearchParams();
-                    body.append('doctor_id', authenticatedDoctor ? authenticatedDoctor.id : 0);
-                    Object.keys(prescForm).forEach(k => body.append(k, prescForm[k]));
-                    body.append('medicines', JSON.stringify(medicines));
-                    if (noteImageBase64) {
-                        body.append('image_base64', noteImageBase64);
-                    }
+                    const payload = {
+                        doctor_id: authenticatedDoctor ? authenticatedDoctor.id : 0,
+                        ...prescForm,
+                        medicines: medicines,
+                        image_base64: noteImageBase64 || ''
+                    };
 
                     const res = await fetch(`/api/v1/doctor/opd/prescription/save/${activeOpd.opd_id}`, {
                         method: 'POST',
-                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-                        body: body.toString()
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
                     });
                     const json = await res.json();
                     if (json.status === 1) {

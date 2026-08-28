@@ -792,11 +792,50 @@ $treatmentEntries = array_values(array_filter($entries, static fn ($r) => ($r['e
                                         <tr><td colspan="5" class="text-center text-muted py-3">No treatment notes recorded yet.</td></tr>
                                     <?php else: ?>
                                         <?php foreach ($treatmentEntries as $trRow): ?>
+                                            <?php
+                                                $tText = (string)($trRow['treatment_text'] ?? '');
+                                                $gNote = (string)($trRow['general_note'] ?? '');
+                                                
+                                                $imgUrl = '';
+                                                if (preg_match('/\[IMAGE_ATTACHMENT:(.*?)\]/', $tText, $m)) {
+                                                    $imgUrl = trim($m[1]);
+                                                    $tText = trim(str_replace(['[Doctor Note]', $m[0]], '', $tText));
+                                                } elseif (preg_match('/\/uploads\/doctor_notes\/[^\s\]]+/', $tText, $m)) {
+                                                    $imgUrl = trim($m[0]);
+                                                } elseif (preg_match('/\/uploads\/doctor_notes\/[^\s\]]+/', $gNote, $m)) {
+                                                    $imgUrl = trim($m[0]);
+                                                }
+
+                                                $tTextClean = str_replace(['[Doctor Note]', '[Doctor Note] '], '', $tText);
+                                            ?>
                                             <tr>
                                                 <td><small><?= esc($trRow['recorded_at']) ?></small></td>
                                                 <td><small><?= esc($trRow['recorded_by'] ?? 'Staff') ?></small></td>
-                                                <td><?= esc((string)($trRow['treatment_text'] ?? '')) ?></td>
-                                                <td><small><?= esc((string)($trRow['general_note'] ?? '')) ?></small></td>
+                                                <td>
+                                                    <?php if ($tTextClean !== ''): ?>
+                                                        <div class="fw-semibold text-dark"><?= esc($tTextClean) ?></div>
+                                                    <?php endif; ?>
+
+                                                    <?php if ($imgUrl !== ''): ?>
+                                                        <div class="mt-1">
+                                                            <span class="badge bg-primary mb-1 d-inline-flex align-items-center gap-1" style="font-size: 10px;">
+                                                                <i class="bi bi-paperclip"></i> Doctor Handwritten Note
+                                                            </span><br>
+                                                            <a href="<?= esc($imgUrl) ?>" target="_blank" class="d-inline-block border rounded p-1 bg-white shadow-sm me-2">
+                                                                <img src="<?= esc($imgUrl) ?>" alt="Doctor Handwritten Note" style="max-height: 120px; max-width: 260px; border-radius: 6px; object-fit: contain;">
+                                                            </a>
+                                                        </div>
+                                                    <?php endif; ?>
+                                                </td>
+                                                <td>
+                                                    <?php if ($imgUrl !== ''): ?>
+                                                        <a href="<?= esc($imgUrl) ?>" target="_blank" class="btn btn-xs btn-outline-primary py-0 px-2 fw-bold" style="font-size: 11px;">
+                                                            <i class="bi bi-file-earmark-image me-1"></i> View Photo
+                                                        </a>
+                                                    <?php else: ?>
+                                                        <small><?= esc($gNote) ?></small>
+                                                    <?php endif; ?>
+                                                </td>
                                                 <td class="text-center">
                                                     <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 btn-edit-treatment"
                                                         data-id="<?= esc($trRow['id']) ?>"

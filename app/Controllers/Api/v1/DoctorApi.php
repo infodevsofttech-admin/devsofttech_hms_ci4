@@ -337,39 +337,44 @@ class DoctorApi extends BaseController
     public function saveOpdPrescription(int $opdId)
     {
         $db = db_connect();
-        $post = $this->request->getPost() ?: ($this->request->getJSON(true) ?? []);
+        $json = $this->request->getJSON(true);
+        $post = $this->request->getPost() ?: [];
+        $dataInput = ! empty($json) ? $json : $post;
 
         $opdRow = $db->table('opd_master')->where('opd_id', $opdId)->get()->getRowArray();
         if (! $opdRow) {
             return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'OPD record not found']);
         }
 
-        $docId = (int) ($post['doctor_id'] ?? $opdRow['doc_id']);
+        $docId = (int) ($dataInput['doctor_id'] ?? $opdRow['doc_id']);
         $pId = (int) ($opdRow['p_id'] ?? 0);
 
-        $imageBase64 = $post['image_base64'] ?? null;
+        $imageBase64 = $dataInput['image_base64'] ?? null;
         $imageUrl = '';
         if (! empty($imageBase64)) {
+            $imgData = $imageBase64;
+            $ext = 'jpg';
             if (preg_match('/^data:image\/(\w+);base64,/', $imageBase64, $type)) {
                 $imgData = substr($imageBase64, strpos($imageBase64, ',') + 1);
                 $ext = strtolower($type[1]);
                 if ($ext === 'jpeg') $ext = 'jpg';
-                $binary = base64_decode($imgData);
-                if ($binary !== false) {
-                    $uploadDir = FCPATH . 'uploads/doctor_notes/';
-                    if (! is_dir($uploadDir)) {
-                        @mkdir($uploadDir, 0777, true);
-                    }
-                    $filename = 'opd_rx_' . $opdId . '_' . time() . '_' . rand(100, 999) . '.' . $ext;
-                    file_put_contents($uploadDir . $filename, $binary);
-                    $imageUrl = '/uploads/doctor_notes/' . $filename;
+            }
+            $imgData = str_replace(' ', '+', $imgData);
+            $binary = base64_decode($imgData);
+            if ($binary !== false && strlen($binary) > 0) {
+                $uploadDir = FCPATH . 'uploads/doctor_notes/';
+                if (! is_dir($uploadDir)) {
+                    @mkdir($uploadDir, 0777, true);
                 }
+                $filename = 'opd_rx_' . $opdId . '_' . time() . '_' . rand(100, 999) . '.' . $ext;
+                file_put_contents($uploadDir . $filename, $binary);
+                $imageUrl = '/uploads/doctor_notes/' . $filename;
             }
         }
 
-        $adviceText = trim((string) ($post['advice'] ?? ''));
+        $adviceText = trim((string) ($dataInput['advice'] ?? ''));
         if (! empty($imageUrl)) {
-            $adviceText .= ($adviceText ? "\n" : '') . '[Handwritten Rx Photo: ' . $imageUrl . ']';
+            $adviceText .= ($adviceText ? "\n" : '') . '[IMAGE_ATTACHMENT:' . $imageUrl . ']';
         }
 
         $prescData = [
@@ -377,20 +382,20 @@ class DoctorApi extends BaseController
             'doc_id' => $docId,
             'p_id' => $pId,
             'date_opd_visit' => date('Y-m-d'),
-            'temp' => trim((string) ($post['temp'] ?? '')),
-            'pulse' => trim((string) ($post['pulse'] ?? '')),
-            'bp' => trim((string) ($post['bp_systolic'] ?? '')),
-            'diastolic' => trim((string) ($post['bp_diastolic'] ?? '')),
-            'spo2' => trim((string) ($post['spo2'] ?? '')),
-            'weight' => trim((string) ($post['weight'] ?? '')),
-            'height' => trim((string) ($post['height'] ?? '')),
-            'rr_min' => trim((string) ($post['rr_min'] ?? '')),
-            'complaints' => trim((string) ($post['chief_complaints'] ?? '')),
-            'Finding_Examinations' => trim((string) ($post['finding_examinations'] ?? '')),
-            'diagnosis' => trim((string) ($post['provisional_diagnosis'] ?? '')),
+            'temp' => trim((string) ($dataInput['temp'] ?? '')),
+            'pulse' => trim((string) ($dataInput['pulse'] ?? '')),
+            'bp' => trim((string) ($dataInput['bp_systolic'] ?? '')),
+            'diastolic' => trim((string) ($dataInput['bp_diastolic'] ?? '')),
+            'spo2' => trim((string) ($dataInput['spo2'] ?? '')),
+            'weight' => trim((string) ($dataInput['weight'] ?? '')),
+            'height' => trim((string) ($dataInput['height'] ?? '')),
+            'rr_min' => trim((string) ($dataInput['rr_min'] ?? '')),
+            'complaints' => trim((string) ($dataInput['chief_complaints'] ?? '')),
+            'Finding_Examinations' => trim((string) ($dataInput['finding_examinations'] ?? '')),
+            'diagnosis' => trim((string) ($dataInput['provisional_diagnosis'] ?? '')),
             'advice' => $adviceText,
-            'investigation' => trim((string) ($post['investigation'] ?? '')),
-            'next_visit' => trim((string) ($post['next_visit'] ?? '')),
+            'investigation' => trim((string) ($dataInput['investigation'] ?? '')),
+            'next_visit' => trim((string) ($dataInput['next_visit'] ?? '')),
         ];
 
         $existing = $db->table('opd_prescription')->where('opd_id', $opdId)->get()->getRowArray();
@@ -403,7 +408,7 @@ class DoctorApi extends BaseController
             $opdPreId = (int) $db->insertID();
         }
 
-        $medRaw = $post['medicines'] ?? null;
+        $medRaw = $dataInput['medicines'] ?? null;
         $medArray = is_array($medRaw) ? $medRaw : json_decode((string)$medRaw, true);
         if ($opdPreId > 0 && is_array($medArray)) {
             $db->table('opd_prescrption_prescribed')->where('opd_pre_id', $opdPreId)->delete();
@@ -428,6 +433,7 @@ class DoctorApi extends BaseController
         return $this->response->setJSON([
             'status' => 1,
             'message' => 'Prescription saved & OPD Visit completed successfully',
+            'image_url' => $imageUrl,
         ]);
     }
 
@@ -523,26 +529,32 @@ class DoctorApi extends BaseController
      */
     public function saveTreatmentNote(int $ipdId)
     {
-        $post = $this->request->getPost() ?: ($this->request->getJSON(true) ?? []);
-        $treatmentText = trim((string) ($post['treatment_text'] ?? ''));
-        $imageBase64 = $post['image_base64'] ?? null;
+        $json = $this->request->getJSON(true);
+        $post = $this->request->getPost() ?: [];
+        $dataInput = ! empty($json) ? $json : $post;
+
+        $treatmentText = trim((string) ($dataInput['treatment_text'] ?? ''));
+        $imageBase64 = $dataInput['image_base64'] ?? null;
 
         $imageUrl = '';
         if (! empty($imageBase64)) {
+            $imgData = $imageBase64;
+            $ext = 'jpg';
             if (preg_match('/^data:image\/(\w+);base64,/', $imageBase64, $type)) {
                 $imgData = substr($imageBase64, strpos($imageBase64, ',') + 1);
                 $ext = strtolower($type[1]);
                 if ($ext === 'jpeg') $ext = 'jpg';
-                $binary = base64_decode($imgData);
-                if ($binary !== false) {
-                    $uploadDir = FCPATH . 'uploads/doctor_notes/';
-                    if (! is_dir($uploadDir)) {
-                        @mkdir($uploadDir, 0777, true);
-                    }
-                    $filename = 'note_ipd_' . $ipdId . '_' . time() . '_' . rand(100, 999) . '.' . $ext;
-                    file_put_contents($uploadDir . $filename, $binary);
-                    $imageUrl = '/uploads/doctor_notes/' . $filename;
+            }
+            $imgData = str_replace(' ', '+', $imgData);
+            $binary = base64_decode($imgData);
+            if ($binary !== false && strlen($binary) > 0) {
+                $uploadDir = FCPATH . 'uploads/doctor_notes/';
+                if (! is_dir($uploadDir)) {
+                    @mkdir($uploadDir, 0777, true);
                 }
+                $filename = 'note_ipd_' . $ipdId . '_' . time() . '_' . rand(100, 999) . '.' . $ext;
+                file_put_contents($uploadDir . $filename, $binary);
+                $imageUrl = '/uploads/doctor_notes/' . $filename;
             }
         }
 
@@ -550,8 +562,8 @@ class DoctorApi extends BaseController
             return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Please enter clinical notes or attach a handwritten note photo']);
         }
 
-        $docId = (int) ($post['doctor_id'] ?? 0);
-        $doctorName = trim((string) ($post['doctor_name'] ?? 'Doctor'));
+        $docId = (int) ($dataInput['doctor_id'] ?? 0);
+        $doctorName = trim((string) ($dataInput['doctor_name'] ?? 'Doctor'));
 
         $fullNoteText = '[Doctor Note] ' . $treatmentText;
         if (! empty($imageUrl)) {
@@ -563,7 +575,7 @@ class DoctorApi extends BaseController
             'entry_type' => 'treatment',
             'recorded_at' => date('Y-m-d H:i:s'),
             'treatment_text' => $fullNoteText,
-            'general_note' => $imageUrl ? ('Attachment: ' . $imageUrl) : (string) ($post['general_note'] ?? ''),
+            'general_note' => $imageUrl ? ('Attachment: ' . $imageUrl) : (string) ($dataInput['general_note'] ?? ''),
             'recorded_by' => 'Dr. ' . $doctorName,
             'recorded_by_id' => $docId,
             'created_at' => date('Y-m-d H:i:s'),
