@@ -55,7 +55,31 @@ class NursingApi extends BaseController
      */
     public function beds()
     {
-        $records = $this->bedMasterModel->getAllWithRelations();
+        $db = db_connect();
+        $sql = "SELECT b.id, b.bed_number, b.bed_code, b.bed_category_id, b.ward_id, b.current_ipd_id,
+                       b.status, coalesce(b.bed_status, 'available') as bed_status,
+                       w.ward_name, c.category_name,
+                       i.id as ipd_id, i.ipd_code, i.p_id, i.r_doc_id, i.r_doc_name,
+                       p.p_fname as patient_name, p.p_code as uhid, p.mphone1, p.gender, p.age, p.dob,
+                       coalesce(ipd_doc_list.doc_name, concat('Dr. ', i.r_doc_name)) as doctor_name
+                FROM bed_master b
+                LEFT JOIN ward_master w ON b.ward_id = w.id
+                LEFT JOIN bed_category_master c ON b.bed_category_id = c.id
+                LEFT JOIN ipd_master i ON (b.current_ipd_id = i.id AND i.ipd_status = 0)
+                LEFT JOIN patient_master p ON i.p_id = p.id
+                LEFT JOIN (
+                    select i.ipd_id, group_concat(distinct concat_ws(' ', 'Dr.', d.p_fname, d.p_mname, d.p_lname)) as doc_name
+                    from ipd_master_doc_list i
+                    join doctor_master d on i.doc_id = d.id
+                    group by i.ipd_id
+                ) ipd_doc_list ON i.id = ipd_doc_list.ipd_id
+                ORDER BY w.ward_name ASC, b.bed_number ASC";
+
+        $records = $db->query($sql)->getResultArray();
+        foreach ($records as &$r) {
+            $r['status'] = (!empty($r['patient_name']) || !empty($r['ipd_id'])) ? 'occupied' : 'available';
+        }
+
         $nursingStations = $this->nursingStationModel->getActiveStations();
 
         return $this->response->setJSON([
@@ -425,6 +449,9 @@ class NursingApi extends BaseController
         $imageUrl = '/uploads/nursing_scans/' . $filename;
 
         // Append attachment to OPD prescription advice/investigation
+        $opdRow = $db->table('opd_master')->where('opd_id', $opdId)->get()->getRowArray();
+        $pId = (int) ($opdRow['p_id'] ?? 0);
+
         $existing = $db->table('opd_prescription')->where('opd_id', $opdId)->get()->getRowArray();
         $attachmentText = '[Nursing Scan: ' . $docType . ' by ' . $nurseName . '] [IMAGE_ATTACHMENT:' . $imageUrl . ']';
 
@@ -432,15 +459,25 @@ class NursingApi extends BaseController
             $newAdvice = trim(($existing['advice'] ?? '') . "\n" . $attachmentText);
             $db->table('opd_prescription')->where('opd_id', $opdId)->update(['advice' => $newAdvice]);
         } else {
-            $opdRow = $db->table('opd_master')->where('opd_id', $opdId)->get()->getRowArray();
             $db->table('opd_prescription')->insert([
                 'opd_id' => $opdId,
                 'doc_id' => (int) ($opdRow['doc_id'] ?? 0),
-                'p_id' => (int) ($opdRow['p_id'] ?? 0),
+                'p_id' => $pId,
                 'date_opd_visit' => date('Y-m-d'),
                 'advice' => $attachmentText,
             ]);
         }
+
+        // Register in file_upload_data for HMS Scan Doc List popup
+        $this->registerFileUploadData([
+            'filename' => $filename,
+            'public_path' => $imageUrl,
+            'opd_id' => $opdId,
+            'p_id' => $pId,
+            'upload_by' => $nurseName,
+            'doc_type' => $docType,
+            'file_size_kb' => round(strlen($binary) / 1024, 2),
+        ]);
 
         return $this->response->setJSON([
             'status' => 1,
@@ -454,6 +491,7 @@ class NursingApi extends BaseController
      */
     public function saveIpdScan(int $ipdId)
     {
+        $db = db_connect();
         $json = $this->request->getJSON(true);
         $post = $this->request->getPost() ?: [];
         $dataInput = ! empty($json) ? $json : $post;
@@ -491,6 +529,9 @@ class NursingApi extends BaseController
 
         $fullNoteText = '[Nursing Scanned Document: ' . $docType . '] [IMAGE_ATTACHMENT:' . $imageUrl . ']';
 
+        $ipdRow = $db->table('ipd_master')->where('id', $ipdId)->get()->getRowArray();
+        $pId = (int) ($ipdRow['p_id'] ?? 0);
+
         $data = [
             'ipd_id' => $ipdId,
             'entry_type' => 'treatment',
@@ -505,10 +546,66 @@ class NursingApi extends BaseController
 
         $this->ipdNursingEntryModel->insert($data);
 
+        // Register in file_upload_data for HMS Scan Doc List popup
+        $this->registerFileUploadData([
+            'filename' => $filename,
+            'public_path' => $imageUrl,
+            'ipd_id' => $ipdId,
+            'p_id' => $pId,
+            'upload_by' => $nurseName,
+            'doc_type' => $docType,
+            'file_size_kb' => round(strlen($binary) / 1024, 2),
+        ]);
+
         return $this->response->setJSON([
             'status' => 1,
             'message' => 'IPD Scanned Document uploaded successfully to Patient Chart',
             'image_url' => $imageUrl,
+        ]);
+    }
+
+    protected function registerFileUploadData(array $info)
+    {
+        $db = db_connect();
+        if (! $db->tableExists('file_upload_data')) {
+            return;
+        }
+
+        $filename = $info['filename'];
+        $publicPath = $info['public_path'];
+        $fullPath = FCPATH . ltrim($publicPath, '/');
+        $opdId = (int) ($info['opd_id'] ?? 0);
+        $ipdId = (int) ($info['ipd_id'] ?? 0);
+        $pId = (int) ($info['p_id'] ?? 0);
+        $uploadBy = $info['upload_by'] ?? 'App User';
+        $docCategory = $info['doc_type'] ?? 'Scanned Document';
+        $binarySizeKb = (float) ($info['file_size_kb'] ?? 0);
+        $ext = pathinfo($filename, PATHINFO_EXTENSION);
+
+        $db->table('file_upload_data')->insert([
+            'file_name' => $filename,
+            'file_type' => 'image/' . ($ext === 'jpg' ? 'jpeg' : $ext),
+            'file_path' => str_replace('\\', '/', dirname($fullPath)) . '/',
+            'full_path' => str_replace('\\', '/', $fullPath),
+            'raw_name' => pathinfo($filename, PATHINFO_FILENAME),
+            'orig_name' => $filename,
+            'client_name' => $filename,
+            'file_ext' => '.' . $ext,
+            'file_size' => $binarySizeKb,
+            'is_image' => 1,
+            'image_type' => $ext,
+            'insert_date' => date('Y-m-d H:i:s'),
+            'insert_time' => date('Y-m-d H:i:s'),
+            'pid' => $pId,
+            'opd_id' => $opdId,
+            'ipd_id' => $ipdId,
+            'upload_by' => $uploadBy,
+            'show_type' => 0,
+            'isdelete' => 0,
+            'document_type' => $docCategory,
+            'content_description' => 'Scanned via Mobile PWA App (' . $docCategory . ')',
+            'ai_status' => 'pending',
+            'ai_alert_flag' => 0,
         ]);
     }
 }

@@ -430,6 +430,18 @@ class DoctorApi extends BaseController
         // Update OPD status to Visited (2)
         $db->table('opd_master')->where('opd_id', $opdId)->update(['opd_status' => 2]);
 
+        if (! empty($imageUrl)) {
+            $this->registerFileUploadData([
+                'filename' => basename($imageUrl),
+                'public_path' => $imageUrl,
+                'opd_id' => $opdId,
+                'p_id' => $pId,
+                'upload_by' => 'Doctor',
+                'doc_type' => 'Handwritten Rx Photo',
+                'file_size_kb' => round(strlen($binary) / 1024, 2),
+            ]);
+        }
+
         return $this->response->setJSON([
             'status' => 1,
             'message' => 'Prescription saved & OPD Visit completed successfully',
@@ -584,10 +596,70 @@ class DoctorApi extends BaseController
 
         $this->ipdNursingEntryModel->insert($data);
 
+        $ipdRow = db_connect()->table('ipd_master')->where('id', $ipdId)->get()->getRowArray();
+        $pId = (int) ($ipdRow['p_id'] ?? 0);
+
+        if (! empty($imageUrl)) {
+            $this->registerFileUploadData([
+                'filename' => basename($imageUrl),
+                'public_path' => $imageUrl,
+                'ipd_id' => $ipdId,
+                'p_id' => $pId,
+                'upload_by' => 'Dr. ' . $doctorName,
+                'doc_type' => 'Handwritten Doctor Note',
+                'file_size_kb' => round(strlen($binary) / 1024, 2),
+            ]);
+        }
+
         return $this->response->setJSON([
             'status' => 1,
             'message' => 'Doctor clinical note / handwritten photo saved successfully',
             'image_url' => $imageUrl,
+        ]);
+    }
+
+    protected function registerFileUploadData(array $info)
+    {
+        $db = db_connect();
+        if (! $db->tableExists('file_upload_data')) {
+            return;
+        }
+
+        $filename = $info['filename'];
+        $publicPath = $info['public_path'];
+        $fullPath = FCPATH . ltrim($publicPath, '/');
+        $opdId = (int) ($info['opd_id'] ?? 0);
+        $ipdId = (int) ($info['ipd_id'] ?? 0);
+        $pId = (int) ($info['p_id'] ?? 0);
+        $uploadBy = $info['upload_by'] ?? 'Doctor';
+        $docCategory = $info['doc_type'] ?? 'Handwritten Doctor Note';
+        $binarySizeKb = (float) ($info['file_size_kb'] ?? 0);
+        $ext = pathinfo($filename, PATHINFO_EXTENSION);
+
+        $db->table('file_upload_data')->insert([
+            'file_name' => $filename,
+            'file_type' => 'image/' . ($ext === 'jpg' ? 'jpeg' : $ext),
+            'file_path' => str_replace('\\', '/', dirname($fullPath)) . '/',
+            'full_path' => str_replace('\\', '/', $fullPath),
+            'raw_name' => pathinfo($filename, PATHINFO_FILENAME),
+            'orig_name' => $filename,
+            'client_name' => $filename,
+            'file_ext' => '.' . $ext,
+            'file_size' => $binarySizeKb,
+            'is_image' => 1,
+            'image_type' => $ext,
+            'insert_date' => date('Y-m-d H:i:s'),
+            'insert_time' => date('Y-m-d H:i:s'),
+            'pid' => $pId,
+            'opd_id' => $opdId,
+            'ipd_id' => $ipdId,
+            'upload_by' => $uploadBy,
+            'show_type' => 0,
+            'isdelete' => 0,
+            'document_type' => $docCategory,
+            'content_description' => 'Uploaded via Mobile Doctor App (' . $docCategory . ')',
+            'ai_status' => 'pending',
+            'ai_alert_flag' => 0,
         ]);
     }
 }

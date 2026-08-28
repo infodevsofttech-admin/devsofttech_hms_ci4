@@ -875,9 +875,11 @@
 
                                                         {bed.patient_name ? (
                                                             <div>
-                                                                <div className="fw-bold text-primary text-truncate">{bed.patient_name}</div>
-                                                                <small className="text-muted d-block" style={{fontSize: '11px'}}>UHID: {bed.uhid || 'N/A'}</small>
-                                                                <small className="text-dark fw-semibold d-block mt-1" style={{fontSize: '11px'}}>IPD: {bed.ipd_code}</small>
+                                                                <div className="fw-bold text-primary text-truncate" style={{fontSize: '15px'}}>{bed.patient_name}</div>
+                                                                <small className="text-muted d-block" style={{fontSize: '11px'}}>UHID: {bed.uhid || 'N/A'} • IPD: {bed.ipd_code || 'N/A'}</small>
+                                                                <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 mt-2 d-inline-block" style={{fontSize: '11px'}}>
+                                                                    <i className="bi bi-person-badge me-1"></i> {bed.doctor_name || 'Dr. Assigned'}
+                                                                </span>
                                                             </div>
                                                         ) : (
                                                             <div className="text-success small fw-semibold py-2">Available for Admission</div>
