@@ -1556,3 +1556,22 @@ $routes->get('Document_Patient/index', 'DoctorDocument::index');
 $routes->get('Document_Patient/workspace', 'DoctorDocument::workspace');
 $routes->get('Document_Patient/health_document_fhir_preview/(:num)', 'DoctorDocument::health_document_fhir_preview/$1');
 
+/*
+ * --------------------------------------------------------------------
+ * Dedicated PWA Apps & RESTful API Routes (Isolated Architecture)
+ * --------------------------------------------------------------------
+ */
+
+// Dedicated PWA Web App Endpoint (Serves React PWA without touching standard CI4 web views)
+$routes->get('app/nursing', 'Api\v1\NursingApi::pwaIndex');
+$routes->get('app/nursing/(:any)', 'Api\v1\NursingApi::pwaIndex');
+
+// Dedicated RESTful JSON API v1 Group for React PWAs & Mobile Apps
+$routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1'], static function ($routes) {
+    // Nursing PWA APIs
+    $routes->get('nursing/beds', 'NursingApi::beds');
+    $routes->get('nursing/nurses', 'NursingApi::nurses');
+    $routes->get('nursing/workspace/(:num)', 'NursingApi::workspace/$1');
+    $routes->post('nursing/entry/save/(:num)', 'NursingApi::saveEntry/$1');
+});
+
