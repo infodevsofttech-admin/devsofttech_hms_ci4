@@ -36,6 +36,7 @@
             padding: 0;
             user-select: none;
             -webkit-user-select: none;
+            overflow-x: hidden;
         }
 
         .doctor-header {
@@ -48,20 +49,31 @@
             z-index: 1000;
         }
 
-        .patient-card {
-            border: 1px solid #e2e8f0;
-            border-radius: 12px;
+        .mobile-patient-card {
             background: #ffffff;
-            transition: all 0.2s ease-in-out;
-            cursor: pointer;
-            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 14px;
+            margin-bottom: 12px;
+            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
             border-left: 5px solid var(--accent-blue);
+            transition: all 0.2s ease;
         }
 
-        .patient-card:hover, .patient-card:active {
-            transform: translateY(-2px);
-            box-shadow: 0 8px 16px rgba(13,110,253,0.12);
-            border-color: #0d6efd;
+        .mobile-patient-card:active {
+            transform: scale(0.99);
+        }
+
+        .mobile-patient-card.visited {
+            border-left-color: #0dcaf0;
+        }
+
+        .mobile-patient-card.booked {
+            border-left-color: #6c757d;
+        }
+
+        .mobile-patient-card.waiting {
+            border-left-color: #0d6efd;
         }
 
         .nav-pills .nav-link {
@@ -98,7 +110,7 @@
 
         .chip-btn {
             font-size: 11px;
-            padding: 3px 8px;
+            padding: 4px 10px;
             border-radius: 14px;
             border: 1px solid #cbd5e1;
             background: #f8fafc;
@@ -614,7 +626,7 @@
                     </header>
 
                     {/* Main Container */}
-                    <main className="container-fluid py-3">
+                    <main className="container-fluid py-3 px-2 px-md-3">
                         {!activeOpd && !activePatient ? (
                             <div>
                                 {/* Top Main Tabs */}
@@ -673,10 +685,63 @@
                                             />
                                         </div>
 
-                                        {/* OPD Table / Mobile List */}
-                                        <div className="card shadow-sm border-0">
+                                        {/* MOBILE PROFESSIONAL CARDS LIST (Phones < 768px - NO Left-Right Scroll Needed!) */}
+                                        <div className="d-block d-md-none">
+                                            {filteredOpdAppointments.length === 0 ? (
+                                                <div className="text-center text-muted py-4 bg-white rounded border">
+                                                    No OPD appointments found for selected filter.
+                                                </div>
+                                            ) : (
+                                                filteredOpdAppointments.map(app => {
+                                                    const statusBadgeClass = app.status_key === 'waiting' ? 'bg-primary' 
+                                                        : app.status_key === 'visited' ? 'bg-info text-dark' 
+                                                        : app.status_key === 'booked' ? 'bg-secondary' : 'bg-danger';
+
+                                                    return (
+                                                        <div key={app.opd_id} className={`mobile-patient-card ${app.status_key}`}>
+                                                            <div className="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                                                                <div className="d-flex align-items-center gap-2">
+                                                                    <span className="badge bg-dark fs-6 px-2 py-1">Q #{app.queue_no || app.opd_no || '1'}</span>
+                                                                    <span className={`badge ${statusBadgeClass} text-uppercase px-2 py-1`}>
+                                                                        {app.status_label}
+                                                                    </span>
+                                                                </div>
+                                                                <strong className="text-dark small">{app.opd_code}</strong>
+                                                            </div>
+
+                                                            <div className="mb-3">
+                                                                <h6 className="fw-bold text-primary mb-1 fs-5">{app.patient_display_name}</h6>
+                                                                <div className="d-flex flex-wrap gap-2 text-muted small">
+                                                                    <span className="badge bg-light text-dark border">
+                                                                        <i className="bi bi-person me-1"></i>{app.age_display || '47 Year'} / {app.gender_label}
+                                                                    </span>
+                                                                    <span className="badge bg-light text-danger border">
+                                                                        <i className="bi bi-card-text me-1"></i>{app.uhid || '-'}
+                                                                    </span>
+                                                                    <span className="badge bg-light text-secondary border">
+                                                                        <i className="bi bi-cash me-1"></i>{app.opd_type || 'Cash'}
+                                                                    </span>
+                                                                </div>
+                                                            </div>
+
+                                                            <div>
+                                                                <button 
+                                                                    className="btn btn-primary w-100 fw-bold py-2 shadow-sm"
+                                                                    onClick={() => openOpdConsultation(app)}
+                                                                >
+                                                                    <i className="bi bi-file-earmark-medical me-1"></i> Consult Patient
+                                                                </button>
+                                                            </div>
+                                                        </div>
+                                                    );
+                                                })
+                                            )}
+                                        </div>
+
+                                        {/* DESKTOP TABLE VIEW (Monitors >= 768px) */}
+                                        <div className="card shadow-sm border-0 d-none d-md-block">
                                             <div className="card-body p-0 table-responsive">
-                                                <table className="table table-hover align-middle mb-0" style={{minWidth: '650px'}}>
+                                                <table className="table table-hover align-middle mb-0">
                                                     <thead className="table-light">
                                                         <tr>
                                                             <th>Status</th>
@@ -750,9 +815,57 @@
                                             />
                                         </div>
 
-                                        <div className="card shadow-sm border-0">
+                                        {/* MOBILE CARDS LIST VIEW FOR IPD (Phones < 768px) */}
+                                        <div className="d-block d-md-none">
+                                            {filteredIpdPatients.length === 0 ? (
+                                                <div className="text-center text-muted py-4 bg-white rounded border">
+                                                    <i className="bi bi-hospital fs-1 d-block text-secondary mb-2"></i>
+                                                    No Admitted IPD Patients found.
+                                                </div>
+                                            ) : (
+                                                filteredIpdPatients.map(pat => (
+                                                    <div key={pat.ipd_id} className="mobile-patient-card" style={{borderLeft: '5px solid #198754'}}>
+                                                        <div className="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
+                                                            <span className="badge bg-success text-uppercase px-2 py-1">Current Admission</span>
+                                                            <strong className="text-dark small">{pat.ipd_code}</strong>
+                                                        </div>
+
+                                                        <div className="mb-3">
+                                                            <h6 className="fw-bold text-primary mb-1 fs-5">{pat.patient_display_name}</h6>
+                                                            <small className="text-muted d-block mb-2">
+                                                                {pat.rname ? `S/D/W of ${pat.rname}` : `(${pat.age_display} / ${pat.gender_label})`}
+                                                            </small>
+
+                                                            <div className="d-flex flex-wrap gap-2 mb-2">
+                                                                <span className="badge bg-primary-subtle text-primary border">
+                                                                    <i className="bi bi-door-closed me-1"></i>{pat.bed_label}
+                                                                </span>
+                                                                <span className="badge bg-light text-danger border">
+                                                                    <i className="bi bi-card-text me-1"></i>{pat.uhid}
+                                                                </span>
+                                                                <span className="badge bg-light text-dark border">
+                                                                    <i className="bi bi-person-badge me-1"></i>{pat.assigned_doctors || pat.r_doc_name || `Dr. ${authenticatedDoctor.name}`}
+                                                                </span>
+                                                            </div>
+                                                        </div>
+
+                                                        <div>
+                                                            <button 
+                                                                className="btn btn-success w-100 fw-bold py-2 shadow-sm"
+                                                                onClick={() => openIpdWorkspace(pat)}
+                                                            >
+                                                                <i className="bi bi-heart-pulse-fill me-1"></i> Bedside Workspace
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+
+                                        {/* DESKTOP TABLE VIEW FOR IPD (Monitors >= 768px) */}
+                                        <div className="card shadow-sm border-0 d-none d-md-block">
                                             <div className="card-body p-0 table-responsive">
-                                                <table className="table table-hover align-middle mb-0" style={{minWidth: '700px'}}>
+                                                <table className="table table-hover align-middle mb-0">
                                                     <thead className="table-light">
                                                         <tr>
                                                             <th>IPD Code</th>
@@ -768,7 +881,7 @@
                                                             <tr>
                                                                 <td colSpan="6" className="text-center text-muted py-4">
                                                                     <i className="bi bi-hospital fs-1 d-block text-secondary mb-2"></i>
-                                                                    No Admitted IPD Patients found for Dr. {authenticatedDoctor.name}.
+                                                                    No Admitted IPD Patients found.
                                                                 </td>
                                                             </tr>
                                                         ) : (
