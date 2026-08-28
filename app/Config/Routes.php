@@ -1562,9 +1562,11 @@ $routes->get('Document_Patient/health_document_fhir_preview/(:num)', 'DoctorDocu
  * --------------------------------------------------------------------
  */
 
-// Dedicated PWA Web App Endpoint (Serves React PWA without touching standard CI4 web views)
+// Dedicated PWA Web App Endpoints (Serves React PWAs without touching standard CI4 web views)
 $routes->get('app/nursing', 'Api\v1\NursingApi::pwaIndex');
 $routes->get('app/nursing/(:any)', 'Api\v1\NursingApi::pwaIndex');
+$routes->get('app/doctor', 'Api\v1\DoctorApi::pwaIndex');
+$routes->get('app/doctor/(:any)', 'Api\v1\DoctorApi::pwaIndex');
 
 // Dedicated RESTful JSON API v1 Group for React PWAs & Mobile Apps
 $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1'], static function ($routes) {
@@ -1575,5 +1577,14 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1'], static funct
     $routes->post('nursing/auth/set-pin', 'NursingApi::setPin');
     $routes->get('nursing/workspace/(:num)', 'NursingApi::workspace/$1');
     $routes->post('nursing/entry/save/(:num)', 'NursingApi::saveEntry/$1');
+
+    // Doctor PWA APIs
+    $routes->get('doctor/list', 'DoctorApi::doctors');
+    $routes->post('doctor/auth/verify-pin', 'DoctorApi::verifyPin');
+    $routes->post('doctor/auth/set-pin', 'DoctorApi::setPin');
+    $routes->get('doctor/opd/list/(:num)', 'DoctorApi::opdList/$1');
+    $routes->get('doctor/ipd/list/(:num)', 'DoctorApi::ipdList/$1');
+    $routes->get('doctor/ipd/workspace/(:num)', 'DoctorApi::patientWorkspace/$1');
+    $routes->post('doctor/ipd/treatment/save/(:num)', 'DoctorApi::saveTreatmentNote/$1');
 });
 

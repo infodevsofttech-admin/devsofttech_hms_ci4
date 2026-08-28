@@ -302,17 +302,17 @@
                 <label class="form-label fw-bold small text-secondary mb-2">1. SELECT APPLICATION</label>
                 <div class="row g-2 mb-3">
                     <div class="col-4">
-                        <div class="card p-2 text-center border-primary bg-primary-subtle text-primary h-100" style="cursor: pointer;" id="app_card_nursing">
+                        <div class="card p-2 text-center border-primary bg-primary-subtle text-primary h-100 app-card-item active" style="cursor: pointer;" id="app_card_nursing" data-app="nursing">
                             <i class="bi bi-heart-pulse-fill fs-3 mb-1"></i>
                             <div class="fw-bold small" style="font-size:12px;">Nursing Care</div>
                             <span class="badge bg-primary mt-1" style="font-size:9px;">Active PWA</span>
                         </div>
                     </div>
                     <div class="col-4">
-                        <div class="card p-2 text-center border-secondary bg-light text-muted opacity-75 h-100">
-                            <i class="bi bi-person-badge-fill fs-3 mb-1"></i>
+                        <div class="card p-2 text-center border-secondary bg-light text-dark h-100 app-card-item" style="cursor: pointer;" id="app_card_doctor" data-app="doctor">
+                            <i class="bi bi-person-badge-fill fs-3 mb-1 text-primary"></i>
                             <div class="fw-bold small" style="font-size:12px;">Doctor App</div>
-                            <span class="badge bg-secondary mt-1" style="font-size:9px;">Coming Soon</span>
+                            <span class="badge bg-success mt-1" style="font-size:9px;">Active PWA</span>
                         </div>
                     </div>
                     <div class="col-4">
@@ -326,7 +326,7 @@
 
                 <!-- Step 2: Staff User Selection -->
                 <div class="mb-3">
-                    <label class="form-label fw-bold small text-secondary mb-1">2. SELECT NURSING STAFF PROFILE</label>
+                    <label class="form-label fw-bold small text-secondary mb-1" id="hdr_apps_staff_label">2. SELECT NURSING STAFF PROFILE</label>
                     <select class="form-select form-select-sm" id="hdr_apps_nurse_select">
                         <option value="">-- General / All Staff Access --</option>
                     </select>
@@ -360,15 +360,18 @@
 
 <script>
 (function() {
+    var selectedApp = 'nursing';
+
     function getAppBaseUrl() {
-        return '<?= base_url('app/nursing') ?>';
+        return '<?= base_url('app') ?>/' + selectedApp;
     }
 
     function updateHdrAppDetails() {
         var sel = document.getElementById('hdr_apps_nurse_select');
         var code = sel ? sel.value : '';
         var appBaseUrl = getAppBaseUrl();
-        var appUrl = appBaseUrl + (code ? '?nurse_code=' + encodeURIComponent(code) : '');
+        var paramKey = (selectedApp === 'doctor') ? 'doctor_id=' : 'nurse_code=';
+        var appUrl = appBaseUrl + (code ? '?' + paramKey + encodeURIComponent(code) : '');
         var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' + encodeURIComponent(appUrl);
 
         var qrImg = document.getElementById('hdr_apps_qr_img');
@@ -381,13 +384,15 @@
         if (urlInput) urlInput.value = appUrl;
         if (launchLink) launchLink.href = appUrl;
 
+        var title = (selectedApp === 'doctor') ? 'DoctorCare EMR App' : 'Nursing Care App';
+
         if (code && sel && sel.options[sel.selectedIndex]) {
             var text = sel.options[sel.selectedIndex].text;
-            if (targetName) targetName.textContent = 'Nursing Care App: ' + text;
+            if (targetName) targetName.textContent = title + ': ' + text;
             if (targetCode) targetCode.textContent = code;
         } else {
-            if (targetName) targetName.textContent = 'Nursing Care App';
-            if (targetCode) targetCode.textContent = '/app/nursing';
+            if (targetName) targetName.textContent = title;
+            if (targetCode) targetCode.textContent = '/app/' + selectedApp;
         }
     }
 
@@ -405,13 +410,32 @@
         }
     }
 
-    function openAppsModal() {
-        var apiUrl = '<?= base_url('api/v1/nursing/nurses') ?>';
-        fetch(apiUrl)
-            .then(function(res) { return res.json(); })
-            .then(function(resp) {
-                var sel = document.getElementById('hdr_apps_nurse_select');
-                if (sel) {
+    function loadAppStaffList() {
+        var sel = document.getElementById('hdr_apps_nurse_select');
+        var label = document.getElementById('hdr_apps_staff_label');
+        if (!sel) return;
+
+        if (selectedApp === 'doctor') {
+            if (label) label.textContent = '2. SELECT DOCTOR PROFILE';
+            fetch('<?= base_url('api/v1/doctor/list') ?>')
+                .then(function(r) { return r.json(); })
+                .then(function(resp) {
+                    sel.innerHTML = '<option value="">-- General / All Doctor Access --</option>';
+                    if (resp && resp.status === 1 && Array.isArray(resp.data)) {
+                        resp.data.forEach(function(d) {
+                            var opt = document.createElement('option');
+                            opt.value = d.id;
+                            opt.textContent = d.name;
+                            sel.appendChild(opt);
+                        });
+                    }
+                    updateHdrAppDetails();
+                });
+        } else {
+            if (label) label.textContent = '2. SELECT NURSING STAFF PROFILE';
+            fetch('<?= base_url('api/v1/nursing/nurses') ?>')
+                .then(function(r) { return r.json(); })
+                .then(function(resp) {
                     sel.innerHTML = '<option value="">-- General / All Staff Access --</option>';
                     if (resp && resp.status === 1 && Array.isArray(resp.data)) {
                         resp.data.forEach(function(n) {
@@ -421,14 +445,14 @@
                             sel.appendChild(opt);
                         });
                     }
-                }
-                updateHdrAppDetails();
-                showAppsModal();
-            })
-            .catch(function(err) {
-                updateHdrAppDetails();
-                showAppsModal();
-            });
+                    updateHdrAppDetails();
+                });
+        }
+    }
+
+    function openAppsModal() {
+        loadAppStaffList();
+        showAppsModal();
     }
 
     document.addEventListener('click', function(e) {
@@ -436,6 +460,22 @@
         if (launcherBtn) {
             e.preventDefault();
             openAppsModal();
+            return;
+        }
+
+        var appCard = e.target.closest('.app-card-item');
+        if (appCard) {
+            var appType = appCard.getAttribute('data-app');
+            if (appType) {
+                selectedApp = appType;
+                document.querySelectorAll('.app-card-item').forEach(function(c) {
+                    c.classList.remove('border-primary', 'bg-primary-subtle', 'text-primary');
+                    c.classList.add('border-secondary', 'bg-light', 'text-dark');
+                });
+                appCard.classList.remove('border-secondary', 'bg-light', 'text-dark');
+                appCard.classList.add('border-primary', 'bg-primary-subtle', 'text-primary');
+                loadAppStaffList();
+            }
             return;
         }
 

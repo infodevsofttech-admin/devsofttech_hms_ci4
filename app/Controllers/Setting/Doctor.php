@@ -128,6 +128,11 @@ class Doctor extends BaseController
             $data['healthplix_doctor_identifier'] = $healthplixDoctorIdentifier;
         }
 
+        $appPin = trim((string) ($this->request->getPost('app_pin') ?? ''));
+        if ($appPin !== '') {
+            $data['app_pin'] = password_hash($appPin, PASSWORD_DEFAULT);
+        }
+
         $insertId = $doctorModel->insert($data);
 
         if ($insertId <= 0) {
@@ -244,6 +249,11 @@ class Doctor extends BaseController
         }
         if (in_array('healthplix_doctor_identifier', $doctorFields, true)) {
             $data['healthplix_doctor_identifier'] = $healthplixDoctorIdentifier;
+        }
+
+        $appPin = trim((string) ($this->request->getPost('app_pin') ?? ''));
+        if ($appPin !== '') {
+            $data['app_pin'] = password_hash($appPin, PASSWORD_DEFAULT);
         }
 
         $updated = $doctorModel->updateDoctor($data, $docId);

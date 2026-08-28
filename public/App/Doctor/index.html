@@ -1,0 +1,807 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Doctor EMR & Bedside Care PWA App</title>
+    <link rel="manifest" href="/App/Doctor/manifest.json">
+    <meta name="theme-color" content="#0d6efd">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3774/3774299.png">
+    
+    <!-- Bootstrap 5 CSS & Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <!-- React 18 & ReactDOM UMD -->
+    <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        :root {
+            --primary-bg: #0f172a;
+            --card-bg: #1e293b;
+            --accent-blue: #0d6efd;
+            --accent-indigo: #6610f2;
+            --accent-green: #198754;
+            --accent-amber: #ffc107;
+            --accent-red: #dc3545;
+        }
+
+        body {
+            background-color: #f8fafc;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .doctor-header {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #ffffff;
+            padding: 12px 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .patient-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            background: #ffffff;
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            border-left: 5px solid var(--accent-blue);
+        }
+
+        .patient-card:hover, .patient-card:active {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(13,110,253,0.12);
+            border-color: #0d6efd;
+        }
+
+        .nav-pills .nav-link {
+            border-radius: 8px;
+            font-weight: 500;
+            color: #64748b;
+        }
+
+        .nav-pills .nav-link.active {
+            background-color: var(--accent-blue);
+            color: #ffffff;
+        }
+
+        /* Lock Screen Styling */
+        .lock-screen-overlay {
+            position: fixed;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            z-index: 9999;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+
+        .lock-card {
+            background: #ffffff;
+            border-radius: 16px;
+            width: 100%;
+            max-width: 400px;
+            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+            overflow: hidden;
+        }
+
+        .vitals-pill {
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            background: #f1f5f9;
+            color: #334155;
+            font-weight: 600;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        const DOC_DEVICE_AUTH_KEY = 'doctor_pwa_device_auth_v1';
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
+
+        function DoctorApp() {
+            const [doctors, setDoctors] = useState([]);
+            const [ipdPatients, setIpdPatients] = useState([]);
+            const [opdAppointments, setOpdAppointments] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [searchQuery, setSearchQuery] = useState('');
+            const [mainTab, setMainTab] = useState('ipd'); // 'ipd', 'opd', 'discharge'
+            const [activePatient, setActivePatient] = useState(null);
+            const [workspaceData, setWorkspaceData] = useState([]);
+            const [emrTab, setEmrTab] = useState('vitals'); // 'vitals', 'progress', 'rx', 'lab'
+            const [installPrompt, setInstallPrompt] = useState(null);
+
+            // Auth state
+            const [authenticatedDoctor, setAuthenticatedDoctor] = useState(null);
+            const [authDocId, setAuthDocId] = useState(0);
+            const [pinInput, setPinInput] = useState('');
+            const [pinError, setPinError] = useState('');
+            const [isSettingNewPin, setIsSettingNewPin] = useState(false);
+            const [newPin, setNewPin] = useState('');
+            const [confirmPin, setConfirmPin] = useState('');
+
+            // Clinical Progress Note Form
+            const [doctorNote, setDoctorNote] = useState('');
+            const [doctorAdvice, setDoctorAdvice] = useState('');
+
+            // Quick E-Rx Form
+            const [rxForm, setRxForm] = useState({ drug_name: '', dosage: '', frequency: '1-0-1', duration: '5 days', instructions: '' });
+
+            // Lab Order Form
+            const [labOrderText, setLabOrderText] = useState('');
+
+            // Fetch doctors list
+            const fetchDoctors = async () => {
+                try {
+                    const res = await fetch('/api/v1/doctor/list');
+                    const json = await res.json();
+                    if (json.status === 1 && json.data) {
+                        setDoctors(json.data);
+
+                        // Check URL query parameters for doctor_id (QR scan or link)
+                        const params = new URLSearchParams(window.location.search);
+                        const docIdParam = params.get('doctor_id');
+                        if (docIdParam) {
+                            setAuthDocId(docIdParam);
+                        }
+                    }
+                } catch (err) {
+                    console.error('Failed to load doctors', err);
+                }
+            };
+
+            // Fetch IPD Patients for current doctor
+            const fetchIpdPatients = async (docId) => {
+                try {
+                    setLoading(true);
+                    const res = await fetch(`/api/v1/doctor/ipd/list/${docId || 0}`);
+                    const json = await res.json();
+                    if (json.status === 1) {
+                        setIpdPatients(json.patients || []);
+                    }
+                } catch (err) {
+                    console.error('Failed to load IPD patients', err);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            // Fetch OPD Appointments for current doctor
+            const fetchOpdAppointments = async (docId) => {
+                try {
+                    const res = await fetch(`/api/v1/doctor/opd/list/${docId || 0}`);
+                    const json = await res.json();
+                    if (json.status === 1) {
+                        setOpdAppointments(json.appointments || []);
+                    }
+                } catch (err) {
+                    console.error('Failed to load OPD appointments', err);
+                }
+            };
+
+            // Fetch patient bedside workspace
+            const fetchWorkspace = async (ipdId) => {
+                try {
+                    const res = await fetch(`/api/v1/doctor/ipd/workspace/${ipdId}`);
+                    const json = await res.json();
+                    if (json.status === 1) {
+                        setWorkspaceData(json.entries || []);
+                    }
+                } catch (err) {
+                    console.error('Failed to load patient workspace', err);
+                }
+            };
+
+            // Restore 30-Day Device Authentication
+            useEffect(() => {
+                const savedAuth = localStorage.getItem(DOC_DEVICE_AUTH_KEY);
+                if (savedAuth) {
+                    try {
+                        const parsed = JSON.parse(savedAuth);
+                        if (parsed && parsed.doctor && parsed.expires_at > Date.now()) {
+                            setAuthenticatedDoctor(parsed.doctor);
+                            fetchIpdPatients(parsed.doctor.id);
+                            fetchOpdAppointments(parsed.doctor.id);
+                        } else {
+                            localStorage.removeItem(DOC_DEVICE_AUTH_KEY);
+                        }
+                    } catch (e) {}
+                }
+                fetchDoctors();
+
+                window.addEventListener('beforeinstallprompt', (e) => {
+                    e.preventDefault();
+                    setInstallPrompt(e);
+                });
+
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.register('/App/Doctor/sw.js')
+                        .then(() => console.log('Doctor PWA Service Worker Registered'))
+                        .catch(err => console.error('SW failed', err));
+                }
+            }, []);
+
+            // Verify Doctor PIN
+            const handleVerifyPin = async () => {
+                if (!authDocId || authDocId === '0') {
+                    setPinError('Please select your Doctor Profile.');
+                    return;
+                }
+                if (!pinInput || pinInput.length < 4) {
+                    setPinError('Enter your 4 to 6 digit Security PIN.');
+                    return;
+                }
+
+                setPinError('');
+                try {
+                    const body = new URLSearchParams();
+                    body.append('doctor_id', authDocId);
+                    body.append('pin', pinInput);
+
+                    const res = await fetch('/api/v1/doctor/auth/verify-pin', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: body.toString()
+                    });
+                    const json = await res.json();
+
+                    if (json.status === 1 && json.doctor) {
+                        setAuthenticatedDoctor(json.doctor);
+                        
+                        // Save 30-day device authentication
+                        const deviceAuthObj = {
+                            doctor: json.doctor,
+                            expires_at: Date.now() + THIRTY_DAYS_MS
+                        };
+                        localStorage.setItem(DOC_DEVICE_AUTH_KEY, JSON.stringify(deviceAuthObj));
+                        setPinInput('');
+                        fetchIpdPatients(json.doctor.id);
+                        fetchOpdAppointments(json.doctor.id);
+                    } else if (json.status === 2) {
+                        setIsSettingNewPin(true);
+                    } else {
+                        setPinError(json.message || 'Invalid Security PIN');
+                    }
+                } catch (err) {
+                    setPinError('Connection error verifying PIN.');
+                }
+            };
+
+            // Set Doctor PIN
+            const handleSaveNewPin = async () => {
+                if (!newPin || newPin.length < 4) {
+                    setPinError('PIN must be 4 to 6 numeric digits.');
+                    return;
+                }
+                if (newPin !== confirmPin) {
+                    setPinError('New PIN and Confirm PIN do not match.');
+                    return;
+                }
+
+                try {
+                    const body = new URLSearchParams();
+                    body.append('doctor_id', authDocId || (authenticatedDoctor ? authenticatedDoctor.id : 0));
+                    body.append('new_pin', newPin);
+
+                    const res = await fetch('/api/v1/doctor/auth/set-pin', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: body.toString()
+                    });
+                    const json = await res.json();
+
+                    if (json.status === 1) {
+                        alert('Security PIN set successfully! You can now login with your PIN.');
+                        setIsSettingNewPin(false);
+                        setNewPin('');
+                        setConfirmPin('');
+                        setPinInput('');
+                    } else {
+                        setPinError(json.message || 'Failed to update PIN');
+                    }
+                } catch (err) {
+                    setPinError('Error setting PIN.');
+                }
+            };
+
+            const handleLogout = () => {
+                setAuthenticatedDoctor(null);
+                localStorage.removeItem(DOC_DEVICE_AUTH_KEY);
+                setPinInput('');
+                setActivePatient(null);
+            };
+
+            const openPatientWorkspace = (patient) => {
+                setActivePatient(patient);
+                fetchWorkspace(patient.id);
+            };
+
+            // Save Doctor Daily Rounds / Treatment Note
+            const handleSaveDoctorTreatmentNote = async () => {
+                if (!activePatient) return;
+                if (!doctorNote.trim()) {
+                    alert('Please enter doctor treatment / daily progress note.');
+                    return;
+                }
+
+                try {
+                    const body = new URLSearchParams();
+                    body.append('doctor_id', authenticatedDoctor ? authenticatedDoctor.id : 0);
+                    body.append('doctor_name', authenticatedDoctor ? authenticatedDoctor.name : 'Doctor');
+                    body.append('treatment_text', doctorNote);
+                    body.append('general_note', doctorAdvice);
+
+                    const res = await fetch(`/api/v1/doctor/ipd/treatment/save/${activePatient.id}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: body.toString()
+                    });
+                    const json = await res.json();
+                    if (json.status === 1) {
+                        alert(json.message || 'Doctor note saved');
+                        setDoctorNote('');
+                        setDoctorAdvice('');
+                        fetchWorkspace(activePatient.id);
+                    } else {
+                        alert(json.message || 'Failed to save note');
+                    }
+                } catch (err) {
+                    alert('Error submitting note');
+                }
+            };
+
+            // Save Quick E-Prescription Order
+            const handleSaveQuickRx = async () => {
+                if (!activePatient) return;
+                if (!rxForm.drug_name.trim()) {
+                    alert('Please enter Drug / Medicine Name.');
+                    return;
+                }
+
+                const rxText = `Rx: ${rxForm.drug_name} | Dosage: ${rxForm.dosage} | Freq: ${rxForm.frequency} | Duration: ${rxForm.duration} ${rxForm.instructions ? '(' + rxForm.instructions + ')' : ''}`;
+
+                try {
+                    const body = new URLSearchParams();
+                    body.append('doctor_id', authenticatedDoctor ? authenticatedDoctor.id : 0);
+                    body.append('doctor_name', authenticatedDoctor ? authenticatedDoctor.name : 'Doctor');
+                    body.append('treatment_text', rxText);
+
+                    const res = await fetch(`/api/v1/doctor/ipd/treatment/save/${activePatient.id}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: body.toString()
+                    });
+                    const json = await res.json();
+                    if (json.status === 1) {
+                        alert('E-Prescription order added to patient record!');
+                        setRxForm({ drug_name: '', dosage: '', frequency: '1-0-1', duration: '5 days', instructions: '' });
+                        fetchWorkspace(activePatient.id);
+                    }
+                } catch (err) {
+                    alert('Error submitting prescription');
+                }
+            };
+
+            // Save Lab Test Order
+            const handleSaveLabOrder = async () => {
+                if (!activePatient || !labOrderText.trim()) {
+                    alert('Please enter Lab / Pathology / Radiology test orders.');
+                    return;
+                }
+
+                const labText = `Lab & Diagnostics Order: ${labOrderText}`;
+
+                try {
+                    const body = new URLSearchParams();
+                    body.append('doctor_id', authenticatedDoctor ? authenticatedDoctor.id : 0);
+                    body.append('doctor_name', authenticatedDoctor ? authenticatedDoctor.name : 'Doctor');
+                    body.append('treatment_text', labText);
+
+                    const res = await fetch(`/api/v1/doctor/ipd/treatment/save/${activePatient.id}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: body.toString()
+                    });
+                    const json = await res.json();
+                    if (json.status === 1) {
+                        alert('Lab & Diagnostic order submitted!');
+                        setLabOrderText('');
+                        fetchWorkspace(activePatient.id);
+                    }
+                } catch (err) {
+                    alert('Error submitting lab order');
+                }
+            };
+
+            const filteredIpdPatients = ipdPatients.filter(p => {
+                const name = `${p.fname || ''} ${p.lname || ''}`.toLowerCase();
+                const q = searchQuery.toLowerCase();
+                return name.includes(q) || (p.uhid && p.uhid.toLowerCase().includes(q)) || (p.bed_code && p.bed_code.toLowerCase().includes(q));
+            });
+
+            // -------------------------------------------------------------
+            // RENDER: LOCK SCREEN (DOCTOR PIN AUTHENTICATION)
+            // -------------------------------------------------------------
+            if (!authenticatedDoctor) {
+                return (
+                    <div className="lock-screen-overlay">
+                        <div className="lock-card">
+                            <div className="p-4 text-center bg-primary text-white">
+                                <i className="bi bi-person-badge-fill display-4 d-block mb-2"></i>
+                                <h5 className="fw-bold mb-0">DoctorCare EMR App</h5>
+                                <small className="opacity-75">30-Day Device Authentication Security</small>
+                            </div>
+
+                            <div className="p-4">
+                                {pinError && <div className="alert alert-danger py-2 px-3 small mb-3">{pinError}</div>}
+
+                                {!isSettingNewPin ? (
+                                    <div>
+                                        <div className="mb-3">
+                                            <label className="form-label fw-bold small">Select Doctor Profile</label>
+                                            <select 
+                                                className="form-select"
+                                                value={authDocId}
+                                                onChange={(e) => setAuthDocId(e.target.value)}
+                                            >
+                                                <option value="0">-- Choose Doctor Profile --</option>
+                                                {doctors.map(d => (
+                                                    <option key={d.id} value={d.id}>{d.name}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+
+                                        <div className="mb-4">
+                                            <label className="form-label fw-bold small">Enter App Security PIN</label>
+                                            <input 
+                                                type="password" 
+                                                maxLength="6"
+                                                className="form-control text-center fs-4"
+                                                placeholder="••••"
+                                                value={pinInput}
+                                                onChange={(e) => setPinInput(e.target.value)}
+                                                onKeyUp={(e) => e.key === 'Enter' && handleVerifyPin()}
+                                            />
+                                            <small className="text-muted text-center d-block mt-1" style={{fontSize: '11px'}}>
+                                                Unlocks device access for 30 days
+                                            </small>
+                                        </div>
+
+                                        <button className="btn btn-primary w-100 py-2 fw-bold" onClick={handleVerifyPin}>
+                                            <i className="bi bi-unlock-fill me-1"></i> Unlock Doctor App
+                                        </button>
+                                    </div>
+                                ) : (
+                                    <div>
+                                        <div className="alert alert-info py-2 small mb-3">
+                                            Initial PIN Setup for Doctor Profile. Set a 4-6 digit Security PIN.
+                                        </div>
+                                        <div className="mb-3">
+                                            <label className="form-label fw-bold small">New Security PIN</label>
+                                            <input 
+                                                type="password" 
+                                                maxLength="6"
+                                                className="form-control text-center fs-4"
+                                                placeholder="••••"
+                                                value={newPin}
+                                                onChange={(e) => setNewPin(e.target.value)}
+                                            />
+                                        </div>
+                                        <div className="mb-3">
+                                            <label className="form-label fw-bold small">Confirm New PIN</label>
+                                            <input 
+                                                type="password" 
+                                                maxLength="6"
+                                                className="form-control text-center fs-4"
+                                                placeholder="••••"
+                                                value={confirmPin}
+                                                onChange={(e) => setConfirmPin(e.target.value)}
+                                            />
+                                        </div>
+                                        <button className="btn btn-success w-100 py-2 fw-bold" onClick={handleSaveNewPin}>
+                                            <i className="bi bi-check-circle-fill me-1"></i> Save PIN &amp; Unlock
+                                        </button>
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    </div>
+                );
+            }
+
+            // -------------------------------------------------------------
+            // RENDER: UNLOCKED DOCTOR PWA APP
+            // -------------------------------------------------------------
+            return (
+                <div>
+                    {/* PWA Install Banner */}
+                    {installPrompt && (
+                        <div className="install-pwa-banner d-flex justify-content-between align-items-center">
+                            <span><i className="bi bi-download me-2"></i> Install Doctor EMR App on your home screen</span>
+                            <button className="btn btn-sm btn-light text-primary fw-bold" onClick={() => installPrompt.prompt()}>Install App</button>
+                        </div>
+                    )}
+
+                    {/* Top Doctor Header */}
+                    <header className="doctor-header d-flex justify-content-between align-items-center">
+                        <div className="d-flex align-items-center">
+                            <i className="bi bi-person-badge-fill text-primary fs-3 me-2"></i>
+                            <div>
+                                <h6 className="mb-0 fw-bold">{authenticatedDoctor.name}</h6>
+                                <small className="text-light opacity-75">Doctor EMR <span className="badge bg-success ms-1" style={{fontSize: '9px'}}>30-Day Device Auth</span></small>
+                            </div>
+                        </div>
+                        <div className="d-flex align-items-center gap-2">
+                            <button className="btn btn-sm btn-outline-light" onClick={() => fetchIpdPatients(authenticatedDoctor.id)} title="Refresh">
+                                <i className="bi bi-arrow-clockwise"></i>
+                            </button>
+                            <button className="btn btn-sm btn-danger" onClick={handleLogout} title="Lock Device Access">
+                                <i className="bi bi-lock-fill me-1"></i> Lock
+                            </button>
+                        </div>
+                    </header>
+
+                    {/* Main Container */}
+                    <main className="container-fluid py-3">
+                        {!activePatient ? (
+                            <div>
+                                {/* Top Main Tabs */}
+                                <ul className="nav nav-pills mb-3 gap-2">
+                                    <li className="nav-item">
+                                        <button className={`nav-link ${mainTab === 'ipd' ? 'active' : ''}`} onClick={() => setMainTab('ipd')}>
+                                            <i className="bi bi-hospital me-1"></i> Admitted IPD Patients ({ipdPatients.length})
+                                        </button>
+                                    </li>
+                                    <li className="nav-item">
+                                        <button className={`nav-link ${mainTab === 'opd' ? 'active' : ''}`} onClick={() => setMainTab('opd')}>
+                                            <i className="bi bi-calendar-event me-1"></i> OPD Appointments ({opdAppointments.length})
+                                        </button>
+                                    </li>
+                                </ul>
+
+                                {/* Search Bar */}
+                                <div className="input-group mb-3">
+                                    <span className="input-group-text bg-white"><i className="bi bi-search"></i></span>
+                                    <input 
+                                        type="text" 
+                                        className="form-control" 
+                                        placeholder="Search patient by name, UHID, or Bed Code..." 
+                                        value={searchQuery}
+                                        onChange={(e) => setSearchQuery(e.target.value)}
+                                    />
+                                </div>
+
+                                {mainTab === 'ipd' && (
+                                    loading ? (
+                                        <div className="text-center py-5">
+                                            <div className="spinner-border text-primary" role="status"></div>
+                                            <p className="mt-2 text-muted">Loading Admitted IPD Patients...</p>
+                                        </div>
+                                    ) : (
+                                        <div className="row g-3">
+                                            {filteredIpdPatients.length === 0 ? (
+                                                <div className="col-12 text-center py-4 text-muted">No admitted IPD patients found.</div>
+                                            ) : (
+                                                filteredIpdPatients.map(patient => (
+                                                    <div key={patient.id} className="col-lg-4 col-md-6 col-12">
+                                                        <div className="card p-3 patient-card" onClick={() => openPatientWorkspace(patient)}>
+                                                            <div className="d-flex justify-content-between align-items-start mb-2">
+                                                                <div>
+                                                                    <h5 className="fw-bold mb-0 text-primary">{patient.fname} {patient.lname}</h5>
+                                                                    <small className="text-muted">UHID: {patient.uhid || 'N/A'} | {patient.gender}, {patient.age || 'N/A'}</small>
+                                                                </div>
+                                                                <span className="badge bg-primary fs-6">
+                                                                    {patient.bed_code || patient.bed_number || 'Bed N/A'}
+                                                                </span>
+                                                            </div>
+                                                            <div className="d-flex justify-content-between align-items-center mt-2 pt-2 border-top">
+                                                                <span className="badge bg-secondary-subtle text-dark">Ward: {patient.ward_name || 'General Ward'}</span>
+                                                                <small className="text-muted">IPD #{patient.id}</small>
+                                                            </div>
+                                                        </div>
+                                                    </div>
+                                                ))
+                                            )}
+                                        </div>
+                                    )
+                                )}
+
+                                {mainTab === 'opd' && (
+                                    <div className="card shadow-sm border-0">
+                                        <div className="card-body p-0 table-responsive">
+                                            <table className="table table-hover align-middle mb-0">
+                                                <thead className="table-light">
+                                                    <tr>
+                                                        <th>UHID</th>
+                                                        <th>Patient Name</th>
+                                                        <th>Gender / Age</th>
+                                                        <th>Mobile</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {opdAppointments.length === 0 ? (
+                                                        <tr><td colSpan="4" className="text-center text-muted py-4">No OPD appointments found for today.</td></tr>
+                                                    ) : (
+                                                        opdAppointments.map(app => (
+                                                            <tr key={app.id}>
+                                                                <td><code>{app.uhid || '-'}</code></td>
+                                                                <td className="fw-bold text-primary">{app.fname} {app.lname}</td>
+                                                                <td>{app.gender}, {app.age}</td>
+                                                                <td>{app.mphone1 || '-'}</td>
+                                                            </tr>
+                                                        ))
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            /* Doctor Bedside EMR Workspace */
+                            <div>
+                                <button className="btn btn-sm btn-outline-dark mb-3" onClick={() => setActivePatient(null)}>
+                                    <i className="bi bi-arrow-left me-1"></i> Back to Patient List
+                                </button>
+
+                                <div className="card shadow-sm mb-3 border-0">
+                                    <div className="card-body bg-light rounded d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                        <div>
+                                            <h4 className="fw-bold mb-1 text-primary">{activePatient.fname} {activePatient.lname}</h4>
+                                            <span className="badge bg-secondary me-2">UHID: {activePatient.uhid || 'N/A'}</span>
+                                            <span className="badge bg-info text-dark me-2">Gender/Age: {activePatient.gender}, {activePatient.age || 'N/A'}</span>
+                                            <span className="badge bg-primary">Bed: {activePatient.bed_code || 'N/A'} ({activePatient.ward_name || 'General Ward'})</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* EMR Tabs */}
+                                <ul className="nav nav-pills mb-3 gap-2">
+                                    <li className="nav-item">
+                                        <button className={`nav-link ${emrTab === 'vitals' ? 'active' : ''}`} onClick={() => setEmrTab('vitals')}>
+                                            <i className="bi bi-activity me-1"></i> Vitals &amp; Nursing Records
+                                        </button>
+                                    </li>
+                                    <li className="nav-item">
+                                        <button className={`nav-link ${emrTab === 'progress' ? 'active' : ''}`} onClick={() => setEmrTab('progress')}>
+                                            <i className="bi bi-journal-medical me-1"></i> Daily Progress Note / Orders
+                                        </button>
+                                    </li>
+                                    <li className="nav-item">
+                                        <button className={`nav-link ${emrTab === 'rx' ? 'active' : ''}`} onClick={() => setEmrTab('rx')}>
+                                            <i className="bi bi-capsule me-1"></i> E-Prescription Order
+                                        </button>
+                                    </li>
+                                    <li className="nav-item">
+                                        <button className={`nav-link ${emrTab === 'lab' ? 'active' : ''}`} onClick={() => setEmrTab('lab')}>
+                                            <i className="bi bi-file-earmark-medical me-1"></i> Lab &amp; Diagnostic Order
+                                        </button>
+                                    </li>
+                                </ul>
+
+                                {/* EMR Tab Content */}
+                                <div className="card p-3 shadow-sm border-0">
+                                    {emrTab === 'vitals' && (
+                                        <div>
+                                            <h6 className="fw-bold mb-3"><i className="bi bi-activity text-danger me-1"></i> Bedside Vitals &amp; Fluid History</h6>
+                                            <div className="table-responsive">
+                                                <table className="table table-sm table-striped">
+                                                    <thead>
+                                                        <tr>
+                                                            <th>Recorded At</th>
+                                                            <th>Type</th>
+                                                            <th>Staff</th>
+                                                            <th>Summary</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {workspaceData.length === 0 ? (
+                                                            <tr><td colSpan="4" className="text-center text-muted py-3">No nursing entries logged for this admission yet.</td></tr>
+                                                        ) : (
+                                                            workspaceData.map(entry => (
+                                                                <tr key={entry.id}>
+                                                                    <td><small>{entry.recorded_at}</small></td>
+                                                                    <td><span className="badge bg-secondary text-uppercase">{entry.entry_type}</span></td>
+                                                                    <td><small>{entry.recorded_by || 'Staff'}</small></td>
+                                                                    <td>
+                                                                        <small>
+                                                                            {entry.entry_type === 'vitals' && `T: ${entry.temperature_c ? ((entry.temperature_c * 9/5) + 32).toFixed(1) + '°F' : '-'}, P: ${entry.pulse_rate || '-'}, BP: ${entry.bp_systolic || '-'}/${entry.bp_diastolic || '-'}, SpO2: ${entry.spo2 || '-'}`}
+                                                                            {entry.entry_type === 'fluid' && `${entry.fluid_direction?.toUpperCase()} - ${entry.fluid_route}: ${entry.fluid_amount_ml}ml`}
+                                                                            {entry.entry_type === 'treatment' && entry.treatment_text}
+                                                                            {entry.general_note && ` (${entry.general_note})`}
+                                                                        </small>
+                                                                    </td>
+                                                                </tr>
+                                                            ))
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {emrTab === 'progress' && (
+                                        <div>
+                                            <h6 className="fw-bold mb-3"><i className="bi bi-journal-medical text-primary me-1"></i> Doctor Daily Rounds Note &amp; Clinical Orders</h6>
+                                            <div className="row g-2">
+                                                <div className="col-12">
+                                                    <label className="form-label small fw-bold">Daily Progress / Treatment Orders <span className="text-danger">*</span></label>
+                                                    <textarea className="form-control" rows="3" placeholder="Enter clinical progress note, diagnosis adjustments, or bedside instructions..." value={doctorNote} onChange={e => setDoctorNote(e.target.value)}></textarea>
+                                                </div>
+                                                <div className="col-12">
+                                                    <label className="form-label small fw-bold">Additional Advice / Instructions to Nursing Staff</label>
+                                                    <textarea className="form-control" rows="2" placeholder="e.g. Keep head elevated 30 deg, monitor BP q4h..." value={doctorAdvice} onChange={e => setDoctorAdvice(e.target.value)}></textarea>
+                                                </div>
+                                                <div className="col-12 mt-3">
+                                                    <button className="btn btn-primary" onClick={handleSaveDoctorTreatmentNote}>
+                                                        <i className="bi bi-check-circle-fill me-1"></i> Save Doctor Progress Note
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {emrTab === 'rx' && (
+                                        <div>
+                                            <h6 className="fw-bold mb-3"><i className="bi bi-capsule text-success me-1"></i> Quick E-Prescription Bedside Order</h6>
+                                            <div className="row g-2">
+                                                <div className="col-md-5 col-12"><label className="form-label small">Medicine / Drug Name <span className="text-danger">*</span></label><input type="text" className="form-control" placeholder="e.g. Paracetamol 500mg" value={rxForm.drug_name} onChange={e => setRxForm({...rxForm, drug_name: e.target.value})} /></div>
+                                                <div className="col-md-3 col-6"><label className="form-label small">Dosage</label><input type="text" className="form-control" placeholder="e.g. 1 Tablet" value={rxForm.dosage} onChange={e => setRxForm({...rxForm, dosage: e.target.value})} /></div>
+                                                <div className="col-md-2 col-6"><label className="form-label small">Frequency</label><input type="text" className="form-control" value={rxForm.frequency} onChange={e => setRxForm({...rxForm, frequency: e.target.value})} /></div>
+                                                <div className="col-md-2 col-6"><label className="form-label small">Duration</label><input type="text" className="form-control" value={rxForm.duration} onChange={e => setRxForm({...rxForm, duration: e.target.value})} /></div>
+                                                <div className="col-12"><label className="form-label small">Instructions</label><input type="text" className="form-control" placeholder="e.g. After meals" value={rxForm.instructions} onChange={e => setRxForm({...rxForm, instructions: e.target.value})} /></div>
+                                                <div className="col-12 mt-3">
+                                                    <button className="btn btn-success" onClick={handleSaveQuickRx}>
+                                                        <i className="bi bi-plus-circle me-1"></i> Submit E-Prescription Order
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {emrTab === 'lab' && (
+                                        <div>
+                                            <h6 className="fw-bold mb-3"><i className="bi bi-file-earmark-medical text-warning me-1"></i> Lab &amp; Diagnostic Test Orders</h6>
+                                            <div className="row g-2">
+                                                <div className="col-12">
+                                                    <label className="form-label small fw-bold">Required Tests <span className="text-danger">*</span></label>
+                                                    <textarea className="form-control" rows="3" placeholder="e.g. CBC, Serum Creatinine, Chest X-Ray PA view..." value={labOrderText} onChange={e => setLabOrderText(e.target.value)}></textarea>
+                                                </div>
+                                                <div className="col-12 mt-3">
+                                                    <button className="btn btn-warning text-dark fw-bold" onClick={handleSaveLabOrder}>
+                                                        <i className="bi bi-send me-1"></i> Submit Diagnostic Orders
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+                                </div>
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<DoctorApp />);
+    </script>
+</body>
+</html>

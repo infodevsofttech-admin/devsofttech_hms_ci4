@@ -11,6 +11,18 @@ class DoctorModel
     public function __construct()
     {
         $this->db = db_connect();
+        $this->ensureDoctorMasterTable();
+    }
+
+    public function ensureDoctorMasterTable(): bool
+    {
+        if ($this->db->tableExists('doctor_master')) {
+            $fields = $this->db->getFieldNames('doctor_master') ?? [];
+            if (! in_array('app_pin', $fields, true)) {
+                $this->db->query("ALTER TABLE doctor_master ADD COLUMN app_pin VARCHAR(255) NULL");
+            }
+        }
+        return true;
     }
 
     public function getDoctors(): array
