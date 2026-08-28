@@ -495,7 +495,8 @@
                 const name = (pat.patient_display_name || pat.fname || '').toLowerCase();
                 const uhid = (pat.uhid || '').toLowerCase();
                 const ipdCode = (pat.ipd_code || '').toLowerCase();
-                return searchQuery === '' || name.includes(q) || uhid.includes(q) || ipdCode.includes(q);
+                const docName = (pat.assigned_doctors || pat.r_doc_name || '').toLowerCase();
+                return searchQuery === '' || name.includes(q) || uhid.includes(q) || ipdCode.includes(q) || docName.includes(q);
             });
 
             // -------------------------------------------------------------
@@ -751,22 +752,21 @@
 
                                         <div className="card shadow-sm border-0">
                                             <div className="card-body p-0 table-responsive">
-                                                <table className="table table-hover align-middle mb-0" style={{minWidth: '650px'}}>
+                                                <table className="table table-hover align-middle mb-0" style={{minWidth: '700px'}}>
                                                     <thead className="table-light">
                                                         <tr>
-                                                            <th>Status</th>
                                                             <th>IPD Code</th>
-                                                            <th>Admitted Patient</th>
-                                                            <th>Ward &amp; Bed</th>
-                                                            <th>UHID</th>
-                                                            <th>Admitted Date</th>
+                                                            <th>Name / Patient Code</th>
+                                                            <th>Bed No. [Type]</th>
+                                                            <th>Register Date</th>
+                                                            <th>Dr. Name</th>
                                                             <th className="text-center">Action</th>
                                                         </tr>
                                                     </thead>
                                                     <tbody>
                                                         {filteredIpdPatients.length === 0 ? (
                                                             <tr>
-                                                                <td colSpan="7" className="text-center text-muted py-4">
+                                                                <td colSpan="6" className="text-center text-muted py-4">
                                                                     <i className="bi bi-hospital fs-1 d-block text-secondary mb-2"></i>
                                                                     No Admitted IPD Patients found for Dr. {authenticatedDoctor.name}.
                                                                 </td>
@@ -774,15 +774,24 @@
                                                         ) : (
                                                             filteredIpdPatients.map(pat => (
                                                                 <tr key={pat.ipd_id}>
-                                                                    <td><span className="badge bg-success text-uppercase">Admitted</span></td>
-                                                                    <td><strong className="text-dark">{pat.ipd_code}</strong></td>
                                                                     <td>
-                                                                        <div className="fw-bold text-primary">{pat.patient_display_name}</div>
-                                                                        <small className="text-muted">({pat.age_display} / {pat.gender_label})</small>
+                                                                        <strong className="text-dark d-block">{pat.ipd_code}</strong>
+                                                                        <span className="badge bg-success" style={{fontSize: '9px'}}>CURRENT ADMISSION</span>
                                                                     </td>
-                                                                    <td><span className="badge bg-primary-subtle text-primary border">{pat.bed_label}</span></td>
-                                                                    <td><code>{pat.uhid}</code></td>
-                                                                    <td><small className="text-muted">{pat.register_date || 'Today'}</small></td>
+                                                                    <td>
+                                                                        <small className="text-danger fw-bold d-block">[{pat.uhid}]</small>
+                                                                        <div className="fw-bold text-primary">{pat.patient_display_name}</div>
+                                                                        <small className="text-muted">{pat.rname ? `S/D/W of ${pat.rname}` : `(${pat.age_display} / ${pat.gender_label})`}</small>
+                                                                    </td>
+                                                                    <td>
+                                                                        <span className="badge bg-primary-subtle text-primary border">{pat.bed_label}</span>
+                                                                    </td>
+                                                                    <td>
+                                                                        <small className="text-dark fw-semibold">{pat.register_date || 'Today'}</small>
+                                                                    </td>
+                                                                    <td>
+                                                                        <small className="text-dark fw-semibold">{pat.assigned_doctors || pat.r_doc_name || `Dr. ${authenticatedDoctor.name}`}</small>
+                                                                    </td>
                                                                     <td className="text-center">
                                                                         <button 
                                                                             className="btn btn-sm btn-primary fw-bold"
@@ -810,7 +819,7 @@
                                     <button className="btn btn-sm btn-outline-dark" onClick={() => setActivePatient(null)}>
                                         <i className="bi bi-arrow-left me-1"></i> Back to Admitted IPDs
                                     </button>
-                                    <span className="badge bg-success fs-6">Status: ADMITTED</span>
+                                    <span className="badge bg-success fs-6">Status: CURRENT ADMISSION</span>
                                 </div>
 
                                 <div className="card shadow-sm mb-3 border-0 bg-primary text-white">
@@ -818,7 +827,7 @@
                                         <h5 className="fw-bold mb-1">{activePatient.patient_display_name}</h5>
                                         <small className="opacity-90 me-3">Demographics: {activePatient.age_display} / {activePatient.gender_label}</small>
                                         <small className="opacity-90 me-3">UHID: {activePatient.uhid}</small>
-                                        <small className="opacity-90 me-3">IPD: {activePatient.ipd_code}</small>
+                                        <small className="opacity-90 me-3">IPD Code: {activePatient.ipd_code}</small>
                                         <small className="opacity-90">Bed: {activePatient.bed_label}</small>
                                     </div>
                                 </div>
