@@ -360,52 +360,105 @@
 
 <script>
 (function() {
+    function getAppBaseUrl() {
+        return '<?= base_url('app/nursing') ?>';
+    }
+
     function updateHdrAppDetails() {
-        var code = $('#hdr_apps_nurse_select').val();
-        var appBaseUrl = '<?= base_url('app/nursing') ?>';
+        var sel = document.getElementById('hdr_apps_nurse_select');
+        var code = sel ? sel.value : '';
+        var appBaseUrl = getAppBaseUrl();
         var appUrl = appBaseUrl + (code ? '?nurse_code=' + encodeURIComponent(code) : '');
         var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' + encodeURIComponent(appUrl);
 
-        $('#hdr_apps_qr_img').attr('src', qrUrl);
-        $('#hdr_apps_url_input').val(appUrl);
-        $('#hdr_apps_launch_link').attr('href', appUrl);
+        var qrImg = document.getElementById('hdr_apps_qr_img');
+        var urlInput = document.getElementById('hdr_apps_url_input');
+        var launchLink = document.getElementById('hdr_apps_launch_link');
+        var targetName = document.getElementById('hdr_apps_target_name');
+        var targetCode = document.getElementById('hdr_apps_target_code');
 
-        if (code) {
-            var text = $('#hdr_apps_nurse_select option:selected').text();
-            $('#hdr_apps_target_name').text('Nursing Care App: ' + text);
-            $('#hdr_apps_target_code').text(code);
+        if (qrImg) qrImg.src = qrUrl;
+        if (urlInput) urlInput.value = appUrl;
+        if (launchLink) launchLink.href = appUrl;
+
+        if (code && sel && sel.options[sel.selectedIndex]) {
+            var text = sel.options[sel.selectedIndex].text;
+            if (targetName) targetName.textContent = 'Nursing Care App: ' + text;
+            if (targetCode) targetCode.textContent = code;
         } else {
-            $('#hdr_apps_target_name').text('Nursing Care App');
-            $('#hdr_apps_target_code').text('/app/nursing');
+            if (targetName) targetName.textContent = 'Nursing Care App';
+            if (targetCode) targetCode.textContent = '/app/nursing';
         }
     }
 
-    $(document).on('click', '#btn_hdr_apps_launcher', function() {
-        $.getJSON('<?= base_url('api/v1/nursing/nurses') ?>', function(resp) {
-            var $sel = $('#hdr_apps_nurse_select');
-            $sel.html('<option value="">-- General / All Staff Access --</option>');
-            if (resp && resp.status === 1 && resp.data) {
-                resp.data.forEach(function(n) {
-                    $sel.append('<option value="' + n.nurse_code + '">[' + n.nurse_code + '] ' + n.name + '</option>');
-                });
+    function openAppsModal() {
+        var apiUrl = '<?= base_url('api/v1/nursing/nurses') ?>';
+        fetch(apiUrl)
+            .then(function(res) { return res.json(); })
+            .then(function(resp) {
+                var sel = document.getElementById('hdr_apps_nurse_select');
+                if (sel) {
+                    sel.innerHTML = '<option value="">-- General / All Staff Access --</option>';
+                    if (resp && resp.status === 1 && Array.isArray(resp.data)) {
+                        resp.data.forEach(function(n) {
+                            var opt = document.createElement('option');
+                            opt.value = n.nurse_code;
+                            opt.textContent = '[' + n.nurse_code + '] ' + n.name;
+                            sel.appendChild(opt);
+                        });
+                    }
+                }
+                updateHdrAppDetails();
+                var modalEl = document.getElementById('hmsAppsLauncherModal');
+                if (modalEl) {
+                    if (window.bootstrap && window.bootstrap.Modal) {
+                        window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                    } else if (typeof $ !== 'undefined' && $.fn && $.fn.modal) {
+                        $(modalEl).modal('show');
+                    }
+                }
+            })
+            .catch(function(err) {
+                updateHdrAppDetails();
+                var modalEl = document.getElementById('hmsAppsLauncherModal');
+                if (modalEl) {
+                    if (window.bootstrap && window.bootstrap.Modal) {
+                        window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+                    } else if (typeof $ !== 'undefined' && $.fn && $.fn.modal) {
+                        $(modalEl).modal('show');
+                    }
+                }
+            });
+    }
+
+    document.addEventListener('click', function(e) {
+        var launcherBtn = e.target.closest('#btn_hdr_apps_launcher');
+        if (launcherBtn) {
+            e.preventDefault();
+            openAppsModal();
+            return;
+        }
+
+        var copyBtn = e.target.closest('#btn_hdr_apps_copy_url');
+        if (copyBtn) {
+            e.preventDefault();
+            var input = document.getElementById('hdr_apps_url_input');
+            if (input) {
+                input.select();
+                try {
+                    navigator.clipboard ? navigator.clipboard.writeText(input.value) : document.execCommand('copy');
+                } catch(ex) {
+                    document.execCommand('copy');
+                }
+                alert('App URL copied to clipboard!');
             }
-            updateHdrAppDetails();
-            var modalEl = document.getElementById('hmsAppsLauncherModal');
-            if (window.bootstrap && window.bootstrap.Modal) {
-                window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
-            } else {
-                $(modalEl).modal('show');
-            }
-        });
+        }
     });
 
-    $(document).on('change', '#hdr_apps_nurse_select', updateHdrAppDetails);
-
-    $(document).on('click', '#btn_hdr_apps_copy_url', function() {
-        var input = document.getElementById('hdr_apps_url_input');
-        input.select();
-        document.execCommand('copy');
-        alert('App URL copied to clipboard!');
+    document.addEventListener('change', function(e) {
+        if (e.target && e.target.id === 'hdr_apps_nurse_select') {
+            updateHdrAppDetails();
+        }
     });
 })();
 </script>
