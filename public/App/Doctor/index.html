@@ -22,6 +22,10 @@
     <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
     <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
 
+    <!-- Cropper.js for Document Photo Cropping -->
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
+
     <style>
         :root {
             --primary-bg: #0f172a;
@@ -526,15 +530,67 @@
                 }
             };
 
+            const [cropSrc, setCropSrc] = useState('');
+            const [cropper, setCropper] = useState(null);
+            const imageRef = React.useRef(null);
+
             const handleImageCapture = (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
                 const reader = new FileReader();
                 reader.onload = (event) => {
-                    setNoteImageBase64(event.target.result);
-                    setNoteImagePreview(event.target.result);
+                    setCropSrc(event.target.result);
                 };
                 reader.readAsDataURL(file);
+                e.target.value = '';
+            };
+
+            useEffect(() => {
+                if (cropSrc && imageRef.current) {
+                    if (cropper) {
+                        cropper.destroy();
+                    }
+                    const newCropper = new Cropper(imageRef.current, {
+                        viewMode: 1,
+                        autoCropArea: 0.9,
+                        responsive: true,
+                        restore: false,
+                        guides: true,
+                        center: true,
+                        highlight: true,
+                        cropBoxMovable: true,
+                        cropBoxResizable: true,
+                        toggleDragModeOnDblclick: false,
+                    });
+                    setCropper(newCropper);
+                }
+            }, [cropSrc]);
+
+            const applyCrop = () => {
+                if (cropper) {
+                    const croppedCanvas = cropper.getCroppedCanvas({
+                        maxWidth: 1600,
+                        maxHeight: 1600,
+                        imageSmoothingEnabled: true,
+                        imageSmoothingQuality: 'high',
+                    });
+                    if (croppedCanvas) {
+                        const croppedBase64 = croppedCanvas.toDataURL('image/jpeg', 0.85);
+                        setNoteImageBase64(croppedBase64);
+                        setNoteImagePreview(croppedBase64);
+                    }
+                    cropper.destroy();
+                    setCropper(null);
+                    setCropSrc('');
+                }
+            };
+
+            const cancelCrop = () => {
+                if (cropper) {
+                    cropper.destroy();
+                    setCropper(null);
+                }
+                setCropSrc('');
             };
 
             const clearCapturedImage = () => {
@@ -1489,6 +1545,46 @@
                                 </div>
                             </div>
                         ) : null}
+
+                        {/* DOCUMENT PHOTO CROPPER MODAL */}
+                        {cropSrc && (
+                            <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.85)', zIndex: 10000}}>
+                                <div className="modal-dialog modal-dialog-centered modal-lg">
+                                    <div className="modal-content rounded-4 border-0 shadow-lg overflow-hidden">
+                                        <div className="modal-header bg-dark text-white py-2">
+                                            <h6 className="modal-title fw-bold mb-0">
+                                                <i className="bi bi-crop me-2 text-primary"></i> Crop Document Photo
+                                            </h6>
+                                            <button className="btn-close btn-close-white" onClick={cancelCrop}></button>
+                                        </div>
+                                        <div className="modal-body p-2 text-center bg-black" style={{maxHeight: '65vh', overflow: 'hidden'}}>
+                                            <div style={{maxHeight: '60vh', width: '100%'}}>
+                                                <img ref={imageRef} src={cropSrc} alt="Crop Target" style={{maxWidth: '100%', display: 'block'}} />
+                                            </div>
+                                        </div>
+                                        <div className="modal-footer p-2 bg-dark d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                            <div className="d-flex gap-1">
+                                                <button className="btn btn-sm btn-outline-light px-2" onClick={() => cropper && cropper.rotate(-90)} title="Rotate Left 90°">
+                                                    <i className="bi bi-arrow-counterclockwise"></i> 90°
+                                                </button>
+                                                <button className="btn btn-sm btn-outline-light px-2" onClick={() => cropper && cropper.rotate(90)} title="Rotate Right 90°">
+                                                    <i className="bi bi-arrow-clockwise"></i> 90°
+                                                </button>
+                                                <button className="btn btn-sm btn-outline-light px-2" onClick={() => cropper && cropper.reset()} title="Reset Crop Box">
+                                                    <i className="bi bi-aspect-ratio"></i> Reset
+                                                </button>
+                                            </div>
+                                            <div className="d-flex gap-2">
+                                                <button className="btn btn-sm btn-secondary" onClick={cancelCrop}>Cancel</button>
+                                                <button className="btn btn-sm btn-success fw-bold px-3" onClick={applyCrop}>
+                                                    <i className="bi bi-check-lg me-1"></i> Apply Crop &amp; Save Photo
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </main>
                 </div>
             );
