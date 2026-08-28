@@ -119,15 +119,6 @@
             box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
             overflow: hidden;
         }
-
-        .pin-pad-btn {
-            width: 60px;
-            height: 60px;
-            border-radius: 50%;
-            font-size: 20px;
-            font-weight: 600;
-            margin: 6px;
-        }
     </style>
 </head>
 <body>
@@ -135,6 +126,9 @@
 
     <script type="text/babel">
         const { useState, useEffect } = React;
+
+        const DEVICE_AUTH_KEY = 'nursing_pwa_device_auth_v1';
+        const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
         function NursingApp() {
             const [beds, setBeds] = useState([]);
@@ -155,7 +149,6 @@
             const [isSettingNewPin, setIsSettingNewPin] = useState(false);
             const [newPin, setNewPin] = useState('');
             const [confirmPin, setConfirmPin] = useState('');
-            const [showChangePinModal, setShowChangePinModal] = useState(false);
 
             // Form state for workspace
             const [vitalsForm, setVitalsForm] = useState({
@@ -196,7 +189,7 @@
                     if (json.status === 1 && json.data) {
                         setNurses(json.data);
 
-                        // Check URL query parameters for nurse_code (QR Code scan)
+                        // Check URL query parameters for nurse_code (QR Code scan or Direct URL)
                         const params = new URLSearchParams(window.location.search);
                         const codeParam = params.get('nurse_code');
                         if (codeParam) {
@@ -211,14 +204,16 @@
                 }
             };
 
-            // Restore saved authentication from sessionStorage
+            // Restore 30-day device authentication from localStorage
             useEffect(() => {
-                const saved = sessionStorage.getItem('nursing_auth_nurse');
-                if (saved) {
+                const savedAuth = localStorage.getItem(DEVICE_AUTH_KEY);
+                if (savedAuth) {
                     try {
-                        const parsed = JSON.parse(saved);
-                        if (parsed && parsed.id) {
-                            setAuthenticatedNurse(parsed);
+                        const parsed = JSON.parse(savedAuth);
+                        if (parsed && parsed.nurse && parsed.expires_at > Date.now()) {
+                            setAuthenticatedNurse(parsed.nurse);
+                        } else {
+                            localStorage.removeItem(DEVICE_AUTH_KEY);
                         }
                     } catch (e) {}
                 }
@@ -239,7 +234,7 @@
                 }
             }, []);
 
-            // Authenticate Nurse with Security PIN
+            // Authenticate Nurse with Security PIN & Save 30-Day Device Auth
             const handleVerifyPin = async () => {
                 if (!authNurseId || authNurseId === '0') {
                     setPinError('Please select your Nursing Staff ID / Profile.');
@@ -265,10 +260,15 @@
 
                     if (json.status === 1 && json.nurse) {
                         setAuthenticatedNurse(json.nurse);
-                        sessionStorage.setItem('nursing_auth_nurse', JSON.stringify(json.nurse));
+                        
+                        // Save 30-day persistent device authentication in localStorage
+                        const deviceAuthObj = {
+                            nurse: json.nurse,
+                            expires_at: Date.now() + THIRTY_DAYS_MS
+                        };
+                        localStorage.setItem(DEVICE_AUTH_KEY, JSON.stringify(deviceAuthObj));
                         setPinInput('');
                     } else if (json.status === 2) {
-                        // PIN not set yet for this nurse
                         setIsSettingNewPin(true);
                     } else {
                         setPinError(json.message || 'Invalid Security PIN');
@@ -302,9 +302,8 @@
                     const json = await res.json();
 
                     if (json.status === 1) {
-                        alert('Security PIN updated! You can now login with your PIN.');
+                        alert('Security PIN set successfully! Enter your PIN to unlock.');
                         setIsSettingNewPin(false);
-                        setShowChangePinModal(false);
                         setNewPin('');
                         setConfirmPin('');
                         setPinInput('');
@@ -318,7 +317,7 @@
 
             const handleLogout = () => {
                 setAuthenticatedNurse(null);
-                sessionStorage.removeItem('nursing_auth_nurse');
+                localStorage.removeItem(DEVICE_AUTH_KEY);
                 setPinInput('');
                 setActiveBed(null);
             };
@@ -395,7 +394,7 @@
                             <div className="p-4 text-center bg-primary text-white">
                                 <i className="bi bi-shield-lock-fill display-4 d-block mb-2"></i>
                                 <h5 className="fw-bold mb-0">Nursing Care PWA App</h5>
-                                <small className="opacity-75">Staff PIN Authentication Security</small>
+                                <small className="opacity-75">30-Day Device Authentication Security</small>
                             </div>
 
                             <div className="p-4">
@@ -404,7 +403,7 @@
                                 {!isSettingNewPin ? (
                                     <div>
                                         <div className="mb-3">
-                                            <label className="form-label fw-bold small">Select Nursing Staff</label>
+                                            <label className="form-label fw-bold small">Select Nursing Staff Profile</label>
                                             <select 
                                                 className="form-select"
                                                 value={authNurseId}
@@ -422,16 +421,19 @@
                                             <input 
                                                 type="password" 
                                                 maxLength="6"
-                                                className="form-control text-center fs-4 tracking-widest"
+                                                className="form-control text-center fs-4"
                                                 placeholder="••••"
                                                 value={pinInput}
                                                 onChange={(e) => setPinInput(e.target.value)}
                                                 onKeyUp={(e) => e.key === 'Enter' && handleVerifyPin()}
                                             />
+                                            <small className="text-muted text-center d-block mt-1" style={{fontSize: '11px'}}>
+                                                Unlocks device access for 30 days
+                                            </small>
                                         </div>
 
                                         <button className="btn btn-primary w-100 py-2 fw-bold" onClick={handleVerifyPin}>
-                                            <i className="bi bi-unlock-fill me-1"></i> Unlock App Access
+                                            <i className="bi bi-unlock-fill me-1"></i> Unlock Device Access
                                         </button>
                                     </div>
                                 ) : (
@@ -491,14 +493,14 @@
                             <i className="bi bi-heart-pulse-fill text-danger fs-4 me-2"></i>
                             <div>
                                 <h6 className="mb-0 fw-bold">NursingCare PWA</h6>
-                                <small className="text-light opacity-75">Staff: <strong>[{authenticatedNurse.nurse_code}] {authenticatedNurse.name}</strong></small>
+                                <small className="text-light opacity-75">Staff: <strong>[{authenticatedNurse.nurse_code}] {authenticatedNurse.name}</strong> <span className="badge bg-success ms-1" style={{fontSize: '9px'}}>30-Day Device Auth</span></small>
                             </div>
                         </div>
                         <div className="d-flex align-items-center gap-2">
                             <button className="btn btn-sm btn-outline-light" onClick={fetchBeds} title="Refresh Beds">
                                 <i className="bi bi-arrow-clockwise"></i>
                             </button>
-                            <button className="btn btn-sm btn-danger" onClick={handleLogout} title="Lock App Device Access">
+                            <button className="btn btn-sm btn-danger" onClick={handleLogout} title="Lock Device Access">
                                 <i className="bi bi-lock-fill me-1"></i> Lock
                             </button>
                         </div>

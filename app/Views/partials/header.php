@@ -136,6 +136,11 @@
                     </a>
                 </li>
                 <?php } ?>
+                <li class="nav-item d-flex align-items-center" style="margin-right:20px;">
+                    <a class="nav-shortcut-icon text-decoration-none text-primary" href="javascript:void(0)" id="btn_hdr_apps_launcher" data-bs-toggle="tooltip" data-bs-placement="bottom" title="HMS Mobile & PWA Apps">
+                        <i class="bi bi-phone-vibrate fs-4"></i>
+                    </a>
+                </li>
                 <li class="nav-item pe-3 d-flex align-items-center text-nowrap">
                     <a class="text-decoration-none" href="<?= base_url('help.html') ?>" target="_blank" rel="noopener">
                         <i class="bi bi-question-circle me-1"></i>
@@ -282,4 +287,125 @@
         refreshClock();
         setInterval(refreshClock, 1000);
     })();
+</script>
+
+<!-- Modal for HMS Mobile & PWA Apps Launcher -->
+<div class="modal fade" id="hmsAppsLauncherModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content shadow-lg border-0">
+            <div class="modal-header bg-primary text-white py-2">
+                <h5 class="modal-title fs-6 fw-bold mb-0"><i class="bi bi-grid-3x3-gap-fill me-2"></i> HMS Mobile &amp; PWA Apps Launcher</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-3">
+                <!-- Step 1: App Selection Cards -->
+                <label class="form-label fw-bold small text-secondary mb-2">1. SELECT APPLICATION</label>
+                <div class="row g-2 mb-3">
+                    <div class="col-4">
+                        <div class="card p-2 text-center border-primary bg-primary-subtle text-primary h-100" style="cursor: pointer;" id="app_card_nursing">
+                            <i class="bi bi-heart-pulse-fill fs-3 mb-1"></i>
+                            <div class="fw-bold small" style="font-size:12px;">Nursing Care</div>
+                            <span class="badge bg-primary mt-1" style="font-size:9px;">Active PWA</span>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="card p-2 text-center border-secondary bg-light text-muted opacity-75 h-100">
+                            <i class="bi bi-person-badge-fill fs-3 mb-1"></i>
+                            <div class="fw-bold small" style="font-size:12px;">Doctor App</div>
+                            <span class="badge bg-secondary mt-1" style="font-size:9px;">Coming Soon</span>
+                        </div>
+                    </div>
+                    <div class="col-4">
+                        <div class="card p-2 text-center border-secondary bg-light text-muted opacity-75 h-100">
+                            <i class="bi bi-capsule fs-3 mb-1"></i>
+                            <div class="fw-bold small" style="font-size:12px;">Pharmacy App</div>
+                            <span class="badge bg-secondary mt-1" style="font-size:9px;">Coming Soon</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Step 2: Staff User Selection -->
+                <div class="mb-3">
+                    <label class="form-label fw-bold small text-secondary mb-1">2. SELECT NURSING STAFF PROFILE</label>
+                    <select class="form-select form-select-sm" id="hdr_apps_nurse_select">
+                        <option value="">-- General / All Staff Access --</option>
+                    </select>
+                </div>
+
+                <!-- Step 3: QR Code & Access Link -->
+                <div class="p-3 bg-light rounded border text-center">
+                    <div class="fw-bold small text-dark mb-1" id="hdr_apps_target_name">Nursing Care App</div>
+                    <span class="badge bg-secondary mb-2" id="hdr_apps_target_code">/app/nursing</span>
+
+                    <div class="my-2">
+                        <img id="hdr_apps_qr_img" src="" alt="App QR Code" style="width: 160px; height: 160px; border-radius: 8px;" class="border p-1 bg-white shadow-sm" />
+                    </div>
+                    <p class="small text-muted mb-2" style="font-size: 11px;">
+                        <i class="bi bi-qr-code-scan me-1"></i> Scan with Phone Camera to launch app on Mobile, or click link below to open on Computer.
+                    </p>
+
+                    <div class="input-group input-group-sm mb-2">
+                        <input type="text" class="form-control form-control-sm text-center" id="hdr_apps_url_input" readonly />
+                        <button class="btn btn-outline-primary" type="button" id="btn_hdr_apps_copy_url"><i class="bi bi-clipboard"></i> Copy</button>
+                    </div>
+
+                    <a href="#" target="_blank" class="btn btn-primary btn-sm w-100 fw-bold" id="hdr_apps_launch_link">
+                        <i class="bi bi-box-arrow-up-right me-1"></i> Launch App on Computer / Browser
+                    </a>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+(function() {
+    function updateHdrAppDetails() {
+        var code = $('#hdr_apps_nurse_select').val();
+        var appBaseUrl = '<?= base_url('app/nursing') ?>';
+        var appUrl = appBaseUrl + (code ? '?nurse_code=' + encodeURIComponent(code) : '');
+        var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' + encodeURIComponent(appUrl);
+
+        $('#hdr_apps_qr_img').attr('src', qrUrl);
+        $('#hdr_apps_url_input').val(appUrl);
+        $('#hdr_apps_launch_link').attr('href', appUrl);
+
+        if (code) {
+            var text = $('#hdr_apps_nurse_select option:selected').text();
+            $('#hdr_apps_target_name').text('Nursing Care App: ' + text);
+            $('#hdr_apps_target_code').text(code);
+        } else {
+            $('#hdr_apps_target_name').text('Nursing Care App');
+            $('#hdr_apps_target_code').text('/app/nursing');
+        }
+    }
+
+    $(document).on('click', '#btn_hdr_apps_launcher', function() {
+        $.getJSON('<?= base_url('api/v1/nursing/nurses') ?>', function(resp) {
+            var $sel = $('#hdr_apps_nurse_select');
+            $sel.html('<option value="">-- General / All Staff Access --</option>');
+            if (resp && resp.status === 1 && resp.data) {
+                resp.data.forEach(function(n) {
+                    $sel.append('<option value="' + n.nurse_code + '">[' + n.nurse_code + '] ' + n.name + '</option>');
+                });
+            }
+            updateHdrAppDetails();
+            var modalEl = document.getElementById('hmsAppsLauncherModal');
+            if (window.bootstrap && window.bootstrap.Modal) {
+                window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+            } else {
+                $(modalEl).modal('show');
+            }
+        });
+    });
+
+    $(document).on('change', '#hdr_apps_nurse_select', updateHdrAppDetails);
+
+    $(document).on('click', '#btn_hdr_apps_copy_url', function() {
+        var input = document.getElementById('hdr_apps_url_input');
+        input.select();
+        document.execCommand('copy');
+        alert('App URL copied to clipboard!');
+    });
+})();
 </script>
