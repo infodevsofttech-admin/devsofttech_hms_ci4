@@ -400,19 +400,43 @@ class DoctorApi extends BaseController
     public function ipdList(int $docId)
     {
         $db = db_connect();
-        $builder = $db->table('ipd_master ipd')
-            ->select('ipd.*, p.p_fname as fname, p.p_code as uhid, p.mphone1, p.gender, p.age, b.bed_code, b.bed_number, w.ward_name')
-            ->join('patient_master p', 'p.id = ipd.p_id', 'left')
-            ->join('bed_master b', 'b.id = ipd.bed_id', 'left')
-            ->join('ward_master w', 'w.id = b.ward_id', 'left')
-            ->where('ipd.status', 'admitted')
-            ->orderBy('ipd.id', 'DESC');
+        helper('common');
 
-        if ($docId > 0 && $db->fieldExists('doc_id', 'ipd_master')) {
-            $builder->where('ipd.doc_id', $docId);
+        $sql = "SELECT ipd.id as ipd_id, ipd.ipd_code, ipd.p_id, ipd.r_doc_id, ipd.r_doc_name, ipd.register_date, ipd.problem,
+                       p.p_fname as fname, p.p_code as uhid, p.mphone1, p.gender, p.age, p.age_in_month, p.estimate_dob, p.dob,
+                       b.bed_code, b.bed_number, w.ward_name
+                FROM ipd_master ipd
+                JOIN patient_master p ON p.id = ipd.p_id
+                LEFT JOIN bed_master b ON b.id = ipd.bed_no
+                LEFT JOIN ward_master w ON w.id = b.ward_id
+                WHERE ipd.ipd_status = 0";
+
+        if ($docId > 0) {
+            $sql .= " AND (ipd.r_doc_id = " . (int) $docId . " OR ipd.r_doc_id IS NULL OR ipd.r_doc_id = 0)";
         }
 
-        $patients = $builder->get()->getResultArray();
+        $sql .= " ORDER BY ipd.id DESC";
+
+        $query = $db->query($sql);
+        $patients = $query->getResultArray();
+
+        foreach ($patients as &$r) {
+            $ageDisplay = 'N/A';
+            if (function_exists('get_age_1')) {
+                $ageDisplay = get_age_1($r['dob'] ?? null, $r['age'] ?? '', $r['age_in_month'] ?? '', $r['estimate_dob'] ?? '');
+            } elseif (! empty($r['age'])) {
+                $ageDisplay = $r['age'] . ' Year';
+            } elseif (! empty($r['dob']) && $r['dob'] !== '0000-00-00') {
+                try {
+                    $ageDisplay = date_diff(date_create($r['dob']), date_create('today'))->y . ' Year';
+                } catch (\Throwable $e) {}
+            }
+
+            $r['age_display'] = $ageDisplay;
+            $r['gender_label'] = ((int)($r['gender'] ?? 1) === 1) ? 'Male' : 'Female';
+            $r['patient_display_name'] = $r['fname'] ?? 'Patient';
+            $r['bed_label'] = ! empty($r['ward_name']) ? ($r['ward_name'] . ' - Bed ' . ($r['bed_number'] ?? $r['bed_code'] ?? '')) : 'General Ward';
+        }
 
         return $this->response->setJSON([
             'status' => 1,
