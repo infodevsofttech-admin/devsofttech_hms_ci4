@@ -294,9 +294,12 @@ class DoctorApi extends BaseController
 
         if (! empty($prescRow)) {
             $prescRow['chief_complaints'] = $prescRow['complaints'] ?? '';
+            $prescRow['finding_examinations'] = $prescRow['Finding_Examinations'] ?? '';
             $prescRow['provisional_diagnosis'] = $prescRow['diagnosis'] ?? $prescRow['Provisional_diagnosis'] ?? '';
             $prescRow['bp_systolic'] = $prescRow['bp'] ?? '';
             $prescRow['bp_diastolic'] = $prescRow['diastolic'] ?? '';
+            $prescRow['height'] = $prescRow['height'] ?? '';
+            $prescRow['rr_min'] = $prescRow['rr_min'] ?? '';
         }
 
         return $this->response->setJSON([
@@ -343,7 +346,10 @@ class DoctorApi extends BaseController
             'diastolic' => trim((string) ($post['bp_diastolic'] ?? '')),
             'spo2' => trim((string) ($post['spo2'] ?? '')),
             'weight' => trim((string) ($post['weight'] ?? '')),
+            'height' => trim((string) ($post['height'] ?? '')),
+            'rr_min' => trim((string) ($post['rr_min'] ?? '')),
             'complaints' => trim((string) ($post['chief_complaints'] ?? '')),
+            'Finding_Examinations' => trim((string) ($post['finding_examinations'] ?? '')),
             'diagnosis' => trim((string) ($post['provisional_diagnosis'] ?? '')),
             'advice' => trim((string) ($post['advice'] ?? '')),
             'investigation' => trim((string) ($post['investigation'] ?? '')),

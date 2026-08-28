@@ -136,7 +136,6 @@
             // Active Workspace state
             const [activePatient, setActivePatient] = useState(null);
             const [activeOpd, setActiveOpd] = useState(null);
-            const [hmsConsultModalOpen, setHmsConsultModalOpen] = useState(false);
             const [workspaceData, setWorkspaceData] = useState([]);
             const [emrTab, setEmrTab] = useState('vitals');
             const [installPrompt, setInstallPrompt] = useState(null);
@@ -150,9 +149,10 @@
             const [newPin, setNewPin] = useState('');
             const [confirmPin, setConfirmPin] = useState('');
 
-            // OPD Prescription Form State
+            // OPD Prescription Consultation Controls State (Full Copy of HMS Functionality)
             const [prescForm, setPrescForm] = useState({
                 chief_complaints: '',
+                finding_examinations: '',
                 provisional_diagnosis: '',
                 investigation: '',
                 advice: '',
@@ -162,7 +162,9 @@
                 bp_systolic: '',
                 bp_diastolic: '',
                 spo2: '',
-                weight: ''
+                weight: '',
+                height: '',
+                rr_min: ''
             });
 
             // Medicines Repeater Array
@@ -171,10 +173,11 @@
             ]);
 
             // Quick Chips presets for Mobile Typing
-            const COMPLAINT_CHIPS = ['Fever', 'Cough', 'Swelling', 'Joint Pain', 'Headache', 'Back Ache', 'Nausea / Vomiting', 'Weakness'];
-            const DIAGNOSIS_CHIPS = ['Acute Rheumatic Fever', 'Viral Infection', 'Hypertension', 'Type 2 Diabetes', 'GERD', 'Bronchitis', 'Osteoarthritis'];
+            const COMPLAINT_CHIPS = ['Fever', 'Cough', 'Swelling', 'Joint Pain', 'Headache', 'Back Ache', 'Nausea / Vomiting', 'Weakness', 'Chest Pain', 'Shortness of Breath'];
+            const EXAMINATION_CHIPS = ['Pallor (+)', 'Icterus (-)', 'Cyanosis (-)', 'Clubbing (-)', 'Edema (-)', 'B/L Chest Clear', 'S1 S2 Heard'];
+            const DIAGNOSIS_CHIPS = ['Acute Rheumatic Fever', 'Viral Infection', 'Essential Hypertension', 'Type 2 Diabetes Mellitus', 'GERD', 'Acute Bronchitis', 'Osteoarthritis'];
             const DRUG_CHIPS = ['Paracetamol 500mg', 'Amoxicillin 500mg', 'Pantoprazole 40mg', 'Cetirizine 10mg', 'Ibuprofen 400mg', 'Azithromycin 500mg', 'Multivitamin'];
-            const LAB_CHIPS = ['CBC', 'Serum Creatinine', 'LFT', 'KFT', 'Chest X-Ray PA', 'ECG', 'Urine RE'];
+            const LAB_CHIPS = ['CBC', 'Serum Creatinine', 'LFT', 'KFT', 'Chest X-Ray PA', 'ECG', 'Urine RE', 'HbA1c', 'USG Abdomen'];
 
             const fetchDoctors = async () => {
                 try {
@@ -349,6 +352,7 @@
                         const pr = json.prescription;
                         setPrescForm({
                             chief_complaints: pr.chief_complaints || pr.complaints || '',
+                            finding_examinations: pr.finding_examinations || pr.Finding_Examinations || '',
                             provisional_diagnosis: pr.provisional_diagnosis || pr.diagnosis || '',
                             investigation: pr.investigation || '',
                             advice: pr.advice || '',
@@ -358,7 +362,9 @@
                             bp_systolic: pr.bp || '',
                             bp_diastolic: pr.diastolic || '',
                             spo2: pr.spo2 || '',
-                            weight: pr.weight || ''
+                            weight: pr.weight || '',
+                            height: pr.height || '',
+                            rr_min: pr.rr_min || ''
                         });
                         if (json.medicines && json.medicines.length > 0) {
                             setMedicines(json.medicines);
@@ -372,8 +378,8 @@
                         }
                     } else {
                         setPrescForm({
-                            chief_complaints: '', provisional_diagnosis: '', investigation: '', advice: '', next_visit: '',
-                            temp: '', pulse: '', bp_systolic: '', bp_diastolic: '', spo2: '', weight: ''
+                            chief_complaints: '', finding_examinations: '', provisional_diagnosis: '', investigation: '', advice: '', next_visit: '',
+                            temp: '', pulse: '', bp_systolic: '', bp_diastolic: '', spo2: '', weight: '', height: '', rr_min: ''
                         });
                         setMedicines([{ drug_name: '', dosage: '1 Tab', frequency: '1-0-1', duration: '5 Days', instructions: 'After Food' }]);
                     }
@@ -681,7 +687,7 @@
                             </div>
                         ) : activeOpd ? (
                             /* -------------------------------------------------------------
-                               OPD CONSULTATION & PRESCRIPTION FORM
+                               OPD CONSULTATION & PRESCRIPTION FORM (NATIVE CONTROLS COPY)
                                ------------------------------------------------------------- */
                             <div>
                                 <div className="d-flex justify-content-between align-items-center mb-3">
@@ -689,11 +695,11 @@
                                         <i className="bi bi-arrow-left me-1"></i> Back to Appointments
                                     </button>
                                     <div className="d-flex gap-2">
-                                        <button className="btn btn-sm btn-primary fw-bold" onClick={() => setHmsConsultModalOpen(true)}>
-                                            <i className="bi bi-window-fullscreen me-1"></i> Open Full HMS Consult Form
+                                        <button className="btn btn-sm btn-outline-secondary fw-bold" onClick={() => window.open(`/Opd/opd_lettre_pdf/${activeOpd.opd_id}?layout=content_only`, '_blank')}>
+                                            <i className="bi bi-printer me-1"></i> Print PDF
                                         </button>
                                         <button className="btn btn-sm btn-success fw-bold" onClick={handleSaveOpdPrescription}>
-                                            <i className="bi bi-check-circle-fill me-1"></i> Save &amp; Complete Visit
+                                            <i className="bi bi-check-circle-fill me-1"></i> Save &amp; Mark Visited
                                         </button>
                                     </div>
                                 </div>
@@ -713,9 +719,9 @@
                                     </div>
                                 </div>
 
-                                {/* Vitals Entry Bar */}
+                                {/* Vitals Entry Bar (Native HMS Controls) */}
                                 <div className="card p-3 shadow-sm border-0 mb-3">
-                                    <h6 className="fw-bold mb-2 text-danger small"><i className="bi bi-heart-pulse-fill me-1"></i> Patient Vitals</h6>
+                                    <h6 className="fw-bold mb-2 text-danger small"><i className="bi bi-heart-pulse-fill me-1"></i> Patient Vitals (BP, Pulse, Temp, SpO2, Weight)</h6>
                                     <div className="row g-2">
                                         <div className="col-4 col-md-2">
                                             <label className="form-label small mb-1" style={{fontSize: '11px'}}>BP Sys/Dia</label>
@@ -733,13 +739,17 @@
                                             <label className="form-label small mb-1" style={{fontSize: '11px'}}>SpO2 %</label>
                                             <input type="number" className="form-control form-control-sm text-center" placeholder="98" value={prescForm.spo2} onChange={e => setPrescForm({...prescForm, spo2: e.target.value})} />
                                         </div>
-                                        <div className="col-6 col-md-2">
+                                        <div className="col-4 col-md-2">
                                             <label className="form-label small mb-1" style={{fontSize: '11px'}}>Temp °F</label>
                                             <input type="number" step="0.1" className="form-control form-control-sm text-center" placeholder="98.6" value={prescForm.temp} onChange={e => setPrescForm({...prescForm, temp: e.target.value})} />
                                         </div>
-                                        <div className="col-6 col-md-2">
+                                        <div className="col-4 col-md-2">
                                             <label className="form-label small mb-1" style={{fontSize: '11px'}}>Weight (kg)</label>
                                             <input type="number" className="form-control form-control-sm text-center" placeholder="70" value={prescForm.weight} onChange={e => setPrescForm({...prescForm, weight: e.target.value})} />
+                                        </div>
+                                        <div className="col-4 col-md-2">
+                                            <label className="form-label small mb-1" style={{fontSize: '11px'}}>Height (cm)</label>
+                                            <input type="number" className="form-control form-control-sm text-center" placeholder="165" value={prescForm.height} onChange={e => setPrescForm({...prescForm, height: e.target.value})} />
                                         </div>
                                     </div>
                                 </div>
@@ -755,6 +765,17 @@
                                     <textarea className="form-control form-control-sm" rows="2" placeholder="Enter chief complaints..." value={prescForm.chief_complaints} onChange={e => setPrescForm({...prescForm, chief_complaints: e.target.value})}></textarea>
                                 </div>
 
+                                {/* Clinical Examination & Findings */}
+                                <div className="card p-3 shadow-sm border-0 mb-3">
+                                    <label className="form-label fw-bold small text-dark mb-1"><i className="bi bi-clipboard2-pulse text-info me-1"></i> Clinical Examination &amp; Findings</label>
+                                    <div className="d-flex gap-1 flex-wrap mb-2">
+                                        {EXAMINATION_CHIPS.map(e => (
+                                            <button key={e} type="button" className="chip-btn" onClick={() => appendChipText('finding_examinations', e)}>+ {e}</button>
+                                        ))}
+                                    </div>
+                                    <textarea className="form-control form-control-sm" rows="2" placeholder="Enter clinical examination & findings..." value={prescForm.finding_examinations} onChange={e => setPrescForm({...prescForm, finding_examinations: e.target.value})}></textarea>
+                                </div>
+
                                 {/* Provisional Diagnosis */}
                                 <div className="card p-3 shadow-sm border-0 mb-3">
                                     <label className="form-label fw-bold small text-dark mb-1"><i className="bi bi-stethoscope text-primary me-1"></i> Provisional Diagnosis</label>
@@ -766,7 +787,7 @@
                                     <textarea className="form-control form-control-sm" rows="2" placeholder="Enter diagnosis..." value={prescForm.provisional_diagnosis} onChange={e => setPrescForm({...prescForm, provisional_diagnosis: e.target.value})}></textarea>
                                 </div>
 
-                                {/* Medicines Rx Repeater (Mobile Friendly) */}
+                                {/* Medicines Rx Repeater (Native HMS Controls) */}
                                 <div className="card p-3 shadow-sm border-0 mb-3">
                                     <div className="d-flex justify-content-between align-items-center mb-2">
                                         <label className="form-label fw-bold small text-dark mb-0"><i className="bi bi-capsule text-success me-1"></i> Prescribed Medicines (Rx)</label>
@@ -820,7 +841,7 @@
 
                                 {/* Lab Investigations & Advice */}
                                 <div className="card p-3 shadow-sm border-0 mb-3">
-                                    <label className="form-label fw-bold small text-dark mb-1"><i className="bi bi-file-earmark-medical text-warning me-1"></i> Lab Investigations Order</label>
+                                    <label className="form-label fw-bold small text-dark mb-1"><i className="bi bi-file-earmark-medical text-warning me-1"></i> Lab &amp; Pathology Orders</label>
                                     <div className="d-flex gap-1 flex-wrap mb-2">
                                         {LAB_CHIPS.map(lab => (
                                             <button key={lab} type="button" className="chip-btn" onClick={() => appendChipText('investigation', lab)}>+ {lab}</button>
@@ -840,35 +861,16 @@
                                     <input type="text" className="form-control form-control-sm" placeholder="Follow-up advice" value={prescForm.next_visit} onChange={e => setPrescForm({...prescForm, next_visit: e.target.value})} />
                                 </div>
 
-                                <button className="btn btn-success btn-lg w-100 fw-bold py-2 shadow-sm mb-4" onClick={handleSaveOpdPrescription}>
-                                    <i className="bi bi-check-circle-fill me-1"></i> Save Prescription &amp; Mark Visited
-                                </button>
-                            </div>
-                        ) : null}
-
-                        {/* FULL HMS CONSULTATION FORM MODAL (100% IDENTICAL TO HMS SCREEN) */}
-                        {hmsConsultModalOpen && activeOpd && (
-                            <div className="modal fade show d-block" style={{backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 10050}}>
-                                <div className="modal-dialog modal-fullscreen">
-                                    <div className="modal-content">
-                                        <div className="modal-header bg-primary text-white py-2">
-                                            <h6 className="modal-title fw-bold">
-                                                <i className="bi bi-file-earmark-medical me-2"></i>
-                                                Official HMS OPD Consult Form - {activeOpd.patient_display_name} ({activeOpd.opd_code})
-                                            </h6>
-                                            <button type="button" className="btn-close btn-close-white" onClick={() => { setHmsConsultModalOpen(false); fetchOpdAppointments(authenticatedDoctor ? authenticatedDoctor.id : 0); }}></button>
-                                        </div>
-                                        <div className="modal-body p-0" style={{height: 'calc(100vh - 55px)'}}>
-                                            <iframe 
-                                                src={`/Opd_prescription/Prescription/${activeOpd.opd_id}`}
-                                                style={{width: '100%', height: '100%', border: 'none'}}
-                                                title="HMS OPD Prescription Form"
-                                            />
-                                        </div>
-                                    </div>
+                                <div className="d-flex gap-2 mb-4">
+                                    <button className="btn btn-outline-secondary btn-lg w-50 fw-bold py-2 shadow-sm" onClick={() => window.open(`/Opd/opd_lettre_pdf/${activeOpd.opd_id}?layout=content_only`, '_blank')}>
+                                        <i className="bi bi-printer me-1"></i> Print PDF
+                                    </button>
+                                    <button className="btn btn-success btn-lg w-50 fw-bold py-2 shadow-sm" onClick={handleSaveOpdPrescription}>
+                                        <i className="bi bi-check-circle-fill me-1"></i> Save &amp; Complete Visit
+                                    </button>
                                 </div>
                             </div>
-                        )}
+                        ) : null}
                     </main>
                 </div>
             );
