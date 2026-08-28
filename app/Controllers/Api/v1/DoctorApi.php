@@ -165,11 +165,12 @@ class DoctorApi extends BaseController
     public function opdList(int $docId)
     {
         $db = db_connect();
+        helper('common');
 
         $sql = "SELECT o.opd_id, o.opd_code, o.opd_no, o.opd_status, o.apointment_date,
                        o.opd_fee_desc, o.opd_fee_amount, o.payment_status, o.opd_fee_type,
                        coalesce(o.running_opd, 0) as running_opd,
-                       p.id as p_id, p.p_code, p.p_fname as P_name, p.gender, p.age, p.dob, p.mphone1,
+                       p.id as p_id, p.p_code, p.p_fname as P_name, p.gender, p.age, p.age_in_month, p.estimate_dob, p.dob, p.mphone1,
                        (CASE
                            WHEN (coalesce(o.running_opd,0)=1 OR o.opd_fee_type=3 OR UPPER(coalesce(o.opd_fee_desc,'')) LIKE '%RUNNING%') THEN 'Running'
                            WHEN o.payment_mode=4 THEN 'Credit to ECHS'
@@ -221,11 +222,23 @@ class DoctorApi extends BaseController
                 $counts['waiting']++;
             }
 
+            $ageDisplay = 'N/A';
+            if (function_exists('get_age_1')) {
+                $ageDisplay = get_age_1($r['dob'] ?? null, $r['age'] ?? '', $r['age_in_month'] ?? '', $r['estimate_dob'] ?? '', $r['apointment_date'] ?? null);
+            } elseif (! empty($r['age'])) {
+                $ageDisplay = $r['age'] . ' Year';
+            } elseif (! empty($r['dob']) && $r['dob'] !== '0000-00-00') {
+                try {
+                    $ageDisplay = date_diff(date_create($r['dob']), date_create('today'))->y . ' Year';
+                } catch (\Throwable $e) {}
+            }
+
             $r['status_label'] = ucfirst($statusText);
             $r['status_key'] = $statusText;
             $r['gender_label'] = ((int)($r['gender'] ?? 1) === 1) ? 'Male' : 'Female';
             $r['patient_display_name'] = $r['P_name'] ?? 'Patient';
             $r['uhid'] = $r['p_code'] ?? '';
+            $r['age_display'] = $ageDisplay;
             $appointments[] = $r;
         }
 

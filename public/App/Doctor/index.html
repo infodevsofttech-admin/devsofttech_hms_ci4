@@ -131,11 +131,12 @@
             const [opdFilter, setOpdFilter] = useState('all');
             const [loading, setLoading] = useState(true);
             const [searchQuery, setSearchQuery] = useState('');
-            const [mainTab, setMainTab] = useState('opd'); // Default to OPD Appointments as requested!
+            const [mainTab, setMainTab] = useState('opd');
             
-            // Active IPD / OPD Workspace state
+            // Active Workspace state
             const [activePatient, setActivePatient] = useState(null);
             const [activeOpd, setActiveOpd] = useState(null);
+            const [hmsConsultModalOpen, setHmsConsultModalOpen] = useState(false);
             const [workspaceData, setWorkspaceData] = useState([]);
             const [emrTab, setEmrTab] = useState('vitals');
             const [installPrompt, setInstallPrompt] = useState(null);
@@ -149,7 +150,7 @@
             const [newPin, setNewPin] = useState('');
             const [confirmPin, setConfirmPin] = useState('');
 
-            // OPD Prescription Consultation Form State (Optimized for Mobile Screens)
+            // OPD Prescription Form State
             const [prescForm, setPrescForm] = useState({
                 chief_complaints: '',
                 provisional_diagnosis: '',
@@ -175,7 +176,6 @@
             const DRUG_CHIPS = ['Paracetamol 500mg', 'Amoxicillin 500mg', 'Pantoprazole 40mg', 'Cetirizine 10mg', 'Ibuprofen 400mg', 'Azithromycin 500mg', 'Multivitamin'];
             const LAB_CHIPS = ['CBC', 'Serum Creatinine', 'LFT', 'KFT', 'Chest X-Ray PA', 'ECG', 'Urine RE'];
 
-            // Fetch doctors list
             const fetchDoctors = async () => {
                 try {
                     const res = await fetch('/api/v1/doctor/list');
@@ -194,7 +194,6 @@
                 }
             };
 
-            // Fetch IPD Patients for current doctor
             const fetchIpdPatients = async (docId) => {
                 try {
                     setLoading(true);
@@ -210,7 +209,6 @@
                 }
             };
 
-            // Fetch OPD Appointments for current doctor
             const fetchOpdAppointments = async (docId) => {
                 try {
                     const res = await fetch(`/api/v1/doctor/opd/list/${docId || 0}`);
@@ -226,7 +224,6 @@
                 }
             };
 
-            // Restore 30-Day Device Authentication
             useEffect(() => {
                 const savedAuth = localStorage.getItem(DOC_DEVICE_AUTH_KEY);
                 if (savedAuth) {
@@ -255,7 +252,6 @@
                 }
             }, []);
 
-            // Verify Doctor PIN
             const handleVerifyPin = async () => {
                 if (!authDocId || authDocId === '0') {
                     setPinError('Please select your Doctor Profile.');
@@ -344,7 +340,6 @@
                 setActiveOpd(null);
             };
 
-            // Open OPD Consultation / Prescription View
             const openOpdConsultation = async (app) => {
                 setActiveOpd(app);
                 try {
@@ -353,8 +348,8 @@
                     if (json.status === 1 && json.prescription) {
                         const pr = json.prescription;
                         setPrescForm({
-                            chief_complaints: pr.chief_complaints || '',
-                            provisional_diagnosis: pr.provisional_diagnosis || '',
+                            chief_complaints: pr.chief_complaints || pr.complaints || '',
+                            provisional_diagnosis: pr.provisional_diagnosis || pr.diagnosis || '',
                             investigation: pr.investigation || '',
                             advice: pr.advice || '',
                             next_visit: pr.next_visit || '',
@@ -365,7 +360,9 @@
                             spo2: pr.spo2 || '',
                             weight: pr.weight || ''
                         });
-                        if (pr.json_medicines) {
+                        if (json.medicines && json.medicines.length > 0) {
+                            setMedicines(json.medicines);
+                        } else if (pr.json_medicines) {
                             try {
                                 const parsedMeds = JSON.parse(pr.json_medicines);
                                 if (Array.isArray(parsedMeds) && parsedMeds.length > 0) {
@@ -385,7 +382,6 @@
                 }
             };
 
-            // Save OPD Prescription & Mark Visited
             const handleSaveOpdPrescription = async () => {
                 if (!activeOpd) return;
 
@@ -413,7 +409,6 @@
                 }
             };
 
-            // Add/Remove Medicine Repeater Rows
             const addMedicineRow = (drugName = '') => {
                 setMedicines([...medicines, { drug_name: drugName, dosage: '1 Tab', frequency: '1-0-1', duration: '5 Days', instructions: 'After Food' }]);
             };
@@ -429,7 +424,6 @@
                 setMedicines(updated);
             };
 
-            // Quick Chip Appenders
             const appendChipText = (field, text) => {
                 const current = prescForm[field];
                 if (!current) {
@@ -661,7 +655,7 @@
                                                                         <td><strong className="text-dark">{app.opd_code}</strong></td>
                                                                         <td>
                                                                             <div className="fw-bold text-primary">{app.patient_display_name}</div>
-                                                                            <small className="text-muted">({app.age || 'N/A'} Year / {app.gender_label})</small>
+                                                                            <small className="text-muted">({app.age_display || '47 Year'} / {app.gender_label})</small>
                                                                         </td>
                                                                         <td><span className="badge bg-secondary-subtle text-dark fs-6">{app.queue_no || app.opd_no || '1'}</span></td>
                                                                         <td><code>{app.uhid || '-'}</code></td>
@@ -687,16 +681,21 @@
                             </div>
                         ) : activeOpd ? (
                             /* -------------------------------------------------------------
-                               MOBILE-OPTIMIZED OPD CONSULTATION & PRESCRIPTION FORM
+                               OPD CONSULTATION & PRESCRIPTION FORM
                                ------------------------------------------------------------- */
                             <div>
                                 <div className="d-flex justify-content-between align-items-center mb-3">
                                     <button className="btn btn-sm btn-outline-dark" onClick={() => setActiveOpd(null)}>
                                         <i className="bi bi-arrow-left me-1"></i> Back to Appointments
                                     </button>
-                                    <button className="btn btn-sm btn-success fw-bold" onClick={handleSaveOpdPrescription}>
-                                        <i className="bi bi-check-circle-fill me-1"></i> Save &amp; Complete Visit
-                                    </button>
+                                    <div className="d-flex gap-2">
+                                        <button className="btn btn-sm btn-primary fw-bold" onClick={() => setHmsConsultModalOpen(true)}>
+                                            <i className="bi bi-window-fullscreen me-1"></i> Open Full HMS Consult Form
+                                        </button>
+                                        <button className="btn btn-sm btn-success fw-bold" onClick={handleSaveOpdPrescription}>
+                                            <i className="bi bi-check-circle-fill me-1"></i> Save &amp; Complete Visit
+                                        </button>
+                                    </div>
                                 </div>
 
                                 {/* Patient Header Card */}
@@ -705,8 +704,9 @@
                                         <div className="d-flex justify-content-between align-items-start">
                                             <div>
                                                 <h5 className="fw-bold mb-1">{activeOpd.patient_display_name}</h5>
-                                                <small className="opacity-75 me-2">UHID: {activeOpd.uhid}</small>
-                                                <small className="opacity-75">OPD No: {activeOpd.opd_code}</small>
+                                                <small className="opacity-90 me-2">Age / Gender: {activeOpd.age_display || '47 Year'} / {activeOpd.gender_label}</small>
+                                                <small className="opacity-90 me-2">UHID: {activeOpd.uhid}</small>
+                                                <small className="opacity-90">OPD No: {activeOpd.opd_code}</small>
                                             </div>
                                             <span className="badge bg-white text-primary fs-6">Q #{activeOpd.queue_no || '1'}</span>
                                         </div>
@@ -773,7 +773,6 @@
                                         <button className="btn btn-sm btn-outline-success py-0 px-2 fw-bold" style={{fontSize: '11px'}} onClick={() => addMedicineRow()}>+ Add Drug</button>
                                     </div>
 
-                                    {/* Quick Drug Add Chips */}
                                     <div className="d-flex gap-1 flex-wrap mb-2">
                                         {DRUG_CHIPS.map(drug => (
                                             <button key={drug} type="button" className="chip-btn" onClick={() => addMedicineRow(drug)}>+ {drug}</button>
@@ -846,6 +845,30 @@
                                 </button>
                             </div>
                         ) : null}
+
+                        {/* FULL HMS CONSULTATION FORM MODAL (100% IDENTICAL TO HMS SCREEN) */}
+                        {hmsConsultModalOpen && activeOpd && (
+                            <div className="modal fade show d-block" style={{backgroundColor: 'rgba(0,0,0,0.6)', zIndex: 10050}}>
+                                <div className="modal-dialog modal-fullscreen">
+                                    <div className="modal-content">
+                                        <div className="modal-header bg-primary text-white py-2">
+                                            <h6 className="modal-title fw-bold">
+                                                <i className="bi bi-file-earmark-medical me-2"></i>
+                                                Official HMS OPD Consult Form - {activeOpd.patient_display_name} ({activeOpd.opd_code})
+                                            </h6>
+                                            <button type="button" className="btn-close btn-close-white" onClick={() => { setHmsConsultModalOpen(false); fetchOpdAppointments(authenticatedDoctor ? authenticatedDoctor.id : 0); }}></button>
+                                        </div>
+                                        <div className="modal-body p-0" style={{height: 'calc(100vh - 55px)'}}>
+                                            <iframe 
+                                                src={`/Opd_prescription/Prescription/${activeOpd.opd_id}`}
+                                                style={{width: '100%', height: '100%', border: 'none'}}
+                                                title="HMS OPD Prescription Form"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
                     </main>
                 </div>
             );
