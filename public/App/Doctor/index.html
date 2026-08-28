@@ -5,12 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <title>Doctor EMR & Bedside Care PWA App</title>
     <link rel="manifest" href="/App/Doctor/manifest.json">
-    <meta name="theme-color" content="#0d6efd">
+    <meta name="theme-color" content="#0f172a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
     <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3774/3774299.png">
     
-    <!-- Bootstrap 5 CSS & Icons -->
+    <!-- Google Fonts & Bootstrap 5 CSS & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
     
@@ -22,69 +25,221 @@
     <style>
         :root {
             --primary-bg: #0f172a;
-            --card-bg: #1e293b;
-            --accent-blue: #0d6efd;
-            --accent-green: #198754;
-            --accent-amber: #ffc107;
-            --accent-red: #dc3545;
+            --card-bg: #ffffff;
+            --accent-blue: #2563eb;
+            --accent-cyan: #0891b2;
+            --accent-green: #16a34a;
+            --accent-amber: #d97706;
+            --accent-red: #dc2626;
+            --slate-800: #1e293b;
+            --slate-900: #0f172a;
         }
 
         body {
-            background-color: #f8fafc;
-            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            background-color: #f1f5f9;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
             margin: 0;
             padding: 0;
             user-select: none;
             -webkit-user-select: none;
             overflow-x: hidden;
+            color: #334155;
         }
 
+        /* Sleek Doctor Topbar */
         .doctor-header {
             background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
             color: #ffffff;
             padding: 12px 16px;
-            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            box-shadow: 0 4px 20px rgba(15, 23, 42, 0.25);
             position: sticky;
             top: 0;
             z-index: 1000;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.08);
         }
 
+        .avatar-circle {
+            width: 38px;
+            height: 38px;
+            border-radius: 50%;
+            background: linear-gradient(135deg, #3b82f6 0%, #1d4ed8 100%);
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 14px;
+            box-shadow: 0 2px 8px rgba(37, 99, 235, 0.3);
+            border: 2px solid rgba(255,255,255,0.2);
+        }
+
+        .patient-avatar-circle {
+            width: 44px;
+            height: 44px;
+            border-radius: 50%;
+            background: #eff6ff;
+            color: #2563eb;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-weight: 700;
+            font-size: 15px;
+            border: 1.5px solid #dbeafe;
+            flex-shrink: 0;
+        }
+
+        /* Modern Segmented Navigation Tabs */
+        .segmented-tabs {
+            background: #e2e8f0;
+            border-radius: 12px;
+            padding: 4px;
+            display: flex;
+            gap: 4px;
+        }
+
+        .segmented-tab {
+            flex: 1;
+            border: none;
+            background: transparent;
+            padding: 10px 14px;
+            border-radius: 9px;
+            font-weight: 600;
+            font-size: 13px;
+            color: #64748b;
+            transition: all 0.2s ease;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .segmented-tab.active {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            color: #ffffff;
+            box-shadow: 0 4px 12px rgba(37, 99, 235, 0.25);
+        }
+
+        /* Modern Patient Card Styling */
         .mobile-patient-card {
             background: #ffffff;
             border: 1px solid #e2e8f0;
-            border-radius: 14px;
-            padding: 14px;
-            margin-bottom: 12px;
-            box-shadow: 0 2px 6px rgba(0,0,0,0.04);
-            border-left: 5px solid var(--accent-blue);
-            transition: all 0.2s ease;
+            border-radius: 16px;
+            padding: 16px;
+            margin-bottom: 14px;
+            box-shadow: 0 4px 16px -2px rgba(15, 23, 42, 0.05);
+            border-left: 6px solid var(--accent-blue);
+            transition: all 0.25s cubic-bezier(0.16, 1, 0.3, 1);
+            position: relative;
+            overflow: hidden;
         }
 
-        .mobile-patient-card:active {
-            transform: scale(0.99);
+        .mobile-patient-card:hover {
+            box-shadow: 0 8px 24px -4px rgba(15, 23, 42, 0.1);
+            border-color: #cbd5e1;
         }
 
         .mobile-patient-card.visited {
-            border-left-color: #0dcaf0;
+            border-left-color: #0891b2;
         }
 
         .mobile-patient-card.booked {
-            border-left-color: #6c757d;
+            border-left-color: #64748b;
         }
 
         .mobile-patient-card.waiting {
-            border-left-color: #0d6efd;
+            border-left-color: #2563eb;
         }
 
-        .nav-pills .nav-link {
-            border-radius: 8px;
-            font-weight: 500;
-            color: #64748b;
+        /* Status Pills */
+        .status-pill {
+            font-size: 11px;
+            font-weight: 700;
+            padding: 4px 10px;
+            border-radius: 20px;
+            text-transform: uppercase;
+            letter-spacing: 0.3px;
+            display: inline-flex;
+            align-items: center;
+            gap: 4px;
         }
 
-        .nav-pills .nav-link.active {
-            background-color: var(--accent-blue);
+        .status-pill.waiting {
+            background-color: #eff6ff;
+            color: #1d4ed8;
+            border: 1px solid #bfdbfe;
+        }
+
+        .status-pill.visited {
+            background-color: #ecfeff;
+            color: #0e7490;
+            border: 1px solid #a5f3fc;
+        }
+
+        .status-pill.booked {
+            background-color: #f8fafc;
+            color: #475569;
+            border: 1px solid #cbd5e1;
+        }
+
+        /* Queue Badge */
+        .queue-badge {
+            background: #0f172a;
             color: #ffffff;
+            font-weight: 800;
+            font-size: 12px;
+            padding: 4px 10px;
+            border-radius: 20px;
+            box-shadow: 0 2px 6px rgba(15, 23, 42, 0.2);
+        }
+
+        /* Action Button */
+        .btn-action-primary {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            color: #ffffff;
+            border: none;
+            border-radius: 12px;
+            font-weight: 700;
+            padding: 10px 16px;
+            box-shadow: 0 4px 14px rgba(37, 99, 235, 0.3);
+            transition: all 0.2s ease;
+        }
+
+        .btn-action-primary:hover, .btn-action-primary:active {
+            background: linear-gradient(135deg, #1d4ed8 0%, #1e40af 100%);
+            transform: translateY(-1px);
+            box-shadow: 0 6px 18px rgba(37, 99, 235, 0.4);
+            color: #ffffff;
+        }
+
+        .btn-action-success {
+            background: linear-gradient(135deg, #16a34a 0%, #15803d 100%);
+            color: #ffffff;
+            border: none;
+            border-radius: 12px;
+            font-weight: 700;
+            padding: 10px 16px;
+            box-shadow: 0 4px 14px rgba(22, 163, 74, 0.3);
+            transition: all 0.2s ease;
+        }
+
+        /* Touch Chip Buttons */
+        .chip-btn {
+            font-size: 11px;
+            font-weight: 600;
+            padding: 5px 12px;
+            border-radius: 20px;
+            border: 1px solid #cbd5e1;
+            background: #ffffff;
+            color: #334155;
+            cursor: pointer;
+            transition: all 0.15s ease;
+            box-shadow: 0 1px 3px rgba(0,0,0,0.03);
+        }
+
+        .chip-btn:hover, .chip-btn:active {
+            background: #2563eb;
+            color: #ffffff;
+            border-color: #2563eb;
+            transform: translateY(-1px);
         }
 
         /* Lock Screen Styling */
@@ -101,28 +256,20 @@
 
         .lock-card {
             background: #ffffff;
-            border-radius: 16px;
+            border-radius: 20px;
             width: 100%;
             max-width: 400px;
-            box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.3);
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.4);
             overflow: hidden;
         }
 
-        .chip-btn {
-            font-size: 11px;
-            padding: 4px 10px;
-            border-radius: 14px;
-            border: 1px solid #cbd5e1;
-            background: #f8fafc;
-            color: #334155;
-            cursor: pointer;
-            transition: all 0.15s ease;
+        /* Custom Scrollbar for chips */
+        .no-scrollbar::-webkit-scrollbar {
+            display: none;
         }
-
-        .chip-btn:hover, .chip-btn.active {
-            background: #0d6efd;
-            color: #ffffff;
-            border-color: #0d6efd;
+        .no-scrollbar {
+            -ms-overflow-style: none;
+            scrollbar-width: none;
         }
     </style>
 </head>
@@ -150,7 +297,6 @@
             const [activeOpd, setActiveOpd] = useState(null);
             const [workspaceEntries, setWorkspaceEntries] = useState([]);
             const [newTreatmentNote, setNewTreatmentNote] = useState('');
-            const [emrTab, setEmrTab] = useState('vitals');
             const [installPrompt, setInstallPrompt] = useState(null);
 
             // Auth state
@@ -162,7 +308,7 @@
             const [newPin, setNewPin] = useState('');
             const [confirmPin, setConfirmPin] = useState('');
 
-            // OPD Prescription Consultation Controls State (Full Copy of HMS Functionality)
+            // OPD Prescription Consultation Controls State
             const [prescForm, setPrescForm] = useState({
                 chief_complaints: '',
                 finding_examinations: '',
@@ -511,6 +657,13 @@
                 return searchQuery === '' || name.includes(q) || uhid.includes(q) || ipdCode.includes(q) || docName.includes(q);
             });
 
+            const getInitials = (nameStr) => {
+                if (!nameStr) return 'P';
+                const parts = nameStr.trim().split(' ');
+                if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase();
+                return nameStr.substring(0, 2).toUpperCase();
+            };
+
             // -------------------------------------------------------------
             // RENDER: LOCK SCREEN (PIN AUTHENTICATION)
             // -------------------------------------------------------------
@@ -518,9 +671,9 @@
                 return (
                     <div className="lock-screen-overlay">
                         <div className="lock-card">
-                            <div className="p-4 text-center bg-primary text-white">
-                                <i className="bi bi-person-badge-fill display-4 d-block mb-2"></i>
-                                <h5 className="fw-bold mb-0">DoctorCare EMR App</h5>
+                            <div className="p-4 text-center bg-primary text-white" style={{background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)'}}>
+                                <i className="bi bi-person-badge-fill display-4 d-block mb-2 text-primary"></i>
+                                <h5 className="fw-bold mb-1">Doctor EMR Mobile Portal</h5>
                                 <small className="opacity-75">30-Day Device Authentication Security</small>
                             </div>
 
@@ -532,7 +685,7 @@
                                         <div className="mb-3">
                                             <label className="form-label fw-bold small">Select Doctor Profile</label>
                                             <select 
-                                                className="form-select"
+                                                className="form-select form-select-lg fs-6"
                                                 value={authDocId}
                                                 onChange={(e) => setAuthDocId(e.target.value)}
                                             >
@@ -548,7 +701,7 @@
                                             <input 
                                                 type="password" 
                                                 maxLength="6"
-                                                className="form-control text-center fs-4"
+                                                className="form-control text-center fs-3 letter-spacing-2"
                                                 placeholder="••••"
                                                 value={pinInput}
                                                 onChange={(e) => setPinInput(e.target.value)}
@@ -559,8 +712,8 @@
                                             </small>
                                         </div>
 
-                                        <button className="btn btn-primary w-100 py-2 fw-bold" onClick={handleVerifyPin}>
-                                            <i className="bi bi-unlock-fill me-1"></i> Unlock Doctor App
+                                        <button className="btn btn-primary btn-lg w-100 py-3 fw-bold shadow-sm" onClick={handleVerifyPin}>
+                                            <i className="bi bi-unlock-fill me-2"></i> Unlock Doctor Portal
                                         </button>
                                     </div>
                                 ) : (
@@ -573,7 +726,7 @@
                                             <input 
                                                 type="password" 
                                                 maxLength="6"
-                                                className="form-control text-center fs-4"
+                                                className="form-control text-center fs-3"
                                                 placeholder="••••"
                                                 value={newPin}
                                                 onChange={(e) => setNewPin(e.target.value)}
@@ -584,14 +737,14 @@
                                             <input 
                                                 type="password" 
                                                 maxLength="6"
-                                                className="form-control text-center fs-4"
+                                                className="form-control text-center fs-3"
                                                 placeholder="••••"
                                                 value={confirmPin}
                                                 onChange={(e) => setConfirmPin(e.target.value)}
                                             />
                                         </div>
-                                        <button className="btn btn-success w-100 py-2 fw-bold" onClick={handleSaveNewPin}>
-                                            <i className="bi bi-check-circle-fill me-1"></i> Save PIN &amp; Unlock
+                                        <button className="btn btn-success btn-lg w-100 py-3 fw-bold shadow-sm" onClick={handleSaveNewPin}>
+                                            <i className="bi bi-check-circle-fill me-2"></i> Save PIN &amp; Unlock
                                         </button>
                                     </div>
                                 )}
@@ -608,18 +761,22 @@
                 <div>
                     {/* Top Doctor Header */}
                     <header className="doctor-header d-flex justify-content-between align-items-center">
-                        <div className="d-flex align-items-center">
-                            <i className="bi bi-person-badge-fill text-primary fs-3 me-2"></i>
+                        <div className="d-flex align-items-center gap-2">
+                            <div className="avatar-circle">
+                                {getInitials(authenticatedDoctor.name)}
+                            </div>
                             <div>
                                 <h6 className="mb-0 fw-bold">{authenticatedDoctor.name}</h6>
-                                <small className="text-light opacity-75">Doctor EMR <span className="badge bg-success ms-1" style={{fontSize: '9px'}}>30-Day Device Auth</span></small>
+                                <small className="text-light opacity-75" style={{fontSize: '11px'}}>
+                                    Doctor EMR <span className="badge bg-success ms-1" style={{fontSize: '9px'}}>● Active Session</span>
+                                </small>
                             </div>
                         </div>
                         <div className="d-flex align-items-center gap-2">
-                            <button className="btn btn-sm btn-outline-light" onClick={() => { fetchOpdAppointments(authenticatedDoctor.id); fetchIpdPatients(authenticatedDoctor.id); }} title="Refresh">
+                            <button className="btn btn-sm btn-outline-light rounded-circle p-2" style={{width: '36px', height: '36px'}} onClick={() => { fetchOpdAppointments(authenticatedDoctor.id); fetchIpdPatients(authenticatedDoctor.id); }} title="Refresh Queue">
                                 <i className="bi bi-arrow-clockwise"></i>
                             </button>
-                            <button className="btn btn-sm btn-danger" onClick={handleLogout} title="Lock Device Access">
+                            <button className="btn btn-sm btn-danger px-3 py-1 fw-bold rounded-pill" onClick={handleLogout} title="Lock Device Access">
                                 <i className="bi bi-lock-fill me-1"></i> Lock
                             </button>
                         </div>
@@ -629,107 +786,119 @@
                     <main className="container-fluid py-3 px-2 px-md-3">
                         {!activeOpd && !activePatient ? (
                             <div>
-                                {/* Top Main Tabs */}
-                                <ul className="nav nav-pills mb-3 gap-2">
-                                    <li className="nav-item">
-                                        <button className={`nav-link ${mainTab === 'opd' ? 'active' : ''}`} onClick={() => setMainTab('opd')}>
-                                            <i className="bi bi-calendar-check-fill me-1"></i> OPD Appointments ({opdAppointments.length})
-                                        </button>
-                                    </li>
-                                    <li className="nav-item">
-                                        <button className={`nav-link ${mainTab === 'ipd' ? 'active' : ''}`} onClick={() => setMainTab('ipd')}>
-                                            <i className="bi bi-hospital me-1"></i> Admitted IPDs ({ipdPatients.length})
-                                        </button>
-                                    </li>
-                                </ul>
+                                {/* Segmented Tab Controller */}
+                                <div className="segmented-tabs mb-3">
+                                    <button className={`segmented-tab ${mainTab === 'opd' ? 'active' : ''}`} onClick={() => setMainTab('opd')}>
+                                        <i className="bi bi-calendar-check-fill me-2"></i> OPD Appointments ({opdAppointments.length})
+                                    </button>
+                                    <button className={`segmented-tab ${mainTab === 'ipd' ? 'active' : ''}`} onClick={() => setMainTab('ipd')}>
+                                        <i className="bi bi-hospital-fill me-2"></i> Admitted IPDs ({ipdPatients.length})
+                                    </button>
+                                </div>
 
                                 {mainTab === 'opd' ? (
                                     <div>
-                                        {/* Status Filter Badges (Matching HMS Screen) */}
-                                        <div className="d-flex gap-1 mb-3 overflow-auto pb-1">
+                                        {/* Status Filter Pills Bar */}
+                                        <div className="d-flex gap-2 mb-3 overflow-auto no-scrollbar pb-1">
                                             <button 
-                                                className={`btn btn-sm text-nowrap ${opdFilter === 'all' ? 'btn-primary' : 'btn-outline-primary'}`}
+                                                className={`btn btn-sm rounded-pill text-nowrap px-3 ${opdFilter === 'all' ? 'btn-primary fw-bold shadow-sm' : 'btn-white bg-white text-secondary border'}`}
                                                 onClick={() => setOpdFilter('all')}
                                             >
-                                                All <span className="badge bg-white text-primary ms-1">{opdCounts.all}</span>
+                                                All <span className={`badge ms-1 ${opdFilter === 'all' ? 'bg-white text-primary' : 'bg-light text-dark'}`}>{opdCounts.all}</span>
                                             </button>
                                             <button 
-                                                className={`btn btn-sm text-nowrap ${opdFilter === 'waiting' ? 'btn-primary' : 'btn-outline-primary'}`}
+                                                className={`btn btn-sm rounded-pill text-nowrap px-3 ${opdFilter === 'waiting' ? 'btn-primary fw-bold shadow-sm' : 'btn-white bg-white text-secondary border'}`}
                                                 onClick={() => setOpdFilter('waiting')}
                                             >
-                                                Waiting <span className="badge bg-white text-primary ms-1">{opdCounts.waiting}</span>
+                                                Waiting <span className={`badge ms-1 ${opdFilter === 'waiting' ? 'bg-white text-primary' : 'bg-light text-dark'}`}>{opdCounts.waiting}</span>
                                             </button>
                                             <button 
-                                                className={`btn btn-sm text-nowrap ${opdFilter === 'visited' ? 'btn-info text-dark' : 'btn-outline-info'}`}
+                                                className={`btn btn-sm rounded-pill text-nowrap px-3 ${opdFilter === 'visited' ? 'btn-info text-dark fw-bold shadow-sm' : 'btn-white bg-white text-secondary border'}`}
                                                 onClick={() => setOpdFilter('visited')}
                                             >
-                                                Visited <span className="badge bg-white text-dark ms-1">{opdCounts.visited}</span>
+                                                Visited <span className={`badge ms-1 ${opdFilter === 'visited' ? 'bg-white text-dark' : 'bg-light text-dark'}`}>{opdCounts.visited}</span>
                                             </button>
                                             <button 
-                                                className={`btn btn-sm text-nowrap ${opdFilter === 'booked' ? 'btn-secondary' : 'btn-outline-secondary'}`}
+                                                className={`btn btn-sm rounded-pill text-nowrap px-3 ${opdFilter === 'booked' ? 'btn-secondary fw-bold shadow-sm' : 'btn-white bg-white text-secondary border'}`}
                                                 onClick={() => setOpdFilter('booked')}
                                             >
-                                                Booked <span className="badge bg-white text-secondary ms-1">{opdCounts.booked}</span>
+                                                Booked <span className={`badge ms-1 ${opdFilter === 'booked' ? 'bg-white text-secondary' : 'bg-light text-dark'}`}>{opdCounts.booked}</span>
                                             </button>
                                         </div>
 
-                                        {/* Search Input */}
-                                        <div className="input-group mb-3">
-                                            <span className="input-group-text bg-white"><i className="bi bi-search"></i></span>
+                                        {/* Search Input Bar */}
+                                        <div className="input-group mb-3 shadow-sm rounded-pill overflow-hidden bg-white border">
+                                            <span className="input-group-text bg-white border-0 ps-3 text-secondary"><i className="bi bi-search"></i></span>
                                             <input 
                                                 type="text" 
-                                                className="form-control" 
-                                                placeholder="Search Patient Name, UHID, OPD No..." 
+                                                className="form-control border-0 py-2 shadow-none" 
+                                                placeholder="Search Patient Name, UHID, OPD Code..." 
                                                 value={searchQuery}
                                                 onChange={(e) => setSearchQuery(e.target.value)}
                                             />
+                                            {searchQuery && (
+                                                <button className="btn bg-white border-0 pe-3 text-secondary" onClick={() => setSearchQuery('')}>
+                                                    <i className="bi bi-x-circle-fill"></i>
+                                                </button>
+                                            )}
                                         </div>
 
-                                        {/* MOBILE PROFESSIONAL CARDS LIST (Phones < 768px - NO Left-Right Scroll Needed!) */}
+                                        {/* ULTRA-PREMIUM MOBILE PATIENT CARDS LIST */}
                                         <div className="d-block d-md-none">
                                             {filteredOpdAppointments.length === 0 ? (
-                                                <div className="text-center text-muted py-4 bg-white rounded border">
+                                                <div className="text-center text-muted py-5 bg-white rounded-4 border shadow-sm">
+                                                    <i className="bi bi-person-x fs-1 text-secondary opacity-50 d-block mb-2"></i>
                                                     No OPD appointments found for selected filter.
                                                 </div>
                                             ) : (
                                                 filteredOpdAppointments.map(app => {
-                                                    const statusBadgeClass = app.status_key === 'waiting' ? 'bg-primary' 
-                                                        : app.status_key === 'visited' ? 'bg-info text-dark' 
-                                                        : app.status_key === 'booked' ? 'bg-secondary' : 'bg-danger';
+                                                    const statusClass = app.status_key === 'waiting' ? 'waiting' 
+                                                        : app.status_key === 'visited' ? 'visited' 
+                                                        : 'booked';
 
                                                     return (
-                                                        <div key={app.opd_id} className={`mobile-patient-card ${app.status_key}`}>
+                                                        <div key={app.opd_id} className={`mobile-patient-card ${statusClass}`}>
+                                                            {/* Card Header Row */}
                                                             <div className="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
                                                                 <div className="d-flex align-items-center gap-2">
-                                                                    <span className="badge bg-dark fs-6 px-2 py-1">Q #{app.queue_no || app.opd_no || '1'}</span>
-                                                                    <span className={`badge ${statusBadgeClass} text-uppercase px-2 py-1`}>
-                                                                        {app.status_label}
+                                                                    <span className="queue-badge">Q #{app.queue_no || app.opd_no || '1'}</span>
+                                                                    <span className={`status-pill ${statusClass}`}>
+                                                                        ● {app.status_label}
                                                                     </span>
                                                                 </div>
-                                                                <strong className="text-dark small">{app.opd_code}</strong>
+                                                                <code className="fw-bold text-slate-800 fs-6">{app.opd_code}</code>
                                                             </div>
 
-                                                            <div className="mb-3">
-                                                                <h6 className="fw-bold text-primary mb-1 fs-5">{app.patient_display_name}</h6>
-                                                                <div className="d-flex flex-wrap gap-2 text-muted small">
-                                                                    <span className="badge bg-light text-dark border">
-                                                                        <i className="bi bi-person me-1"></i>{app.age_display || '47 Year'} / {app.gender_label}
-                                                                    </span>
-                                                                    <span className="badge bg-light text-danger border">
-                                                                        <i className="bi bi-card-text me-1"></i>{app.uhid || '-'}
-                                                                    </span>
-                                                                    <span className="badge bg-light text-secondary border">
-                                                                        <i className="bi bi-cash me-1"></i>{app.opd_type || 'Cash'}
-                                                                    </span>
+                                                            {/* Patient Info Row with Avatar */}
+                                                            <div className="d-flex align-items-start gap-3 mb-3">
+                                                                <div className="patient-avatar-circle">
+                                                                    {getInitials(app.patient_display_name)}
+                                                                </div>
+                                                                <div className="flex-grow-1">
+                                                                    <h5 className="fw-bold text-slate-900 mb-1" style={{fontSize: '16px'}}>
+                                                                        {app.patient_display_name}
+                                                                    </h5>
+                                                                    <div className="d-flex flex-wrap gap-1 align-items-center mt-1">
+                                                                        <span className="badge bg-slate-100 text-dark border px-2 py-1" style={{fontSize: '11px'}}>
+                                                                            <i className="bi bi-person-fill text-primary me-1"></i>{app.age_display || '47 Year'} • {app.gender_label}
+                                                                        </span>
+                                                                        <span className="badge bg-rose-50 text-danger border border-danger-subtle px-2 py-1" style={{fontSize: '11px'}}>
+                                                                            <i className="bi bi-card-text me-1"></i>{app.uhid || '-'}
+                                                                        </span>
+                                                                        <span className="badge bg-emerald-50 text-success border border-success-subtle px-2 py-1" style={{fontSize: '11px'}}>
+                                                                            <i className="bi bi-wallet2 me-1"></i>{app.opd_type || 'Cash'}
+                                                                        </span>
+                                                                    </div>
                                                                 </div>
                                                             </div>
 
+                                                            {/* Action Button Row */}
                                                             <div>
                                                                 <button 
-                                                                    className="btn btn-primary w-100 fw-bold py-2 shadow-sm"
+                                                                    className="btn btn-action-primary w-100 py-2.5"
                                                                     onClick={() => openOpdConsultation(app)}
                                                                 >
-                                                                    <i className="bi bi-file-earmark-medical me-1"></i> Consult Patient
+                                                                    <i className="bi bi-file-earmark-medical-fill me-2"></i> Consult Patient
                                                                 </button>
                                                             </div>
                                                         </div>
@@ -739,7 +908,7 @@
                                         </div>
 
                                         {/* DESKTOP TABLE VIEW (Monitors >= 768px) */}
-                                        <div className="card shadow-sm border-0 d-none d-md-block">
+                                        <div className="card shadow-sm border-0 d-none d-md-block rounded-4 overflow-hidden">
                                             <div className="card-body p-0 table-responsive">
                                                 <table className="table table-hover align-middle mb-0">
                                                     <thead className="table-light">
@@ -769,7 +938,7 @@
                                                                 return (
                                                                     <tr key={app.opd_id}>
                                                                         <td>
-                                                                            <span className={`badge ${statusBadgeClass} text-uppercase`}>
+                                                                            <span className={`badge ${statusBadgeClass} text-uppercase px-2 py-1`}>
                                                                                 {app.status_label}
                                                                             </span>
                                                                         </td>
@@ -778,12 +947,12 @@
                                                                             <div className="fw-bold text-primary">{app.patient_display_name}</div>
                                                                             <small className="text-muted">({app.age_display || '47 Year'} / {app.gender_label})</small>
                                                                         </td>
-                                                                        <td><span className="badge bg-secondary-subtle text-dark fs-6">{app.queue_no || app.opd_no || '1'}</span></td>
+                                                                        <td><span className="badge bg-dark text-white fs-6">{app.queue_no || app.opd_no || '1'}</span></td>
                                                                         <td><code>{app.uhid || '-'}</code></td>
                                                                         <td><small className="text-muted">{app.opd_type || 'Cash'}</small></td>
                                                                         <td className="text-center">
                                                                             <button 
-                                                                                className="btn btn-sm btn-outline-primary fw-bold me-1"
+                                                                                className="btn btn-sm btn-action-primary px-3"
                                                                                 onClick={() => openOpdConsultation(app)}
                                                                             >
                                                                                 <i className="bi bi-file-earmark-medical me-1"></i> Consult
@@ -803,12 +972,12 @@
                                        ADMITTED IPD PATIENTS LIST (ASSIGNED TO DOCTOR)
                                        ------------------------------------------------------------- */
                                     <div>
-                                        {/* Search Input */}
-                                        <div className="input-group mb-3">
-                                            <span className="input-group-text bg-white"><i className="bi bi-search"></i></span>
+                                        {/* Search Input Bar */}
+                                        <div className="input-group mb-3 shadow-sm rounded-pill overflow-hidden bg-white border">
+                                            <span className="input-group-text bg-white border-0 ps-3 text-secondary"><i className="bi bi-search"></i></span>
                                             <input 
                                                 type="text" 
-                                                className="form-control" 
+                                                className="form-control border-0 py-2 shadow-none" 
                                                 placeholder="Search Admitted Patient Name, UHID, IPD Code..." 
                                                 value={searchQuery}
                                                 onChange={(e) => setSearchQuery(e.target.value)}
@@ -818,43 +987,49 @@
                                         {/* MOBILE CARDS LIST VIEW FOR IPD (Phones < 768px) */}
                                         <div className="d-block d-md-none">
                                             {filteredIpdPatients.length === 0 ? (
-                                                <div className="text-center text-muted py-4 bg-white rounded border">
-                                                    <i className="bi bi-hospital fs-1 d-block text-secondary mb-2"></i>
+                                                <div className="text-center text-muted py-5 bg-white rounded-4 border shadow-sm">
+                                                    <i className="bi bi-hospital fs-1 d-block text-secondary opacity-50 mb-2"></i>
                                                     No Admitted IPD Patients found.
                                                 </div>
                                             ) : (
                                                 filteredIpdPatients.map(pat => (
-                                                    <div key={pat.ipd_id} className="mobile-patient-card" style={{borderLeft: '5px solid #198754'}}>
+                                                    <div key={pat.ipd_id} className="mobile-patient-card" style={{borderLeft: '6px solid #16a34a'}}>
                                                         <div className="d-flex justify-content-between align-items-center mb-2 pb-2 border-bottom">
-                                                            <span className="badge bg-success text-uppercase px-2 py-1">Current Admission</span>
-                                                            <strong className="text-dark small">{pat.ipd_code}</strong>
+                                                            <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1 rounded-pill fw-bold" style={{fontSize: '11px'}}>
+                                                                ● Current Admission
+                                                            </span>
+                                                            <code className="fw-bold text-dark fs-6">{pat.ipd_code}</code>
                                                         </div>
 
-                                                        <div className="mb-3">
-                                                            <h6 className="fw-bold text-primary mb-1 fs-5">{pat.patient_display_name}</h6>
-                                                            <small className="text-muted d-block mb-2">
-                                                                {pat.rname ? `S/D/W of ${pat.rname}` : `(${pat.age_display} / ${pat.gender_label})`}
-                                                            </small>
+                                                        <div className="d-flex align-items-start gap-3 mb-3">
+                                                            <div className="patient-avatar-circle" style={{background: '#f0fdf4', color: '#16a34a', borderColor: '#bbf7d0'}}>
+                                                                {getInitials(pat.patient_display_name)}
+                                                            </div>
+                                                            <div className="flex-grow-1">
+                                                                <h5 className="fw-bold text-slate-900 mb-1" style={{fontSize: '16px'}}>
+                                                                    {pat.patient_display_name}
+                                                                </h5>
+                                                                <small className="text-muted d-block mb-2" style={{fontSize: '12px'}}>
+                                                                    {pat.rname ? `S/D/W of ${pat.rname}` : `(${pat.age_display} • ${pat.gender_label})`}
+                                                                </small>
 
-                                                            <div className="d-flex flex-wrap gap-2 mb-2">
-                                                                <span className="badge bg-primary-subtle text-primary border">
-                                                                    <i className="bi bi-door-closed me-1"></i>{pat.bed_label}
-                                                                </span>
-                                                                <span className="badge bg-light text-danger border">
-                                                                    <i className="bi bi-card-text me-1"></i>{pat.uhid}
-                                                                </span>
-                                                                <span className="badge bg-light text-dark border">
-                                                                    <i className="bi bi-person-badge me-1"></i>{pat.assigned_doctors || pat.r_doc_name || `Dr. ${authenticatedDoctor.name}`}
-                                                                </span>
+                                                                <div className="d-flex flex-wrap gap-1">
+                                                                    <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1" style={{fontSize: '11px'}}>
+                                                                        <i className="bi bi-door-closed me-1"></i>{pat.bed_label}
+                                                                    </span>
+                                                                    <span className="badge bg-rose-50 text-danger border border-danger-subtle px-2 py-1" style={{fontSize: '11px'}}>
+                                                                        <i className="bi bi-card-text me-1"></i>{pat.uhid}
+                                                                    </span>
+                                                                </div>
                                                             </div>
                                                         </div>
 
                                                         <div>
                                                             <button 
-                                                                className="btn btn-success w-100 fw-bold py-2 shadow-sm"
+                                                                className="btn btn-action-success w-100 py-2.5"
                                                                 onClick={() => openIpdWorkspace(pat)}
                                                             >
-                                                                <i className="bi bi-heart-pulse-fill me-1"></i> Bedside Workspace
+                                                                <i className="bi bi-heart-pulse-fill me-2"></i> Open Bedside Workspace
                                                             </button>
                                                         </div>
                                                     </div>
@@ -863,7 +1038,7 @@
                                         </div>
 
                                         {/* DESKTOP TABLE VIEW FOR IPD (Monitors >= 768px) */}
-                                        <div className="card shadow-sm border-0 d-none d-md-block">
+                                        <div className="card shadow-sm border-0 d-none d-md-block rounded-4 overflow-hidden">
                                             <div className="card-body p-0 table-responsive">
                                                 <table className="table table-hover align-middle mb-0">
                                                     <thead className="table-light">
@@ -907,7 +1082,7 @@
                                                                     </td>
                                                                     <td className="text-center">
                                                                         <button 
-                                                                            className="btn btn-sm btn-primary fw-bold"
+                                                                            className="btn btn-sm btn-action-success px-3"
                                                                             onClick={() => openIpdWorkspace(pat)}
                                                                         >
                                                                             <i className="bi bi-heart-pulse-fill me-1"></i> Bedside Workspace
@@ -929,39 +1104,43 @@
                                ------------------------------------------------------------- */
                             <div>
                                 <div className="d-flex justify-content-between align-items-center mb-3">
-                                    <button className="btn btn-sm btn-outline-dark" onClick={() => setActivePatient(null)}>
+                                    <button className="btn btn-sm btn-outline-dark rounded-pill px-3" onClick={() => setActivePatient(null)}>
                                         <i className="bi bi-arrow-left me-1"></i> Back to Admitted IPDs
                                     </button>
-                                    <span className="badge bg-success fs-6">Status: CURRENT ADMISSION</span>
+                                    <span className="badge bg-success-subtle text-success border border-success-subtle px-3 py-1 rounded-pill fw-bold">
+                                        ● CURRENT ADMISSION
+                                    </span>
                                 </div>
 
-                                <div className="card shadow-sm mb-3 border-0 bg-primary text-white">
+                                <div className="card shadow-sm mb-3 border-0 bg-primary text-white rounded-4" style={{background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)'}}>
                                     <div className="card-body p-3">
                                         <h5 className="fw-bold mb-1">{activePatient.patient_display_name}</h5>
-                                        <small className="opacity-90 me-3">Demographics: {activePatient.age_display} / {activePatient.gender_label}</small>
-                                        <small className="opacity-90 me-3">UHID: {activePatient.uhid}</small>
-                                        <small className="opacity-90 me-3">IPD Code: {activePatient.ipd_code}</small>
-                                        <small className="opacity-90">Bed: {activePatient.bed_label}</small>
+                                        <div className="d-flex flex-wrap gap-2 opacity-90 small mt-2">
+                                            <span className="badge bg-white text-dark">{activePatient.age_display} • {activePatient.gender_label}</span>
+                                            <span className="badge bg-white text-danger">UHID: {activePatient.uhid}</span>
+                                            <span className="badge bg-white text-primary">IPD: {activePatient.ipd_code}</span>
+                                            <span className="badge bg-white text-success">Bed: {activePatient.bed_label}</span>
+                                        </div>
                                     </div>
                                 </div>
 
                                 {/* Write Doctor Round Note / Treatment Order */}
-                                <div className="card p-3 shadow-sm border-0 mb-3">
-                                    <label className="form-label fw-bold small text-dark mb-1"><i className="bi bi-pencil-square text-primary me-1"></i> Write Doctor Round Clinical Note / Treatment Order</label>
-                                    <textarea className="form-control form-control-sm mb-2" rows="3" placeholder="Enter clinical observations, daily round progress note, or bedside treatment instructions..." value={newTreatmentNote} onChange={e => setNewTreatmentNote(e.target.value)}></textarea>
-                                    <button className="btn btn-primary btn-sm fw-bold align-self-end" onClick={handleSaveTreatmentNote}>
+                                <div className="card p-3 shadow-sm border-0 mb-3 rounded-4">
+                                    <label className="form-label fw-bold small text-dark mb-2"><i className="bi bi-pencil-square text-primary me-1"></i> Write Doctor Round Clinical Note / Treatment Order</label>
+                                    <textarea className="form-control mb-2 rounded-3" rows="3" placeholder="Enter clinical observations, daily round progress note, or bedside treatment instructions..." value={newTreatmentNote} onChange={e => setNewTreatmentNote(e.target.value)}></textarea>
+                                    <button className="btn btn-action-primary btn-sm fw-bold align-self-end px-4" onClick={handleSaveTreatmentNote}>
                                         <i className="bi bi-send-fill me-1"></i> Save Round Note
                                     </button>
                                 </div>
 
                                 {/* Bedside Log Entries */}
-                                <div className="card p-3 shadow-sm border-0">
+                                <div className="card p-3 shadow-sm border-0 rounded-4">
                                     <h6 className="fw-bold mb-3"><i className="bi bi-journal-medical me-1"></i> Bedside Clinical Log History</h6>
                                     {workspaceEntries.length === 0 ? (
                                         <p className="text-muted small">No bedside log entries recorded yet.</p>
                                     ) : (
                                         workspaceEntries.map(e => (
-                                            <div key={e.id} className="p-2 border rounded bg-light mb-2">
+                                            <div key={e.id} className="p-3 border rounded-3 bg-light mb-2">
                                                 <div className="d-flex justify-content-between align-items-center mb-1">
                                                     <span className="badge bg-secondary" style={{fontSize: '10px'}}>{e.entry_type}</span>
                                                     <small className="text-muted" style={{fontSize: '10px'}}>{e.recorded_at} - by {e.recorded_by}</small>
@@ -978,36 +1157,38 @@
                                ------------------------------------------------------------- */
                             <div>
                                 <div className="d-flex justify-content-between align-items-center mb-3">
-                                    <button className="btn btn-sm btn-outline-dark" onClick={() => setActiveOpd(null)}>
+                                    <button className="btn btn-sm btn-outline-dark rounded-pill px-3" onClick={() => setActiveOpd(null)}>
                                         <i className="bi bi-arrow-left me-1"></i> Back to Appointments
                                     </button>
                                     <div className="d-flex gap-2">
-                                        <button className="btn btn-sm btn-outline-secondary fw-bold" onClick={() => window.open(`/Opd/opd_lettre_pdf/${activeOpd.opd_id}?layout=content_only`, '_blank')}>
+                                        <button className="btn btn-sm btn-outline-secondary fw-bold rounded-pill px-3" onClick={() => window.open(`/Opd/opd_lettre_pdf/${activeOpd.opd_id}?layout=content_only`, '_blank')}>
                                             <i className="bi bi-printer me-1"></i> Print PDF
                                         </button>
-                                        <button className="btn btn-sm btn-success fw-bold" onClick={handleSaveOpdPrescription}>
+                                        <button className="btn btn-sm btn-action-success fw-bold rounded-pill px-3" onClick={handleSaveOpdPrescription}>
                                             <i className="bi bi-check-circle-fill me-1"></i> Save &amp; Mark Visited
                                         </button>
                                     </div>
                                 </div>
 
                                 {/* Patient Header Card */}
-                                <div className="card shadow-sm mb-3 border-0 bg-primary text-white">
+                                <div className="card shadow-sm mb-3 border-0 rounded-4 text-white" style={{background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)'}}>
                                     <div className="card-body p-3">
                                         <div className="d-flex justify-content-between align-items-start">
                                             <div>
                                                 <h5 className="fw-bold mb-1">{activeOpd.patient_display_name}</h5>
-                                                <small className="opacity-90 me-2">Age / Gender: {activeOpd.age_display || '47 Year'} / {activeOpd.gender_label}</small>
-                                                <small className="opacity-90 me-2">UHID: {activeOpd.uhid}</small>
-                                                <small className="opacity-90">OPD No: {activeOpd.opd_code}</small>
+                                                <div className="d-flex flex-wrap gap-1 opacity-90 small mt-2">
+                                                    <span className="badge bg-white text-dark">{activeOpd.age_display || '47 Year'} • {activeOpd.gender_label}</span>
+                                                    <span className="badge bg-white text-danger">UHID: {activeOpd.uhid}</span>
+                                                    <span className="badge bg-white text-primary">OPD: {activeOpd.opd_code}</span>
+                                                </div>
                                             </div>
-                                            <span className="badge bg-white text-primary fs-6">Q #{activeOpd.queue_no || '1'}</span>
+                                            <span className="queue-badge fs-6">Q #{activeOpd.queue_no || '1'}</span>
                                         </div>
                                     </div>
                                 </div>
 
-                                {/* Vitals Entry Bar (Native HMS Controls) */}
-                                <div className="card p-3 shadow-sm border-0 mb-3">
+                                {/* Vitals Entry Bar */}
+                                <div className="card p-3 shadow-sm border-0 mb-3 rounded-4">
                                     <h6 className="fw-bold mb-2 text-danger small"><i className="bi bi-heart-pulse-fill me-1"></i> Patient Vitals (BP, Pulse, Temp, SpO2, Weight)</h6>
                                     <div className="row g-2">
                                         <div className="col-4 col-md-2">
@@ -1042,43 +1223,43 @@
                                 </div>
 
                                 {/* Chief Complaints */}
-                                <div className="card p-3 shadow-sm border-0 mb-3">
+                                <div className="card p-3 shadow-sm border-0 mb-3 rounded-4">
                                     <label className="form-label fw-bold small text-dark mb-1"><i className="bi bi-chat-square-text text-primary me-1"></i> Chief Complaints</label>
                                     <div className="d-flex gap-1 flex-wrap mb-2">
                                         {COMPLAINT_CHIPS.map(c => (
                                             <button key={c} type="button" className="chip-btn" onClick={() => appendChipText('chief_complaints', c)}>+ {c}</button>
                                         ))}
                                     </div>
-                                    <textarea className="form-control form-control-sm" rows="2" placeholder="Enter chief complaints..." value={prescForm.chief_complaints} onChange={e => setPrescForm({...prescForm, chief_complaints: e.target.value})}></textarea>
+                                    <textarea className="form-control form-control-sm rounded-3" rows="2" placeholder="Enter chief complaints..." value={prescForm.chief_complaints} onChange={e => setPrescForm({...prescForm, chief_complaints: e.target.value})}></textarea>
                                 </div>
 
                                 {/* Clinical Examination & Findings */}
-                                <div className="card p-3 shadow-sm border-0 mb-3">
+                                <div className="card p-3 shadow-sm border-0 mb-3 rounded-4">
                                     <label className="form-label fw-bold small text-dark mb-1"><i className="bi bi-clipboard2-pulse text-info me-1"></i> Clinical Examination &amp; Findings</label>
                                     <div className="d-flex gap-1 flex-wrap mb-2">
                                         {EXAMINATION_CHIPS.map(e => (
                                             <button key={e} type="button" className="chip-btn" onClick={() => appendChipText('finding_examinations', e)}>+ {e}</button>
                                         ))}
                                     </div>
-                                    <textarea className="form-control form-control-sm" rows="2" placeholder="Enter clinical examination & findings..." value={prescForm.finding_examinations} onChange={e => setPrescForm({...prescForm, finding_examinations: e.target.value})}></textarea>
+                                    <textarea className="form-control form-control-sm rounded-3" rows="2" placeholder="Enter clinical examination & findings..." value={prescForm.finding_examinations} onChange={e => setPrescForm({...prescForm, finding_examinations: e.target.value})}></textarea>
                                 </div>
 
                                 {/* Provisional Diagnosis */}
-                                <div className="card p-3 shadow-sm border-0 mb-3">
+                                <div className="card p-3 shadow-sm border-0 mb-3 rounded-4">
                                     <label className="form-label fw-bold small text-dark mb-1"><i className="bi bi-stethoscope text-primary me-1"></i> Provisional Diagnosis</label>
                                     <div className="d-flex gap-1 flex-wrap mb-2">
                                         {DIAGNOSIS_CHIPS.map(d => (
                                             <button key={d} type="button" className="chip-btn" onClick={() => appendChipText('provisional_diagnosis', d)}>+ {d}</button>
                                         ))}
                                     </div>
-                                    <textarea className="form-control form-control-sm" rows="2" placeholder="Enter diagnosis..." value={prescForm.provisional_diagnosis} onChange={e => setPrescForm({...prescForm, provisional_diagnosis: e.target.value})}></textarea>
+                                    <textarea className="form-control form-control-sm rounded-3" rows="2" placeholder="Enter diagnosis..." value={prescForm.provisional_diagnosis} onChange={e => setPrescForm({...prescForm, provisional_diagnosis: e.target.value})}></textarea>
                                 </div>
 
-                                {/* Medicines Rx Repeater (Native HMS Controls) */}
-                                <div className="card p-3 shadow-sm border-0 mb-3">
+                                {/* Medicines Rx Repeater */}
+                                <div className="card p-3 shadow-sm border-0 mb-3 rounded-4">
                                     <div className="d-flex justify-content-between align-items-center mb-2">
                                         <label className="form-label fw-bold small text-dark mb-0"><i className="bi bi-capsule text-success me-1"></i> Prescribed Medicines (Rx)</label>
-                                        <button className="btn btn-sm btn-outline-success py-0 px-2 fw-bold" style={{fontSize: '11px'}} onClick={() => addMedicineRow()}>+ Add Drug</button>
+                                        <button className="btn btn-sm btn-outline-success py-0 px-2 fw-bold rounded-pill" style={{fontSize: '11px'}} onClick={() => addMedicineRow()}>+ Add Drug</button>
                                     </div>
 
                                     <div className="d-flex gap-1 flex-wrap mb-2">
@@ -1088,7 +1269,7 @@
                                     </div>
 
                                     {medicines.map((med, idx) => (
-                                        <div key={idx} className="p-2 border rounded bg-light mb-2">
+                                        <div key={idx} className="p-2 border rounded-3 bg-light mb-2">
                                             <div className="d-flex justify-content-between align-items-center mb-1">
                                                 <span className="badge bg-secondary" style={{fontSize: '10px'}}>Item #{idx + 1}</span>
                                                 {medicines.length > 1 && (
@@ -1127,17 +1308,17 @@
                                 </div>
 
                                 {/* Lab Investigations & Advice */}
-                                <div className="card p-3 shadow-sm border-0 mb-3">
+                                <div className="card p-3 shadow-sm border-0 mb-3 rounded-4">
                                     <label className="form-label fw-bold small text-dark mb-1"><i className="bi bi-file-earmark-medical text-warning me-1"></i> Lab &amp; Pathology Orders</label>
                                     <div className="d-flex gap-1 flex-wrap mb-2">
                                         {LAB_CHIPS.map(lab => (
                                             <button key={lab} type="button" className="chip-btn" onClick={() => appendChipText('investigation', lab)}>+ {lab}</button>
                                         ))}
                                     </div>
-                                    <textarea className="form-control form-control-sm mb-3" rows="2" placeholder="Lab / Pathology / Radiology tests..." value={prescForm.investigation} onChange={e => setPrescForm({...prescForm, investigation: e.target.value})}></textarea>
+                                    <textarea className="form-control form-control-sm mb-3 rounded-3" rows="2" placeholder="Lab / Pathology / Radiology tests..." value={prescForm.investigation} onChange={e => setPrescForm({...prescForm, investigation: e.target.value})}></textarea>
 
                                     <label className="form-label fw-bold small text-dark mb-1"><i className="bi bi-card-text me-1"></i> General Advice &amp; Instructions</label>
-                                    <textarea className="form-control form-control-sm mb-3" rows="2" placeholder="Doctor's advice to patient..." value={prescForm.advice} onChange={e => setPrescForm({...prescForm, advice: e.target.value})}></textarea>
+                                    <textarea className="form-control form-control-sm mb-3 rounded-3" rows="2" placeholder="Doctor's advice to patient..." value={prescForm.advice} onChange={e => setPrescForm({...prescForm, advice: e.target.value})}></textarea>
 
                                     <label className="form-label fw-bold small text-dark mb-1"><i className="bi bi-calendar-event me-1"></i> Follow-up Next Visit</label>
                                     <div className="d-flex gap-1 mb-2">
@@ -1145,15 +1326,15 @@
                                             <button key={d} type="button" className="chip-btn" onClick={() => setPrescForm({...prescForm, next_visit: d})}>{d}</button>
                                         ))}
                                     </div>
-                                    <input type="text" className="form-control form-control-sm" placeholder="Follow-up advice" value={prescForm.next_visit} onChange={e => setPrescForm({...prescForm, next_visit: e.target.value})} />
+                                    <input type="text" className="form-control form-control-sm rounded-3" placeholder="Follow-up advice" value={prescForm.next_visit} onChange={e => setPrescForm({...prescForm, next_visit: e.target.value})} />
                                 </div>
 
                                 <div className="d-flex gap-2 mb-4">
-                                    <button className="btn btn-outline-secondary btn-lg w-50 fw-bold py-2 shadow-sm" onClick={() => window.open(`/Opd/opd_lettre_pdf/${activeOpd.opd_id}?layout=content_only`, '_blank')}>
+                                    <button className="btn btn-outline-secondary btn-lg w-50 fw-bold py-2.5 rounded-3 shadow-sm" onClick={() => window.open(`/Opd/opd_lettre_pdf/${activeOpd.opd_id}?layout=content_only`, '_blank')}>
                                         <i className="bi bi-printer me-1"></i> Print PDF
                                     </button>
-                                    <button className="btn btn-success btn-lg w-50 fw-bold py-2 shadow-sm" onClick={handleSaveOpdPrescription}>
-                                        <i className="bi bi-check-circle-fill me-1"></i> Save &amp; Mark Visited
+                                    <button className="btn btn-action-success btn-lg w-50 fw-bold py-2.5 rounded-3 shadow-sm" onClick={handleSaveOpdPrescription}>
+                                        <i className="bi bi-check-circle-fill me-1"></i> Save &amp; Complete Visit
                                     </button>
                                 </div>
                             </div>
