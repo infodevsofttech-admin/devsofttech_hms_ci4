@@ -1,0 +1,509 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Nursing Care PWA App</title>
+    <link rel="manifest" href="/App/Nursing/manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3304/3304567.png">
+    
+    <!-- Bootstrap 5 CSS & Icons -->
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <!-- React 18 & ReactDOM UMD -->
+    <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        :root {
+            --primary-bg: #0f172a;
+            --card-bg: #1e293b;
+            --accent-blue: #2563eb;
+            --accent-green: #10b981;
+            --accent-amber: #f59e0b;
+            --accent-red: #ef4444;
+        }
+
+        body {
+            background-color: #f8fafc;
+            font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            -webkit-user-select: none;
+        }
+
+        .nursing-header {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            color: #ffffff;
+            padding: 12px 16px;
+            box-shadow: 0 4px 12px rgba(0,0,0,0.15);
+            position: sticky;
+            top: 0;
+            z-index: 1000;
+        }
+
+        .bed-card {
+            border: 1px solid #e2e8f0;
+            border-radius: 12px;
+            background: #ffffff;
+            transition: all 0.2s ease-in-out;
+            cursor: pointer;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+        }
+
+        .bed-card:hover, .bed-card:active {
+            transform: translateY(-2px);
+            box-shadow: 0 8px 16px rgba(37,99,235,0.12);
+            border-color: #2563eb;
+        }
+
+        .bed-status-available { border-top: 4px solid var(--accent-green); }
+        .bed-status-occupied { border-top: 4px solid var(--accent-blue); }
+        .bed-status-cleaning { border-top: 4px solid var(--accent-amber); }
+        .bed-status-maintenance { border-top: 4px solid var(--accent-red); }
+
+        .badge-soft-green { background: #d1fae5; color: #065f46; }
+        .badge-soft-blue { background: #dbeafe; color: #1e40af; }
+        .badge-soft-amber { background: #fef3c7; color: #92400e; }
+        .badge-soft-red { background: #fee2e2; color: #991b1b; }
+
+        .nav-pills .nav-link {
+            border-radius: 8px;
+            font-weight: 500;
+            color: #64748b;
+        }
+
+        .nav-pills .nav-link.active {
+            background-color: var(--accent-blue);
+            color: #ffffff;
+        }
+
+        .install-pwa-banner {
+            background: linear-gradient(90deg, #2563eb, #3b82f6);
+            color: white;
+            padding: 10px 16px;
+            font-size: 14px;
+        }
+
+        .equipment-chip {
+            font-size: 11px;
+            padding: 2px 6px;
+            border-radius: 4px;
+            background: #f1f5f9;
+            color: #475569;
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect } = React;
+
+        function NursingApp() {
+            const [beds, setBeds] = useState([]);
+            const [loading, setLoading] = useState(true);
+            const [selectedWard, setSelectedWard] = useState('all');
+            const [searchQuery, setSearchQuery] = useState('');
+            const [activeBed, setActiveBed] = useState(null);
+            const [activeTab, setActiveTab] = useState('vitals');
+            const [workspaceData, setWorkspaceData] = useState([]);
+            const [installPrompt, setInstallPrompt] = useState(null);
+            const [nurses, setNurses] = useState([]);
+
+            // Form state for workspace
+            const [vitalsForm, setVitalsForm] = useState({
+                temperature_f: '', pulse_rate: '', resp_rate: '',
+                bp_systolic: '', bp_diastolic: '', spo2: '', weight_kg: '', general_note: ''
+            });
+
+            const [fluidForm, setFluidForm] = useState({
+                fluid_direction: 'intake', fluid_route: 'IV (Intravenous)',
+                fluid_amount_ml: '', general_note: ''
+            });
+
+            const [treatmentForm, setTreatmentForm] = useState({
+                treatment_text: '', general_note: ''
+            });
+
+            const [selectedNurseId, setSelectedNurseId] = useState(0);
+
+            // Fetch live bed list from CI4 API
+            const fetchBeds = async () => {
+                try {
+                    setLoading(true);
+                    const res = await fetch('/api/v1/nursing/beds');
+                    const json = await res.json();
+                    if (json.status === 1 && json.data) {
+                        setBeds(json.data.beds || []);
+                    }
+                } catch (err) {
+                    console.error('Failed to load beds', err);
+                } finally {
+                    setLoading(false);
+                }
+            };
+
+            // Fetch active nurses
+            const fetchNurses = async () => {
+                try {
+                    const res = await fetch('/api/v1/nursing/nurses');
+                    const json = await res.json();
+                    if (json.status === 1 && json.data) {
+                        setNurses(json.data);
+                    }
+                } catch (err) {
+                    console.error('Failed to load nurses', err);
+                }
+            };
+
+            // Fetch patient workspace entries
+            const fetchWorkspace = async (ipdId) => {
+                try {
+                    const res = await fetch(`/api/v1/nursing/workspace/${ipdId}`);
+                    const json = await res.json();
+                    if (json.status === 1) {
+                        setWorkspaceData(json.entries || []);
+                    }
+                } catch (err) {
+                    console.error('Failed to load workspace data', err);
+                }
+            };
+
+            useEffect(() => {
+                fetchBeds();
+                fetchNurses();
+
+                // PWA Install Prompt Listener
+                window.addEventListener('beforeinstallprompt', (e) => {
+                    e.preventDefault();
+                    setInstallPrompt(e);
+                });
+
+                // Service worker registration
+                if ('serviceWorker' in navigator) {
+                    navigator.serviceWorker.register('/App/Nursing/sw.js')
+                        .then(() => console.log('Nursing PWA Service Worker Registered'))
+                        .catch(err => console.error('SW failed', err));
+                }
+            }, []);
+
+            const openBedWorkspace = (bed) => {
+                setActiveBed(bed);
+                if (bed.current_ipd_id) {
+                    fetchWorkspace(bed.current_ipd_id);
+                } else {
+                    setWorkspaceData([]);
+                }
+            };
+
+            const handleSaveEntry = async (entryType, formData) => {
+                if (!activeBed || !activeBed.current_ipd_id) {
+                    alert('Please select an occupied bed to save entries.');
+                    return;
+                }
+
+                const body = new URLSearchParams();
+                body.append('entry_type', entryType);
+                body.append('recorded_by_id', selectedNurseId);
+                Object.keys(formData).forEach(key => body.append(key, formData[key]));
+
+                try {
+                    const res = await fetch(`/api/v1/nursing/entry/save/${activeBed.current_ipd_id}`, {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+                        body: body.toString()
+                    });
+                    const json = await res.json();
+                    if (json.status === 1) {
+                        alert(json.message || 'Saved successfully');
+                        fetchWorkspace(activeBed.current_ipd_id);
+                    } else {
+                        alert(json.message || 'Failed to save');
+                    }
+                } catch (err) {
+                    alert('Error submitting entry');
+                }
+            };
+
+            const uniqueWards = ['all', ...new Set(beds.map(b => b.ward_name).filter(Boolean))];
+
+            const filteredBeds = beds.filter(bed => {
+                const matchesWard = selectedWard === 'all' || bed.ward_name === selectedWard;
+                const matchesSearch = searchQuery === '' || 
+                    (bed.bed_code && bed.bed_code.toLowerCase().includes(searchQuery.toLowerCase())) ||
+                    (bed.ward_name && bed.ward_name.toLowerCase().includes(searchQuery.toLowerCase()));
+                return matchesWard && matchesSearch;
+            });
+
+            return (
+                <div>
+                    {/* PWA Install Banner */}
+                    {installPrompt && (
+                        <div className="install-pwa-banner d-flex justify-content-between align-items-center">
+                            <span><i className="bi bi-download me-2"></i> Install Nursing App on your device home screen</span>
+                            <button className="btn btn-sm btn-light text-primary fw-bold" onClick={() => installPrompt.prompt()}>Install App</button>
+                        </div>
+                    )}
+
+                    {/* Top Nursing Header */}
+                    <header className="nursing-header d-flex justify-content-between align-items-center">
+                        <div className="d-flex align-items-center">
+                            <i className="bi bi-heart-pulse-fill text-danger fs-4 me-2"></i>
+                            <div>
+                                <h6 className="mb-0 fw-bold">NursingCare PWA</h6>
+                                <small className="text-light opacity-75">Bedside Care & Vitals Logger</small>
+                            </div>
+                        </div>
+                        <div className="d-flex align-items-center gap-2">
+                            <select 
+                                className="form-select form-select-sm bg-dark text-white border-secondary"
+                                value={selectedNurseId}
+                                onChange={(e) => setSelectedNurseId(e.target.value)}
+                            >
+                                <option value="0">-- Staff Nurse --</option>
+                                {nurses.map(n => (
+                                    <option key={n.id} value={n.id}>[{n.nurse_code}] {n.name}</option>
+                                ))}
+                            </select>
+                            <button className="btn btn-sm btn-outline-light" onClick={fetchBeds}>
+                                <i className="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                    </header>
+
+                    {/* Main Container */}
+                    <main className="container-fluid py-3">
+                        {!activeBed ? (
+                            <div>
+                                {/* Filter Bar */}
+                                <div className="row g-2 mb-3 align-items-center">
+                                    <div className="col-md-4 col-12">
+                                        <div className="input-group">
+                                            <span className="input-group-text bg-white"><i className="bi bi-search"></i></span>
+                                            <input 
+                                                type="text" 
+                                                className="form-control" 
+                                                placeholder="Search Bed Code or Ward..." 
+                                                value={searchQuery}
+                                                onChange={(e) => setSearchQuery(e.target.value)}
+                                            />
+                                        </div>
+                                    </div>
+                                    <div className="col-md-8 col-12 d-flex gap-2 overflow-auto">
+                                        {uniqueWards.map(ward => (
+                                            <button 
+                                                key={ward}
+                                                className={`btn btn-sm text-nowrap ${selectedWard === ward ? 'btn-primary' : 'btn-outline-secondary'}`}
+                                                onClick={() => setSelectedWard(ward)}
+                                            >
+                                                {ward === 'all' ? 'All Wards' : ward}
+                                            </button>
+                                        ))}
+                                    </div>
+                                </div>
+
+                                {/* Bed Matrix */}
+                                {loading ? (
+                                    <div className="text-center py-5">
+                                        <div className="spinner-border text-primary" role="status"></div>
+                                        <p className="mt-2 text-muted">Loading Hospital Bed Matrix...</p>
+                                    </div>
+                                ) : (
+                                    <div className="row g-3">
+                                        {filteredBeds.map(bed => {
+                                            const statusClass = `bed-status-${bed.bed_status || 'available'}`;
+                                            const badgeClass = bed.bed_status === 'occupied' ? 'badge-soft-blue' 
+                                                : bed.bed_status === 'available' ? 'badge-soft-green' 
+                                                : bed.bed_status === 'cleaning' ? 'badge-soft-amber' : 'badge-soft-red';
+
+                                            return (
+                                                <div key={bed.id} className="col-lg-3 col-md-4 col-sm-6 col-12">
+                                                    <div className={`card p-3 bed-card ${statusClass}`} onClick={() => openBedWorkspace(bed)}>
+                                                        <div className="d-flex justify-content-between align-items-start mb-2">
+                                                            <div>
+                                                                <h5 className="fw-bold mb-0 text-dark">{bed.bed_code || bed.bed_number}</h5>
+                                                                <small className="text-muted">{bed.ward_name || 'General Ward'}</small>
+                                                            </div>
+                                                            <span className={`badge ${badgeClass} text-uppercase`}>
+                                                                {bed.bed_status || 'Available'}
+                                                            </span>
+                                                        </div>
+                                                        
+                                                        {bed.current_ipd_id ? (
+                                                            <div className="mt-2 pt-2 border-top">
+                                                                <span className="badge bg-primary me-1">IPD #{bed.current_ipd_id}</span>
+                                                                <small className="text-muted">Patient Admitted</small>
+                                                            </div>
+                                                        ) : (
+                                                            <small className="text-success mt-2 d-block"><i className="bi bi-check-circle-fill me-1"></i> Ready for Admission</small>
+                                                        )}
+
+                                                        <div className="d-flex gap-1 mt-2 flex-wrap">
+                                                            {bed.has_oxygen == 1 && <span className="equipment-chip"><i className="bi bi-wind text-info"></i> O2</span>}
+                                                            {bed.has_suction == 1 && <span className="equipment-chip"><i className="bi bi-funnel text-primary"></i> Suction</span>}
+                                                            {bed.has_monitor == 1 && <span className="equipment-chip"><i className="bi bi-activity text-danger"></i> Monitor</span>}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            );
+                                        })}
+                                    </div>
+                                )}
+                            </div>
+                        ) : (
+                            /* Bedside Patient Workspace */
+                            <div>
+                                <button className="btn btn-sm btn-outline-dark mb-3" onClick={() => setActiveBed(null)}>
+                                    <i className="bi bi-arrow-left me-1"></i> Back to Bed Matrix
+                                </button>
+
+                                <div className="card shadow-sm mb-3 border-0">
+                                    <div className="card-body bg-light rounded d-flex justify-content-between align-items-center flex-wrap gap-2">
+                                        <div>
+                                            <h5 className="fw-bold mb-1 text-primary">Bed: {activeBed.bed_code}</h5>
+                                            <span className="badge bg-secondary me-2">{activeBed.ward_name}</span>
+                                            {activeBed.current_ipd_id ? (
+                                                <span className="badge bg-primary">IPD ID: #{activeBed.current_ipd_id}</span>
+                                            ) : (
+                                                <span className="badge bg-success">Unoccupied Bed</span>
+                                            )}
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Tabs */}
+                                <ul className="nav nav-pills mb-3 gap-2">
+                                    <li className="nav-item">
+                                        <button className={`nav-link ${activeTab === 'vitals' ? 'active' : ''}`} onClick={() => setActiveTab('vitals')}>
+                                            <i className="bi bi-activity me-1"></i> Vitals Entry
+                                        </button>
+                                    </li>
+                                    <li className="nav-item">
+                                        <button className={`nav-link ${activeTab === 'fluid' ? 'active' : ''}`} onClick={() => setActiveTab('fluid')}>
+                                            <i className="bi bi-droplet me-1"></i> Fluid Intake / Output
+                                        </button>
+                                    </li>
+                                    <li className="nav-item">
+                                        <button className={`nav-link ${activeTab === 'treatment' ? 'active' : ''}`} onClick={() => setActiveTab('treatment')}>
+                                            <i className="bi bi-prescription2 me-1"></i> Treatment Note
+                                        </button>
+                                    </li>
+                                </ul>
+
+                                {/* Tab Content */}
+                                <div className="card p-3 shadow-sm border-0">
+                                    {activeTab === 'vitals' && (
+                                        <div>
+                                            <h6 className="fw-bold mb-3"><i className="bi bi-heart-pulse text-danger me-1"></i> Log Patient Vitals</h6>
+                                            <div className="row g-2">
+                                                <div className="col-md-2 col-6"><label className="form-label small">Temp °F</label><input type="number" step="0.1" class="form-control" value={vitalsForm.temperature_f} onChange={e => setVitalsForm({...vitalsForm, temperature_f: e.target.value})} /></div>
+                                                <div className="col-md-2 col-6"><label className="form-label small">Pulse</label><input type="number" class="form-control" value={vitalsForm.pulse_rate} onChange={e => setVitalsForm({...vitalsForm, pulse_rate: e.target.value})} /></div>
+                                                <div className="col-md-2 col-6"><label className="form-label small">Resp</label><input type="number" class="form-control" value={vitalsForm.resp_rate} onChange={e => setVitalsForm({...vitalsForm, resp_rate: e.target.value})} /></div>
+                                                <div className="col-md-2 col-6"><label className="form-label small">SBP</label><input type="number" class="form-control" value={vitalsForm.bp_systolic} onChange={e => setVitalsForm({...vitalsForm, bp_systolic: e.target.value})} /></div>
+                                                <div className="col-md-2 col-6"><label className="form-label small">DBP</label><input type="number" class="form-control" value={vitalsForm.bp_diastolic} onChange={e => setVitalsForm({...vitalsForm, bp_diastolic: e.target.value})} /></div>
+                                                <div className="col-md-2 col-6"><label className="form-label small">SpO2 %</label><input type="number" class="form-control" value={vitalsForm.spo2} onChange={e => setVitalsForm({...vitalsForm, spo2: e.target.value})} /></div>
+                                                <div className="col-12"><label className="form-label small">Nursing Observation</label><textarea className="form-control" rows="2" value={vitalsForm.general_note} onChange={e => setVitalsForm({...vitalsForm, general_note: e.target.value})}></textarea></div>
+                                                <div className="col-12 mt-3">
+                                                    <button className="btn btn-primary" onClick={() => handleSaveEntry('vitals', vitalsForm)}>Save Vitals Entry</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'fluid' && (
+                                        <div>
+                                            <h6 className="fw-bold mb-3"><i className="bi bi-droplet text-primary me-1"></i> Log Fluid Intake / Output</h6>
+                                            <div className="row g-2">
+                                                <div className="col-md-3 col-6">
+                                                    <label className="form-label small">Direction</label>
+                                                    <select className="form-select" value={fluidForm.fluid_direction} onChange={e => setFluidForm({...fluidForm, fluid_direction: e.target.value})}>
+                                                        <option value="intake">Intake (In)</option>
+                                                        <option value="output">Output (Out)</option>
+                                                    </select>
+                                                </div>
+                                                <div className="col-md-4 col-6">
+                                                    <label className="form-label small">Route</label>
+                                                    <input type="text" className="form-control" value={fluidForm.fluid_route} onChange={e => setFluidForm({...fluidForm, fluid_route: e.target.value})} />
+                                                </div>
+                                                <div className="col-md-3 col-6">
+                                                    <label className="form-label small">Amount (ml)</label>
+                                                    <input type="number" className="form-control" value={fluidForm.fluid_amount_ml} onChange={e => setFluidForm({...fluidForm, fluid_amount_ml: e.target.value})} />
+                                                </div>
+                                                <div className="col-12"><label className="form-label small">Observation</label><textarea className="form-control" rows="2" value={fluidForm.general_note} onChange={e => setFluidForm({...fluidForm, general_note: e.target.value})}></textarea></div>
+                                                <div className="col-12 mt-3">
+                                                    <button className="btn btn-primary" onClick={() => handleSaveEntry('fluid', fluidForm)}>Save Fluid Entry</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {activeTab === 'treatment' && (
+                                        <div>
+                                            <h6 className="fw-bold mb-3"><i className="bi bi-prescription2 text-warning me-1"></i> Log Treatment / Procedure Note</h6>
+                                            <div className="row g-2">
+                                                <div className="col-12"><label className="form-label small">Treatment Given</label><textarea className="form-control" rows="3" value={treatmentForm.treatment_text} onChange={e => setTreatmentForm({...treatmentForm, treatment_text: e.target.value})}></textarea></div>
+                                                <div className="col-12"><label className="form-label small">Additional Note</label><textarea className="form-control" rows="2" value={treatmentForm.general_note} onChange={e => setTreatmentForm({...treatmentForm, general_note: e.target.value})}></textarea></div>
+                                                <div className="col-12 mt-3">
+                                                    <button className="btn btn-primary" onClick={() => handleSaveEntry('treatment', treatmentForm)}>Save Treatment Note</button>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Workspace Entries Table */}
+                                    <div className="mt-4 border-top pt-3">
+                                        <h6 className="fw-bold mb-2">Live Entries History ({workspaceData.length})</h6>
+                                        <div className="table-responsive">
+                                            <table className="table table-sm table-striped">
+                                                <thead>
+                                                    <tr>
+                                                        <th>Recorded At</th>
+                                                        <th>Type</th>
+                                                        <th>Staff</th>
+                                                        <th>Summary</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {workspaceData.length === 0 ? (
+                                                        <tr><td colSpan="4" className="text-center text-muted py-3">No nursing entries found for this admission.</td></tr>
+                                                    ) : (
+                                                        workspaceData.map(entry => (
+                                                            <tr key={entry.id}>
+                                                                <td><small>{entry.recorded_at}</small></td>
+                                                                <td><span className="badge bg-secondary text-uppercase">{entry.entry_type}</span></td>
+                                                                <td><small>{entry.recorded_by || 'Staff'}</small></td>
+                                                                <td>
+                                                                    <small>
+                                                                        {entry.entry_type === 'vitals' && `T: ${entry.temperature_c ? ((entry.temperature_c * 9/5) + 32).toFixed(1) + '°F' : '-'}, P: ${entry.pulse_rate || '-'}, BP: ${entry.bp_systolic || '-'}/${entry.bp_diastolic || '-'}, SpO2: ${entry.spo2 || '-'}`}
+                                                                        {entry.entry_type === 'fluid' && `${entry.fluid_direction?.toUpperCase()} - ${entry.fluid_route}: ${entry.fluid_amount_ml}ml`}
+                                                                        {entry.entry_type === 'treatment' && entry.treatment_text}
+                                                                        {entry.general_note && ` (${entry.general_note})`}
+                                                                    </small>
+                                                                </td>
+                                                            </tr>
+                                                        ))
+                                                    )}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+                    </main>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<NursingApp />);
+    </script>
+</body>
+</html>
