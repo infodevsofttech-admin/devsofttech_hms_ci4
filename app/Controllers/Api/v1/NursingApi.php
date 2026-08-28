@@ -79,6 +79,96 @@ class NursingApi extends BaseController
     }
 
     /**
+     * POST api/v1/nursing/auth/verify-pin
+     */
+    public function verifyPin()
+    {
+        $post = $this->request->getPost() ?: ($this->request->getJSON(true) ?? []);
+        $nurseId = (int) ($post['nurse_id'] ?? 0);
+        $nurseCode = trim((string) ($post['nurse_code'] ?? ''));
+        $pin = trim((string) ($post['pin'] ?? ''));
+
+        if ($nurseId <= 0 && $nurseCode !== '') {
+            $nurseRow = db_connect()->table('nurse_master')->where('nurse_code', $nurseCode)->get()->getRowArray();
+        } else {
+            $nurseRow = $this->nurseModel->getNurseById($nurseId);
+        }
+
+        if (! $nurseRow) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Nurse profile not found']);
+        }
+
+        $hashedPin = (string) ($nurseRow['app_pin'] ?? '');
+
+        if ($hashedPin === '') {
+            return $this->response->setJSON([
+                'status' => 2,
+                'message' => 'PIN not set yet. Please set a 4-6 digit PIN.',
+                'nurse' => [
+                    'id' => (int) $nurseRow['id'],
+                    'nurse_code' => $nurseRow['nurse_code'],
+                    'name' => $nurseRow['name'],
+                    'designation' => $nurseRow['designation'] ?? 'Staff Nurse',
+                ],
+            ]);
+        }
+
+        $isValid = password_verify($pin, $hashedPin) || ($pin === $hashedPin);
+
+        if (! $isValid) {
+            return $this->response->setStatusCode(401)->setJSON(['status' => 0, 'message' => 'Incorrect Security PIN']);
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'message' => 'Authentication successful',
+            'nurse' => [
+                'id' => (int) $nurseRow['id'],
+                'nurse_code' => $nurseRow['nurse_code'],
+                'name' => $nurseRow['name'],
+                'designation' => $nurseRow['designation'] ?? 'Staff Nurse',
+            ],
+        ]);
+    }
+
+    /**
+     * POST api/v1/nursing/auth/set-pin
+     */
+    public function setPin()
+    {
+        $post = $this->request->getPost() ?: ($this->request->getJSON(true) ?? []);
+        $nurseId = (int) ($post['nurse_id'] ?? 0);
+        $newPin = trim((string) ($post['new_pin'] ?? ''));
+        $oldPin = trim((string) ($post['old_pin'] ?? ''));
+
+        if ($nurseId <= 0 || strlen($newPin) < 4) {
+            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Valid Nurse ID and 4-6 digit PIN are required']);
+        }
+
+        $nurseRow = $this->nurseModel->getNurseById($nurseId);
+        if (! $nurseRow) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Nurse profile not found']);
+        }
+
+        $hashedPin = (string) ($nurseRow['app_pin'] ?? '');
+        if ($hashedPin !== '' && $oldPin !== '') {
+            $isValid = password_verify($oldPin, $hashedPin) || ($oldPin === $hashedPin);
+            if (! $isValid) {
+                return $this->response->setStatusCode(401)->setJSON(['status' => 0, 'message' => 'Current PIN is incorrect']);
+            }
+        }
+
+        $this->nurseModel->updateNurse($nurseId, [
+            'app_pin' => password_hash($newPin, PASSWORD_DEFAULT),
+        ]);
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'message' => 'Security PIN updated successfully',
+        ]);
+    }
+
+    /**
      * GET api/v1/nursing/workspace/(:num)
      */
     public function workspace(int $ipdId)

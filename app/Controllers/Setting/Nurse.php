@@ -53,6 +53,8 @@ class Nurse extends BaseController
             $nurseCode = 'NUR-' . str_pad((string) (rand(100, 999)), 3, '0', STR_PAD_LEFT);
         }
 
+        $appPin = trim((string) ($this->request->getPost('app_pin') ?? ''));
+
         $payload = [
             'nurse_code' => $nurseCode,
             'name' => $name,
@@ -66,6 +68,10 @@ class Nurse extends BaseController
             'department' => $department,
             'is_active' => $isActive,
         ];
+
+        if ($appPin !== '') {
+            $payload['app_pin'] = password_hash($appPin, PASSWORD_DEFAULT);
+        }
 
         if ($id > 0) {
             $this->nurseModel->updateNurse($id, $payload);

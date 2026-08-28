@@ -52,6 +52,9 @@ class NurseModel
         if (! in_array('designation', $fields, true)) {
             $this->db->query("ALTER TABLE nurse_master ADD COLUMN designation VARCHAR(100) NULL AFTER gender");
         }
+        if (! in_array('app_pin', $fields, true)) {
+            $this->db->query("ALTER TABLE nurse_master ADD COLUMN app_pin VARCHAR(255) NULL AFTER email");
+        }
 
         return true;
     }

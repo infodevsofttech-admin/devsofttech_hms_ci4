@@ -83,6 +83,9 @@
                                         <?php endif; ?>
                                     </td>
                                     <td class="text-end pe-3">
+                                        <button type="button" class="btn btn-outline-dark btn-sm py-0 px-2 me-1 btn-qr-nurse" data-code="<?= esc($nurse['nurse_code']) ?>" data-name="<?= esc($nurse['name']) ?>">
+                                            <i class="bi bi-qr-code"></i> QR
+                                        </button>
                                         <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 btn-edit-nurse" data-id="<?= (int)$nurse['id'] ?>">
                                             <i class="bi bi-pencil-square"></i> Edit
                                         </button>
@@ -185,6 +188,15 @@
                             <label class="form-label fw-bold small mb-1">Email Address</label>
                             <input type="email" class="form-control form-control-sm" id="nurse_email" name="email" placeholder="Email address">
                         </div>
+
+                        <!-- App Security PIN Section -->
+                        <div class="col-md-6 mt-2">
+                            <div class="p-2 bg-warning-subtle border border-warning rounded">
+                                <label class="form-label fw-bold small text-dark mb-1"><i class="bi bi-key me-1"></i> Mobile App Security PIN</label>
+                                <input type="password" maxlength="6" class="form-control form-control-sm" id="nurse_app_pin" name="app_pin" placeholder="Set or update 4-6 digit PIN">
+                                <small class="text-muted" style="font-size: 10px;">Used by nurse to login to NursingCare PWA App</small>
+                            </div>
+                        </div>
                     </div>
                 </div>
                 <div class="modal-footer bg-light py-2">
@@ -198,11 +210,34 @@
     </div>
 </div>
 
+<!-- Modal for Nurse App QR Code -->
+<div class="modal fade" id="nurseQrModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-dialog-centered modal-sm">
+        <div class="modal-content text-center">
+            <div class="modal-header bg-light py-2">
+                <h5 class="modal-title text-primary fs-6 mb-0" id="qrModalTitle"><i class="bi bi-qr-code-scan me-1"></i> Nurse App QR Code</h5>
+                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body py-3">
+                <h6 class="fw-bold mb-0 text-dark" id="qr_nurse_name">Staff Nurse</h6>
+                <span class="badge bg-secondary mb-3" id="qr_nurse_code">NUR-001</span>
+                <div class="p-2 border rounded d-inline-block bg-white shadow-sm mb-3">
+                    <img id="qr_code_img" src="" alt="Nurse App QR Code" style="width: 180px; height: 180px;" />
+                </div>
+                <p class="small text-muted mb-0" style="font-size: 11px;">Scan with mobile phone to open <strong>NursingCare PWA</strong> for this nurse profile.</p>
+            </div>
+            <div class="modal-footer bg-light py-2 justify-content-center">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
 <script>
 (function() {
     var saveUrl = '<?= base_url('setting/admin/nurse/save') ?>';
     var deleteUrlBase = '<?= base_url('setting/admin/nurse/delete') ?>';
-    var csrfTokenName = '<?= csrf_token() ?>';
+    var appBaseUrl = '<?= base_url('app/nursing') ?>';
 
     function resetNurseForm() {
         $('#nurse_id').val('0');
@@ -215,11 +250,30 @@
         $('#nurse_qualification').val('');
         $('#nurse_contact_no').val('');
         $('#nurse_email').val('');
+        $('#nurse_app_pin').val('');
         $('#nurse_department').val('Nursing');
         $('#nurse_is_active').val('1');
         $('#nurse_form_status').addClass('d-none').text('');
         $('#nurseModalTitle').html('<i class="bi bi-person-plus me-1"></i> Add Nursing Staff');
     }
+
+    $(document).on('click', '.btn-qr-nurse', function() {
+        var code = $(this).data('code') || '';
+        var name = $(this).data('name') || '';
+        var appUrl = appBaseUrl + '?nurse_code=' + encodeURIComponent(code);
+        var qrApiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' + encodeURIComponent(appUrl);
+
+        $('#qr_nurse_name').text(name);
+        $('#qr_nurse_code').text(code);
+        $('#qr_code_img').attr('src', qrApiUrl);
+
+        var modalEl = document.getElementById('nurseQrModal');
+        if (window.bootstrap && window.bootstrap.Modal) {
+            window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
+        } else {
+            $(modalEl).modal('show');
+        }
+    });
 
     $('#btn_add_nurse').on('click', function() {
         resetNurseForm();

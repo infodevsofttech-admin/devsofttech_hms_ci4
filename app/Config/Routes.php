@@ -1571,6 +1571,8 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1'], static funct
     // Nursing PWA APIs
     $routes->get('nursing/beds', 'NursingApi::beds');
     $routes->get('nursing/nurses', 'NursingApi::nurses');
+    $routes->post('nursing/auth/verify-pin', 'NursingApi::verifyPin');
+    $routes->post('nursing/auth/set-pin', 'NursingApi::setPin');
     $routes->get('nursing/workspace/(:num)', 'NursingApi::workspace/$1');
     $routes->post('nursing/entry/save/(:num)', 'NursingApi::saveEntry/$1');
 });
