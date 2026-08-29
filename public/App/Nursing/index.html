@@ -3,12 +3,13 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Nursing Care EMR & Bedside PWA App</title>
+    <title>Nursing Care - HMS Mobile</title>
     <link rel="manifest" href="/App/Nursing/manifest.json">
     <meta name="theme-color" content="#0f172a">
     <meta name="apple-mobile-web-app-capable" content="yes">
     <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-    <link rel="apple-touch-icon" href="https://cdn-icons-png.flaticon.com/512/3304/3304567.png">
+    <link rel="icon" href="/assets/img/logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="/assets/img/logo.png">
     
     <!-- Google Fonts & Bootstrap 5 CSS & Icons -->
     <link rel="preconnect" href="https://fonts.googleapis.com">
@@ -223,7 +224,113 @@
         const DEVICE_AUTH_KEY = 'nursing_pwa_device_auth_v1';
         const THIRTY_DAYS_MS = 30 * 24 * 60 * 60 * 1000;
 
+        const MobileAppsModal = ({ show, onClose, currentApp }) => {
+            if (!show) return null;
+
+            const navigateToApp = (appKey) => {
+                if (appKey === currentApp) {
+                    onClose();
+                    return;
+                }
+                if (appKey === 'doctor') {
+                    window.location.href = '/app/doctor';
+                } else if (appKey === 'nursing') {
+                    window.location.href = '/app/nursing';
+                }
+            };
+
+            return (
+                <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(15, 23, 42, 0.7)', zIndex: 1055, backdropFilter: 'blur(4px)' }} tabIndex="-1">
+                    <div className="modal-dialog modal-dialog-centered px-2">
+                        <div className="modal-content border-0 shadow-lg rounded-4 overflow-hidden">
+                            <div className="modal-header text-white p-3" style={{ background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)' }}>
+                                <div className="d-flex align-items-center gap-2">
+                                    <img src="/assets/img/logo.png" alt="Hospital Logo" style={{ height: '28px', width: 'auto', filter: 'brightness(0) invert(1)' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                                    <h6 className="modal-title fw-bold mb-0 text-white" style={{ fontSize: '15px' }}>
+                                        <i className="bi bi-grid-fill me-1 text-primary"></i> HMS Mobile &amp; PWA Apps Launcher
+                                    </h6>
+                                </div>
+                                <button type="button" className="btn-close btn-close-white" onClick={onClose}></button>
+                            </div>
+                            <div className="modal-body p-3 bg-light">
+                                <label className="form-label fw-bold small text-secondary mb-2" style={{ letterSpacing: '0.5px' }}>
+                                    1. SELECT APPLICATION
+                                </label>
+                                <div className="row g-2 mb-3">
+                                    <div className="col-4">
+                                        <div 
+                                            className={`card p-2 text-center h-100 ${currentApp === 'nursing' ? 'border-2 border-primary bg-primary-subtle shadow-sm' : 'border bg-white text-dark'}`}
+                                            style={{ cursor: 'pointer', borderRadius: '12px' }}
+                                            onClick={() => navigateToApp('nursing')}
+                                        >
+                                            <div className="my-1">
+                                                <i className="bi bi-heart-pulse-fill fs-3 text-primary"></i>
+                                            </div>
+                                            <div className="fw-bold small text-truncate" style={{ fontSize: '12px' }}>Nursing Care</div>
+                                            {currentApp === 'nursing' ? (
+                                                <span className="badge bg-primary mt-1" style={{ fontSize: '9px' }}>● Active App</span>
+                                            ) : (
+                                                <span className="badge bg-info-subtle text-info-emphasis border border-info-subtle mt-1" style={{ fontSize: '9px' }}>Active PWA</span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="col-4">
+                                        <div 
+                                            className={`card p-2 text-center h-100 ${currentApp === 'doctor' ? 'border-2 border-primary bg-primary-subtle shadow-sm' : 'border bg-white text-dark'}`}
+                                            style={{ cursor: 'pointer', borderRadius: '12px' }}
+                                            onClick={() => navigateToApp('doctor')}
+                                        >
+                                            <div className="my-1">
+                                                <i className="bi bi-person-badge-fill fs-3 text-primary"></i>
+                                            </div>
+                                            <div className="fw-bold small text-truncate" style={{ fontSize: '12px' }}>Doctor App</div>
+                                            {currentApp === 'doctor' ? (
+                                                <span className="badge bg-primary mt-1" style={{ fontSize: '9px' }}>● Active App</span>
+                                            ) : (
+                                                <span className="badge bg-success mt-1" style={{ fontSize: '9px' }}>Active PWA</span>
+                                            )}
+                                        </div>
+                                    </div>
+
+                                    <div className="col-4">
+                                        <div 
+                                            className="card p-2 text-center border bg-white text-muted opacity-75 h-100"
+                                            style={{ borderRadius: '12px', cursor: 'not-allowed' }}
+                                        >
+                                            <div className="my-1">
+                                                <i className="bi bi-capsule fs-3 text-secondary"></i>
+                                            </div>
+                                            <div className="fw-bold small text-truncate" style={{ fontSize: '12px' }}>Pharmacy App</div>
+                                            <span className="badge bg-secondary mt-1" style={{ fontSize: '9px' }}>Coming Soon</span>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="p-3 bg-white rounded-3 border text-center shadow-sm">
+                                    <div className="d-flex align-items-center justify-content-center gap-2 mb-2">
+                                        <img src="/assets/img/logo.png" alt="Logo" style={{ height: '28px' }} onError={(e) => e.target.style.display = 'none'} />
+                                        <div className="text-start">
+                                            <div className="fw-bold small text-dark">HMS Unified Mobile Portal</div>
+                                            <div className="small text-muted" style={{ fontSize: '10px' }}>Domain: {window.location.host}</div>
+                                        </div>
+                                    </div>
+                                    <p className="small text-muted mb-2" style={{ fontSize: '11px' }}>
+                                        Tap any active app card above to switch between modules in your mobile app.
+                                    </p>
+                                    <a href="/app" className="btn btn-outline-primary btn-sm w-100 fw-bold rounded-pill" style={{ fontSize: '12px' }}>
+                                        <i className="bi bi-house-door me-1"></i> Open Mobile App Hub
+                                    </a>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            );
+        };
+
         function NursingApp() {
+            const [showAppsModal, setShowAppsModal] = useState(false);
             const [mainTab, setMainTab] = useState('ipd'); // 'ipd' or 'opd'
             const [beds, setBeds] = useState([]);
             const [loading, setLoading] = useState(true);
@@ -701,9 +808,19 @@
             if (!authenticatedNurse) {
                 return (
                     <div className="lock-screen-overlay">
+                        <MobileAppsModal show={showAppsModal} onClose={() => setShowAppsModal(false)} currentApp="nursing" />
                         <div className="lock-card">
-                            <div className="p-4 text-center text-white" style={{background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)'}}>
-                                <i className="bi bi-shield-lock-fill display-4 d-block mb-2 text-success"></i>
+                            <div className="p-4 text-center text-white position-relative" style={{background: 'linear-gradient(135deg, #0f172a 0%, #1e293b 100%)'}}>
+                                <button 
+                                    type="button" 
+                                    className="btn btn-sm btn-outline-light position-absolute top-0 end-0 m-2 rounded-circle" 
+                                    style={{width: '32px', height: '32px', padding: 0}}
+                                    onClick={() => setShowAppsModal(true)}
+                                    title="HMS Mobile & PWA Apps Launcher"
+                                >
+                                    <i className="bi bi-grid-3x3-gap-fill" style={{fontSize: '12px'}}></i>
+                                </button>
+                                <img src="/assets/img/logo.png" alt="Hospital Logo" className="d-block mx-auto mb-2" style={{maxHeight: '40px', filter: 'brightness(0) invert(1)'}} onError={(e) => { e.target.style.display = 'none'; }} />
                                 <h5 className="fw-bold mb-1">Nursing Care Mobile App</h5>
                                 <small className="opacity-75">30-Day Device Security Authentication</small>
                             </div>
@@ -790,6 +907,7 @@
             // -------------------------------------------------------------
             return (
                 <div>
+                    <MobileAppsModal show={showAppsModal} onClose={() => setShowAppsModal(false)} currentApp="nursing" />
                     {/* Header Topbar */}
                     <header className="nursing-header d-flex justify-content-between align-items-center">
                         <div className="d-flex align-items-center gap-2">
@@ -804,6 +922,9 @@
                             </div>
                         </div>
                         <div className="d-flex align-items-center gap-2">
+                            <button className="btn btn-sm btn-outline-light rounded-circle p-2" style={{width: '36px', height: '36px'}} onClick={() => setShowAppsModal(true)} title="HMS Mobile & PWA Apps Launcher">
+                                <i className="bi bi-grid-3x3-gap-fill"></i>
+                            </button>
                             <button className="btn btn-sm btn-outline-light rounded-circle p-2" style={{width: '36px', height: '36px'}} onClick={() => { fetchBeds(); fetchOpdAppointments(opdDateMode); }} title="Refresh">
                                 <i className="bi bi-arrow-clockwise"></i>
                             </button>

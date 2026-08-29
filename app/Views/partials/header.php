@@ -293,8 +293,11 @@
 <div class="modal fade" id="hmsAppsLauncherModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content shadow-lg border-0">
-            <div class="modal-header bg-primary text-white py-2">
-                <h5 class="modal-title fs-6 fw-bold mb-0"><i class="bi bi-grid-3x3-gap-fill me-2"></i> HMS Mobile &amp; PWA Apps Launcher</h5>
+            <div class="modal-header bg-primary text-white py-2" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%) !important;">
+                <h5 class="modal-title fs-6 fw-bold mb-0 d-flex align-items-center gap-2">
+                    <img src="<?= base_url('assets/img/logo.png') ?>" alt="Logo" style="height:24px; width:auto; filter:brightness(0) invert(1);" onError="this.style.display='none'">
+                    <i class="bi bi-grid-3x3-gap-fill me-1 text-primary"></i> HMS Mobile &amp; PWA Apps Launcher
+                </h5>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body p-3">

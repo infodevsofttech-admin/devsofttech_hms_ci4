@@ -1,6 +1,6 @@
 {
   "short_name": "HMS Mobile",
-  "name": "HMS Mobile Care - Doctor EMR",
+  "name": "HMS Hospital Mobile Care",
   "icons": [
     {
       "src": "/assets/img/logo.png",
@@ -14,9 +14,9 @@
       "sizes": "180x180"
     }
   ],
-  "start_url": "/app/doctor",
+  "start_url": "/app",
   "background_color": "#0f172a",
-  "theme_color": "#0d6efd",
+  "theme_color": "#0f172a",
   "display": "standalone",
   "orientation": "portrait"
 }

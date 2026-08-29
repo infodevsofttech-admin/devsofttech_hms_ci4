@@ -1,11 +1,17 @@
 {
-  "short_name": "Nursing Care",
-  "name": "E-Atria IPD Bedside Nursing Care PWA",
+  "short_name": "HMS Mobile",
+  "name": "HMS Mobile Care - Nursing Care",
   "icons": [
     {
-      "src": "https://cdn-icons-png.flaticon.com/512/3304/3304567.png",
+      "src": "/assets/img/logo.png",
       "type": "image/png",
-      "sizes": "512x512"
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/img/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180"
     }
   ],
   "start_url": "/app/nursing",

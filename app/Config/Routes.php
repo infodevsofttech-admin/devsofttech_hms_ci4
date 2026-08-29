@@ -1563,6 +1563,7 @@ $routes->get('Document_Patient/health_document_fhir_preview/(:num)', 'DoctorDocu
  */
 
 // Dedicated PWA Web App Endpoints (Serves React PWAs without touching standard CI4 web views)
+$routes->get('app', 'Api\v1\NursingApi::hubIndex');
 $routes->get('app/nursing', 'Api\v1\NursingApi::pwaIndex');
 $routes->get('app/nursing/(:any)', 'Api\v1\NursingApi::pwaIndex');
 $routes->get('app/doctor', 'Api\v1\DoctorApi::pwaIndex');

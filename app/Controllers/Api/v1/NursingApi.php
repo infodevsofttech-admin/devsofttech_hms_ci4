@@ -27,6 +27,19 @@ class NursingApi extends BaseController
     }
 
     /**
+     * Serves the central Mobile Apps Hub entry point at /app
+     */
+    public function hubIndex()
+    {
+        $hubPath = FCPATH . 'App/index.html';
+        if (file_exists($hubPath)) {
+            return $this->response->setBody(file_get_contents($hubPath));
+        }
+
+        return redirect()->to(base_url('app/nursing'));
+    }
+
+    /**
      * Serves the React PWA app entry point at /app/nursing
      */
     public function pwaIndex()
