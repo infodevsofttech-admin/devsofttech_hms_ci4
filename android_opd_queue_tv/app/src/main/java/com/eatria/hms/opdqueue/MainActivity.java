@@ -53,6 +53,7 @@ public class MainActivity extends AppCompatActivity {
         webSettings.setLoadWithOverviewMode(true);
         webSettings.setBuiltInZoomControls(false);
         webSettings.setSupportZoom(false);
+        webSettings.setCacheMode(WebSettings.LOAD_DEFAULT); // Ensures TV auto-fetches live updates from server
 
         webView.setWebViewClient(new WebViewClient() {
             @Override
