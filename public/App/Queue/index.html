@@ -17,18 +17,8 @@
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
-    
-    <!-- React 18 & ReactDOM UMD -->
-    <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js" crossorigin></script>
-    <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
-    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
 
     <style>
-        :root {
-            --slate-900: #0f172a;
-            --slate-800: #1e293b;
-        }
-
         body {
             background-color: #0b1329;
             font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
@@ -109,7 +99,8 @@
             align-items: center;
             justify-content: space-between;
             box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
-            transition: transform 0.2s ease, box-shadow 0.2s ease;
+            transition: transform 0.2s ease;
+            cursor: pointer;
         }
 
         .tracker-card:focus, :focus-visible {
@@ -119,36 +110,23 @@
             box-shadow: 0 0 20px rgba(245, 158, 11, 0.8) !important;
         }
 
-        .tracker-card.blue {
-            background: linear-gradient(90deg, #2563eb 0%, #1d4ed8 100%);
-        }
+        .card-blue { background: linear-gradient(90deg, #2563eb 0%, #1d4ed8 100%); }
+        .card-green { background: linear-gradient(90deg, #059669 0%, #047857 100%); }
+        .card-cyan { background: linear-gradient(90deg, #0284c7 0%, #0369a1 100%); }
+        .card-darkgreen { background: linear-gradient(90deg, #16a34a 0%, #15803d 100%); }
+        .card-red { background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%); }
 
-        .tracker-card.green {
-            background: linear-gradient(90deg, #059669 0%, #047857 100%);
-        }
-
-        .tracker-card.cyan {
-            background: linear-gradient(90deg, #0284c7 0%, #0369a1 100%);
-        }
-
-        .tracker-card.darkgreen {
-            background: linear-gradient(90deg, #16a34a 0%, #15803d 100%);
-        }
-
-        .tracker-card.red {
-            background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
-        }
-
-        .avatar-box {
-            width: 48px;
-            height: 48px;
+        .avatar-circle {
+            width: 44px;
+            height: 44px;
             border-radius: 50%;
             background: #ffffff;
             color: #0f172a;
             display: flex;
             align-items: center;
             justify-content: center;
-            font-size: 22px;
+            font-size: 20px;
+            font-weight: 800;
             flex-shrink: 0;
             box-shadow: 0 2px 8px rgba(0,0,0,0.2);
             overflow: hidden;
@@ -200,7 +178,7 @@
             width: 220px;
             height: 250px;
             border-radius: 16px;
-            border: 4px solid #ea580c; /* Orange accent frame matching screenshot */
+            border: 4px solid #ea580c;
             box-shadow: 0 10px 25px rgba(234, 88, 12, 0.25);
             object-fit: cover;
             background: #f1f5f9;
@@ -237,266 +215,225 @@
             0% { transform: translateX(100%); }
             100% { transform: translateX(-100%); }
         }
-
-        /* Pulse animation for new called token */
-        .token-pulse {
-            animation: pulse-border 1.5s infinite;
-        }
-
-        @keyframes pulse-border {
-            0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.8); }
-            70% { box-shadow: 0 0 0 16px rgba(245, 158, 11, 0); }
-            100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
-        }
     </style>
 </head>
 <body>
-    <div id="root"></div>
 
-    <script type="text/babel">
-        const { useState, useEffect, useRef } = React;
+    <!-- Top Header -->
+    <header class="tv-header d-flex justify-content-between align-items-center">
+        <div class="d-flex align-items-center gap-3">
+            <img src="/assets/img/logo.png" alt="Hospital Logo" id="hdr_logo" style="height: 38px; width: auto; filter: brightness(0) invert(1);" onError="this.style.display='none'" />
+            <div>
+                <h5 class="mb-0 fw-bold text-white" id="hdr_hosp_name" style="font-size: 18px; letter-spacing: -0.3px;">
+                    E-Atria Multispeciality Hospital
+                </h5>
+                <small class="text-light opacity-75" style="font-size: 11px;">
+                    Live OPD Token Tracker &amp; Patient Calling Display
+                </small>
+            </div>
+        </div>
 
-        function OpdQueueTvApp() {
-            const [trackers, setTrackers] = useState([]);
-            const [ads, setAds] = useState([]);
-            const [currentAdIdx, setCurrentAdIdx] = useState(0);
-            const [hospitalName, setHospitalName] = useState('E-Atria Multispeciality Hospital');
-            const [audioEnabled, setAudioEnabled] = useState(true);
-            const [lastCalledToken, setLastCalledToken] = useState(null);
-            const [currentTime, setCurrentTime] = useState('');
+        <div class="d-flex align-items-center gap-3">
+            <button id="btn_toggle_audio" class="btn btn-sm btn-danger rounded-circle p-2" style="width: 40px; height: 40px;" title="Toggle Voice Announcement">
+                <i id="icon_audio" class="bi bi-volume-up-fill fs-5"></i>
+            </button>
 
-            // Update Live Clock
-            useEffect(() => {
-                const updateClock = () => {
-                    const now = new Date();
-                    setCurrentTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
-                };
-                updateClock();
-                const timer = setInterval(updateClock, 1000);
-                return () => clearInterval(timer);
-            }, []);
+            <div class="bg-dark text-white px-3 py-1.5 rounded-3 border border-secondary shadow-sm text-center">
+                <div class="fw-bold fs-6" id="tv_clock" style="font-family: monospace; letter-spacing: 1px;">00:00:00</div>
+                <div class="small opacity-75" style="font-size: 10px;">LIVE TIME</div>
+            </div>
+        </div>
+    </header>
 
-            // Fetch Live Tokens & Ads from Backend API
-            const fetchQueueData = async () => {
-                try {
-                    const res = await fetch('/api/v1/opd/queue/live');
-                    const json = await res.json();
-                    if (json.status === 1) {
-                        if (json.trackers) setTrackers(json.trackers);
-                        if (json.ads) setAds(json.ads);
-                        if (json.hospital_name) setHospitalName(json.hospital_name);
-                    }
-                } catch (err) {
-                    console.error('Error fetching queue data', err);
-                }
-            };
+    <!-- Main Grid -->
+    <main class="tv-main-grid">
+        <!-- Left: Token Tracker List -->
+        <div class="tracker-column">
+            <div class="tracker-header">
+                <span><i class="bi bi-person-lines-fill me-2"></i> Token Tracker</span>
+                <span class="badge bg-white text-primary rounded-pill px-3 py-1 fs-6">Live Queue</span>
+            </div>
+            <div class="tracker-list" id="tracker_list_container">
+                <!-- Dynamically Populated -->
+            </div>
+        </div>
 
-            // Initial Load & 5s Polling
-            useEffect(() => {
-                fetchQueueData();
-                const interval = setInterval(fetchQueueData, 5000);
-                return () => clearInterval(interval);
-            }, []);
+        <!-- Right: Hospital Showcase Carousel -->
+        <div class="showcase-column">
+            <div class="showcase-header" id="showcase_header">
+                <i class="bi bi-award-fill me-2"></i> Our Experts
+            </div>
+            <div class="showcase-body" id="showcase_body">
+                <!-- Dynamically Populated Slide -->
+            </div>
+        </div>
+    </main>
 
-            // Auto-rotate Right Side Showcase Ads (8 seconds)
-            useEffect(() => {
-                if (ads.length <= 1) return;
-                const timer = setInterval(() => {
-                    setCurrentAdIdx((prev) => (prev + 1) % ads.length);
-                }, 8000);
-                return () => clearInterval(timer);
-            }, [ads]);
+    <!-- Bottom Ticker Bar -->
+    <div class="tv-ticker">
+        <div class="ticker-content" id="ticker_text">
+            <i class="bi bi-info-circle-fill text-warning me-2"></i>
+            Welcome to E-Atria Multispeciality Hospital. Please observe your token number on the screen. Voice announcements will call your turn. For assistance, contact the help desk. &nbsp;&nbsp;&bull;&nbsp;&nbsp; Emergency Helpline: +91-9876543210 &nbsp;&nbsp;&bull;&nbsp;&nbsp; 24/7 Pharmacy &amp; Ambulance Services Available
+        </div>
+    </div>
 
-            // Text-To-Speech Announcement Function
-            const speakToken = (tokenText) => {
-                if (!audioEnabled || !('speechSynthesis' in window)) return;
-                try {
+    <!-- Universal Pure Vanilla JS script (Works 100% on Samsung TV Browser, Smart TVs & PCs) -->
+    <script>
+        var audioEnabled = true;
+        var trackersData = [];
+        var adsData = [];
+        var currentAdIdx = 0;
+        var cardColors = ['card-blue', 'card-green', 'card-cyan', 'card-darkgreen', 'card-red'];
+
+        // Live Clock
+        function updateClock() {
+            var now = new Date();
+            var hours = String(now.getHours()).padStart(2, '0');
+            var minutes = String(now.getMinutes()).padStart(2, '0');
+            var seconds = String(now.getSeconds()).padStart(2, '0');
+            var clockEl = document.getElementById('tv_clock');
+            if (clockEl) clockEl.textContent = hours + ':' + minutes + ':' + seconds;
+        }
+        setInterval(updateClock, 1000);
+        updateClock();
+
+        // Audio Announcement
+        function speakText(text) {
+            if (!audioEnabled) return;
+            try {
+                if ('speechSynthesis' in window) {
                     window.speechSynthesis.cancel();
-                    const utterance = new SpeechSynthesisUtterance(tokenText);
-                    utterance.rate = 0.9;
-                    utterance.pitch = 1.0;
-                    utterance.lang = 'en-US';
-                    window.speechSynthesis.speak(utterance);
-                } catch (e) {
-                    console.error('Speech synthesis error', e);
+                    var msg = new SpeechSynthesisUtterance(text);
+                    msg.rate = 0.9;
+                    msg.lang = 'en-US';
+                    window.speechSynthesis.speak(msg);
                 }
-            };
-
-            // Trigger Voice Announcement when top token updates
-            const announceToken = (item) => {
-                const text = `Token Number ${item.token_no}, please proceed to ${item.name}, ${item.room}`;
-                speakToken(text);
-                setLastCalledToken(item.id);
-            };
-
-            const currentAd = ads[currentAdIdx] || {
-                type: 'doctor_profile',
-                title: 'Our Medical Experts',
-                doctor_name: 'Dr. Prakash Chandwani',
-                specialization: 'Cardiologist',
-                designation: 'Chief Managing Director',
-                image_url: '/assets/img/profile-img.jpg',
-                description: 'Available for OPD Consultations (10:00 AM - 4:00 PM)'
-            };
-
-            // Color Themes for Department Cards
-            const cardColors = ['blue', 'green', 'cyan', 'darkgreen', 'red'];
-
-            return (
-                <div className="d-flex flex-column h-100">
-                    {/* Top TV Header Bar */}
-                    <header className="tv-header d-flex justify-content-between align-items-center">
-                        <div className="d-flex align-items-center gap-3">
-                            <img src="/assets/img/logo.png" alt="Hospital Logo" style={{ height: '38px', width: 'auto', filter: 'brightness(0) invert(1)' }} onError={(e) => { e.target.style.display = 'none'; }} />
-                            <div>
-                                <h5 className="mb-0 fw-bold text-white" style={{ fontSize: '18px', letterSpacing: '-0.3px' }}>
-                                    {hospitalName}
-                                </h5>
-                                <small className="text-light opacity-75" style={{ fontSize: '11px' }}>
-                                    Live OPD Token Tracker &amp; Patient Calling Display
-                                </small>
-                            </div>
-                        </div>
-
-                        <div className="d-flex align-items-center gap-3">
-                            {/* Audio Voice Announcement Toggle */}
-                            <button 
-                                className={`btn btn-sm ${audioEnabled ? 'btn-danger' : 'btn-secondary'} rounded-circle p-2`} 
-                                style={{ width: '40px', height: '40px' }}
-                                onClick={() => setAudioEnabled(!audioEnabled)}
-                                title={audioEnabled ? 'Voice Callout Enabled (Click to Mute)' : 'Voice Callout Muted (Click to Enable)'}
-                            >
-                                <i className={`bi ${audioEnabled ? 'bi-volume-up-fill' : 'bi-volume-mute-fill'} fs-5`}></i>
-                            </button>
-
-                            {/* Live Clock Display */}
-                            <div className="bg-dark text-white px-3 py-1.5 rounded-3 border border-secondary shadow-sm text-center">
-                                <div className="fw-bold fs-6" style={{ fontFamily: 'monospace', letterSpacing: '1px' }}>{currentTime}</div>
-                                <div className="small opacity-75" style={{ fontSize: '10px' }}>LIVE TIME</div>
-                            </div>
-                        </div>
-                    </header>
-
-                    {/* Split Screen Grid (Left: Tokens, Right: Showcase Ads) */}
-                    <main className="tv-main-grid">
-                        {/* LEFT COLUMN: LIVE TOKEN TRACKER */}
-                        <div className="tracker-column">
-                            <div className="tracker-header">
-                                <span><i className="bi bi-person-lines-fill me-2"></i> Token Tracker</span>
-                                <span className="badge bg-white text-primary rounded-pill px-3 py-1 fs-6">Live Queue</span>
-                            </div>
-                            <div className="tracker-list">
-                                {trackers.map((item, idx) => {
-                                    const colorClass = cardColors[idx % cardColors.length];
-                                    return (
-                                        <div 
-                                            key={item.id || idx} 
-                                            tabIndex="0"
-                                            className={`tracker-card ${colorClass} ${lastCalledToken === item.id ? 'token-pulse' : ''}`}
-                                            onClick={() => announceToken(item)}
-                                        >
-                                            <div className="d-flex align-items-center gap-3">
-                                                <div className="avatar-circle" style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#ffffff', color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: '800' }}>
-                                                    {item.icon ? (
-                                                        <i className={`bi ${item.icon} text-primary`}></i>
-                                                    ) : (
-                                                        item.name ? item.name.charAt(0) : 'D'
-                                                    )}
-                                                </div>
-                                                <div>
-                                                    <h5 className="mb-0 fw-extrabold" style={{ fontSize: '19px', fontWeight: '800' }}>{item.name}</h5>
-                                                    <small className="opacity-90" style={{ fontSize: '12px', fontWeight: '500' }}>
-                                                        {item.specialization} &bull; <span className="badge bg-white bg-opacity-25 text-white">{item.room}</span>
-                                                    </small>
-                                                </div>
-                                            </div>
-
-                                            <div className="text-end">
-                                                <div className="token-number-box">{item.token_no}</div>
-                                                <small className="opacity-75" style={{ fontSize: '10px' }}>CURRENT TOKEN</small>
-                                            </div>
-                                        </div>
-                                    );
-                                })}
-                            </div>
-                        </div>
-
-                        {/* RIGHT COLUMN: HOSPITAL AD SHOWCASE & DOCTOR CAROUSEL */}
-                        <div className="showcase-column">
-                            <div className="showcase-header">
-                                <i className="bi bi-award-fill me-2"></i> {currentAd.title || 'Our Experts'}
-                            </div>
-
-                            <div className="showcase-body">
-                                {currentAd.type === 'doctor_profile' ? (
-                                    <div className="d-flex flex-column align-items-center">
-                                        <img 
-                                            src={currentAd.image_url} 
-                                            alt={currentAd.doctor_name} 
-                                            className="doctor-photo-frame"
-                                            onError={(e) => { e.target.src = '/assets/img/profile-img.jpg'; }}
-                                        />
-                                        <h3 className="fw-extrabold text-dark mb-1" style={{ fontWeight: '800', letterSpacing: '-0.5px' }}>
-                                            {currentAd.doctor_name}
-                                        </h3>
-                                        <h5 className="text-primary fw-bold mb-2" style={{ fontSize: '18px' }}>
-                                            {currentAd.specialization}
-                                        </h5>
-                                        <h6 className="text-secondary fw-semibold mb-3" style={{ fontSize: '15px' }}>
-                                            {currentAd.designation}
-                                        </h6>
-                                        <p className="text-muted small max-width-350 px-3" style={{ fontSize: '13px', maxWidth: '420px' }}>
-                                            {currentAd.description}
-                                        </p>
-                                    </div>
-                                ) : (
-                                    <div className="d-flex flex-column align-items-center">
-                                        <img 
-                                            src={currentAd.image_url} 
-                                            alt={currentAd.title} 
-                                            className="ad-banner-img"
-                                            onError={(e) => { e.target.src = '/assets/img/slides-1.jpg'; }}
-                                        />
-                                        <h3 className="fw-extrabold text-dark mb-1" style={{ fontWeight: '800' }}>
-                                            {currentAd.title}
-                                        </h3>
-                                        <h5 className="text-success fw-bold mb-2" style={{ fontSize: '17px' }}>
-                                            {currentAd.tagline}
-                                        </h5>
-                                        <p className="text-muted small px-3" style={{ fontSize: '13px', maxWidth: '420px' }}>
-                                            {currentAd.description}
-                                        </p>
-                                    </div>
-                                )}
-
-                                {/* Slide Indicator Dots */}
-                                <div className="d-flex gap-2 mt-4">
-                                    {ads.map((ad, idx) => (
-                                        <button 
-                                            key={idx}
-                                            className={`btn rounded-circle p-0 transition-all ${currentAdIdx === idx ? 'bg-primary' : 'bg-secondary opacity-50'}`}
-                                            style={{ width: currentAdIdx === idx ? '24px' : '10px', height: '10px', borderRadius: '10px' }}
-                                            onClick={() => setCurrentAdIdx(idx)}
-                                        ></button>
-                                    ))}
-                                </div>
-                            </div>
-                        </div>
-                    </main>
-
-                    {/* Bottom Ticker Bar */}
-                    <div className="tv-ticker">
-                        <div className="ticker-content">
-                            <i className="bi bi-info-circle-fill text-warning me-2"></i>
-                            Welcome to {hospitalName}. Please observe your token number on the screen. Voice announcements will call your turn. For assistance, contact the help desk. &nbsp;&nbsp;&bull;&nbsp;&nbsp; Emergency Helpline: +91-9876543210 &nbsp;&nbsp;&bull;&nbsp;&nbsp; 24/7 Pharmacy &amp; Ambulance Services Available
-                        </div>
-                    </div>
-                </div>
-            );
+            } catch (e) {
+                console.log('Audio speech not supported');
+            }
         }
 
-        const root = ReactDOM.createRoot(document.getElementById('root'));
-        root.render(<OpdQueueTvApp />);
+        var btnAudio = document.getElementById('btn_toggle_audio');
+        var iconAudio = document.getElementById('icon_audio');
+        if (btnAudio) {
+            btnAudio.onclick = function() {
+                audioEnabled = !audioEnabled;
+                if (audioEnabled) {
+                    btnAudio.className = 'btn btn-sm btn-danger rounded-circle p-2';
+                    if (iconAudio) iconAudio.className = 'bi bi-volume-up-fill fs-5';
+                } else {
+                    btnAudio.className = 'btn btn-sm btn-secondary rounded-circle p-2';
+                    if (iconAudio) iconAudio.className = 'bi bi-volume-mute-fill fs-5';
+                }
+            };
+        }
+
+        // Render Token Cards
+        function renderTrackers() {
+            var container = document.getElementById('tracker_list_container');
+            if (!container) return;
+            var html = '';
+
+            for (var i = 0; i < trackersData.length; i++) {
+                var item = trackersData[i];
+                var colorClass = cardColors[i % cardColors.length];
+                var iconHtml = item.icon 
+                    ? '<i class="bi ' + item.icon + ' text-primary"></i>' 
+                    : (item.name ? item.name.charAt(0) : 'D');
+
+                html += '<div tabindex="0" class="tracker-card ' + colorClass + '" onclick="speakText(\'Token Number ' + item.token_no + ' for ' + item.name + '\')">';
+                html += '  <div class="d-flex align-items-center gap-3">';
+                html += '    <div class="avatar-circle">' + iconHtml + '</div>';
+                html += '    <div>';
+                html += '      <h5 class="mb-0 fw-extrabold" style="font-size:19px; font-weight:800;">' + item.name + '</h5>';
+                html += '      <small class="opacity-90" style="font-size:12px; font-weight:500;">' + item.specialization + ' &bull; <span class="badge bg-white bg-opacity-25 text-white">' + item.room + '</span></small>';
+                html += '    </div>';
+                html += '  </div>';
+                html += '  <div class="text-end">';
+                html += '    <div class="token-number-box">' + item.token_no + '</div>';
+                html += '    <small class="opacity-75" style="font-size:10px;">CURRENT TOKEN</small>';
+                html += '  </div>';
+                html += '</div>';
+            }
+
+            container.innerHTML = html;
+        }
+
+        // Render Showcase Ad Slide
+        function renderShowcase() {
+            var headerEl = document.getElementById('showcase_header');
+            var bodyEl = document.getElementById('showcase_body');
+            if (!bodyEl || adsData.length === 0) return;
+
+            var ad = adsData[currentAdIdx];
+            if (headerEl) headerEl.innerHTML = '<i class="bi bi-award-fill me-2"></i> ' + (ad.title || 'Our Experts');
+
+            var html = '';
+            if (ad.type === 'doctor_profile') {
+                html += '<div class="d-flex flex-column align-items-center">';
+                html += '  <img src="' + ad.image_url + '" alt="Doctor" class="doctor-photo-frame" onerror="this.src=\'/assets/img/profile-img.jpg\'" />';
+                html += '  <h3 class="fw-extrabold text-dark mb-1" style="font-weight:800;">' + ad.doctor_name + '</h3>';
+                html += '  <h5 class="text-primary fw-bold mb-2" style="font-size:18px;">' + ad.specialization + '</h5>';
+                html += '  <h6 class="text-secondary fw-semibold mb-3" style="font-size:15px;">' + ad.designation + '</h6>';
+                html += '  <p class="text-muted small" style="font-size:13px; max-width:420px;">' + ad.description + '</p>';
+                html += '</div>';
+            } else {
+                html += '<div class="d-flex flex-column align-items-center">';
+                html += '  <img src="' + ad.image_url + '" alt="Ad Banner" class="ad-banner-img" onerror="this.src=\'/assets/img/slides-1.jpg\'" />';
+                html += '  <h3 class="fw-extrabold text-dark mb-1" style="font-weight:800;">' + ad.title + '</h3>';
+                html += '  <h5 class="text-success fw-bold mb-2" style="font-size:17px;">' + (ad.tagline || '') + '</h5>';
+                html += '  <p class="text-muted small" style="font-size:13px; max-width:420px;">' + ad.description + '</p>';
+                html += '</div>';
+            }
+
+            // Dot Indicators
+            html += '<div class="d-flex gap-2 mt-4">';
+            for (var k = 0; k < adsData.length; k++) {
+                var activeStyle = (k === currentAdIdx) ? 'bg-primary' : 'bg-secondary opacity-50';
+                var widthStyle = (k === currentAdIdx) ? '24px' : '10px';
+                html += '<button class="btn rounded-circle p-0 ' + activeStyle + '" style="width:' + widthStyle + '; height:10px; border-radius:10px;" onclick="currentAdIdx=' + k + '; renderShowcase();"></button>';
+            }
+            html += '</div>';
+
+            bodyEl.innerHTML = html;
+        }
+
+        // Fetch Data from API (XMLHttpRequest for 100% Samsung TV Browser Compatibility)
+        function loadQueueData() {
+            var xhr = new XMLHttpRequest();
+            xhr.open('GET', '/api/v1/opd/queue/live', true);
+            xhr.onreadystatechange = function() {
+                if (xhr.readyState === 4 && xhr.status === 200) {
+                    try {
+                        var json = JSON.parse(xhr.responseText);
+                        if (json.status === 1) {
+                            if (json.trackers) trackersData = json.trackers;
+                            if (json.ads) adsData = json.ads;
+                            if (json.hospital_name) {
+                                var hospEl = document.getElementById('hdr_hosp_name');
+                                if (hospEl) hospEl.textContent = json.hospital_name;
+                            }
+                            renderTrackers();
+                            renderShowcase();
+                        }
+                    } catch (e) {
+                        console.log('JSON parse error');
+                    }
+                }
+            };
+            xhr.send();
+        }
+
+        // Initial Load & Timers
+        loadQueueData();
+        setInterval(loadQueueData, 5000);
+
+        setInterval(function() {
+            if (adsData.length > 0) {
+                currentAdIdx = (currentAdIdx + 1) % adsData.length;
+                renderShowcase();
+            }
+        }, 8000);
     </script>
 </body>
 </html>
