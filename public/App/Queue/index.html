@@ -1,0 +1,502 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>OPD Token Tracker & Queue Display - HMS Mobile</title>
+    <link rel="manifest" href="/App/Queue/manifest.json">
+    <meta name="theme-color" content="#0f172a">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <link rel="icon" href="/assets/img/logo.png" type="image/png">
+    <link rel="apple-touch-icon" href="/assets/img/logo.png">
+    
+    <!-- Google Fonts & Bootstrap 5 CSS & Icons -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.1/font/bootstrap-icons.css">
+    
+    <!-- React 18 & ReactDOM UMD -->
+    <script src="https://cdn.jsdelivr.net/npm/react@18/umd/react.production.min.js" crossorigin></script>
+    <script src="https://cdn.jsdelivr.net/npm/react-dom@18/umd/react-dom.production.min.js" crossorigin></script>
+    <script src="https://cdn.jsdelivr.net/npm/@babel/standalone/babel.min.js"></script>
+
+    <style>
+        :root {
+            --slate-900: #0f172a;
+            --slate-800: #1e293b;
+        }
+
+        body {
+            background-color: #0b1329;
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            margin: 0;
+            padding: 0;
+            user-select: none;
+            overflow: hidden;
+            color: #ffffff;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+
+        /* Top TV Header Bar */
+        .tv-header {
+            background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+            border-bottom: 2px solid rgba(255, 255, 255, 0.1);
+            padding: 10px 20px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.5);
+            z-index: 100;
+        }
+
+        /* Split Columns Grid */
+        .tv-main-grid {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            height: calc(100vh - 105px);
+            gap: 16px;
+            padding: 16px;
+            box-sizing: border-box;
+        }
+
+        @media (max-width: 991px) {
+            .tv-main-grid {
+                grid-template-columns: 1fr;
+                overflow-y: auto;
+                height: auto;
+            }
+        }
+
+        /* Token List Tracker Column (Left) */
+        .tracker-column {
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.3);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+        }
+
+        .tracker-header {
+            background: #0046ad;
+            color: #ffffff;
+            padding: 12px 20px;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            font-weight: 800;
+            font-size: 20px;
+            letter-spacing: 0.5px;
+        }
+
+        .tracker-list {
+            padding: 12px;
+            display: flex;
+            flex-direction: column;
+            gap: 10px;
+            flex: 1;
+            overflow-y: auto;
+        }
+
+        /* Individual Token Tracker Item Card */
+        .tracker-card {
+            border-radius: 12px;
+            padding: 12px 18px;
+            color: #ffffff;
+            display: flex;
+            align-items: center;
+            justify-content: space-between;
+            box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+            transition: transform 0.2s ease, box-shadow 0.2s ease;
+        }
+
+        .tracker-card:focus, :focus-visible {
+            outline: 4px solid #f59e0b !important;
+            outline-offset: 2px !important;
+            transform: scale(1.02);
+            box-shadow: 0 0 20px rgba(245, 158, 11, 0.8) !important;
+        }
+
+        .tracker-card.blue {
+            background: linear-gradient(90deg, #2563eb 0%, #1d4ed8 100%);
+        }
+
+        .tracker-card.green {
+            background: linear-gradient(90deg, #059669 0%, #047857 100%);
+        }
+
+        .tracker-card.cyan {
+            background: linear-gradient(90deg, #0284c7 0%, #0369a1 100%);
+        }
+
+        .tracker-card.darkgreen {
+            background: linear-gradient(90deg, #16a34a 0%, #15803d 100%);
+        }
+
+        .tracker-card.red {
+            background: linear-gradient(90deg, #ef4444 0%, #dc2626 100%);
+        }
+
+        .avatar-box {
+            width: 48px;
+            height: 48px;
+            border-radius: 50%;
+            background: #ffffff;
+            color: #0f172a;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 22px;
+            flex-shrink: 0;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+            overflow: hidden;
+        }
+
+        .token-number-box {
+            font-size: 42px;
+            font-weight: 900;
+            letter-spacing: -1px;
+            min-width: 80px;
+            text-align: right;
+            line-height: 1;
+            text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        /* Hospital Ads & Doctor Showcase Column (Right) */
+        .showcase-column {
+            background: #ffffff;
+            border-radius: 16px;
+            box-shadow: 0 12px 30px rgba(0,0,0,0.3);
+            overflow: hidden;
+            display: flex;
+            flex-direction: column;
+            color: #1e293b;
+        }
+
+        .showcase-header {
+            background: #0046ad;
+            color: #ffffff;
+            padding: 12px 20px;
+            font-weight: 800;
+            font-size: 20px;
+            letter-spacing: 0.5px;
+            text-align: center;
+        }
+
+        .showcase-body {
+            flex: 1;
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            text-align: center;
+            background: radial-gradient(circle at center, #ffffff 0%, #f8fafc 100%);
+        }
+
+        .doctor-photo-frame {
+            width: 220px;
+            height: 250px;
+            border-radius: 16px;
+            border: 4px solid #ea580c; /* Orange accent frame matching screenshot */
+            box-shadow: 0 10px 25px rgba(234, 88, 12, 0.25);
+            object-fit: cover;
+            background: #f1f5f9;
+            margin-bottom: 20px;
+        }
+
+        .ad-banner-img {
+            max-width: 100%;
+            max-height: 260px;
+            border-radius: 16px;
+            object-fit: cover;
+            box-shadow: 0 8px 24px rgba(0,0,0,0.15);
+            margin-bottom: 20px;
+        }
+
+        /* Bottom Ticker Bar */
+        .tv-ticker {
+            background: #0f172a;
+            color: #f8fafc;
+            padding: 8px 16px;
+            font-size: 14px;
+            font-weight: 600;
+            border-top: 1px solid rgba(255, 255, 255, 0.1);
+            overflow: hidden;
+            white-space: nowrap;
+        }
+
+        .ticker-content {
+            display: inline-block;
+            animation: marquee 25s linear infinite;
+        }
+
+        @keyframes marquee {
+            0% { transform: translateX(100%); }
+            100% { transform: translateX(-100%); }
+        }
+
+        /* Pulse animation for new called token */
+        .token-pulse {
+            animation: pulse-border 1.5s infinite;
+        }
+
+        @keyframes pulse-border {
+            0% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0.8); }
+            70% { box-shadow: 0 0 0 16px rgba(245, 158, 11, 0); }
+            100% { box-shadow: 0 0 0 0 rgba(245, 158, 11, 0); }
+        }
+    </style>
+</head>
+<body>
+    <div id="root"></div>
+
+    <script type="text/babel">
+        const { useState, useEffect, useRef } = React;
+
+        function OpdQueueTvApp() {
+            const [trackers, setTrackers] = useState([]);
+            const [ads, setAds] = useState([]);
+            const [currentAdIdx, setCurrentAdIdx] = useState(0);
+            const [hospitalName, setHospitalName] = useState('E-Atria Multispeciality Hospital');
+            const [audioEnabled, setAudioEnabled] = useState(true);
+            const [lastCalledToken, setLastCalledToken] = useState(null);
+            const [currentTime, setCurrentTime] = useState('');
+
+            // Update Live Clock
+            useEffect(() => {
+                const updateClock = () => {
+                    const now = new Date();
+                    setCurrentTime(now.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' }));
+                };
+                updateClock();
+                const timer = setInterval(updateClock, 1000);
+                return () => clearInterval(timer);
+            }, []);
+
+            // Fetch Live Tokens & Ads from Backend API
+            const fetchQueueData = async () => {
+                try {
+                    const res = await fetch('/api/v1/opd/queue/live');
+                    const json = await res.json();
+                    if (json.status === 1) {
+                        if (json.trackers) setTrackers(json.trackers);
+                        if (json.ads) setAds(json.ads);
+                        if (json.hospital_name) setHospitalName(json.hospital_name);
+                    }
+                } catch (err) {
+                    console.error('Error fetching queue data', err);
+                }
+            };
+
+            // Initial Load & 5s Polling
+            useEffect(() => {
+                fetchQueueData();
+                const interval = setInterval(fetchQueueData, 5000);
+                return () => clearInterval(interval);
+            }, []);
+
+            // Auto-rotate Right Side Showcase Ads (8 seconds)
+            useEffect(() => {
+                if (ads.length <= 1) return;
+                const timer = setInterval(() => {
+                    setCurrentAdIdx((prev) => (prev + 1) % ads.length);
+                }, 8000);
+                return () => clearInterval(timer);
+            }, [ads]);
+
+            // Text-To-Speech Announcement Function
+            const speakToken = (tokenText) => {
+                if (!audioEnabled || !('speechSynthesis' in window)) return;
+                try {
+                    window.speechSynthesis.cancel();
+                    const utterance = new SpeechSynthesisUtterance(tokenText);
+                    utterance.rate = 0.9;
+                    utterance.pitch = 1.0;
+                    utterance.lang = 'en-US';
+                    window.speechSynthesis.speak(utterance);
+                } catch (e) {
+                    console.error('Speech synthesis error', e);
+                }
+            };
+
+            // Trigger Voice Announcement when top token updates
+            const announceToken = (item) => {
+                const text = `Token Number ${item.token_no}, please proceed to ${item.name}, ${item.room}`;
+                speakToken(text);
+                setLastCalledToken(item.id);
+            };
+
+            const currentAd = ads[currentAdIdx] || {
+                type: 'doctor_profile',
+                title: 'Our Medical Experts',
+                doctor_name: 'Dr. Prakash Chandwani',
+                specialization: 'Cardiologist',
+                designation: 'Chief Managing Director',
+                image_url: '/assets/img/profile-img.jpg',
+                description: 'Available for OPD Consultations (10:00 AM - 4:00 PM)'
+            };
+
+            // Color Themes for Department Cards
+            const cardColors = ['blue', 'green', 'cyan', 'darkgreen', 'red'];
+
+            return (
+                <div className="d-flex flex-column h-100">
+                    {/* Top TV Header Bar */}
+                    <header className="tv-header d-flex justify-content-between align-items-center">
+                        <div className="d-flex align-items-center gap-3">
+                            <img src="/assets/img/logo.png" alt="Hospital Logo" style={{ height: '38px', width: 'auto', filter: 'brightness(0) invert(1)' }} onError={(e) => { e.target.style.display = 'none'; }} />
+                            <div>
+                                <h5 className="mb-0 fw-bold text-white" style={{ fontSize: '18px', letterSpacing: '-0.3px' }}>
+                                    {hospitalName}
+                                </h5>
+                                <small className="text-light opacity-75" style={{ fontSize: '11px' }}>
+                                    Live OPD Token Tracker &amp; Patient Calling Display
+                                </small>
+                            </div>
+                        </div>
+
+                        <div className="d-flex align-items-center gap-3">
+                            {/* Audio Voice Announcement Toggle */}
+                            <button 
+                                className={`btn btn-sm ${audioEnabled ? 'btn-danger' : 'btn-secondary'} rounded-circle p-2`} 
+                                style={{ width: '40px', height: '40px' }}
+                                onClick={() => setAudioEnabled(!audioEnabled)}
+                                title={audioEnabled ? 'Voice Callout Enabled (Click to Mute)' : 'Voice Callout Muted (Click to Enable)'}
+                            >
+                                <i className={`bi ${audioEnabled ? 'bi-volume-up-fill' : 'bi-volume-mute-fill'} fs-5`}></i>
+                            </button>
+
+                            {/* Live Clock Display */}
+                            <div className="bg-dark text-white px-3 py-1.5 rounded-3 border border-secondary shadow-sm text-center">
+                                <div className="fw-bold fs-6" style={{ fontFamily: 'monospace', letterSpacing: '1px' }}>{currentTime}</div>
+                                <div className="small opacity-75" style={{ fontSize: '10px' }}>LIVE TIME</div>
+                            </div>
+                        </div>
+                    </header>
+
+                    {/* Split Screen Grid (Left: Tokens, Right: Showcase Ads) */}
+                    <main className="tv-main-grid">
+                        {/* LEFT COLUMN: LIVE TOKEN TRACKER */}
+                        <div className="tracker-column">
+                            <div className="tracker-header">
+                                <span><i className="bi bi-person-lines-fill me-2"></i> Token Tracker</span>
+                                <span className="badge bg-white text-primary rounded-pill px-3 py-1 fs-6">Live Queue</span>
+                            </div>
+                            <div className="tracker-list">
+                                {trackers.map((item, idx) => {
+                                    const colorClass = cardColors[idx % cardColors.length];
+                                    return (
+                                        <div 
+                                            key={item.id || idx} 
+                                            tabIndex="0"
+                                            className={`tracker-card ${colorClass} ${lastCalledToken === item.id ? 'token-pulse' : ''}`}
+                                            onClick={() => announceToken(item)}
+                                        >
+                                            <div className="d-flex align-items-center gap-3">
+                                                <div className="avatar-circle" style={{ width: '44px', height: '44px', borderRadius: '50%', background: '#ffffff', color: '#0f172a', display: 'flex', alignItems: 'center', justifyContent: 'center', fontSize: '20px', fontWeight: '800' }}>
+                                                    {item.icon ? (
+                                                        <i className={`bi ${item.icon} text-primary`}></i>
+                                                    ) : (
+                                                        item.name ? item.name.charAt(0) : 'D'
+                                                    )}
+                                                </div>
+                                                <div>
+                                                    <h5 className="mb-0 fw-extrabold" style={{ fontSize: '19px', fontWeight: '800' }}>{item.name}</h5>
+                                                    <small className="opacity-90" style={{ fontSize: '12px', fontWeight: '500' }}>
+                                                        {item.specialization} &bull; <span className="badge bg-white bg-opacity-25 text-white">{item.room}</span>
+                                                    </small>
+                                                </div>
+                                            </div>
+
+                                            <div className="text-end">
+                                                <div className="token-number-box">{item.token_no}</div>
+                                                <small className="opacity-75" style={{ fontSize: '10px' }}>CURRENT TOKEN</small>
+                                            </div>
+                                        </div>
+                                    );
+                                })}
+                            </div>
+                        </div>
+
+                        {/* RIGHT COLUMN: HOSPITAL AD SHOWCASE & DOCTOR CAROUSEL */}
+                        <div className="showcase-column">
+                            <div className="showcase-header">
+                                <i className="bi bi-award-fill me-2"></i> {currentAd.title || 'Our Experts'}
+                            </div>
+
+                            <div className="showcase-body">
+                                {currentAd.type === 'doctor_profile' ? (
+                                    <div className="d-flex flex-column align-items-center">
+                                        <img 
+                                            src={currentAd.image_url} 
+                                            alt={currentAd.doctor_name} 
+                                            className="doctor-photo-frame"
+                                            onError={(e) => { e.target.src = '/assets/img/profile-img.jpg'; }}
+                                        />
+                                        <h3 className="fw-extrabold text-dark mb-1" style={{ fontWeight: '800', letterSpacing: '-0.5px' }}>
+                                            {currentAd.doctor_name}
+                                        </h3>
+                                        <h5 className="text-primary fw-bold mb-2" style={{ fontSize: '18px' }}>
+                                            {currentAd.specialization}
+                                        </h5>
+                                        <h6 className="text-secondary fw-semibold mb-3" style={{ fontSize: '15px' }}>
+                                            {currentAd.designation}
+                                        </h6>
+                                        <p className="text-muted small max-width-350 px-3" style={{ fontSize: '13px', maxWidth: '420px' }}>
+                                            {currentAd.description}
+                                        </p>
+                                    </div>
+                                ) : (
+                                    <div className="d-flex flex-column align-items-center">
+                                        <img 
+                                            src={currentAd.image_url} 
+                                            alt={currentAd.title} 
+                                            className="ad-banner-img"
+                                            onError={(e) => { e.target.src = '/assets/img/slides-1.jpg'; }}
+                                        />
+                                        <h3 className="fw-extrabold text-dark mb-1" style={{ fontWeight: '800' }}>
+                                            {currentAd.title}
+                                        </h3>
+                                        <h5 className="text-success fw-bold mb-2" style={{ fontSize: '17px' }}>
+                                            {currentAd.tagline}
+                                        </h5>
+                                        <p className="text-muted small px-3" style={{ fontSize: '13px', maxWidth: '420px' }}>
+                                            {currentAd.description}
+                                        </p>
+                                    </div>
+                                )}
+
+                                {/* Slide Indicator Dots */}
+                                <div className="d-flex gap-2 mt-4">
+                                    {ads.map((ad, idx) => (
+                                        <button 
+                                            key={idx}
+                                            className={`btn rounded-circle p-0 transition-all ${currentAdIdx === idx ? 'bg-primary' : 'bg-secondary opacity-50'}`}
+                                            style={{ width: currentAdIdx === idx ? '24px' : '10px', height: '10px', borderRadius: '10px' }}
+                                            onClick={() => setCurrentAdIdx(idx)}
+                                        ></button>
+                                    ))}
+                                </div>
+                            </div>
+                        </div>
+                    </main>
+
+                    {/* Bottom Ticker Bar */}
+                    <div className="tv-ticker">
+                        <div className="ticker-content">
+                            <i className="bi bi-info-circle-fill text-warning me-2"></i>
+                            Welcome to {hospitalName}. Please observe your token number on the screen. Voice announcements will call your turn. For assistance, contact the help desk. &nbsp;&nbsp;&bull;&nbsp;&nbsp; Emergency Helpline: +91-9876543210 &nbsp;&nbsp;&bull;&nbsp;&nbsp; 24/7 Pharmacy &amp; Ambulance Services Available
+                        </div>
+                    </div>
+                </div>
+            );
+        }
+
+        const root = ReactDOM.createRoot(document.getElementById('root'));
+        root.render(<OpdQueueTvApp />);
+    </script>
+</body>
+</html>

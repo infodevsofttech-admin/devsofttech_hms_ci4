@@ -1,0 +1,22 @@
+{
+  "short_name": "HMS Mobile",
+  "name": "HMS OPD Queue & Token Display PWA",
+  "icons": [
+    {
+      "src": "/assets/img/logo.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/img/apple-touch-icon.png",
+      "type": "image/png",
+      "sizes": "180x180"
+    }
+  ],
+  "start_url": "/app/queue",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "display": "standalone",
+  "orientation": "landscape"
+}

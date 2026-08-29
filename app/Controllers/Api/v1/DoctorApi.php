@@ -662,4 +662,183 @@ class DoctorApi extends BaseController
             'ai_alert_flag' => 0,
         ]);
     }
+
+    /**
+     * Serves the OPD Queue & Token Display PWA Web App at /app/queue
+     */
+    public function queueIndex()
+    {
+        $pwaPath = FCPATH . 'App/Queue/index.html';
+        if (file_exists($pwaPath)) {
+            return $this->response->setBody(file_get_contents($pwaPath));
+        }
+
+        return redirect()->to(base_url('app'));
+    }
+
+    /**
+     * GET api/v1/opd/queue/live
+     * Returns real-time OPD Tokens & Hospital Showcase Ads for TV Queue Display
+     */
+    public function liveQueueDisplay()
+    {
+        $db = db_connect();
+        $todayStart = date('Y-m-d') . ' 00:00:00';
+        $tomorrowStart = date('Y-m-d', strtotime('+1 day')) . ' 00:00:00';
+
+        // 1. Retrieve Doctor OPD Tokens for Today
+        $doctors = $this->doctorModel->getDoctors();
+        $docTokens = [];
+
+        foreach ($doctors as $idx => $d) {
+            $docId = (int) $d->id;
+            $docName = trim(($d->p_title ?? '') . ' ' . ($d->p_fname ?? ''));
+            if ($docName === '') continue;
+
+            // Get Doctor Specialization
+            $specs = $this->doctorModel->getDoctorSpecs($docId);
+            $specNames = [];
+            foreach ($specs as $s) {
+                if (!empty($s->SpecName)) $specNames[] = $s->SpecName;
+            }
+            $specLabel = !empty($specNames) ? implode(', ', $specNames) : 'General OPD';
+
+            // Get Current Serving OPD Token Number
+            $currentServing = $db->table('opd_master')
+                ->select('min(opd_no) as current_no, count(opd_id) as total_waiting')
+                ->where('doc_id', $docId)
+                ->where('apointment_date >=', $todayStart)
+                ->where('apointment_date <', $tomorrowStart)
+                ->where('opd_status', 0) // Waiting
+                ->get()
+                ->getRow();
+
+            // Get Visited count or active running OPD token
+            $runningRow = $db->table('opd_master')
+                ->select('opd_no')
+                ->where('doc_id', $docId)
+                ->where('apointment_date >=', $todayStart)
+                ->where('apointment_date <', $tomorrowStart)
+                ->where('running_opd', 1)
+                ->get()
+                ->getRow();
+
+            $tokenNo = 1;
+            if ($runningRow && (int)$runningRow->opd_no > 0) {
+                $tokenNo = (int) $runningRow->opd_no;
+            } else if ($currentServing && (int)$currentServing->current_no > 0) {
+                $tokenNo = (int) $currentServing->current_no;
+            }
+
+            $roomNo = "Room " . ($idx + 1);
+
+            $docTokens[] = [
+                'id' => $docId,
+                'name' => $docName,
+                'specialization' => $specLabel,
+                'token_no' => $tokenNo,
+                'waiting_count' => (int) ($currentServing->total_waiting ?? 0),
+                'room' => $roomNo,
+                'type' => 'doctor',
+                'color' => '#2563eb', // Blue theme
+                'designation' => 'Consultant Doctor'
+            ];
+        }
+
+        // 2. Add Standard Hospital Departments (Pharmacy, Radiology, Sonography, X-RAY, CT Scan)
+        $deptTokens = [
+            [
+                'id' => 'pharmacy',
+                'name' => 'Pharmacy Counter',
+                'specialization' => 'Medicine Dispense',
+                'token_no' => 139,
+                'waiting_count' => 12,
+                'room' => 'Counter 1',
+                'type' => 'department',
+                'color' => '#16a34a', // Green
+                'icon' => 'bi-capsule'
+            ],
+            [
+                'id' => 'sonography',
+                'name' => 'Sonography Dept',
+                'specialization' => 'Ultrasound & USG',
+                'token_no' => 2,
+                'waiting_count' => 3,
+                'room' => 'Room 105',
+                'type' => 'department',
+                'color' => '#0891b2', // Cyan
+                'icon' => 'bi-diagram-3'
+            ],
+            [
+                'id' => 'xray',
+                'name' => 'X-RAY Room',
+                'specialization' => 'Digital X-Ray Imaging',
+                'token_no' => 86,
+                'waiting_count' => 5,
+                'room' => 'Room 108',
+                'type' => 'department',
+                'color' => '#15803d', // Dark Green
+                'icon' => 'bi-body-text'
+            ],
+            [
+                'id' => 'ctscan',
+                'name' => 'CT Scan Room',
+                'specialization' => '32-Slice CT Scan',
+                'token_no' => 6,
+                'waiting_count' => 2,
+                'room' => 'Room 110',
+                'type' => 'department',
+                'color' => '#dc2626', // Red
+                'icon' => 'bi-cpu-fill'
+            ]
+        ];
+
+        $allTrackers = array_merge($docTokens, $deptTokens);
+
+        // 3. Hospital Advertisements & Doctor Showcase Slides
+        $ads = [
+            [
+                'id' => 1,
+                'type' => 'doctor_profile',
+                'title' => 'Our Medical Experts',
+                'doctor_name' => $docTokens[0]['name'] ?? 'Dr. Prakash Chandwani',
+                'specialization' => $docTokens[0]['specialization'] ?? 'Cardiologist & Physician',
+                'designation' => 'Chief Managing Director & Senior Consultant',
+                'image_url' => base_url('assets/img/profile-img.jpg'),
+                'description' => 'Available for OPD Consultations (10:00 AM - 4:00 PM). Specializing in Advanced Heart Care & Critical Management.'
+            ],
+            [
+                'id' => 2,
+                'type' => 'hospital_ad',
+                'title' => 'In-House 24/7 Pharmacy',
+                'tagline' => '100% Genuine Medicines & Fastest Counter Dispense',
+                'image_url' => base_url('assets/img/slides-1.jpg'),
+                'description' => 'Discounts on prescription billing. Doorstep delivery available for senior citizens and admitted patients.'
+            ],
+            [
+                'id' => 3,
+                'type' => 'hospital_ad',
+                'title' => 'Advanced Radiology & Imaging Center',
+                'tagline' => 'Digital X-Ray, 32-Slice CT Scan & 4D Ultrasound',
+                'image_url' => base_url('assets/img/slides-2.jpg'),
+                'description' => 'Accurate high-precision diagnostic imaging with immediate digital report generation.'
+            ],
+            [
+                'id' => 4,
+                'type' => 'hospital_ad',
+                'title' => '24x7 Emergency & Critical Care ICU',
+                'tagline' => 'Fully Equipped Ventilators, Cardiac Monitors & Trauma Team',
+                'image_url' => base_url('assets/img/slides-3.jpg'),
+                'description' => 'Round-the-clock emergency medical services with dedicated ICU & Operation Theater.'
+            ]
+        ];
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'hospital_name' => 'E-Atria Multispeciality Hospital',
+            'server_time' => date('d-m-Y h:i:s A'),
+            'trackers' => $allTrackers,
+            'ads' => $ads
+        ]);
+    }
 }

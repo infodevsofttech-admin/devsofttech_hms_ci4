@@ -1568,9 +1568,13 @@ $routes->get('app/nursing', 'Api\v1\NursingApi::pwaIndex');
 $routes->get('app/nursing/(:any)', 'Api\v1\NursingApi::pwaIndex');
 $routes->get('app/doctor', 'Api\v1\DoctorApi::pwaIndex');
 $routes->get('app/doctor/(:any)', 'Api\v1\DoctorApi::pwaIndex');
+$routes->get('app/queue', 'Api\v1\DoctorApi::queueIndex');
+$routes->get('app/queue/(:any)', 'Api\v1\DoctorApi::queueIndex');
 
 // Dedicated RESTful JSON API v1 Group for React PWAs & Mobile Apps
 $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1'], static function ($routes) {
+    // Live TV Queue Display API
+    $routes->get('opd/queue/live', 'DoctorApi::liveQueueDisplay');
     // Nursing PWA APIs
     $routes->get('nursing/beds', 'NursingApi::beds');
     $routes->get('nursing/nurses', 'NursingApi::nurses');
