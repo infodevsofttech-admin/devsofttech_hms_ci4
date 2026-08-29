@@ -435,13 +435,15 @@
             }
         }, 8000);
 
-        // Register PWA Service Worker
+        // Register PWA Service Worker immediately for fast automated PWA auditing
         if ('serviceWorker' in navigator) {
-            window.addEventListener('load', function() {
-                navigator.serviceWorker.register('/app/queue/sw.js', { scope: '/app/queue/' })
-                    .then(function(reg) { console.log('Queue PWA Service Worker Registered', reg); })
-                    .catch(function(err) { console.log('Service Worker Registration Failed', err); });
-            });
+            navigator.serviceWorker.register('/app/queue/sw.js', { scope: '/app/queue/' })
+                .then(function(reg) {
+                    console.log('Queue PWA Service Worker Registered', reg);
+                })
+                .catch(function(err) {
+                    console.log('Service Worker Registration Failed', err);
+                });
         }
     </script>
 </body>
