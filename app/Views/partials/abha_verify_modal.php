@@ -24,7 +24,7 @@
     <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-shield-check text-primary me-2"></i>Verify ABHA Account</h5>
+                <h5 class="modal-title"><i class="bi bi-shield-check text-primary me-2"></i>Verify or Find ABHA Account</h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">

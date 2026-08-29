@@ -431,7 +431,7 @@
                                         <div class="card-body d-flex flex-column">
                                             <div class="d-flex align-items-center gap-2 mb-2">
                                                 <i class="bi bi-shield-check fs-3 text-success"></i>
-                                                <h6 class="mb-0">Verify ABHA Account</h6>
+                                                <h6 class="mb-0">Verify or Find ABHA Account</h6>
                                             </div>
                                             <p class="text-muted small mb-2">Verify an existing ABHA account and link it to a patient record. An OTP is sent to the linked mobile.</p>
                                             <ul class="list-unstyled small text-muted mb-3">
