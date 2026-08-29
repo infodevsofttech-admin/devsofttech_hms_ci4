@@ -7,7 +7,7 @@ use CodeIgniter\Database\BaseConnection;
 
 class OpdQueueSetting extends BaseController
 {
-    private BaseConnection $db;
+    protected $db;
 
     public function __construct()
     {
