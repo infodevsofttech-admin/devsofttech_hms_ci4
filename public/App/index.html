@@ -59,12 +59,19 @@
             display: block;
         }
 
-        .app-option-card:hover, .app-option-card:active {
+        .app-option-card:hover, .app-option-card:active, .app-option-card:focus {
             border-color: #2563eb;
             background: #eff6ff;
             transform: translateY(-2px);
             box-shadow: 0 8px 20px rgba(37, 99, 235, 0.15);
             color: inherit;
+        }
+
+        /* Android TV D-Pad Remote Control Focus Outline */
+        :focus-visible, .app-option-card:focus, button:focus, a:focus {
+            outline: 3px solid #2563eb !important;
+            outline-offset: 3px !important;
+            box-shadow: 0 0 18px rgba(37, 99, 235, 0.6) !important;
         }
 
         .app-option-card.disabled {
