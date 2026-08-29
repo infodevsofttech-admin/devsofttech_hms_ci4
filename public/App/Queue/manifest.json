@@ -11,6 +11,7 @@
   "theme_color": "#0f172a",
   "display": "standalone",
   "display_override": ["standalone", "minimal-ui"],
+  "orientation": "landscape",
   "categories": ["medical", "health", "utilities"],
   "prefer_related_applications": false,
   "icons": [
@@ -50,7 +51,7 @@
   "screenshots": [
     {
       "src": "/assets/img/slides-1.jpg",
-      "sizes": "1280x720",
+      "sizes": "1024x683",
       "type": "image/jpeg",
       "form_factor": "wide",
       "label": "OPD Token Tracker & Hospital Showcase TV Display"

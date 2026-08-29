@@ -1569,6 +1569,8 @@ $routes->get('app/nursing/(:any)', 'Api\v1\NursingApi::pwaIndex');
 $routes->get('app/doctor', 'Api\v1\DoctorApi::pwaIndex');
 $routes->get('app/doctor/(:any)', 'Api\v1\DoctorApi::pwaIndex');
 $routes->get('app/queue', 'Api\v1\DoctorApi::queueIndex');
+$routes->get('app/queue/sw.js', 'Api\v1\DoctorApi::queueSw');
+$routes->get('app/queue/manifest.json', 'Api\v1\DoctorApi::queueManifest');
 $routes->get('app/queue/(:any)', 'Api\v1\DoctorApi::queueIndex');
 
 // Dedicated RESTful JSON API v1 Group for React PWAs & Mobile Apps

@@ -677,6 +677,33 @@ class DoctorApi extends BaseController
     }
 
     /**
+     * Serves the Service Worker script for /app/queue
+     */
+    public function queueSw()
+    {
+        $swPath = FCPATH . 'App/Queue/sw.js';
+        if (file_exists($swPath)) {
+            return $this->response->setHeader('Content-Type', 'application/javascript')
+                                  ->setHeader('Service-Worker-Allowed', '/')
+                                  ->setBody(file_get_contents($swPath));
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    /**
+     * Serves manifest.json for /app/queue
+     */
+    public function queueManifest()
+    {
+        $manifestPath = FCPATH . 'App/Queue/manifest.json';
+        if (file_exists($manifestPath)) {
+            return $this->response->setHeader('Content-Type', 'application/json')
+                                  ->setBody(file_get_contents($manifestPath));
+        }
+        return $this->response->setStatusCode(404);
+    }
+
+    /**
      * GET api/v1/opd/queue/live
      * Returns real-time OPD Tokens & Hospital Showcase Ads for TV Queue Display
      */
