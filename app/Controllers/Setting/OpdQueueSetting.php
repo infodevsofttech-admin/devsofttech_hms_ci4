@@ -39,10 +39,6 @@ class OpdQueueSetting extends BaseController
 
     public function save()
     {
-        if (!$this->request->isAJAX()) {
-            return $this->response->setJSON(['status' => 0, 'message' => 'Invalid request']);
-        }
-
         $post = $this->request->getPost();
         $ticker = trim((string) ($post['footer_ticker'] ?? ''));
         $leftAdText = trim((string) ($post['left_ad_text'] ?? ''));
@@ -76,10 +72,6 @@ class OpdQueueSetting extends BaseController
 
     public function uploadBanner()
     {
-        if (!$this->request->isAJAX()) {
-            return $this->response->setJSON(['status' => 0, 'message' => 'Invalid request']);
-        }
-
         $post = $this->request->getPost();
         $title = trim((string) ($post['title'] ?? ''));
         $tagline = trim((string) ($post['tagline'] ?? ''));
@@ -135,10 +127,6 @@ class OpdQueueSetting extends BaseController
 
     public function deleteBanner()
     {
-        if (!$this->request->isAJAX()) {
-            return $this->response->setJSON(['status' => 0, 'message' => 'Invalid request']);
-        }
-
         $post = $this->request->getPost();
         $bannerId = (int) ($post['banner_id'] ?? 0);
 

@@ -17,7 +17,7 @@
                     <i class="bi bi-fonts me-2"></i> Footer Scrolling Ticker Text
                 </div>
                 <div class="card-body mt-3">
-                    <form id="form_ticker_settings" enctype="multipart/form-data">
+                    <form id="form_ticker_settings" action="javascript:void(0)" onsubmit="saveTickerSettings(event)" enctype="multipart/form-data">
                         <div class="mb-3">
                             <label class="form-label fw-bold">Scrolling Ticker Message</label>
                             <textarea class="form-control" name="footer_ticker" rows="3" required><?= esc($footer_ticker) ?></textarea>
@@ -51,7 +51,7 @@
                             <?php endif; ?>
                         </div>
 
-                        <button type="submit" class="btn btn-primary fw-bold px-4">
+                        <button type="button" onclick="saveTickerSettings(event)" class="btn btn-primary fw-bold px-4">
                             <i class="bi bi-save me-1"></i> Save Ticker &amp; Left Ad Settings
                         </button>
                     </form>
@@ -66,7 +66,7 @@
                     <i class="bi bi-file-earmark-image me-2"></i> Right-Side Showcase Ad Banners
                 </div>
                 <div class="card-body mt-3">
-                    <form id="form_add_banner" enctype="multipart/form-data">
+                    <form id="form_add_banner" action="javascript:void(0)" onsubmit="uploadBanner(event)" enctype="multipart/form-data">
                         <h6 class="fw-bold text-success mb-3">Add New Right-Side Showcase Slide</h6>
 
                         <div class="row g-2 mb-2">
@@ -103,7 +103,7 @@
                             <label class="form-check-label small fw-bold" for="slide_enabled">Active Slide in Carousel</label>
                         </div>
 
-                        <button type="submit" class="btn btn-success btn-sm fw-bold px-3">
+                        <button type="button" onclick="uploadBanner(event)" class="btn btn-success btn-sm fw-bold px-3">
                             <i class="bi bi-plus-circle me-1"></i> Add Slide Banner
                         </button>
                     </form>
@@ -148,9 +148,20 @@
 </section>
 
 <script>
-    $('#form_ticker_settings').on('submit', function(e) {
-        e.preventDefault();
-        var formData = new FormData(this);
+    function refreshAdminSubPage() {
+        if (typeof openAdminSubPage === 'function') {
+            openAdminSubPage('<?= base_url('setting/admin/opd-queue-tv') ?>', 'OPD Queue TV Settings');
+        } else {
+            location.reload();
+        }
+    }
+
+    function saveTickerSettings(e) {
+        if (e && e.preventDefault) e.preventDefault();
+        var form = document.getElementById('form_ticker_settings');
+        if (!form) return false;
+        var formData = new FormData(form);
+
         $.ajax({
             url: '<?= base_url('setting/admin/opd-queue-tv/save') ?>',
             type: 'POST',
@@ -161,17 +172,24 @@
             success: function(res) {
                 if (res.status === 1) {
                     alert(res.message);
-                    location.reload();
+                    refreshAdminSubPage();
                 } else {
                     alert(res.message || 'Error saving settings');
                 }
+            },
+            error: function() {
+                alert('Error saving settings');
             }
         });
-    });
+        return false;
+    }
 
-    $('#form_add_banner').on('submit', function(e) {
-        e.preventDefault();
-        var formData = new FormData(this);
+    function uploadBanner(e) {
+        if (e && e.preventDefault) e.preventDefault();
+        var form = document.getElementById('form_add_banner');
+        if (!form) return false;
+        var formData = new FormData(form);
+
         $.ajax({
             url: '<?= base_url('setting/admin/opd-queue-tv/upload-banner') ?>',
             type: 'POST',
@@ -182,13 +200,17 @@
             success: function(res) {
                 if (res.status === 1) {
                     alert(res.message);
-                    location.reload();
+                    refreshAdminSubPage();
                 } else {
                     alert(res.message || 'Error uploading banner');
                 }
+            },
+            error: function() {
+                alert('Error uploading banner');
             }
         });
-    });
+        return false;
+    }
 
     function deleteBanner(bannerId) {
         if (!confirm('Are you sure you want to delete this advertisement slide?')) return;
@@ -200,10 +222,13 @@
             success: function(res) {
                 if (res.status === 1) {
                     alert(res.message);
-                    location.reload();
+                    refreshAdminSubPage();
                 } else {
                     alert(res.message || 'Error deleting banner');
                 }
+            },
+            error: function() {
+                alert('Error deleting banner');
             }
         });
     }
