@@ -1,11 +1,29 @@
 {
-  "short_name": "HMS Mobile",
+  "id": "/app/queue",
   "name": "HMS OPD Queue & Token Display PWA",
+  "short_name": "HMS Queue TV",
+  "description": "Live OPD Token Tracker & Patient Calling TV Display Application for E-Atria Multispeciality Hospital.",
+  "lang": "en",
+  "dir": "ltr",
+  "scope": "/app/queue",
+  "start_url": "/app/queue",
+  "background_color": "#0f172a",
+  "theme_color": "#0f172a",
+  "display": "standalone",
+  "display_override": ["standalone", "minimal-ui"],
+  "categories": ["medical", "health", "utilities"],
+  "prefer_related_applications": false,
   "icons": [
     {
-      "src": "/assets/img/logo.png",
+      "src": "/assets/img/pwa-icon-512.png",
       "type": "image/png",
       "sizes": "512x512",
+      "purpose": "any maskable"
+    },
+    {
+      "src": "/assets/img/pwa-icon-192.png",
+      "type": "image/png",
+      "sizes": "192x192",
       "purpose": "any maskable"
     },
     {
@@ -14,9 +32,28 @@
       "sizes": "180x180"
     }
   ],
-  "start_url": "/app/queue",
-  "background_color": "#0f172a",
-  "theme_color": "#0f172a",
-  "display": "standalone",
-  "orientation": "landscape"
+  "shortcuts": [
+    {
+      "name": "Live OPD Queue Display",
+      "short_name": "Queue",
+      "description": "Open live OPD token tracker & callout display screen",
+      "url": "/app/queue",
+      "icons": [
+        {
+          "src": "/assets/img/pwa-icon-192.png",
+          "sizes": "192x192",
+          "type": "image/png"
+        }
+      ]
+    }
+  ],
+  "screenshots": [
+    {
+      "src": "/assets/img/slides-1.jpg",
+      "sizes": "1280x720",
+      "type": "image/jpeg",
+      "form_factor": "wide",
+      "label": "OPD Token Tracker & Hospital Showcase TV Display"
+    }
+  ]
 }
