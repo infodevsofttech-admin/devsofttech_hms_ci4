@@ -823,6 +823,17 @@ class DoctorApi extends BaseController
         $allTrackers = array_merge($docTokens, $deptTokens);
 
         // 3. Hospital Advertisements & Doctor Showcase Slides
+        $adsJsonRow = $db->table('hospital_setting')->select('s_value')->where('s_name', 'TV_QUEUE_ADS_JSON')->get(1)->getRowArray();
+        $customAdsList = !empty($adsJsonRow['s_value']) ? json_decode($adsJsonRow['s_value'], true) : [];
+        $activeCustomAds = [];
+        if (is_array($customAdsList)) {
+            foreach ($customAdsList as $cad) {
+                if (!isset($cad['enabled']) || (int)$cad['enabled'] === 1) {
+                    $activeCustomAds[] = $cad;
+                }
+            }
+        }
+
         $ads = [];
         $adId = 1;
 
@@ -840,36 +851,64 @@ class DoctorApi extends BaseController
             ];
         }
 
-        // Hospital Service Advertisements
-        $ads[] = [
-            'id' => $adId++,
-            'type' => 'hospital_ad',
-            'title' => 'In-House 24/7 Pharmacy',
-            'tagline' => '100% Genuine Medicines & Fastest Counter Dispense',
-            'image_url' => base_url('assets/img/slides-1.jpg'),
-            'description' => 'Discounts on prescription billing. Doorstep delivery available for senior citizens and admitted patients.'
-        ];
-        $ads[] = [
-            'id' => $adId++,
-            'type' => 'hospital_ad',
-            'title' => 'Advanced Radiology & Imaging Center',
-            'tagline' => 'Digital X-Ray, 32-Slice CT Scan & 4D Ultrasound',
-            'image_url' => base_url('assets/img/slides-2.jpg'),
-            'description' => 'Accurate high-precision diagnostic imaging with immediate digital report generation.'
-        ];
-        $ads[] = [
-            'id' => $adId++,
-            'type' => 'hospital_ad',
-            'title' => '24x7 Emergency & Critical Care ICU',
-            'tagline' => 'Fully Equipped Ventilators, Cardiac Monitors & Trauma Team',
-            'image_url' => base_url('assets/img/slides-3.jpg'),
-            'description' => 'Round-the-clock emergency medical services with dedicated ICU & Operation Theater.'
-        ];
+        // Add Active Custom Admin Uploaded Ad Banners
+        if (!empty($activeCustomAds)) {
+            foreach ($activeCustomAds as $cad) {
+                $ads[] = [
+                    'id' => $adId++,
+                    'type' => $cad['type'] ?? 'hospital_ad',
+                    'title' => $cad['title'] ?? 'Hospital Service',
+                    'tagline' => $cad['tagline'] ?? '',
+                    'image_url' => !empty($cad['relative_image_url']) ? base_url($cad['relative_image_url']) : ($cad['image_url'] ?? base_url('assets/img/slides-1.jpg')),
+                    'description' => $cad['description'] ?? ''
+                ];
+            }
+        } else {
+            // Default Service Banners
+            $ads[] = [
+                'id' => $adId++,
+                'type' => 'hospital_ad',
+                'title' => 'In-House 24/7 Pharmacy',
+                'tagline' => '100% Genuine Medicines & Fastest Counter Dispense',
+                'image_url' => base_url('assets/img/slides-1.jpg'),
+                'description' => 'Discounts on prescription billing. Doorstep delivery available for senior citizens and admitted patients.'
+            ];
+            $ads[] = [
+                'id' => $adId++,
+                'type' => 'hospital_ad',
+                'title' => 'Advanced Radiology & Imaging Center',
+                'tagline' => 'Digital X-Ray, 32-Slice CT Scan & 4D Ultrasound',
+                'image_url' => base_url('assets/img/slides-2.jpg'),
+                'description' => 'Accurate high-precision diagnostic imaging with immediate digital report generation.'
+            ];
+            $ads[] = [
+                'id' => $adId++,
+                'type' => 'hospital_ad',
+                'title' => '24x7 Emergency & Critical Care ICU',
+                'tagline' => 'Fully Equipped Ventilators, Cardiac Monitors & Trauma Team',
+                'image_url' => base_url('assets/img/slides-3.jpg'),
+                'description' => 'Round-the-clock emergency medical services with dedicated ICU & Operation Theater.'
+            ];
+        }
+
+        // Fetch Ticker & Left Ad Settings
+        $tickerRow = $db->table('hospital_setting')->select('s_value')->where('s_name', 'TV_QUEUE_FOOTER_TICKER')->get(1)->getRowArray();
+        $leftAdTextRow = $db->table('hospital_setting')->select('s_value')->where('s_name', 'TV_QUEUE_LEFT_AD_TEXT')->get(1)->getRowArray();
+        $leftAdImgRow = $db->table('hospital_setting')->select('s_value')->where('s_name', 'TV_QUEUE_LEFT_AD_IMAGE')->get(1)->getRowArray();
+        $leftAdEnabledRow = $db->table('hospital_setting')->select('s_value')->where('s_name', 'TV_QUEUE_LEFT_AD_ENABLED')->get(1)->getRowArray();
+
+        $hospNameRow = $db->table('hospital_setting')->select('s_value')->where('s_name', 'H_Name')->get(1)->getRowArray();
 
         return $this->response->setJSON([
             'status' => 1,
-            'hospital_name' => 'E-Atria Multispeciality Hospital',
+            'hospital_name' => !empty($hospNameRow['s_value']) ? $hospNameRow['s_value'] : 'E-Atria Multispeciality Hospital',
             'server_time' => date('d-m-Y h:i:s A'),
+            'footer_ticker' => !empty($tickerRow['s_value']) ? $tickerRow['s_value'] : 'Welcome to E-Atria Multispeciality Hospital. Please observe your token number on the screen. Voice announcements will call your turn. For assistance, contact the help desk. • Emergency Helpline: +91-9876543210 • 24/7 Pharmacy & Ambulance Services Available',
+            'left_ad' => [
+                'enabled' => ($leftAdEnabledRow['s_value'] ?? '1') === '1',
+                'text' => $leftAdTextRow['s_value'] ?? '24x7 Emergency ICU & Ambulance Available',
+                'image_url' => !empty($leftAdImgRow['s_value']) ? base_url($leftAdImgRow['s_value']) : ''
+            ],
             'trackers' => $allTrackers,
             'ads' => $ads
         ]);

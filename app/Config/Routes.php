@@ -1387,6 +1387,10 @@ $routes->group('setting', static function($routes) {
     $routes->post('admin/nursing-station/save', 'Setting\\NursingStation::save');
     $routes->post('admin/nursing-station/delete', 'Setting\\NursingStation::delete');
     $routes->get('admin/nursing-station/list_json', 'Setting\\NursingStation::list_json');
+    $routes->get('admin/opd-queue-tv', 'Setting\\OpdQueueSetting::index');
+    $routes->post('admin/opd-queue-tv/save', 'Setting\\OpdQueueSetting::save');
+    $routes->post('admin/opd-queue-tv/upload-banner', 'Setting\\OpdQueueSetting::uploadBanner');
+    $routes->post('admin/opd-queue-tv/delete-banner', 'Setting\\OpdQueueSetting::deleteBanner');
     $routes->get('admin/bed-management', 'Setting\\BedManagement::index', ['filter' => $settingsBedFilter]);
     $routes->get('admin/departments', 'Setting\\BedManagement::departments', ['filter' => $settingsBedFilter]);
     $routes->post('admin/departments/save', 'Setting\\BedManagement::saveDepartment', ['filter' => $settingsBedFilter]);

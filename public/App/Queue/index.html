@@ -289,6 +289,13 @@
                 </div>
             </div>
 
+            <!-- Left Bottom Space Ad Banner -->
+            <div id="tracker_left_ad_container" class="px-2 py-1" style="display: none; background: #0f172a; color: #ffffff;">
+                <div id="tracker_left_ad_content" class="p-2 rounded d-flex align-items-center justify-content-between shadow-sm" style="background: linear-gradient(90deg, #1e293b 0%, #0f172a 100%); border: 1px solid rgba(255,255,255,0.15);">
+                    <!-- Dynamic Left Bottom Ad Content -->
+                </div>
+            </div>
+
             <!-- Page Dots Footer for Left Column -->
             <div class="tracker-footer" id="tracker_dots_container">
                 <!-- Dynamically Populated Dots -->
@@ -336,9 +343,23 @@
         setInterval(updateClock, 1000);
         updateClock();
 
+        // Speech Pronunciation Formatter (Expands abbreviations so TTS reads "Doctor", "Department", etc. cleanly)
+        function formatSpeechText(text) {
+            if (!text) return '';
+            var clean = text;
+            clean = clean.replace(/\bDr\.\s*/gi, 'Doctor ');
+            clean = clean.replace(/\bDr\s+/gi, 'Doctor ');
+            clean = clean.replace(/\bDept\.\s*/gi, 'Department ');
+            clean = clean.replace(/\bDept\s+/gi, 'Department ');
+            clean = clean.replace(/\bNo\.\s*/gi, 'Number ');
+            clean = clean.replace(/\bUSG\b/gi, 'Ultrasound');
+            return clean;
+        }
+
         // Audio Announcement
-        function speakText(text) {
+        function speakText(rawText) {
             if (!audioEnabled) return;
+            var text = formatSpeechText(rawText);
             try {
                 if ('speechSynthesis' in window) {
                     window.speechSynthesis.cancel();
@@ -497,6 +518,26 @@
                             if (json.hospital_name) {
                                 var hospEl = document.getElementById('hdr_hosp_name');
                                 if (hospEl) hospEl.textContent = json.hospital_name;
+                            }
+                            if (json.footer_ticker) {
+                                var tickerEl = document.getElementById('ticker_text');
+                                if (tickerEl) {
+                                    tickerEl.innerHTML = '<i class="bi bi-info-circle-fill text-warning me-2"></i> ' + json.footer_ticker;
+                                }
+                            }
+                            if (json.left_ad) {
+                                var leftAdContainer = document.getElementById('tracker_left_ad_container');
+                                var leftAdContent = document.getElementById('tracker_left_ad_content');
+                                if (leftAdContainer && leftAdContent && json.left_ad.enabled) {
+                                    leftAdContainer.style.display = 'block';
+                                    if (json.left_ad.image_url) {
+                                        leftAdContent.innerHTML = '<img src="' + json.left_ad.image_url + '" style="max-height: 48px; width: 100%; object-fit: contain; border-radius: 6px;" />';
+                                    } else {
+                                        leftAdContent.innerHTML = '<div class="d-flex align-items-center gap-2 text-warning fw-bold small"><i class="bi bi-megaphone-fill fs-5"></i> <span>' + (json.left_ad.text || '24x7 Emergency Services Available') + '</span></div>';
+                                    }
+                                } else if (leftAdContainer) {
+                                    leftAdContainer.style.display = 'none';
+                                }
                             }
                             renderTrackers();
                             renderShowcase();

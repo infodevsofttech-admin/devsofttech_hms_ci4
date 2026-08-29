@@ -101,6 +101,12 @@
                 </a>
             </div>
             <div class="col-6 col-md-2 col-lg-2">
+                <a class="admin-tile" href="javascript:openAdminSubPage('<?= base_url('setting/admin/opd-queue-tv') ?>','OPD Queue TV Settings');">
+                    <i class="bi bi-tv" style="color:#0d6efd"></i>
+                    <span>OPD Queue TV</span>
+                </a>
+            </div>
+            <div class="col-6 col-md-2 col-lg-2">
                 <a class="admin-tile" href="javascript:openAdminSubPage('<?= base_url('setting/admin/hospital-profile') ?>','Hospital Profile');">
                     <i class="bi bi-building"></i>
                     <span>Hospital Profile</span>
