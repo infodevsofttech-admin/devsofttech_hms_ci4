@@ -823,41 +823,47 @@ class DoctorApi extends BaseController
         $allTrackers = array_merge($docTokens, $deptTokens);
 
         // 3. Hospital Advertisements & Doctor Showcase Slides
-        $ads = [
-            [
-                'id' => 1,
+        $ads = [];
+        $adId = 1;
+
+        // Dynamic Doctor Profile Slides for all doctors on duty
+        foreach ($docTokens as $dt) {
+            $ads[] = [
+                'id' => $adId++,
                 'type' => 'doctor_profile',
                 'title' => 'Our Medical Experts',
-                'doctor_name' => $docTokens[0]['name'] ?? 'Dr. Prakash Chandwani',
-                'specialization' => $docTokens[0]['specialization'] ?? 'Cardiologist & Physician',
-                'designation' => 'Chief Managing Director & Senior Consultant',
+                'doctor_name' => $dt['name'],
+                'specialization' => $dt['specialization'],
+                'designation' => $dt['designation'] ?? 'Consultant Doctor',
                 'image_url' => base_url('assets/img/profile-img.jpg'),
-                'description' => 'Available for OPD Consultations (10:00 AM - 4:00 PM). Specializing in Advanced Heart Care & Critical Management.'
-            ],
-            [
-                'id' => 2,
-                'type' => 'hospital_ad',
-                'title' => 'In-House 24/7 Pharmacy',
-                'tagline' => '100% Genuine Medicines & Fastest Counter Dispense',
-                'image_url' => base_url('assets/img/slides-1.jpg'),
-                'description' => 'Discounts on prescription billing. Doorstep delivery available for senior citizens and admitted patients.'
-            ],
-            [
-                'id' => 3,
-                'type' => 'hospital_ad',
-                'title' => 'Advanced Radiology & Imaging Center',
-                'tagline' => 'Digital X-Ray, 32-Slice CT Scan & 4D Ultrasound',
-                'image_url' => base_url('assets/img/slides-2.jpg'),
-                'description' => 'Accurate high-precision diagnostic imaging with immediate digital report generation.'
-            ],
-            [
-                'id' => 4,
-                'type' => 'hospital_ad',
-                'title' => '24x7 Emergency & Critical Care ICU',
-                'tagline' => 'Fully Equipped Ventilators, Cardiac Monitors & Trauma Team',
-                'image_url' => base_url('assets/img/slides-3.jpg'),
-                'description' => 'Round-the-clock emergency medical services with dedicated ICU & Operation Theater.'
-            ]
+                'description' => 'Available for OPD Consultations (' . $dt['room'] . '). Specializing in ' . $dt['specialization'] . '.'
+            ];
+        }
+
+        // Hospital Service Advertisements
+        $ads[] = [
+            'id' => $adId++,
+            'type' => 'hospital_ad',
+            'title' => 'In-House 24/7 Pharmacy',
+            'tagline' => '100% Genuine Medicines & Fastest Counter Dispense',
+            'image_url' => base_url('assets/img/slides-1.jpg'),
+            'description' => 'Discounts on prescription billing. Doorstep delivery available for senior citizens and admitted patients.'
+        ];
+        $ads[] = [
+            'id' => $adId++,
+            'type' => 'hospital_ad',
+            'title' => 'Advanced Radiology & Imaging Center',
+            'tagline' => 'Digital X-Ray, 32-Slice CT Scan & 4D Ultrasound',
+            'image_url' => base_url('assets/img/slides-2.jpg'),
+            'description' => 'Accurate high-precision diagnostic imaging with immediate digital report generation.'
+        ];
+        $ads[] = [
+            'id' => $adId++,
+            'type' => 'hospital_ad',
+            'title' => '24x7 Emergency & Critical Care ICU',
+            'tagline' => 'Fully Equipped Ventilators, Cardiac Monitors & Trauma Team',
+            'image_url' => base_url('assets/img/slides-3.jpg'),
+            'description' => 'Round-the-clock emergency medical services with dedicated ICU & Operation Theater.'
         ];
 
         return $this->response->setJSON([

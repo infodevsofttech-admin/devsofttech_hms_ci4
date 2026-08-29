@@ -67,6 +67,7 @@
             overflow: hidden;
             display: flex;
             flex-direction: column;
+            position: relative;
         }
 
         .tracker-header {
@@ -79,15 +80,32 @@
             font-weight: 800;
             font-size: 20px;
             letter-spacing: 0.5px;
+            z-index: 10;
         }
 
-        .tracker-list {
+        .tracker-viewport {
+            flex: 1;
+            overflow: hidden;
+            position: relative;
+            width: 100%;
+        }
+
+        .tracker-slider {
+            display: flex;
+            width: 100%;
+            height: 100%;
+            transition: transform 0.6s cubic-bezier(0.25, 1, 0.5, 1);
+        }
+
+        .tracker-page-slide {
+            flex: 0 0 100%;
+            width: 100%;
             padding: 12px;
+            box-sizing: border-box;
             display: flex;
             flex-direction: column;
             gap: 10px;
-            flex: 1;
-            overflow-y: auto;
+            justify-content: flex-start;
         }
 
         /* Individual Token Tracker Item Card */
@@ -140,6 +158,16 @@
             text-align: right;
             line-height: 1;
             text-shadow: 0 2px 4px rgba(0,0,0,0.3);
+        }
+
+        .tracker-footer {
+            padding: 8px 16px;
+            background: #f8fafc;
+            border-top: 1px solid #e2e8f0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
         }
 
         /* Hospital Ads & Doctor Showcase Column (Right) */
@@ -247,14 +275,23 @@
 
     <!-- Main Grid -->
     <main class="tv-main-grid">
-        <!-- Left: Token Tracker List -->
+        <!-- Left: Paginated Token Tracker List -->
         <div class="tracker-column">
             <div class="tracker-header">
                 <span><i class="bi bi-person-lines-fill me-2"></i> Token Tracker</span>
-                <span class="badge bg-white text-primary rounded-pill px-3 py-1 fs-6">Live Queue</span>
+                <span id="tracker_page_badge" class="badge bg-white text-primary rounded-pill px-3 py-1 fs-6">Page 1 of 1</span>
             </div>
-            <div class="tracker-list" id="tracker_list_container">
-                <!-- Dynamically Populated -->
+            
+            <!-- Horizontal Viewport Slider for Left Token Tracker -->
+            <div class="tracker-viewport">
+                <div class="tracker-slider" id="tracker_slider">
+                    <!-- Dynamically Populated Slides (5 items per page) -->
+                </div>
+            </div>
+
+            <!-- Page Dots Footer for Left Column -->
+            <div class="tracker-footer" id="tracker_dots_container">
+                <!-- Dynamically Populated Dots -->
             </div>
         </div>
 
@@ -277,12 +314,14 @@
         </div>
     </div>
 
-    <!-- Universal Pure Vanilla JS script (Works 100% on Samsung TV Browser, Smart TVs & PCs) -->
+    <!-- Universal Pure Vanilla JS script (Paginated Left-to-Right Carousel, Samsung TV compatible) -->
     <script>
         var audioEnabled = true;
         var trackersData = [];
         var adsData = [];
         var currentAdIdx = 0;
+        var currentPageIdx = 0;
+        var itemsPerPage = 5; // 5 cards per page fit perfectly without cutoffs
         var cardColors = ['card-blue', 'card-green', 'card-cyan', 'card-darkgreen', 'card-red'];
 
         // Live Clock
@@ -328,35 +367,81 @@
             };
         }
 
-        // Render Token Cards
+        // Render Paginated Left Token Tracker Slides (Horizontal Carousel)
         function renderTrackers() {
-            var container = document.getElementById('tracker_list_container');
-            if (!container) return;
+            var sliderEl = document.getElementById('tracker_slider');
+            var badgeEl = document.getElementById('tracker_page_badge');
+            var dotsEl = document.getElementById('tracker_dots_container');
+            if (!sliderEl) return;
+
+            var totalPages = Math.ceil(trackersData.length / itemsPerPage);
+            if (totalPages === 0) totalPages = 1;
+            if (currentPageIdx >= totalPages) currentPageIdx = 0;
+
+            if (badgeEl) {
+                badgeEl.textContent = 'Page ' + (currentPageIdx + 1) + ' of ' + totalPages;
+            }
+
             var html = '';
+            for (var p = 0; p < totalPages; p++) {
+                html += '<div class="tracker-page-slide">';
+                var startIdx = p * itemsPerPage;
+                var endIdx = Math.min(startIdx + itemsPerPage, trackersData.length);
 
-            for (var i = 0; i < trackersData.length; i++) {
-                var item = trackersData[i];
-                var colorClass = cardColors[i % cardColors.length];
-                var iconHtml = item.icon 
-                    ? '<i class="bi ' + item.icon + ' text-primary"></i>' 
-                    : (item.name ? item.name.charAt(0) : 'D');
+                for (var i = startIdx; i < endIdx; i++) {
+                    var item = trackersData[i];
+                    var colorClass = cardColors[i % cardColors.length];
+                    var iconHtml = item.icon 
+                        ? '<i class="bi ' + item.icon + ' text-primary"></i>' 
+                        : (item.name ? item.name.charAt(0) : 'D');
 
-                html += '<div tabindex="0" class="tracker-card ' + colorClass + '" onclick="speakText(\'Token Number ' + item.token_no + ' for ' + item.name + '\')">';
-                html += '  <div class="d-flex align-items-center gap-3">';
-                html += '    <div class="avatar-circle">' + iconHtml + '</div>';
-                html += '    <div>';
-                html += '      <h5 class="mb-0 fw-extrabold" style="font-size:19px; font-weight:800;">' + item.name + '</h5>';
-                html += '      <small class="opacity-90" style="font-size:12px; font-weight:500;">' + item.specialization + ' &bull; <span class="badge bg-white bg-opacity-25 text-white">' + item.room + '</span></small>';
-                html += '    </div>';
-                html += '  </div>';
-                html += '  <div class="text-end">';
-                html += '    <div class="token-number-box">' + item.token_no + '</div>';
-                html += '    <small class="opacity-75" style="font-size:10px;">CURRENT TOKEN</small>';
-                html += '  </div>';
+                    html += '<div tabindex="0" class="tracker-card ' + colorClass + '" onclick="speakText(\'Token Number ' + item.token_no + ' for ' + item.name + '\')">';
+                    html += '  <div class="d-flex align-items-center gap-3">';
+                    html += '    <div class="avatar-circle">' + iconHtml + '</div>';
+                    html += '    <div>';
+                    html += '      <h5 class="mb-0 fw-extrabold" style="font-size:18px; font-weight:800;">' + item.name + '</h5>';
+                    html += '      <small class="opacity-90" style="font-size:12px; font-weight:500;">' + item.specialization + ' &bull; <span class="badge bg-white bg-opacity-25 text-white">' + item.room + '</span></small>';
+                    html += '    </div>';
+                    html += '  </div>';
+                    html += '  <div class="text-end">';
+                    html += '    <div class="token-number-box">' + item.token_no + '</div>';
+                    html += '    <small class="opacity-75" style="font-size:10px;">CURRENT TOKEN</small>';
+                    html += '  </div>';
+                    html += '</div>';
+                }
                 html += '</div>';
             }
 
-            container.innerHTML = html;
+            sliderEl.innerHTML = html;
+            sliderEl.style.transform = 'translateX(-' + (currentPageIdx * 100) + '%)';
+
+            // Render Dots Footer
+            if (dotsEl) {
+                var dotsHtml = '';
+                for (var d = 0; d < totalPages; d++) {
+                    var activeStyle = (d === currentPageIdx) ? 'bg-primary' : 'bg-secondary opacity-50';
+                    var widthStyle = (d === currentPageIdx) ? '24px' : '10px';
+                    dotsHtml += '<button class="btn rounded-circle p-0 ' + activeStyle + '" style="width:' + widthStyle + '; height:10px; border-radius:10px;" onclick="goToTrackerPage(' + d + ')"></button>';
+                }
+                dotsEl.innerHTML = dotsHtml;
+            }
+        }
+
+        function goToTrackerPage(pageIdx) {
+            var totalPages = Math.ceil(trackersData.length / itemsPerPage);
+            if (totalPages === 0) totalPages = 1;
+            currentPageIdx = pageIdx % totalPages;
+
+            var sliderEl = document.getElementById('tracker_slider');
+            var badgeEl = document.getElementById('tracker_page_badge');
+
+            if (sliderEl) {
+                sliderEl.style.transform = 'translateX(-' + (currentPageIdx * 100) + '%)';
+            }
+            if (badgeEl) {
+                badgeEl.textContent = 'Page ' + (currentPageIdx + 1) + ' of ' + totalPages;
+            }
+            renderTrackers();
         }
 
         // Render Showcase Ad Slide
@@ -386,7 +471,7 @@
                 html += '</div>';
             }
 
-            // Dot Indicators
+            // Dot Indicators for Showcase
             html += '<div class="d-flex gap-2 mt-4">';
             for (var k = 0; k < adsData.length; k++) {
                 var activeStyle = (k === currentAdIdx) ? 'bg-primary' : 'bg-secondary opacity-50';
@@ -398,7 +483,7 @@
             bodyEl.innerHTML = html;
         }
 
-        // Fetch Data from API (XMLHttpRequest for 100% Samsung TV Browser Compatibility)
+        // Fetch Data from API
         function loadQueueData() {
             var xhr = new XMLHttpRequest();
             xhr.open('GET', '/api/v1/opd/queue/live', true);
@@ -428,6 +513,16 @@
         loadQueueData();
         setInterval(loadQueueData, 5000);
 
+        // Auto-advance Left Token Tracker Page every 7 seconds
+        setInterval(function() {
+            var totalPages = Math.ceil(trackersData.length / itemsPerPage);
+            if (totalPages > 1) {
+                currentPageIdx = (currentPageIdx + 1) % totalPages;
+                goToTrackerPage(currentPageIdx);
+            }
+        }, 7000);
+
+        // Auto-advance Right Showcase Carousel every 8 seconds
         setInterval(function() {
             if (adsData.length > 0) {
                 currentAdIdx = (currentAdIdx + 1) % adsData.length;
@@ -435,7 +530,7 @@
             }
         }, 8000);
 
-        // Register PWA Service Worker immediately for fast automated PWA auditing
+        // Register PWA Service Worker immediately
         if ('serviceWorker' in navigator) {
             navigator.serviceWorker.register('/app/queue/sw.js', { scope: '/app/queue/' })
                 .then(function(reg) {
