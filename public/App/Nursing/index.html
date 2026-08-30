@@ -27,6 +27,9 @@
     <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.css">
     <script src="https://cdnjs.cloudflare.com/ajax/libs/cropperjs/1.6.1/cropper.min.js"></script>
 
+    <!-- HTML5 QR & Barcode Scanner for Patient Barcodes and ABHA QR -->
+    <script src="https://unpkg.com/html5-qrcode@2.3.8/html5-qrcode.min.js"></script>
+
     <style>
         :root {
             --primary-bg: #0f172a;
@@ -218,6 +221,109 @@
             overflow: hidden;
         }
 
+        /* Fluid I/O Stats Cards */
+        .stat-card-intake {
+            background: linear-gradient(135deg, #ecfdf5 0%, #d1fae5 100%);
+            border: 1.5px solid #a7f3d0;
+            border-radius: 14px;
+            padding: 10px 8px;
+        }
+        .stat-card-output {
+            background: linear-gradient(135deg, #fffbeb 0%, #fef3c7 100%);
+            border: 1.5px solid #fde68a;
+            border-radius: 14px;
+            padding: 10px 8px;
+        }
+        .stat-card-balance {
+            background: linear-gradient(135deg, #eff6ff 0%, #dbeafe 100%);
+            border: 1.5px solid #bfdbfe;
+            border-radius: 14px;
+            padding: 10px 8px;
+        }
+
+        /* Floating Bottom Dock Action Bar */
+        .bottom-dock-container {
+            position: fixed;
+            bottom: 0;
+            left: 0;
+            right: 0;
+            z-index: 1040;
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(14px);
+            -webkit-backdrop-filter: blur(14px);
+            border-top: 1px solid #e2e8f0;
+            box-shadow: 0 -6px 25px rgba(15, 23, 42, 0.1);
+            padding: 8px 12px;
+            padding-bottom: calc(10px + env(safe-area-inset-bottom));
+            display: flex;
+            gap: 10px;
+            max-width: 600px;
+            margin: 0 auto;
+        }
+
+        .bottom-dock-btn {
+            border: none;
+            border-radius: 14px;
+            padding: 8px 6px;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            gap: 3px;
+            font-size: 11px;
+            font-weight: 700;
+            transition: all 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+            color: #ffffff;
+            text-decoration: none;
+            flex: 1;
+            cursor: pointer;
+        }
+
+        .bottom-dock-btn:active {
+            transform: scale(0.95);
+        }
+
+        .bottom-dock-btn.btn-scan {
+            background: linear-gradient(135deg, #0f172a 0%, #334155 100%);
+            box-shadow: 0 4px 14px rgba(15, 23, 42, 0.25);
+        }
+
+        .bottom-dock-btn.btn-vitals {
+            background: linear-gradient(135deg, #059669 0%, #047857 100%);
+            box-shadow: 0 4px 14px rgba(5, 150, 105, 0.25);
+        }
+
+        .bottom-dock-btn.btn-doc {
+            background: linear-gradient(135deg, #4f46e5 0%, #3730a3 100%);
+            box-shadow: 0 4px 14px rgba(79, 70, 229, 0.25);
+        }
+
+        .content-with-bottom-dock {
+            padding-bottom: 96px !important;
+        }
+
+        .qr-scanner-wrapper {
+            position: relative;
+            background: #000000;
+            border-radius: 16px;
+            overflow: hidden;
+            border: 2px solid #3b82f6;
+            min-height: 240px;
+        }
+
+        .patient-search-result-card {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            border-radius: 14px;
+            padding: 12px;
+            transition: all 0.2s ease;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.04);
+        }
+        .patient-search-result-card:hover {
+            border-color: #93c5fd;
+            box-shadow: 0 4px 14px rgba(37,99,235,0.08);
+        }
+
         .no-scrollbar::-webkit-scrollbar { display: none; }
         .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
     </style>
@@ -369,6 +475,36 @@
             const [scanImageBase64, setScanImageBase64] = useState('');
             const [scanImagePreview, setScanImagePreview] = useState('');
 
+            // ABDM M2 & Patient Search / Barcode Scanner State
+            const [showPatientSearchModal, setShowPatientSearchModal] = useState(false);
+            const [searchModalTab, setSearchModalTab] = useState('scan'); // 'scan' or 'type'
+            const [patientSearchQuery, setPatientSearchQuery] = useState('');
+            const [patientSearchResults, setPatientSearchResults] = useState([]);
+            const [searchingPatient, setSearchingPatient] = useState(false);
+            const [scannerActive, setScannerActive] = useState(false);
+            const [scannerError, setScannerError] = useState('');
+
+            // ABDM M2 Wellness Vitals Modal State
+            const [activeWellnessPatient, setActiveWellnessPatient] = useState(null);
+            const [wellnessForm, setWellnessForm] = useState({
+                temperature_f: '', pulse_rate: '', resp_rate: '',
+                bp_systolic: '', bp_diastolic: '', spo2: '', weight_kg: '', height_cm: '',
+                general_advice: '', diet_lifestyle_note: ''
+            });
+
+            // ABDM M2 Health Document Modal State
+            const [activeDocPatient, setActiveDocPatient] = useState(null);
+            const [patientDocForm, setPatientDocForm] = useState({
+                document_type: 'Health Document',
+                document_date: new Date().toISOString().slice(0, 10),
+                remarks: ''
+            });
+
+            // Vitals History Modal State
+            const [wellnessHistoryPatient, setWellnessHistoryPatient] = useState(null);
+            const [wellnessHistoryList, setWellnessHistoryList] = useState([]);
+            const [loadingHistory, setLoadingHistory] = useState(false);
+
             // Auth State
             const [authenticatedNurse, setAuthenticatedNurse] = useState(null);
             const [authNurseId, setAuthNurseId] = useState(0);
@@ -392,6 +528,8 @@
             const [treatmentForm, setTreatmentForm] = useState({
                 treatment_text: '', general_note: ''
             });
+
+            const [showAllDoctorOrders, setShowAllDoctorOrders] = useState(false);
 
             const fetchBeds = async () => {
                 try {
@@ -467,8 +605,6 @@
                         const parsed = JSON.parse(savedAuth);
                         if (parsed && parsed.nurse && parsed.expires_at > Date.now()) {
                             setAuthenticatedNurse(parsed.nurse);
-                            fetchBeds();
-                            fetchOpdAppointments(opdDateMode, selectedDoctorId, vitalsFilter);
                         } else {
                             localStorage.removeItem(DEVICE_AUTH_KEY);
                         }
@@ -477,6 +613,7 @@
                 fetchBeds();
                 fetchNurses();
                 fetchDoctors();
+                fetchOpdAppointments('today', '0', 'all');
             }, []);
 
             const handleVerifyPin = async () => {
@@ -511,7 +648,7 @@
                         localStorage.setItem(DEVICE_AUTH_KEY, JSON.stringify(deviceAuthObj));
                         setPinInput('');
                         fetchBeds();
-                        fetchOpdAppointments(opdDateMode);
+                        fetchOpdAppointments(opdDateMode, selectedDoctorId, vitalsFilter);
                     } else if (json.status === 2) {
                         setIsSettingNewPin(true);
                     } else {
@@ -598,6 +735,21 @@
                     const json = await res.json();
                     if (json.status === 1) {
                         alert(json.message || 'Saved successfully!');
+                        if (entryType === 'vitals') {
+                            setVitalsForm({
+                                temperature_f: '', pulse_rate: '', resp_rate: '',
+                                bp_systolic: '', bp_diastolic: '', spo2: '', weight_kg: '', general_note: ''
+                            });
+                        } else if (entryType === 'fluid') {
+                            setFluidForm({
+                                fluid_direction: 'intake', fluid_route: 'IV (Intravenous)',
+                                fluid_amount_ml: '', general_note: ''
+                            });
+                        } else if (entryType === 'treatment') {
+                            setTreatmentForm({
+                                treatment_text: '', general_note: ''
+                            });
+                        }
                         openWorkspace(activeBed);
                     } else {
                         alert(json.message || 'Failed to save entry');
@@ -759,6 +911,255 @@
                 }
             };
 
+            // -----------------------------------------------------------------
+            // ABDM M2 PATIENT SEARCH & BARCODE / QR SCANNER HANDLERS
+            // -----------------------------------------------------------------
+            let scannerInstance = null;
+
+            const startBarcodeQrScanner = () => {
+                if (typeof Html5Qrcode === 'undefined') {
+                    setScannerError('Scanner library is loading. Please try in a moment.');
+                    return;
+                }
+                setScannerError('');
+                setScannerActive(true);
+
+                setTimeout(() => {
+                    const readerElem = document.getElementById('patient-qr-reader');
+                    if (!readerElem) return;
+
+                    try {
+                        if (scannerInstance) {
+                            scannerInstance.stop().catch(() => {}).finally(() => {
+                                initHtml5QrCode(readerElem);
+                            });
+                        } else {
+                            initHtml5QrCode(readerElem);
+                        }
+                    } catch (e) {
+                        setScannerError('Could not access camera: ' + (e.message || e));
+                        setScannerActive(false);
+                    }
+                }, 300);
+            };
+
+            const initHtml5QrCode = (readerElem) => {
+                try {
+                    const html5QrCode = new Html5Qrcode("patient-qr-reader");
+                    scannerInstance = html5QrCode;
+                    const config = {
+                        fps: 12,
+                        qrbox: { width: 280, height: 180 },
+                        aspectRatio: 1.333334,
+                        formatsToSupport: [
+                            Html5QrcodeSupportedFormats.QR_CODE,
+                            Html5QrcodeSupportedFormats.CODE_128,
+                            Html5QrcodeSupportedFormats.CODE_39,
+                            Html5QrcodeSupportedFormats.EAN_13,
+                            Html5QrcodeSupportedFormats.EAN_8,
+                            Html5QrcodeSupportedFormats.DATA_MATRIX
+                        ]
+                    };
+
+                    html5QrCode.start(
+                        { facingMode: "environment" },
+                        config,
+                        (decodedText) => {
+                            // On successful scan
+                            stopBarcodeQrScanner();
+                            setSearchModalTab('type');
+                            setPatientSearchQuery(decodedText);
+                            executePatientSearch(decodedText);
+                        },
+                        (errorMessage) => {
+                            // ignore frame errors
+                        }
+                    ).catch(err => {
+                        setScannerError('Camera permission required or camera busy: ' + (err.message || err));
+                        setScannerActive(false);
+                    });
+                } catch (err) {
+                    setScannerError('Failed to initialize camera scanner: ' + (err.message || err));
+                    setScannerActive(false);
+                }
+            };
+
+            const stopBarcodeQrScanner = () => {
+                if (scannerInstance) {
+                    try {
+                        scannerInstance.stop().then(() => {
+                            scannerInstance.clear();
+                            scannerInstance = null;
+                            setScannerActive(false);
+                        }).catch(() => {
+                            scannerInstance = null;
+                            setScannerActive(false);
+                        });
+                    } catch (e) {
+                        scannerInstance = null;
+                        setScannerActive(false);
+                    }
+                } else {
+                    setScannerActive(false);
+                }
+            };
+
+            const openPatientSearch = (defaultTab = 'scan') => {
+                setShowPatientSearchModal(true);
+                setSearchModalTab(defaultTab);
+                setPatientSearchResults([]);
+                setPatientSearchQuery('');
+                if (defaultTab === 'scan') {
+                    startBarcodeQrScanner();
+                } else {
+                    stopBarcodeQrScanner();
+                }
+            };
+
+            const closePatientSearch = () => {
+                stopBarcodeQrScanner();
+                setShowPatientSearchModal(false);
+                setPatientSearchResults([]);
+                setPatientSearchQuery('');
+            };
+
+            const executePatientSearch = async (queryText) => {
+                const q = queryText !== undefined ? queryText : patientSearchQuery;
+                if (!q || q.trim() === '') {
+                    setPatientSearchResults([]);
+                    return;
+                }
+                setSearchingPatient(true);
+                try {
+                    const res = await fetch(`/api/v1/nursing/patient/search?q=${encodeURIComponent(q.trim())}`);
+                    const json = await res.json();
+                    if (json.status === 1) {
+                        setPatientSearchResults(json.data || []);
+                    } else {
+                        setPatientSearchResults([]);
+                    }
+                } catch (err) {
+                    console.error('Patient search error', err);
+                } finally {
+                    setSearchingPatient(false);
+                }
+            };
+
+            // ABDM M2 Wellness Actions
+            const openWellnessModal = (patient) => {
+                setActiveWellnessPatient(patient);
+                const opdVitals = patient.opd_today || {};
+                setWellnessForm({
+                    temperature_f: opdVitals.temp || '',
+                    pulse_rate: opdVitals.pulse || '',
+                    resp_rate: opdVitals.rr_min || '',
+                    bp_systolic: opdVitals.bp || '',
+                    bp_diastolic: opdVitals.diastolic || '',
+                    spo2: opdVitals.spo2 || '',
+                    weight_kg: opdVitals.weight || '',
+                    height_cm: opdVitals.height || '',
+                    general_advice: '',
+                    diet_lifestyle_note: ''
+                });
+                setShowPatientSearchModal(false);
+                stopBarcodeQrScanner();
+            };
+
+            const handleSaveWellness = async () => {
+                if (!activeWellnessPatient) return;
+                try {
+                    const payload = {
+                        patient_id: activeWellnessPatient.id,
+                        recorded_by: authenticatedNurse ? authenticatedNurse.name : 'Staff Nurse',
+                        recorded_by_id: authenticatedNurse ? authenticatedNurse.id : 0,
+                        ...wellnessForm
+                    };
+                    const res = await fetch('/api/v1/nursing/patient/wellness/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const json = await res.json();
+                    if (json.status === 1) {
+                        alert('✅ ' + (json.message || 'ABDM M2 Wellness Vitals saved successfully!') + (json.bmi ? ` (BMI: ${json.bmi})` : ''));
+                        setActiveWellnessPatient(null);
+                        setWellnessForm({
+                            temperature_f: '', pulse_rate: '', resp_rate: '',
+                            bp_systolic: '', bp_diastolic: '', spo2: '', weight_kg: '', height_cm: '',
+                            general_advice: '', diet_lifestyle_note: ''
+                        });
+                    } else {
+                        alert(json.message || 'Failed to save wellness vitals');
+                    }
+                } catch (err) {
+                    alert('Error saving wellness vitals');
+                }
+            };
+
+            // ABDM M2 Health Document Actions
+            const openDocModal = (patient) => {
+                setActiveDocPatient(patient);
+                setScanImageBase64('');
+                setScanImagePreview('');
+                setPatientDocForm({
+                    document_type: 'Health Document',
+                    document_date: new Date().toISOString().slice(0, 10),
+                    remarks: ''
+                });
+                setShowPatientSearchModal(false);
+                stopBarcodeQrScanner();
+            };
+
+            const handleSavePatientDocument = async () => {
+                if (!activeDocPatient) return;
+                if (!scanImageBase64) {
+                    alert('Please capture or upload a document photo first.');
+                    return;
+                }
+                try {
+                    const payload = {
+                        patient_id: activeDocPatient.id,
+                        nurse_name: authenticatedNurse ? authenticatedNurse.name : 'Staff Nurse',
+                        nurse_id: authenticatedNurse ? authenticatedNurse.id : 0,
+                        image_base64: scanImageBase64,
+                        ...patientDocForm
+                    };
+                    const res = await fetch('/api/v1/nursing/patient/document/save', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
+                    const json = await res.json();
+                    if (json.status === 1) {
+                        alert('✅ ' + (json.message || 'ABDM M2 Health Document uploaded successfully!'));
+                        setActiveDocPatient(null);
+                        setScanImageBase64('');
+                        setScanImagePreview('');
+                    } else {
+                        alert(json.message || 'Failed to upload health document');
+                    }
+                } catch (err) {
+                    alert('Error uploading health document');
+                }
+            };
+
+            // Vitals History Actions
+            const openWellnessHistory = async (patient) => {
+                setWellnessHistoryPatient(patient);
+                setLoadingHistory(true);
+                try {
+                    const res = await fetch(`/api/v1/nursing/patient/wellness/history/${patient.id}`);
+                    const json = await res.json();
+                    if (json.status === 1) {
+                        setWellnessHistoryList(json.records || []);
+                    }
+                } catch (err) {
+                    console.error('Failed to load history', err);
+                } finally {
+                    setLoadingHistory(false);
+                }
+            };
+
             const getInitials = (nameStr) => {
                 if (!nameStr) return 'N';
                 const parts = nameStr.trim().split(' ');
@@ -788,15 +1189,35 @@
                 );
             };
 
-            // Filtered lists
+            const displayTempF = (tempC) => {
+                if (tempC === null || tempC === undefined || tempC === '') return '-';
+                const val = (parseFloat(tempC) * 9 / 5) + 32;
+                return val.toFixed(1) + '°F';
+            };
+
+            const formatDateTime = (dtStr) => {
+                if (!dtStr) return '-';
+                try {
+                    const d = new Date(dtStr.replace(/-/g, '/'));
+                    if (isNaN(d.getTime())) return dtStr;
+                    return d.toLocaleDateString('en-GB', { day: '2-digit', month: 'short', year: 'numeric' }) + ' ' + d.toLocaleTimeString('en-US', { hour: '2-digit', minute: '2-digit', hour12: true });
+                } catch (e) {
+                    return dtStr;
+                }
+            };
+
+            // Filtered lists: Only Admitted IPD Patients with Bed (Occupied Beds)
             const filteredBeds = beds.filter(bed => {
+                const isOccupied = bed.status === 'occupied' || (bed.patient_name && bed.patient_name.trim() !== '') || Boolean(bed.ipd_id);
                 const matchesWard = selectedWard === 'all' || bed.ward_name === selectedWard;
                 const q = searchQuery.toLowerCase();
                 const matchesSearch = searchQuery === '' || 
                     (bed.bed_number || '').toLowerCase().includes(q) ||
                     (bed.patient_name || '').toLowerCase().includes(q) ||
-                    (bed.uhid || '').toLowerCase().includes(q);
-                return matchesWard && matchesSearch;
+                    (bed.uhid || '').toLowerCase().includes(q) ||
+                    (bed.ipd_code || '').toLowerCase().includes(q) ||
+                    (bed.doctor_name || '').toLowerCase().includes(q);
+                return isOccupied && matchesWard && matchesSearch;
             });
 
             const filteredOpdAppointments = opdAppointments.filter(app => {
@@ -932,7 +1353,7 @@
                             <button className="btn btn-sm btn-outline-light rounded-circle p-2" style={{width: '36px', height: '36px'}} onClick={() => setShowAppsModal(true)} title="HMS Mobile & PWA Apps Launcher">
                                 <i className="bi bi-grid-3x3-gap-fill"></i>
                             </button>
-                            <button className="btn btn-sm btn-outline-light rounded-circle p-2" style={{width: '36px', height: '36px'}} onClick={() => { fetchBeds(); fetchOpdAppointments(opdDateMode); }} title="Refresh">
+                            <button className="btn btn-sm btn-outline-light rounded-circle p-2" style={{width: '36px', height: '36px'}} onClick={() => { fetchBeds(); fetchOpdAppointments(opdDateMode, selectedDoctorId, vitalsFilter); }} title="Refresh">
                                 <i className="bi bi-arrow-clockwise"></i>
                             </button>
                             <button className="btn btn-sm btn-outline-danger rounded-circle p-2" style={{width: '36px', height: '36px'}} onClick={handleLogout} title="Lock Access">
@@ -941,15 +1362,15 @@
                         </div>
                     </header>
 
-                    <main className="container-fluid py-3 px-2 px-md-3">
+                    <main className="container-fluid py-3 px-2 px-md-3 content-with-bottom-dock">
                         {!activeBed ? (
                             <div>
                                 {/* Segmented Tab Controller: IPD Admitted vs OPD Patients */}
                                 <div className="segmented-tabs mb-3">
-                                    <button className={`segmented-tab ${mainTab === 'ipd' ? 'active' : ''}`} onClick={() => setMainTab('ipd')}>
-                                        <i className="bi bi-hospital-fill me-2"></i> Admitted IPDs ({beds.filter(b => b.status === 'occupied').length})
+                                    <button className={`segmented-tab ${mainTab === 'ipd' ? 'active' : ''}`} onClick={() => { setMainTab('ipd'); fetchBeds(); }}>
+                                        <i className="bi bi-hospital-fill me-2"></i> Admitted IPDs ({beds.filter(b => b.status === 'occupied' || b.patient_name).length})
                                     </button>
-                                    <button className={`segmented-tab ${mainTab === 'opd' ? 'active-blue' : ''}`} onClick={() => setMainTab('opd')}>
+                                    <button className={`segmented-tab ${mainTab === 'opd' ? 'active-blue' : ''}`} onClick={() => { setMainTab('opd'); fetchOpdAppointments(opdDateMode, selectedDoctorId, vitalsFilter); }}>
                                         <i className="bi bi-calendar-check-fill me-2"></i> OPD Patients ({opdAppointments.length})
                                     </button>
                                 </div>
@@ -987,42 +1408,48 @@
                                         </div>
 
                                         <div className="row g-3">
-                                            {filteredBeds.map(bed => (
-                                                <div key={bed.id} className="col-6 col-md-4 col-lg-3">
-                                                    <div 
-                                                        className={`bed-card p-3 bed-status-${bed.status}`}
-                                                        onClick={() => openWorkspace(bed)}
-                                                    >
-                                                        <div className="d-flex justify-content-between align-items-start mb-2">
-                                                            <span className="fw-bold text-dark fs-5">Bed {bed.bed_number}</span>
-                                                            <span className={`badge ${bed.status === 'occupied' ? 'bg-primary' : 'bg-success'} text-uppercase`} style={{fontSize: '9px'}}>
-                                                                {bed.status}
-                                                            </span>
-                                                        </div>
-                                                        <small className="text-muted d-block mb-2" style={{fontSize: '11px'}}>{bed.ward_name || 'General Ward'}</small>
-
-                                                        {bed.patient_name ? (
-                                                            <div>
-                                                                <div className="fw-bold text-primary text-truncate" style={{fontSize: '15px'}}>{bed.patient_name}</div>
-                                                                <small className="text-muted d-block" style={{fontSize: '11px'}}>UHID: {bed.uhid || 'N/A'} • IPD: {bed.ipd_code || 'N/A'}</small>
-                                                                <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 mt-2 d-inline-block" style={{fontSize: '11px'}}>
-                                                                    <i className="bi bi-person-badge me-1"></i> {bed.doctor_name || 'Dr. Assigned'}
+                                            {filteredBeds.length === 0 ? (
+                                                <div className="col-12 text-center text-muted py-5 bg-white rounded-4 border shadow-sm">
+                                                    <i className="bi bi-hospital fs-1 text-secondary opacity-50 d-block mb-2"></i>
+                                                    <h6 className="fw-bold text-slate-800 mb-1">No Admitted Patients Found</h6>
+                                                    <small className="text-muted">There are currently no admitted IPD patients in the selected ward.</small>
+                                                </div>
+                                            ) : (
+                                                filteredBeds.map(bed => (
+                                                    <div key={bed.id} className="col-12 col-md-6 col-lg-4">
+                                                        <div 
+                                                            className={`bed-card p-3 bed-status-${bed.status}`}
+                                                            onClick={() => openWorkspace(bed)}
+                                                        >
+                                                            <div className="d-flex justify-content-between align-items-start mb-2">
+                                                                <span className="fw-bold text-dark fs-5">Bed {bed.bed_number}</span>
+                                                                <span className={`badge ${bed.status === 'occupied' ? 'bg-primary' : 'bg-success'} text-uppercase`} style={{fontSize: '9px'}}>
+                                                                    {bed.status}
                                                                 </span>
                                                             </div>
-                                                        ) : (
-                                                            <div className="text-success small fw-semibold py-2">Available for Admission</div>
-                                                        )}
+                                                            <small className="text-muted d-block mb-2" style={{fontSize: '11px'}}>{bed.ward_name || 'General Ward'}</small>
 
-                                                        {bed.status === 'occupied' && (
+                                                            {bed.patient_name ? (
+                                                                <div>
+                                                                    <div className="fw-bold text-primary text-truncate" style={{fontSize: '15px'}}>{bed.patient_name}</div>
+                                                                    <small className="text-muted d-block" style={{fontSize: '11px'}}>UHID: {bed.uhid || 'N/A'} • IPD: {bed.ipd_code || 'N/A'}</small>
+                                                                    <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1 mt-2 d-inline-block" style={{fontSize: '11px'}}>
+                                                                        <i className="bi bi-person-badge me-1"></i> {bed.doctor_name || 'Dr. Assigned'}
+                                                                    </span>
+                                                                </div>
+                                                            ) : (
+                                                                <div className="text-success small fw-semibold py-2">Available for Admission</div>
+                                                            )}
+
                                                             <div className="mt-3 pt-2 border-top d-flex gap-1">
-                                                                <button className="btn btn-sm btn-outline-primary w-100 py-1 fw-bold" style={{fontSize: '11px'}}>
-                                                                    <i className="bi bi-heart-pulse me-1"></i> Care Workspace
+                                                                <button className="btn btn-sm btn-primary w-100 py-2 fw-bold rounded-3 shadow-sm" style={{fontSize: '12px'}}>
+                                                                    <i className="bi bi-heart-pulse me-1"></i> Open Bedside Workspace
                                                                 </button>
                                                             </div>
-                                                        )}
+                                                        </div>
                                                     </div>
-                                                </div>
-                                            ))}
+                                                ))
+                                            )}
                                         </div>
                                     </div>
                                 ) : (
@@ -1219,64 +1646,448 @@
                                 </div>
 
                                 {/* Form Tabs for Bedside Care */}
-                                <ul className="nav nav-pills mb-3 bg-white p-1 rounded-3 border">
+                                <ul className="nav nav-pills mb-3 bg-white p-1 rounded-3 border shadow-sm">
                                     <li className="nav-item flex-fill text-center">
-                                        <button className={`nav-link w-100 ${activeTab === 'vitals' ? 'active' : ''}`} onClick={() => setActiveTab('vitals')}>
-                                            <i className="bi bi-heart-pulse me-1"></i> Vitals
+                                        <button className={`nav-link w-100 fw-bold ${activeTab === 'vitals' ? 'active' : ''}`} onClick={() => setActiveTab('vitals')}>
+                                            <i className="bi bi-heart-pulse me-1"></i> Vitals ({workspaceData.filter(e => e.entry_type === 'vitals').length})
                                         </button>
                                     </li>
                                     <li className="nav-item flex-fill text-center">
-                                        <button className={`nav-link w-100 ${activeTab === 'fluid' ? 'active' : ''}`} onClick={() => setActiveTab('fluid')}>
-                                            <i className="bi bi-droplet me-1"></i> Fluid I/O
+                                        <button className={`nav-link w-100 fw-bold ${activeTab === 'fluid' ? 'active' : ''}`} onClick={() => setActiveTab('fluid')}>
+                                            <i className="bi bi-droplet me-1"></i> Fluid I/O ({workspaceData.filter(e => e.entry_type === 'fluid').length})
                                         </button>
                                     </li>
                                     <li className="nav-item flex-fill text-center">
-                                        <button className={`nav-link w-100 ${activeTab === 'treatment' ? 'active' : ''}`} onClick={() => setActiveTab('treatment')}>
-                                            <i className="bi bi-clipboard2-pulse me-1"></i> Treatment
+                                        <button className={`nav-link w-100 fw-bold ${activeTab === 'treatment' ? 'active' : ''}`} onClick={() => setActiveTab('treatment')}>
+                                            <i className="bi bi-clipboard2-pulse me-1"></i> Treatment &amp; Orders ({workspaceData.filter(e => e.entry_type === 'treatment').length})
                                         </button>
                                     </li>
                                 </ul>
 
+                                {/* TAB 1: VITALS (FORM & HISTORY TABLE) */}
                                 {activeTab === 'vitals' && (
-                                    <div className="card p-3 shadow-sm border-0 mb-3 rounded-4">
-                                        <h6 className="fw-bold mb-3"><i className="bi bi-heart-pulse-fill text-danger me-1"></i> Bedside Vitals Entry</h6>
-                                        <div className="row g-2 mb-3">
-                                            <div className="col-6"><label className="form-label small mb-1">BP Sys/Dia</label><div className="input-group input-group-sm"><input type="number" className="form-control" placeholder="120" value={vitalsForm.bp_systolic} onChange={e => setVitalsForm({...vitalsForm, bp_systolic: e.target.value})} /><span className="input-group-text">/</span><input type="number" className="form-control" placeholder="80" value={vitalsForm.bp_diastolic} onChange={e => setVitalsForm({...vitalsForm, bp_diastolic: e.target.value})} /></div></div>
-                                            <div className="col-6"><label className="form-label small mb-1">Pulse Rate</label><input type="number" className="form-control form-control-sm" placeholder="72 bpm" value={vitalsForm.pulse_rate} onChange={e => setVitalsForm({...vitalsForm, pulse_rate: e.target.value})} /></div>
-                                            <div className="col-6"><label className="form-label small mb-1">SpO2 %</label><input type="number" className="form-control form-control-sm" placeholder="98%" value={vitalsForm.spo2} onChange={e => setVitalsForm({...vitalsForm, spo2: e.target.value})} /></div>
-                                            <div className="col-6"><label className="form-label small mb-1">Temp °F</label><input type="number" step="0.1" className="form-control form-control-sm" placeholder="98.6" value={vitalsForm.temperature_f} onChange={e => setVitalsForm({...vitalsForm, temperature_f: e.target.value})} /></div>
-                                            <div className="col-6"><label className="form-label small mb-1">Resp Rate</label><input type="number" className="form-control form-control-sm" placeholder="18/min" value={vitalsForm.resp_rate} onChange={e => setVitalsForm({...vitalsForm, resp_rate: e.target.value})} /></div>
-                                            <div className="col-6"><label className="form-label small mb-1">Weight (kg)</label><input type="number" className="form-control form-control-sm" placeholder="70" value={vitalsForm.weight_kg} onChange={e => setVitalsForm({...vitalsForm, weight_kg: e.target.value})} /></div>
-                                        </div>
-                                        <button className="btn btn-success fw-bold py-2 w-100 rounded-3 shadow-sm" onClick={() => handleSaveIpdEntry('vitals', vitalsForm)}>
-                                            <i className="bi bi-check-circle-fill me-1"></i> Save Bedside Vitals
-                                        </button>
-                                    </div>
-                                )}
-
-                                {activeTab === 'treatment' && (
-                                    <div className="card p-3 shadow-sm border-0 mb-3 rounded-4">
-                                        <h6 className="fw-bold mb-2"><i className="bi bi-journal-check text-primary me-1"></i> Nursing Procedure &amp; Notes</h6>
-                                        <textarea className="form-control mb-3 rounded-3" rows="3" placeholder="Enter nursing procedure given or medication administered..." value={treatmentForm.treatment_text} onChange={e => setTreatmentForm({...treatmentForm, treatment_text: e.target.value})}></textarea>
-                                        <button className="btn btn-primary fw-bold py-2 w-100 rounded-3 shadow-sm" onClick={() => handleSaveIpdEntry('treatment', treatmentForm)}>
-                                            <i className="bi bi-send-fill me-1"></i> Save Procedure Note
-                                        </button>
-                                    </div>
-                                )}
-
-                                {/* Bedside Log Entries */}
-                                <div className="card p-3 shadow-sm border-0 rounded-4">
-                                    <h6 className="fw-bold mb-3"><i className="bi bi-clock-history me-1"></i> Patient Bedside History Log</h6>
-                                    {workspaceData.map(e => (
-                                        <div key={e.id} className="p-3 border rounded-3 bg-light mb-2">
-                                            <div className="d-flex justify-content-between align-items-center mb-1">
-                                                <span className="badge bg-secondary" style={{fontSize: '10px'}}>{e.entry_type}</span>
-                                                <small className="text-muted" style={{fontSize: '10px'}}>{e.recorded_at} - by {e.recorded_by}</small>
+                                    <div>
+                                        <div className="card p-3 shadow-sm border-0 mb-3 rounded-4">
+                                            <h6 className="fw-bold mb-3 text-dark"><i className="bi bi-heart-pulse-fill text-danger me-1"></i> Record Bedside Vitals</h6>
+                                            <div className="row g-2 mb-3">
+                                                <div className="col-6 col-md-3">
+                                                    <label className="form-label small mb-1 fw-bold">BP Sys/Dia (mmHg)</label>
+                                                    <div className="input-group input-group-sm">
+                                                        <input type="number" className="form-control text-center" placeholder="120" value={vitalsForm.bp_systolic} onChange={e => setVitalsForm({...vitalsForm, bp_systolic: e.target.value})} />
+                                                        <span className="input-group-text">/</span>
+                                                        <input type="number" className="form-control text-center" placeholder="80" value={vitalsForm.bp_diastolic} onChange={e => setVitalsForm({...vitalsForm, bp_diastolic: e.target.value})} />
+                                                    </div>
+                                                </div>
+                                                <div className="col-6 col-md-3">
+                                                    <label className="form-label small mb-1 fw-bold">Pulse Rate (bpm)</label>
+                                                    <input type="number" className="form-control form-control-sm text-center" placeholder="72" value={vitalsForm.pulse_rate} onChange={e => setVitalsForm({...vitalsForm, pulse_rate: e.target.value})} />
+                                                </div>
+                                                <div className="col-6 col-md-3">
+                                                    <label className="form-label small mb-1 fw-bold">SpO2 %</label>
+                                                    <input type="number" className="form-control form-control-sm text-center" placeholder="98" value={vitalsForm.spo2} onChange={e => setVitalsForm({...vitalsForm, spo2: e.target.value})} />
+                                                </div>
+                                                <div className="col-6 col-md-3">
+                                                    <label className="form-label small mb-1 fw-bold">Temp °F</label>
+                                                    <input type="number" step="0.1" className="form-control form-control-sm text-center" placeholder="98.6" value={vitalsForm.temperature_f} onChange={e => setVitalsForm({...vitalsForm, temperature_f: e.target.value})} />
+                                                </div>
+                                                <div className="col-6 col-md-3">
+                                                    <label className="form-label small mb-1 fw-bold">Resp Rate (/min)</label>
+                                                    <input type="number" className="form-control form-control-sm text-center" placeholder="18" value={vitalsForm.resp_rate} onChange={e => setVitalsForm({...vitalsForm, resp_rate: e.target.value})} />
+                                                </div>
+                                                <div className="col-6 col-md-3">
+                                                    <label className="form-label small mb-1 fw-bold">Weight (kg)</label>
+                                                    <input type="number" step="0.1" className="form-control form-control-sm text-center" placeholder="70" value={vitalsForm.weight_kg} onChange={e => setVitalsForm({...vitalsForm, weight_kg: e.target.value})} />
+                                                </div>
+                                                <div className="col-12 col-md-6">
+                                                    <label className="form-label small mb-1 fw-bold">Nursing Remark / Observation</label>
+                                                    <input type="text" className="form-control form-control-sm" placeholder="e.g. Patient resting, vitals stable" value={vitalsForm.general_note} onChange={e => setVitalsForm({...vitalsForm, general_note: e.target.value})} />
+                                                </div>
                                             </div>
-                                            {renderNoteContent(e)}
+                                            <button className="btn btn-success fw-bold py-2 w-100 rounded-3 shadow-sm" onClick={() => handleSaveIpdEntry('vitals', vitalsForm)}>
+                                                <i className="bi bi-check-circle-fill me-1"></i> Save Bedside Vitals
+                                            </button>
                                         </div>
-                                    ))}
-                                </div>
+
+                                        {/* Vitals History Table */}
+                                        <div className="card shadow-sm border-0 rounded-4 overflow-hidden mb-3">
+                                            <div className="card-header py-2 bg-white d-flex justify-content-between align-items-center border-bottom">
+                                                <strong className="text-dark"><i className="bi bi-clock-history me-1 text-danger"></i> Vitals History Records</strong>
+                                                <span className="badge bg-danger-subtle text-danger border border-danger-subtle">{workspaceData.filter(e => e.entry_type === 'vitals').length} Records</span>
+                                            </div>
+                                            <div className="table-responsive">
+                                                <table className="table table-sm table-striped table-hover align-middle mb-0" style={{fontSize: '12px'}}>
+                                                    <thead className="table-light">
+                                                        <tr>
+                                                            <th>Date &amp; Time</th>
+                                                            <th>BP (mmHg)</th>
+                                                            <th>Pulse</th>
+                                                            <th>Temp</th>
+                                                            <th>Resp</th>
+                                                            <th>SpO2</th>
+                                                            <th>Weight</th>
+                                                            <th>Staff</th>
+                                                            <th>Remarks</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {workspaceData.filter(e => e.entry_type === 'vitals').length === 0 ? (
+                                                            <tr>
+                                                                <td colSpan="9" className="text-center text-muted py-4">No vitals records entered yet.</td>
+                                                            </tr>
+                                                        ) : (
+                                                            workspaceData.filter(e => e.entry_type === 'vitals').map(v => (
+                                                                <tr key={v.id}>
+                                                                    <td className="fw-semibold text-nowrap">{formatDateTime(v.recorded_at)}</td>
+                                                                    <td><span className="badge bg-light text-dark border">{v.bp_systolic ? `${v.bp_systolic}/${v.bp_diastolic}` : '-'}</span></td>
+                                                                    <td>{v.pulse_rate ? `${v.pulse_rate} bpm` : '-'}</td>
+                                                                    <td><span className="badge bg-danger-subtle text-danger">{displayTempF(v.temperature_c)}</span></td>
+                                                                    <td>{v.resp_rate ? `${v.resp_rate}/min` : '-'}</td>
+                                                                    <td>{v.spo2 ? `${v.spo2}%` : '-'}</td>
+                                                                    <td>{v.weight_kg ? `${v.weight_kg} kg` : '-'}</td>
+                                                                    <td><small className="text-muted">{v.recorded_by || 'Staff'}</small></td>
+                                                                    <td><small>{v.general_note || '-'}</small></td>
+                                                                </tr>
+                                                            ))
+                                                        )}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    </div>
+                                )}
+
+                                {/* TAB 2: FLUID INTAKE / OUTPUT (CALCULATED DIFFERENCE & HISTORY) */}
+                                {activeTab === 'fluid' && (() => {
+                                    const fluidList = workspaceData.filter(e => e.entry_type === 'fluid');
+                                    const totalIn = fluidList.filter(e => (e.fluid_direction || '').toLowerCase() === 'intake').reduce((sum, e) => sum + (parseFloat(e.fluid_amount_ml) || 0), 0);
+                                    const totalOut = fluidList.filter(e => (e.fluid_direction || '').toLowerCase() === 'output').reduce((sum, e) => sum + (parseFloat(e.fluid_amount_ml) || 0), 0);
+                                    const netDiff = totalIn - totalOut;
+
+                                    const intakeRoutes = ['IV (Intravenous)', 'Oral / Water / Juice', 'Ryles Tube / NG Feed', 'Normal Saline (NS)', 'Dextrose (DNS / RL)', 'Blood / Plasma', 'TPN', 'Other Intake'];
+                                    const outputRoutes = ['Urine / Foley Catheter', 'Drain / Ryle Tube', 'Vomitus', 'Stool / Loose Motion', 'Chest Tube Drain', 'Wound Drain', 'Other Output'];
+
+                                    return (
+                                        <div>
+                                            {/* Summary Balance Metric Cards */}
+                                            <div className="row g-2 mb-3">
+                                                <div className="col-4">
+                                                    <div className="stat-card-intake text-center shadow-sm">
+                                                        <small className="text-success fw-bold d-block mb-1" style={{fontSize: '11px'}}><i className="bi bi-arrow-down-left-circle-fill me-1"></i> Total Intake</small>
+                                                        <h5 className="fw-bold text-success mb-0">{totalIn.toLocaleString()} <span style={{fontSize: '11px'}}>ml</span></h5>
+                                                    </div>
+                                                </div>
+                                                <div className="col-4">
+                                                    <div className="stat-card-output text-center shadow-sm">
+                                                        <small className="text-warning fw-bold d-block mb-1" style={{fontSize: '11px'}}><i className="bi bi-arrow-up-right-circle-fill me-1"></i> Total Output</small>
+                                                        <h5 className="fw-bold text-warning mb-0">{totalOut.toLocaleString()} <span style={{fontSize: '11px'}}>ml</span></h5>
+                                                    </div>
+                                                </div>
+                                                <div className="col-4">
+                                                    <div className="stat-card-balance text-center shadow-sm">
+                                                        <small className="text-primary fw-bold d-block mb-1" style={{fontSize: '11px'}}><i className="bi bi-calculator me-1"></i> Difference (In-Out)</small>
+                                                        <h5 className={`fw-bold mb-0 ${netDiff >= 0 ? 'text-primary' : 'text-danger'}`}>
+                                                            {netDiff > 0 ? `+${netDiff.toLocaleString()}` : netDiff.toLocaleString()} <span style={{fontSize: '11px'}}>ml</span>
+                                                        </h5>
+                                                    </div>
+                                                </div>
+                                            </div>
+
+                                            {/* Add Fluid Entry Form */}
+                                            <div className="card p-3 shadow-sm border-0 mb-3 rounded-4">
+                                                <h6 className="fw-bold mb-3 text-dark"><i className="bi bi-droplet-fill text-primary me-1"></i> Add Fluid Intake / Output Entry</h6>
+                                                
+                                                <div className="mb-3">
+                                                    <label className="form-label small fw-bold mb-1">Direction</label>
+                                                    <div className="d-flex gap-2">
+                                                        <button 
+                                                            type="button" 
+                                                            className={`btn btn-sm flex-fill py-2 fw-bold rounded-3 ${fluidForm.fluid_direction === 'intake' ? 'btn-success text-white shadow-sm' : 'btn-light border text-secondary'}`}
+                                                            onClick={() => setFluidForm({...fluidForm, fluid_direction: 'intake', fluid_route: 'IV (Intravenous)'})}
+                                                        >
+                                                            <i className="bi bi-arrow-down-left-circle me-1"></i> Fluid Intake (In)
+                                                        </button>
+                                                        <button 
+                                                            type="button" 
+                                                            className={`btn btn-sm flex-fill py-2 fw-bold rounded-3 ${fluidForm.fluid_direction === 'output' ? 'btn-warning text-dark shadow-sm' : 'btn-light border text-secondary'}`}
+                                                            onClick={() => setFluidForm({...fluidForm, fluid_direction: 'output', fluid_route: 'Urine / Foley Catheter'})}
+                                                        >
+                                                            <i className="bi bi-arrow-up-right-circle me-1"></i> Fluid Output (Out)
+                                                        </button>
+                                                    </div>
+                                                </div>
+
+                                                <div className="row g-2 mb-3">
+                                                    <div className="col-12 col-md-6">
+                                                        <label className="form-label small fw-bold mb-1">Route / Site</label>
+                                                        <select 
+                                                            className="form-select form-select-sm"
+                                                            value={fluidForm.fluid_route}
+                                                            onChange={e => setFluidForm({...fluidForm, fluid_route: e.target.value})}
+                                                        >
+                                                            {(fluidForm.fluid_direction === 'intake' ? intakeRoutes : outputRoutes).map(r => (
+                                                                <option key={r} value={r}>{r}</option>
+                                                            ))}
+                                                        </select>
+                                                    </div>
+                                                    <div className="col-12 col-md-6">
+                                                        <label className="form-label small fw-bold mb-1">Amount (ml) <span className="text-danger">*</span></label>
+                                                        <input 
+                                                            type="number" 
+                                                            className="form-control form-control-sm text-center fw-bold fs-6" 
+                                                            placeholder="e.g. 500" 
+                                                            value={fluidForm.fluid_amount_ml} 
+                                                            onChange={e => setFluidForm({...fluidForm, fluid_amount_ml: e.target.value})} 
+                                                        />
+                                                    </div>
+                                                    <div className="col-12">
+                                                        <label className="form-label small fw-bold mb-1">Observation / Note</label>
+                                                        <input 
+                                                            type="text" 
+                                                            className="form-control form-control-sm" 
+                                                            placeholder="e.g. Clear urine, Normal fluid color, IV site intact" 
+                                                            value={fluidForm.general_note} 
+                                                            onChange={e => setFluidForm({...fluidForm, general_note: e.target.value})} 
+                                                        />
+                                                    </div>
+                                                </div>
+
+                                                <button 
+                                                    className="btn btn-primary fw-bold py-2 w-100 rounded-3 shadow-sm" 
+                                                    onClick={() => {
+                                                        if (!fluidForm.fluid_amount_ml) {
+                                                            alert('Please enter fluid amount in ml.');
+                                                            return;
+                                                        }
+                                                        handleSaveIpdEntry('fluid', fluidForm);
+                                                    }}
+                                                >
+                                                    <i className="bi bi-plus-circle-fill me-1"></i> Save Fluid Entry
+                                                </button>
+                                            </div>
+
+                                            {/* Fluid History Table */}
+                                            <div className="card shadow-sm border-0 rounded-4 overflow-hidden mb-3">
+                                                <div className="card-header py-2 bg-white d-flex justify-content-between align-items-center border-bottom">
+                                                    <strong className="text-dark"><i className="bi bi-clock-history me-1 text-primary"></i> Fluid Intake &amp; Output Log</strong>
+                                                    <span className="badge bg-primary-subtle text-primary border border-primary-subtle">{fluidList.length} Records</span>
+                                                </div>
+                                                <div className="table-responsive">
+                                                    <table className="table table-sm table-striped table-hover align-middle mb-0" style={{fontSize: '12px'}}>
+                                                        <thead className="table-light">
+                                                            <tr>
+                                                                <th>Date &amp; Time</th>
+                                                                <th>Direction</th>
+                                                                <th>Route</th>
+                                                                <th>Amount (ml)</th>
+                                                                <th>Observation / Note</th>
+                                                                <th>Staff</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {fluidList.length === 0 ? (
+                                                                <tr>
+                                                                    <td colSpan="6" className="text-center text-muted py-4">No fluid entries recorded yet.</td>
+                                                                </tr>
+                                                            ) : (
+                                                                fluidList.map(fl => (
+                                                                    <tr key={fl.id}>
+                                                                        <td className="fw-semibold text-nowrap">{formatDateTime(fl.recorded_at)}</td>
+                                                                        <td>
+                                                                            <span className={`badge ${fl.fluid_direction === 'intake' ? 'bg-success' : 'bg-warning text-dark'} text-uppercase`}>
+                                                                                {fl.fluid_direction === 'intake' ? '↓ Intake' : '↑ Output'}
+                                                                            </span>
+                                                                        </td>
+                                                                        <td className="fw-semibold">{fl.fluid_route || '-'}</td>
+                                                                        <td className="fw-bold">{parseFloat(fl.fluid_amount_ml || 0).toLocaleString()} ml</td>
+                                                                        <td><small>{fl.general_note || '-'}</small></td>
+                                                                        <td><small className="text-muted">{fl.recorded_by || 'Staff'}</small></td>
+                                                                    </tr>
+                                                                ))
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
+
+                                {/* TAB 3: TREATMENT & DOCTOR ORDERS REFERENCE */}
+                                {activeTab === 'treatment' && (() => {
+                                    const allTreatments = workspaceData.filter(e => e.entry_type === 'treatment');
+                                    const doctorOrders = allTreatments.filter(e => 
+                                        (e.recorded_by && e.recorded_by.toLowerCase().startsWith('dr.')) || 
+                                        (e.treatment_text && e.treatment_text.includes('[Doctor Note]'))
+                                    );
+                                    const latestDocOrder = doctorOrders.length > 0 ? doctorOrders[0] : null;
+
+                                    const nurseTreatments = allTreatments.filter(e => 
+                                        !(e.recorded_by && e.recorded_by.toLowerCase().startsWith('dr.')) && 
+                                        !(e.treatment_text && e.treatment_text.includes('[Doctor Note]'))
+                                    );
+
+                                    return (
+                                        <div>
+                                            {/* DOCTOR TREATMENT REFERENCE CARD */}
+                                            <div className="card shadow-sm border-0 mb-3 rounded-4 overflow-hidden" style={{border: '1.5px solid #818cf8'}}>
+                                                <div className="card-header py-2 text-white d-flex justify-content-between align-items-center" style={{background: 'linear-gradient(135deg, #3730a3 0%, #4f46e5 100%)'}}>
+                                                    <div className="d-flex align-items-center gap-2">
+                                                        <i className="bi bi-file-earmark-medical-fill"></i>
+                                                        <strong className="small">Doctor's Prescribed Treatment &amp; Orders</strong>
+                                                    </div>
+                                                    <span className="badge bg-white text-dark small">{doctorOrders.length} Doctor Orders</span>
+                                                </div>
+
+                                                <div className="card-body p-3 bg-light">
+                                                    {latestDocOrder ? (
+                                                        <div>
+                                                            <div className="d-flex justify-content-between align-items-start mb-2">
+                                                                <span className="badge bg-primary px-2 py-1">
+                                                                    <i className="bi bi-person-badge me-1"></i> {latestDocOrder.recorded_by}
+                                                                </span>
+                                                                <small className="text-muted fw-semibold">{formatDateTime(latestDocOrder.recorded_at)}</small>
+                                                            </div>
+
+                                                            <div className="p-3 bg-white rounded-3 border mb-2 shadow-sm">
+                                                                {renderNoteContent(latestDocOrder)}
+                                                            </div>
+
+                                                            <button 
+                                                                className="btn btn-sm btn-outline-primary fw-bold w-100 rounded-pill py-2"
+                                                                onClick={() => {
+                                                                    const cleanText = (latestDocOrder.treatment_text || '')
+                                                                        .replace(/\[IMAGE_ATTACHMENT:.*?\]/, '')
+                                                                        .replace('[Doctor Note] ', '')
+                                                                        .trim();
+                                                                    setTreatmentForm({
+                                                                        ...treatmentForm,
+                                                                        treatment_text: `Administered as prescribed: ${cleanText}`
+                                                                    });
+                                                                }}
+                                                            >
+                                                                <i className="bi bi-clipboard-check-fill me-1"></i> Follow &amp; Administer This Order
+                                                            </button>
+
+                                                            {doctorOrders.length > 1 && (
+                                                                <div className="mt-3">
+                                                                    <button 
+                                                                        type="button" 
+                                                                        className="btn btn-sm btn-light border w-100 text-secondary"
+                                                                        onClick={() => setShowAllDoctorOrders(!showAllDoctorOrders)}
+                                                                    >
+                                                                        <i className={`bi bi-chevron-${showAllDoctorOrders ? 'up' : 'down'} me-1`}></i>
+                                                                        {showAllDoctorOrders ? 'Hide Previous Doctor Notes' : `View All ${doctorOrders.length} Doctor Notes`}
+                                                                    </button>
+
+                                                                    {showAllDoctorOrders && (
+                                                                        <div className="mt-2 d-flex flex-column gap-2">
+                                                                            {doctorOrders.slice(1).map(docOrd => (
+                                                                                <div key={docOrd.id} className="p-2.5 bg-white rounded-3 border">
+                                                                                    <div className="d-flex justify-content-between align-items-center mb-1">
+                                                                                        <strong className="text-primary small">{docOrd.recorded_by}</strong>
+                                                                                        <small className="text-muted" style={{fontSize: '11px'}}>{formatDateTime(docOrd.recorded_at)}</small>
+                                                                                    </div>
+                                                                                    {renderNoteContent(docOrd)}
+                                                                                </div>
+                                                                            ))}
+                                                                        </div>
+                                                                    )}
+                                                                </div>
+                                                            )}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-center text-muted py-3">
+                                                            <i className="bi bi-clipboard-x fs-2 text-secondary opacity-50 d-block mb-1"></i>
+                                                            <small>No doctor orders or clinical prescriptions recorded yet.</small>
+                                                        </div>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* NURSING TREATMENT GIVEN FORM */}
+                                            <div className="card p-3 shadow-sm border-0 mb-3 rounded-4">
+                                                <h6 className="fw-bold mb-3 text-dark"><i className="bi bi-capsule text-success me-1"></i> Log Nursing Treatment Given / Medication Administered</h6>
+                                                
+                                                <div className="mb-3">
+                                                    <label className="form-label small fw-bold mb-1">Treatment / Medication Administered <span className="text-danger">*</span></label>
+                                                    <textarea 
+                                                        className="form-control rounded-3" 
+                                                        rows="3" 
+                                                        placeholder="e.g. Inj. Ceftriaxone 1g IV given slowly, Tab Pantop 40mg given orally..." 
+                                                        value={treatmentForm.treatment_text} 
+                                                        onChange={e => setTreatmentForm({...treatmentForm, treatment_text: e.target.value})}
+                                                    ></textarea>
+                                                </div>
+
+                                                <div className="mb-3">
+                                                    <label className="form-label small fw-bold mb-1">Observation / Patient Response</label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="form-control form-control-sm" 
+                                                        placeholder="e.g. Tolerated well, No adverse reaction, IV site patent" 
+                                                        value={treatmentForm.general_note} 
+                                                        onChange={e => setTreatmentForm({...treatmentForm, general_note: e.target.value})} 
+                                                    />
+                                                </div>
+
+                                                <button 
+                                                    className="btn btn-success fw-bold py-2 w-100 rounded-3 shadow-sm" 
+                                                    onClick={() => {
+                                                        if (!treatmentForm.treatment_text.trim()) {
+                                                            alert('Please enter treatment or medication administered.');
+                                                            return;
+                                                        }
+                                                        handleSaveIpdEntry('treatment', treatmentForm);
+                                                    }}
+                                                >
+                                                    <i className="bi bi-send-check-fill me-1"></i> Log Treatment Administration
+                                                </button>
+                                            </div>
+
+                                            {/* NURSING TREATMENT HISTORY LOG WITH TIME */}
+                                            <div className="card shadow-sm border-0 rounded-4 overflow-hidden mb-3">
+                                                <div className="card-header py-2 bg-white d-flex justify-content-between align-items-center border-bottom">
+                                                    <strong className="text-dark"><i className="bi bi-clock-history me-1 text-success"></i> Nursing Treatment Given History</strong>
+                                                    <span className="badge bg-success-subtle text-success border border-success-subtle">{nurseTreatments.length} Records</span>
+                                                </div>
+                                                <div className="table-responsive">
+                                                    <table className="table table-sm table-striped table-hover align-middle mb-0" style={{fontSize: '12px'}}>
+                                                        <thead className="table-light">
+                                                            <tr>
+                                                                <th style={{width: '140px'}}>Time Administered</th>
+                                                                <th>Treatment / Medication Given</th>
+                                                                <th>Observation &amp; Remarks</th>
+                                                                <th style={{width: '120px'}}>Staff Nurse</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {nurseTreatments.length === 0 ? (
+                                                                <tr>
+                                                                    <td colSpan="4" className="text-center text-muted py-4">No nursing treatments logged yet.</td>
+                                                                </tr>
+                                                            ) : (
+                                                                nurseTreatments.map(tr => (
+                                                                    <tr key={tr.id}>
+                                                                        <td className="fw-semibold text-nowrap">{formatDateTime(tr.recorded_at)}</td>
+                                                                        <td>
+                                                                            <div className="fw-bold text-dark">{renderNoteContent(tr)}</div>
+                                                                        </td>
+                                                                        <td><small className="text-muted">{tr.general_note || '-'}</small></td>
+                                                                        <td>
+                                                                            <span className="badge bg-secondary-subtle text-secondary border">
+                                                                                {tr.recorded_by || 'Staff Nurse'}
+                                                                            </span>
+                                                                        </td>
+                                                                    </tr>
+                                                                ))
+                                                            )}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            </div>
+                                        </div>
+                                    );
+                                })()}
                             </div>
                         )}
 
@@ -1425,6 +2236,544 @@
                                                     <i className="bi bi-check-lg me-1"></i> Apply Crop &amp; Save Photo
                                                 </button>
                                             </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* -------------------------------------------------------------
+                           FLOATING BOTTOM QUICK ACTION BAR (DOCK)
+                           ------------------------------------------------------------- */}
+                        <div className="bottom-dock-container">
+                            <button 
+                                className="bottom-dock-btn btn-scan" 
+                                onClick={() => openPatientSearch('scan')}
+                                title="Scan Barcode / QR or Search Patient"
+                            >
+                                <i className="bi bi-qr-code-scan fs-5"></i>
+                                <span>Scan / Search</span>
+                            </button>
+
+                            <button 
+                                className="bottom-dock-btn btn-vitals" 
+                                onClick={() => {
+                                    if (activeBed) {
+                                        openWellnessModal({ id: activeBed.p_id || activeBed.patient_id, p_code: activeBed.uhid, fullName: activeBed.patient_name, abha_id: activeBed.abha_id, gender: activeBed.gender });
+                                    } else {
+                                        openPatientSearch('type');
+                                    }
+                                }}
+                                title="Add ABDM M2 Wellness Vitals"
+                            >
+                                <i className="bi bi-heart-pulse-fill fs-5"></i>
+                                <span>ABDM Vitals</span>
+                            </button>
+
+                            <button 
+                                className="bottom-dock-btn btn-doc" 
+                                onClick={() => {
+                                    if (activeBed) {
+                                        openDocModal({ id: activeBed.p_id || activeBed.patient_id, p_code: activeBed.uhid, fullName: activeBed.patient_name, abha_id: activeBed.abha_id });
+                                    } else {
+                                        openPatientSearch('type');
+                                    }
+                                }}
+                                title="Add ABDM M2 Health Document (Scan/Photo)"
+                            >
+                                <i className="bi bi-file-earmark-medical-fill fs-5"></i>
+                                <span>ABDM Health Doc</span>
+                            </button>
+                        </div>
+
+                        {/* -------------------------------------------------------------
+                           MODAL 1: SEARCH PATIENT BY BARCODE, QR CODE & TEXT (ABDM M2)
+                           ------------------------------------------------------------- */}
+                        {showPatientSearchModal && (
+                            <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.65)', zIndex: 1050}}>
+                                <div className="modal-dialog modal-dialog-centered modal-lg">
+                                    <div className="modal-content rounded-4 border-0 shadow-lg overflow-hidden">
+                                        <div className="modal-header bg-dark text-white py-2.5">
+                                            <div className="d-flex align-items-center gap-2">
+                                                <i className="bi bi-upc-scan fs-5 text-primary"></i>
+                                                <div>
+                                                    <h6 className="modal-title fw-bold mb-0">Search Patient by Barcode, QR &amp; Name</h6>
+                                                    <small className="text-white-50" style={{fontSize: '11px'}}>Scan Hospital Card Barcode, ABHA QR, or search registered patients</small>
+                                                </div>
+                                            </div>
+                                            <button className="btn-close btn-close-white" onClick={closePatientSearch}></button>
+                                        </div>
+
+                                        <div className="modal-body p-3">
+                                            {/* Segmented Mode Selector */}
+                                            <div className="segmented-tabs mb-3">
+                                                <button 
+                                                    className={`segmented-tab ${searchModalTab === 'scan' ? 'active-blue' : ''}`}
+                                                    onClick={() => {
+                                                        setSearchModalTab('scan');
+                                                        startBarcodeQrScanner();
+                                                    }}
+                                                >
+                                                    <i className="bi bi-camera-video-fill me-1"></i> Camera Scanner (Barcode &amp; QR)
+                                                </button>
+                                                <button 
+                                                    className={`segmented-tab ${searchModalTab === 'type' ? 'active-blue' : ''}`}
+                                                    onClick={() => {
+                                                        setSearchModalTab('type');
+                                                        stopBarcodeQrScanner();
+                                                    }}
+                                                >
+                                                    <i className="bi bi-search me-1"></i> Manual Search (UHID / Mobile / ABHA)
+                                                </button>
+                                            </div>
+
+                                            {/* CAMERA SCANNER TAB */}
+                                            {searchModalTab === 'scan' && (
+                                                <div className="text-center mb-3">
+                                                    <div className="qr-scanner-wrapper mx-auto mb-2" style={{maxWidth: '420px'}}>
+                                                        <div id="patient-qr-reader" style={{width: '100%'}}></div>
+                                                    </div>
+
+                                                    {scannerError ? (
+                                                        <div className="alert alert-warning py-2 px-3 small d-inline-block">
+                                                            <i className="bi bi-exclamation-triangle-fill me-1"></i> {scannerError}
+                                                        </div>
+                                                    ) : (
+                                                        <small className="text-muted d-block">
+                                                            <i className="bi bi-info-circle me-1"></i> Point camera at <strong>Patient Card Barcode</strong> or <strong>ABHA QR Code</strong> to scan instantly.
+                                                        </small>
+                                                    )}
+                                                </div>
+                                            )}
+
+                                            {/* SEARCH INPUT */}
+                                            <div className="input-group mb-3">
+                                                <span className="input-group-text bg-white border-end-0">
+                                                    <i className="bi bi-search text-muted"></i>
+                                                </span>
+                                                <input 
+                                                    type="text" 
+                                                    className="form-control border-start-0 ps-0" 
+                                                    placeholder="Search by UHID (P...), ABHA No, Mobile (98...), Name..."
+                                                    value={patientSearchQuery}
+                                                    onChange={e => {
+                                                        setPatientSearchQuery(e.target.value);
+                                                        executePatientSearch(e.target.value);
+                                                    }}
+                                                    onKeyDown={e => {
+                                                        if (e.key === 'Enter') executePatientSearch(patientSearchQuery);
+                                                    }}
+                                                />
+                                                {patientSearchQuery && (
+                                                    <button className="btn btn-outline-secondary" onClick={() => { setPatientSearchQuery(''); setPatientSearchResults([]); }}>
+                                                        <i className="bi bi-x"></i>
+                                                    </button>
+                                                )}
+                                                <button className="btn btn-primary fw-bold px-3" onClick={() => executePatientSearch(patientSearchQuery)}>
+                                                    {searchingPatient ? <span className="spinner-border spinner-border-sm"></span> : 'Search'}
+                                                </button>
+                                            </div>
+
+                                            {/* SEARCH RESULTS LIST */}
+                                            <div>
+                                                <div className="d-flex justify-content-between align-items-center mb-2">
+                                                    <strong className="small text-secondary text-uppercase">
+                                                        Matched Patients ({patientSearchResults.length})
+                                                    </strong>
+                                                    {searchingPatient && <span className="badge bg-primary-subtle text-primary">Searching...</span>}
+                                                </div>
+
+                                                {patientSearchResults.length === 0 ? (
+                                                    <div className="text-center py-4 bg-light rounded-3 border">
+                                                        <i className="bi bi-person-badge fs-2 text-muted opacity-50 d-block mb-1"></i>
+                                                        <p className="small text-muted mb-0">
+                                                            {patientSearchQuery ? 'No patients found matching this query.' : 'Type patient name, UHID, ABHA number or scan barcode above.'}
+                                                        </p>
+                                                    </div>
+                                                ) : (
+                                                    <div className="d-flex flex-column gap-2" style={{maxHeight: '40vh', overflowY: 'auto'}}>
+                                                        {patientSearchResults.map(pat => (
+                                                            <div key={pat.id} className="patient-search-result-card">
+                                                                <div className="d-flex justify-content-between align-items-start flex-wrap gap-2">
+                                                                    <div>
+                                                                        <div className="d-flex align-items-center gap-2">
+                                                                            <h6 className="fw-bold mb-0 text-dark">{pat.fullName}</h6>
+                                                                            <span className="badge bg-light text-dark border" style={{fontSize: '11px'}}>
+                                                                                {pat.gender === '1' || pat.gender === 1 ? 'Male' : (pat.gender === '2' || pat.gender === 2 ? 'Female' : 'Other')}
+                                                                                {pat.dob ? ` • DOB: ${pat.dob}` : ''}
+                                                                            </span>
+                                                                        </div>
+                                                                        <div className="d-flex flex-wrap gap-2 mt-1 small">
+                                                                            <span className="text-danger fw-semibold">UHID: {pat.p_code}</span>
+                                                                            {pat.mphone1 && <span className="text-muted"><i className="bi bi-telephone me-1"></i>{pat.mphone1}</span>}
+                                                                            {pat.abha_id && (
+                                                                                <span className="badge bg-success-subtle text-success border border-success-subtle">
+                                                                                    <i className="bi bi-shield-check me-1"></i>ABHA: {pat.abha_id}
+                                                                                </span>
+                                                                            )}
+                                                                            {pat.abha_address && (
+                                                                                <span className="badge bg-primary-subtle text-primary border border-primary-subtle">
+                                                                                    {pat.abha_address}
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                        {pat.ipd_admission && (
+                                                                            <div className="mt-1">
+                                                                                <span className="badge bg-primary">
+                                                                                    <i className="bi bi-hospital me-1"></i> Admitted IPD: {pat.ipd_admission.ipd_code} (Bed {pat.ipd_admission.bed_number || pat.ipd_admission.bed_no})
+                                                                                </span>
+                                                                            </div>
+                                                                        )}
+                                                                        {pat.opd_today && (
+                                                                            <div className="mt-1">
+                                                                                <span className="badge bg-success">
+                                                                                    <i className="bi bi-calendar-check me-1"></i> OPD Today: Token #{pat.opd_today.token_no} ({pat.opd_today.doctor_name || 'Doctor'})
+                                                                                </span>
+                                                                            </div>
+                                                                        )}
+                                                                    </div>
+
+                                                                    {/* 1-Click Action Buttons */}
+                                                                    <div className="d-flex flex-wrap gap-1.5 align-items-center">
+                                                                        <button 
+                                                                            className="btn btn-sm btn-success fw-bold rounded-3 px-2 py-1.5"
+                                                                            onClick={() => openWellnessModal(pat)}
+                                                                            title="Add ABDM M2 Wellness Vitals"
+                                                                        >
+                                                                            <i className="bi bi-heart-pulse-fill me-1"></i> Add Vitals
+                                                                        </button>
+
+                                                                        <button 
+                                                                            className="btn btn-sm btn-primary fw-bold rounded-3 px-2 py-1.5"
+                                                                            onClick={() => openDocModal(pat)}
+                                                                            title="Add ABDM M2 Health Document"
+                                                                        >
+                                                                            <i className="bi bi-file-earmark-medical-fill me-1"></i> Add Doc
+                                                                        </button>
+
+                                                                        <button 
+                                                                            className="btn btn-sm btn-outline-secondary rounded-3 px-2 py-1.5"
+                                                                            onClick={() => openWellnessHistory(pat)}
+                                                                            title="View Vitals History"
+                                                                        >
+                                                                            <i className="bi bi-clock-history"></i>
+                                                                        </button>
+
+                                                                        {pat.ipd_admission && (
+                                                                            <button 
+                                                                                className="btn btn-sm btn-dark rounded-3 px-2 py-1.5"
+                                                                                onClick={() => {
+                                                                                    closePatientSearch();
+                                                                                    openWorkspace({ ipd_id: pat.ipd_admission.ipd_id, patient_name: pat.fullName, uhid: pat.p_code, ipd_code: pat.ipd_admission.ipd_code, bed_number: pat.ipd_admission.bed_number, ward_name: pat.ipd_admission.ward_name, status: 'occupied' });
+                                                                                }}
+                                                                                title="Go to IPD Bedside Care"
+                                                                            >
+                                                                                <i className="bi bi-arrow-right-circle"></i> IPD Bed
+                                                                            </button>
+                                                                        )}
+                                                                    </div>
+                                                                </div>
+                                                            </div>
+                                                        ))}
+                                                    </div>
+                                                )}
+                                            </div>
+                                        </div>
+
+                                        <div className="modal-footer p-2 bg-light d-flex justify-content-between">
+                                            <small className="text-muted"><i className="bi bi-shield-lock me-1"></i> ABDM M2 Standard Compliance</small>
+                                            <button className="btn btn-secondary btn-sm px-3" onClick={closePatientSearch}>Close</button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* -------------------------------------------------------------
+                           MODAL 2: ABDM M2 WELLNESS & VITALS ENTRY
+                           ------------------------------------------------------------- */}
+                        {activeWellnessPatient && (
+                            <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.65)', zIndex: 1060}}>
+                                <div className="modal-dialog modal-dialog-centered modal-lg">
+                                    <div className="modal-content rounded-4 border-0 shadow-lg overflow-hidden">
+                                        <div className="modal-header bg-success text-white py-2.5">
+                                            <div className="d-flex align-items-center gap-2">
+                                                <i className="bi bi-heart-pulse-fill fs-5"></i>
+                                                <div>
+                                                    <h6 className="modal-title fw-bold mb-0">Record ABDM M2 Wellness &amp; Vitals</h6>
+                                                    <small className="text-white-50" style={{fontSize: '11px'}}>Stores standardized vital signs observation bundle</small>
+                                                </div>
+                                            </div>
+                                            <button className="btn-close btn-close-white" onClick={() => setActiveWellnessPatient(null)}></button>
+                                        </div>
+
+                                        <div className="modal-body p-3">
+                                            {/* Patient Context Banner */}
+                                            <div className="p-2.5 rounded-3 bg-light border mb-3">
+                                                <div className="d-flex justify-content-between align-items-start flex-wrap gap-1">
+                                                    <div>
+                                                        <strong className="fs-6 text-dark">{activeWellnessPatient.fullName || activeWellnessPatient.p_fname}</strong>
+                                                        <div className="small text-muted">
+                                                            UHID: <span className="text-danger fw-bold">{activeWellnessPatient.p_code || activeWellnessPatient.uhid}</span>
+                                                            {activeWellnessPatient.mphone1 && ` • Phone: ${activeWellnessPatient.mphone1}`}
+                                                        </div>
+                                                    </div>
+                                                    {activeWellnessPatient.abha_id && (
+                                                        <span className="badge bg-success">
+                                                            <i className="bi bi-shield-check me-1"></i> ABHA: {activeWellnessPatient.abha_id}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            {/* Vitals Form Grid */}
+                                            <div className="row g-2 mb-3">
+                                                <div className="col-6 col-md-3">
+                                                    <label className="form-label small mb-1 fw-bold">BP Sys/Dia (mmHg)</label>
+                                                    <div className="input-group input-group-sm">
+                                                        <input type="number" className="form-control text-center" placeholder="120" value={wellnessForm.bp_systolic} onChange={e => setWellnessForm({...wellnessForm, bp_systolic: e.target.value})} />
+                                                        <span className="input-group-text">/</span>
+                                                        <input type="number" className="form-control text-center" placeholder="80" value={wellnessForm.bp_diastolic} onChange={e => setWellnessForm({...wellnessForm, bp_diastolic: e.target.value})} />
+                                                    </div>
+                                                </div>
+                                                <div className="col-6 col-md-3">
+                                                    <label className="form-label small mb-1 fw-bold">Pulse Rate (bpm)</label>
+                                                    <input type="number" className="form-control form-control-sm text-center" placeholder="72" value={wellnessForm.pulse_rate} onChange={e => setWellnessForm({...wellnessForm, pulse_rate: e.target.value})} />
+                                                </div>
+                                                <div className="col-6 col-md-3">
+                                                    <label className="form-label small mb-1 fw-bold">SpO2 %</label>
+                                                    <input type="number" className="form-control form-control-sm text-center" placeholder="98" value={wellnessForm.spo2} onChange={e => setWellnessForm({...wellnessForm, spo2: e.target.value})} />
+                                                </div>
+                                                <div className="col-6 col-md-3">
+                                                    <label className="form-label small mb-1 fw-bold">Temp °F</label>
+                                                    <input type="number" step="0.1" className="form-control form-control-sm text-center" placeholder="98.6" value={wellnessForm.temperature_f} onChange={e => setWellnessForm({...wellnessForm, temperature_f: e.target.value})} />
+                                                </div>
+                                                <div className="col-6 col-md-3">
+                                                    <label className="form-label small mb-1 fw-bold">Resp Rate (/min)</label>
+                                                    <input type="number" className="form-control form-control-sm text-center" placeholder="18" value={wellnessForm.resp_rate} onChange={e => setWellnessForm({...wellnessForm, resp_rate: e.target.value})} />
+                                                </div>
+                                                <div className="col-6 col-md-3">
+                                                    <label className="form-label small mb-1 fw-bold">Height (cm)</label>
+                                                    <input type="number" step="0.1" className="form-control form-control-sm text-center" placeholder="165" value={wellnessForm.height_cm} onChange={e => setWellnessForm({...wellnessForm, height_cm: e.target.value})} />
+                                                </div>
+                                                <div className="col-6 col-md-3">
+                                                    <label className="form-label small mb-1 fw-bold">Weight (kg)</label>
+                                                    <input type="number" step="0.1" className="form-control form-control-sm text-center" placeholder="70" value={wellnessForm.weight_kg} onChange={e => setWellnessForm({...wellnessForm, weight_kg: e.target.value})} />
+                                                </div>
+                                                <div className="col-6 col-md-3">
+                                                    <label className="form-label small mb-1 fw-bold">Calculated BMI</label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="form-control form-control-sm text-center bg-light fw-bold" 
+                                                        readOnly 
+                                                        value={
+                                                            wellnessForm.height_cm && wellnessForm.weight_kg && parseFloat(wellnessForm.height_cm) > 0
+                                                                ? (parseFloat(wellnessForm.weight_kg) / Math.pow(parseFloat(wellnessForm.height_cm) / 100, 2)).toFixed(2)
+                                                                : '-'
+                                                        } 
+                                                    />
+                                                </div>
+
+                                                <div className="col-12 col-md-6">
+                                                    <label className="form-label small mb-1 fw-bold">Diet &amp; Lifestyle Guidance (ABDM)</label>
+                                                    <input type="text" className="form-control form-control-sm" placeholder="e.g. Low sodium diet, 30 min daily walking" value={wellnessForm.diet_lifestyle_note} onChange={e => setWellnessForm({...wellnessForm, diet_lifestyle_note: e.target.value})} />
+                                                </div>
+
+                                                <div className="col-12 col-md-6">
+                                                    <label className="form-label small mb-1 fw-bold">General Nursing Observations</label>
+                                                    <input type="text" className="form-control form-control-sm" placeholder="e.g. Patient asymptomatic, alert and oriented" value={wellnessForm.general_advice} onChange={e => setWellnessForm({...wellnessForm, general_advice: e.target.value})} />
+                                                </div>
+                                            </div>
+                                        </div>
+
+                                        <div className="modal-footer p-2 bg-light d-flex justify-content-between">
+                                            <button className="btn btn-outline-secondary btn-sm" onClick={() => openWellnessHistory(activeWellnessPatient)}>
+                                                <i className="bi bi-clock-history me-1"></i> Past History
+                                            </button>
+                                            <div className="d-flex gap-2">
+                                                <button className="btn btn-secondary btn-sm" onClick={() => setActiveWellnessPatient(null)}>Cancel</button>
+                                                <button className="btn btn-success btn-sm fw-bold px-3" onClick={handleSaveWellness}>
+                                                    <i className="bi bi-check-circle-fill me-1"></i> Save ABDM Wellness Vitals
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* -------------------------------------------------------------
+                           MODAL 3: ABDM M2 HEALTH DOCUMENT SCAN & UPLOAD
+                           ------------------------------------------------------------- */}
+                        {activeDocPatient && (
+                            <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.65)', zIndex: 1060}}>
+                                <div className="modal-dialog modal-dialog-centered modal-lg">
+                                    <div className="modal-content rounded-4 border-0 shadow-lg overflow-hidden">
+                                        <div className="modal-header bg-primary text-white py-2.5">
+                                            <div className="d-flex align-items-center gap-2">
+                                                <i className="bi bi-file-earmark-medical-fill fs-5"></i>
+                                                <div>
+                                                    <h6 className="modal-title fw-bold mb-0">Add ABDM M2 Health Document</h6>
+                                                    <small className="text-white-50" style={{fontSize: '11px'}}>Scan paper prescriptions, lab reports or clinical documents</small>
+                                                </div>
+                                            </div>
+                                            <button className="btn-close btn-close-white" onClick={() => setActiveDocPatient(null)}></button>
+                                        </div>
+
+                                        <div className="modal-body p-3">
+                                            {/* Patient Context Banner */}
+                                            <div className="p-2.5 rounded-3 bg-light border mb-3">
+                                                <div className="d-flex justify-content-between align-items-start flex-wrap gap-1">
+                                                    <div>
+                                                        <strong className="fs-6 text-dark">{activeDocPatient.fullName || activeDocPatient.p_fname}</strong>
+                                                        <div className="small text-muted">
+                                                            UHID: <span className="text-danger fw-bold">{activeDocPatient.p_code || activeDocPatient.uhid}</span>
+                                                        </div>
+                                                    </div>
+                                                    {activeDocPatient.abha_id && (
+                                                        <span className="badge bg-success">
+                                                            <i className="bi bi-shield-check me-1"></i> ABHA: {activeDocPatient.abha_id}
+                                                        </span>
+                                                    )}
+                                                </div>
+                                            </div>
+
+                                            <div className="row g-2 mb-3">
+                                                <div className="col-12 col-md-6">
+                                                    <label className="form-label small fw-bold mb-1">Document Category (ABDM HI Type)</label>
+                                                    <select 
+                                                        className="form-select form-select-sm"
+                                                        value={patientDocForm.document_type}
+                                                        onChange={e => setPatientDocForm({...patientDocForm, document_type: e.target.value})}
+                                                    >
+                                                        <option value="Prescription">Prescription Record (PrescriptionRecord)</option>
+                                                        <option value="Diagnostic Report / Lab">Diagnostic / Lab Report (DiagnosticReport)</option>
+                                                        <option value="Discharge Summary">Discharge Summary (DischargeSummary)</option>
+                                                        <option value="Scan / Radiology (X-Ray/CT/MRI)">Radiology / Scan (HealthDocumentRecord)</option>
+                                                        <option value="Paper Medical Record">Paper Medical Record (HealthDocumentRecord)</option>
+                                                        <option value="Immunization Record">Immunization Record (ImmunizationRecord)</option>
+                                                        <option value="Health Document">Other Health Document (HealthDocumentRecord)</option>
+                                                    </select>
+                                                </div>
+
+                                                <div className="col-12 col-md-6">
+                                                    <label className="form-label small fw-bold mb-1">Document Date</label>
+                                                    <input 
+                                                        type="date" 
+                                                        className="form-control form-control-sm" 
+                                                        value={patientDocForm.document_date}
+                                                        onChange={e => setPatientDocForm({...patientDocForm, document_date: e.target.value})}
+                                                    />
+                                                </div>
+
+                                                <div className="col-12">
+                                                    <label className="form-label small fw-bold mb-1">Remarks / Document Title</label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="form-control form-control-sm" 
+                                                        placeholder="e.g. Chest X-Ray Report, Blood CBC Test, Consultation Note"
+                                                        value={patientDocForm.remarks}
+                                                        onChange={e => setPatientDocForm({...patientDocForm, remarks: e.target.value})}
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Camera Capture / Photo Upload */}
+                                            <div className="mb-3 text-center">
+                                                <label className="btn btn-primary btn-lg w-100 py-3 fw-bold rounded-3 shadow-sm">
+                                                    <i className="bi bi-camera me-2"></i> Take Document Photo / Choose Image
+                                                    <input type="file" accept="image/*" capture="environment" className="d-none" onChange={handleScanImageCapture} />
+                                                </label>
+                                            </div>
+
+                                            {scanImagePreview && (
+                                                <div className="position-relative p-2 border rounded-3 bg-light text-center">
+                                                    <span className="badge bg-success position-absolute top-0 start-0 m-2">
+                                                        <i className="bi bi-check-circle me-1"></i> Document Photo Captured
+                                                    </span>
+                                                    <img src={scanImagePreview} alt="Document Scan Preview" className="img-fluid rounded-3 border shadow-sm" style={{maxHeight: '200px', objectFit: 'contain'}} />
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="modal-footer p-2 bg-light">
+                                            <button className="btn btn-secondary btn-sm" onClick={() => setActiveDocPatient(null)}>Cancel</button>
+                                            <button className="btn btn-primary btn-sm fw-bold px-3" onClick={handleSavePatientDocument} disabled={!scanImageBase64}>
+                                                <i className="bi bi-cloud-upload-fill me-1"></i> Upload ABDM Health Document
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+                            </div>
+                        )}
+
+                        {/* -------------------------------------------------------------
+                           MODAL 4: PATIENT VITALS & WELLNESS HISTORY
+                           ------------------------------------------------------------- */}
+                        {wellnessHistoryPatient && (
+                            <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.65)', zIndex: 1070}}>
+                                <div className="modal-dialog modal-dialog-centered modal-lg">
+                                    <div className="modal-content rounded-4 border-0 shadow-lg overflow-hidden">
+                                        <div className="modal-header bg-dark text-white py-2.5">
+                                            <div className="d-flex align-items-center gap-2">
+                                                <i className="bi bi-clock-history fs-5 text-warning"></i>
+                                                <div>
+                                                    <h6 className="modal-title fw-bold mb-0">Vitals &amp; Wellness History</h6>
+                                                    <small className="text-white-50" style={{fontSize: '11px'}}>
+                                                        {wellnessHistoryPatient.fullName || wellnessHistoryPatient.p_fname} (UHID: {wellnessHistoryPatient.p_code || wellnessHistoryPatient.uhid})
+                                                    </small>
+                                                </div>
+                                            </div>
+                                            <button className="btn-close btn-close-white" onClick={() => setWellnessHistoryPatient(null)}></button>
+                                        </div>
+
+                                        <div className="modal-body p-3">
+                                            {loadingHistory ? (
+                                                <div className="text-center py-4">
+                                                    <div className="spinner-border text-primary" role="status"></div>
+                                                    <p className="small text-muted mt-2">Loading historical vitals...</p>
+                                                </div>
+                                            ) : wellnessHistoryList.length === 0 ? (
+                                                <div className="text-center py-4 bg-light rounded-3">
+                                                    <i className="bi bi-heart-pulse fs-2 text-muted opacity-50 d-block mb-1"></i>
+                                                    <p className="small text-muted mb-0">No past vitals or wellness entries recorded yet for this patient.</p>
+                                                </div>
+                                            ) : (
+                                                <div className="table-responsive">
+                                                    <table className="table table-sm table-striped table-hover align-middle mb-0" style={{fontSize: '12px'}}>
+                                                        <thead className="table-light">
+                                                            <tr>
+                                                                <th>Date &amp; Time</th>
+                                                                <th>BP</th>
+                                                                <th>Pulse</th>
+                                                                <th>Temp</th>
+                                                                <th>SpO2</th>
+                                                                <th>BMI</th>
+                                                                <th>Staff</th>
+                                                                <th>Advice / Remarks</th>
+                                                            </tr>
+                                                        </thead>
+                                                        <tbody>
+                                                            {wellnessHistoryList.map(rec => (
+                                                                <tr key={rec.id}>
+                                                                    <td className="fw-semibold text-nowrap">{formatDateTime(rec.recorded_at)}</td>
+                                                                    <td><span className="badge bg-light text-dark border">{rec.bp_systolic ? `${rec.bp_systolic}/${rec.bp_diastolic}` : '-'}</span></td>
+                                                                    <td>{rec.pulse_rate ? `${rec.pulse_rate} bpm` : '-'}</td>
+                                                                    <td><span className="badge bg-danger-subtle text-danger">{rec.temperature_f ? `${rec.temperature_f} °F` : '-'}</span></td>
+                                                                    <td>{rec.spo2 ? `${rec.spo2}%` : '-'}</td>
+                                                                    <td><span className="badge bg-info-subtle text-info">{rec.bmi || '-'}</span></td>
+                                                                    <td><small className="text-muted">{rec.recorded_by || 'Staff'}</small></td>
+                                                                    <td><small>{rec.general_advice || rec.diet_lifestyle_note || '-'}</small></td>
+                                                                </tr>
+                                                            ))}
+                                                        </tbody>
+                                                    </table>
+                                                </div>
+                                            )}
+                                        </div>
+
+                                        <div className="modal-footer p-2 bg-light">
+                                            <button className="btn btn-secondary btn-sm px-3" onClick={() => setWellnessHistoryPatient(null)}>Close</button>
                                         </div>
                                     </div>
                                 </div>
