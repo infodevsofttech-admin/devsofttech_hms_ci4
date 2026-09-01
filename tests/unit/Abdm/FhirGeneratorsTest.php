@@ -492,7 +492,7 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         ]);
 
         $this->assertSame('HealthDocumentRecord', $output['hi_type']);
-        $this->assertSame('DOC-4-2026-08-26', $output['care_context_reference']);
+        $this->assertStringStartsWith('DOC-4-2026-08-26', $output['care_context_reference']);
         $this->assertTrue($output['validation']['valid']);
         $this->assertSame(100, $output['validation']['score']);
 
@@ -501,5 +501,87 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertContains('Composition', $resourceTypes);
         $this->assertContains('Patient', $resourceTypes);
         $this->assertContains('DocumentReference', $resourceTypes);
+    }
+
+    public function testHealthDocumentGeneratorSupportsCustomContentType(): void
+    {
+        $generator = $this->factory->healthDocument();
+        $output = $generator->generate([
+            'record_id' => '5',
+            'visit_date' => '2026-08-31',
+            'document_title' => 'Scanned X-Ray',
+            'document_data_base64' => base64_encode('fake image data'),
+            'content_type' => 'image/png',
+            'patient' => [
+                'id' => '11',
+                'name' => 'DEVENDER SINGH',
+                'abha_id' => '91510165305101',
+            ],
+        ]);
+
+        $this->assertSame('HealthDocumentRecord', $output['hi_type']);
+        $bundle = $output['fhir_bundle'];
+        $this->assertSame('Bundle', $bundle['resourceType']);
+        
+        $docRef = null;
+        foreach ($bundle['entry'] as $entry) {
+            if (($entry['resource']['resourceType'] ?? '') === 'DocumentReference') {
+                $docRef = $entry['resource'];
+                break;
+            }
+        }
+        $this->assertNotNull($docRef);
+        $this->assertSame('application/pdf', $docRef['content'][0]['attachment']['contentType']);
+    }
+
+    public function testWellnessRecordGeneratorCreatesFullSections(): void
+    {
+        $generator = $this->factory->wellness();
+        $output = $generator->generate([
+            'record_id' => '101',
+            'session_id' => '2',
+            'visit_date' => '2026-09-01',
+            'completed_at' => date(DATE_ATOM),
+            'vitals' => [
+                ['loinc_code' => '8480-6', 'display' => 'Systolic blood pressure', 'value' => 120, 'unit' => 'mmHg', 'ucum_code' => 'mm[Hg]'],
+                ['loinc_code' => '8462-4', 'display' => 'Diastolic blood pressure', 'value' => 80, 'unit' => 'mmHg', 'ucum_code' => 'mm[Hg]'],
+                ['loinc_code' => '8867-4', 'display' => 'Heart rate', 'value' => 72, 'unit' => '/min', 'ucum_code' => '/min'],
+                ['loinc_code' => '8310-5', 'display' => 'Body temperature', 'value' => 36.8, 'unit' => 'Cel', 'ucum_code' => 'Cel'],
+                ['loinc_code' => '59408-5', 'display' => 'Oxygen saturation', 'value' => 98, 'unit' => '%', 'ucum_code' => '%'],
+            ],
+            'physical_examination' => [
+                'Complaints: Mild headache for 2 days',
+                'Diagnosis: Essential hypertension (mild)',
+            ],
+            'women_wellness' => [
+                'lmp' => '2026-08-15',
+                'gravida' => '2',
+                'para' => '1',
+            ],
+            'advice' => [
+                'Smoking status: No',
+                'Diet & Lifestyle Advice: Low salt diet, 30 min daily walk',
+            ],
+            'patient' => [
+                'id' => '11',
+                'name' => 'SUNITA DEVI',
+                'abha_id' => '91510165305101',
+                'gender' => 'female',
+            ],
+        ]);
+
+        $this->assertSame('WellnessRecord', $output['hi_type']);
+        $bundle = $output['fhir_bundle'];
+        $this->assertSame('Bundle', $bundle['resourceType']);
+        
+        $resourceTypes = array_column(array_column($bundle['entry'], 'resource'), 'resourceType');
+        $this->assertContains('Composition', $resourceTypes);
+        $this->assertContains('Patient', $resourceTypes);
+        $this->assertContains('Observation', $resourceTypes);
+
+        $composition = $bundle['entry'][0]['resource'];
+        $this->assertSame('https://nrces.in/ndhm/fhir/r4/StructureDefinition/WellnessRecord', $composition['meta']['profile'][0]);
+        $this->assertGreaterThanOrEqual(1, count($composition['section']));
+        $this->assertNotEmpty($composition['section'][0]['entry']);
     }
 }

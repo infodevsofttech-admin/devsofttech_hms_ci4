@@ -24,6 +24,7 @@ $can = static fn (string $panel): bool => (bool) ($panels[$panel] ?? false);
                     </div>
                     <ul class="report-links">
                         <li><a href="javascript:load_form('<?= base_url('Report/collection_report') ?>','Collection Report');"><i class="bi bi-arrow-right-short"></i> Total Payment (Cash and Bank)</a></li>
+                        <li><a href="javascript:load_form('<?= base_url('Report/old_payment_received_report') ?>','Old Payment Received Report');"><i class="bi bi-arrow-right-short"></i> Old Payment Received Report (Late Collections)</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Report/report_opd_total') ?>','OPD Total Report');"><i class="bi bi-arrow-right-short"></i> OPD Total Report</a></li>
                         <li><a href="javascript:load_form('<?= base_url('Report/report_opd_patient_list') ?>','OPD Patient List');"><i class="bi bi-arrow-right-short"></i> OPD Patient List</a></li>
                     </ul>

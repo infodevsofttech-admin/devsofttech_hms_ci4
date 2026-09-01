@@ -763,6 +763,7 @@ class BridgeSyncService
             'abdm.consent.requested' => '/api/v1/abdm/consents/request',
             'abdm.fhir.share.requested' => '/api/v1/abdm/health-information/share',
             'abdm.opd.prescription.share.requested' => '/api/v1/abdm/health-information/share',
+            'abdm.health_document.share.requested' => '/api/v1/abdm/health-information/share',
             'abdm.ipd.admission.share.requested' => '/api/v1/abdm/health-information/ipd-admission/share',
             'abdm.ipd.discharge.share.requested' => '/api/v1/abdm/health-information/ipd-discharge/share',
             'abdm.diagnosis.report.share.requested' => '/api/v1/abdm/health-information/diagnosis-report/share',

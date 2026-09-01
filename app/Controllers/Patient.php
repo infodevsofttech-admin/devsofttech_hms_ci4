@@ -1486,7 +1486,35 @@ class Patient extends BaseController
 			}
 
 			$docRows = $builder->orderBy('id', 'DESC')->get()->getResultArray();
+			$fileIds = array_column($docRows, 'id');
+
+			$syncMap = [];
+			if (! empty($fileIds) && $this->db->tableExists('abdm_sync_records')) {
+				$localIds = array_map(static fn($id) => 'file-upload-' . $id, $fileIds);
+				$syncRows = $this->db->table('abdm_sync_records')
+					->whereIn('local_record_id', $localIds)
+					->get()
+					->getResultArray();
+				foreach ($syncRows as $sRow) {
+					$rawId = str_replace(['file-upload-', 'file-'], '', (string) ($sRow['local_record_id'] ?? ''));
+					$syncMap[(int) $rawId] = $sRow;
+				}
+			}
+
+			$taskMap = [];
+			if (! empty($fileIds) && $this->db->tableExists('abdm_work_tasks')) {
+				$taskRows = $this->db->table('abdm_work_tasks')
+					->where('source_module', 'file_upload_data')
+					->whereIn('source_id', array_map('strval', $fileIds))
+					->get()
+					->getResultArray();
+				foreach ($taskRows as $tRow) {
+					$taskMap[(int) ($tRow['source_id'] ?? 0)] = $tRow;
+				}
+			}
+
 			foreach ($docRows as $row) {
+				$docId = (int) ($row['id'] ?? 0);
 				$path = (string) ($row['full_path'] ?? $row['public_path'] ?? '');
 				if ($path !== '') {
 					$pos = strpos(str_replace('\\', '/', $path), '/uploads/');
@@ -1497,19 +1525,27 @@ class Patient extends BaseController
 
 				$ext = strtolower(ltrim((string) ($row['file_ext'] ?? pathinfo($path, PATHINFO_EXTENSION)), '.'));
 				$isPdf = $ext === 'pdf';
-				$title = trim((string) ($row['document_type'] ?? $row['scan_type'] ?? $row['content_description'] ?? 'Scanned Document'));
-				if ($title === '' || strcasecmp($title, 'Queued for AI analysis') === 0) {
-					$title = 'Scanned Document';
+				$docType = trim((string) ($row['document_type'] ?? $row['scan_type'] ?? $row['content_description'] ?? 'Paper Document (General)'));
+				if ($docType === '' || strcasecmp($docType, 'Queued for AI analysis') === 0) {
+					$docType = 'Paper Document (General)';
 				}
 
+				$hasSync = isset($syncMap[$docId]);
+				$hasTask = isset($taskMap[$docId]);
+				$fhirStatus = $hasSync ? 'FHIR Shared' : ($hasTask ? 'FHIR Ready' : 'FHIR Available');
+
 				$patientDocuments[] = [
-					'id' => (int) ($row['id'] ?? 0),
-					'title' => $title,
+					'id' => $docId,
+					'title' => $docType,
+					'document_type' => $docType,
 					'path' => $path,
 					'isPdf' => $isPdf,
 					'ext' => $ext,
 					'insertDate' => ! empty($row['insert_date']) ? date('d-m-Y H:i', strtotime((string) $row['insert_date'])) : '',
 					'uploadedBy' => (string) ($row['upload_by'] ?? ''),
+					'hasSync' => $hasSync,
+					'hasTask' => $hasTask,
+					'fhirStatus' => $fhirStatus,
 				];
 			}
 		}
@@ -5350,12 +5386,9 @@ class Patient extends BaseController
 		$abhaDigits = is_string($abhaDigits) ? $abhaDigits : '';
 		$abhaAddress = trim((string) ($patientRow['abha_address'] ?? ''));
 
-		$hfrId = 'HFR-IN-HMS';
-		if ($this->db->tableExists('hospital_setting')) {
-			$hfrRow = $this->db->table('hospital_setting')->where('title', 'ABDM_HFR_ID')->get(1)->getRowArray();
-			if (! empty($hfrRow['value'])) {
-				$hfrId = trim((string) $hfrRow['value']);
-			}
+		$hfrId = trim(hospital_setting_value('ABDM_HFR_ID', 'HFR-IN-HMS'));
+		if ($hfrId === '') {
+			$hfrId = 'HFR-IN-HMS';
 		}
 		$hospitalName = defined('H_Name') ? (string) constant('H_Name') : 'Hospital';
 
@@ -5394,7 +5427,7 @@ class Patient extends BaseController
 		$factory = new \App\Libraries\Abdm\Fhir\FhirGeneratorFactory();
 		$generatorOutput = $factory->healthDocument()->generate($source);
 
-		$adapter = new \App\Libraries\Abdm\Sync\GatewayPayloadAdapter();
+		$adapter = new \App\Libraries\Abdm\Fhir\Support\GatewayPayloadAdapter();
 		$gatewayPayload = $adapter->toGatewayPayload($generatorOutput, $source, $hfrId);
 
 		if ($pid > 0 && preg_match('/^\d{14}$/', $abhaDigits) === 1 && class_exists('\App\Libraries\Abdm\Task\AbdmTaskService')) {
@@ -5444,6 +5477,150 @@ class Patient extends BaseController
 		$outbox->enqueueRecordSync($syncPayload);
 
 		return true;
+	}
+
+	public function generate_fhir_for_file(int $fileId)
+	{
+		if ($fileId <= 0) {
+			return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid file ID']);
+		}
+
+		$ok = $this->enqueueHealthDocumentFhirForFileUpload($fileId);
+		if (! $ok) {
+			return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => 'Unable to generate FHIR HealthDocumentRecord for file #' . $fileId]);
+		}
+
+		return $this->response->setJSON([
+			'ok' => 1,
+			'file_id' => $fileId,
+			'message' => 'HealthDocumentRecord FHIR bundle generated & enqueued for ABDM sync',
+			'csrfName' => csrf_token(),
+			'csrfHash' => csrf_hash(),
+		]);
+	}
+
+	public function generate_fhir_bundle_for_all_files(int $pno)
+	{
+		if ($pno <= 0 || ! $this->db->tableExists('file_upload_data')) {
+			return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid patient ID or file_upload_data table missing']);
+		}
+
+		$fields = $this->db->getFieldNames('file_upload_data') ?? [];
+		$builder = $this->db->table('file_upload_data');
+		if (in_array('pid', $fields, true)) {
+			$builder->where('pid', $pno);
+		}
+		if (in_array('show_type', $fields, true)) {
+			$builder->where('show_type', 0);
+		}
+
+		$rows = $builder->select('id')->get()->getResultArray();
+		$count = 0;
+		foreach ($rows as $row) {
+			$fileId = (int) ($row['id'] ?? 0);
+			if ($fileId > 0 && $this->enqueueHealthDocumentFhirForFileUpload($fileId)) {
+				$count++;
+			}
+		}
+
+		return $this->response->setJSON([
+			'ok' => 1,
+			'count' => $count,
+			'message' => 'Generated FHIR HealthDocumentRecord bundles for ' . $count . ' scanned document(s)',
+			'csrfName' => csrf_token(),
+			'csrfHash' => csrf_hash(),
+		]);
+	}
+
+	public function enqueueWellnessRecordFhir(int $patientId, int $opdSessionId = 0): bool
+	{
+		if ($patientId <= 0) {
+			return false;
+		}
+
+		$docCtrl = new \App\Controllers\DoctorDocument();
+		$source = $docCtrl->buildWellnessRecordSource($patientId, $opdSessionId);
+		if (empty($source)) {
+			return false;
+		}
+
+		$factory = new \App\Libraries\Abdm\Fhir\FhirGeneratorFactory();
+		$generatorOutput = $factory->wellness()->generate($source);
+
+		$hfrId = (string) ($source['hfr_id'] ?? 'HFR-IN-HMS');
+		$adapter = new \App\Libraries\Abdm\Fhir\Support\GatewayPayloadAdapter();
+		$gatewayPayload = $adapter->toGatewayPayload($generatorOutput, $source, $hfrId);
+
+		$patientName = (string) ($source['patient']['name'] ?? 'Patient');
+		$abhaDigits = (string) ($source['patient']['abha_id'] ?? '');
+
+		if ($patientId > 0 && preg_match('/^\d{14}$/', $abhaDigits) === 1 && class_exists('\App\Libraries\Abdm\Task\AbdmTaskService')) {
+			try {
+				$taskService = new \App\Libraries\Abdm\Task\AbdmTaskService();
+				$taskService->createOrRefreshTask(
+					'wellness_record_publish',
+					'opd_prescription',
+					'opd_vitals',
+					(string) ($source['record_id'] ?? $patientId),
+					$patientId,
+					$patientName,
+					$abhaDigits,
+					'submit',
+					[
+						'opd_session_id' => $opdSessionId,
+						'trigger' => 'vitals.saved',
+					]
+				);
+			} catch (\Throwable $e) {
+				log_message('warning', 'Unable to refresh ABDM wellness task for patient {id}: {msg}', ['id' => $patientId, 'msg' => $e->getMessage()]);
+			}
+		}
+
+		$syncPayload = [
+			'local_record_id' => 'wellness-' . $patientId . ($opdSessionId > 0 ? ('-' . $opdSessionId) : ''),
+			'local_patient_id' => $patientId,
+			'hi_type' => 'WellnessRecord',
+			'care_context_reference' => (string) ($gatewayPayload['care_context_reference'] ?? ('WELLNESS-' . $patientId)),
+			'care_context_display' => (string) ($gatewayPayload['care_context_display'] ?? ('Wellness Record ' . date('d/m/Y'))),
+			'visit_date' => (string) ($source['visit_date'] ?? date('Y-m-d')),
+			'department' => '',
+			'doctor_name' => (string) ($source['doctor_name'] ?? 'Doctor'),
+			'consent_id' => '',
+			'hfr_id' => $hfrId,
+			'source_updated_at' => date('Y-m-d H:i:s'),
+			'patient_name' => $patientName,
+			'mobile' => (string) ($source['patient']['mobile'] ?? ''),
+			'gender' => (string) ($source['patient']['gender'] ?? ''),
+			'dob' => (string) ($source['patient']['dob'] ?? ''),
+			'abha_id' => $abhaDigits,
+			'abha_address' => (string) ($source['patient']['abha_address'] ?? ''),
+			'fhir_bundle' => (array) ($gatewayPayload['fhir_bundle'] ?? []),
+		];
+
+		$outbox = new \App\Libraries\Abdm\Sync\AbdmSyncOutboxService();
+		$outbox->enqueueRecordSync($syncPayload);
+
+		return true;
+	}
+
+	public function generate_wellness_fhir(int $patientId, int $opdSessionId = 0)
+	{
+		if ($patientId <= 0) {
+			return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid patient ID']);
+		}
+
+		$ok = $this->enqueueWellnessRecordFhir($patientId, $opdSessionId);
+		if (! $ok) {
+			return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => 'Unable to generate WellnessRecord FHIR bundle for patient #' . $patientId]);
+		}
+
+		return $this->response->setJSON([
+			'ok' => 1,
+			'patient_id' => $patientId,
+			'message' => 'WellnessRecord FHIR bundle generated & enqueued for ABDM sync',
+			'csrfName' => csrf_token(),
+			'csrfHash' => csrf_hash(),
+		]);
 	}
 }
 

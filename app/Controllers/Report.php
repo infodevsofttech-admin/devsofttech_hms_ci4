@@ -678,6 +678,92 @@ class Report extends BaseController
         return $this->response->setBody($content);
     }
 
+    public function old_payment_received_report()
+    {
+        return view('report/old_payment_received_report');
+    }
+
+    public function old_payment_received_report_data(string $dateRange = '', int $output = 0)
+    {
+        if ($dateRange === '') {
+            $dateRange = date('Y-m-d\T00:00:00') . 'S' . date('Y-m-d\T23:59:00');
+        }
+
+        [$minRange, $maxRange] = $this->parseDateRange($dateRange);
+
+        $builder = $this->db->table('payment_history p');
+        $builder->select('p.id as payment_id, p.payment_date, inv.inv_date, inv.invoice_code, inv.net_amount')
+            ->select('DATEDIFF(DATE(p.payment_date), DATE(inv.inv_date)) as delay_days', false)
+            ->select("CONCAT(IFNULL(pat.p_fname,''), ' ', IFNULL(pat.p_lname,'')) as patient_name", false)
+            ->select('pat.p_code as patient_code')
+            ->select('p.amount as paid_amount, p.update_by')
+            ->select("CASE p.payment_mode WHEN 1 THEN 'Cash' WHEN 2 THEN 'Bank' ELSE 'Other' END as pay_mode", false)
+            ->join('invoice_master inv', 'p.payof_type = 2 AND inv.id = p.payof_id', 'inner')
+            ->join('patient_master pat', 'inv.attach_id = pat.id', 'left')
+            ->where('p.credit_debit', 0)
+            ->where('p.payment_date >=', $minRange)
+            ->where('p.payment_date <=', $maxRange)
+            ->where('DATE(inv.inv_date) < DATE(p.payment_date)', null, false)
+            ->orderBy('p.payment_date', 'DESC');
+
+        $rows = $builder->get()->getResultArray();
+
+        $totalAmount = 0.0;
+        foreach ($rows as $r) {
+            $totalAmount += (float) ($r['paid_amount'] ?? 0);
+        }
+
+        $data = [
+            'rows' => $rows,
+            'min_range' => $minRange,
+            'max_range' => $maxRange,
+            'total_amount' => $totalAmount,
+        ];
+
+        $content = view('report/old_payment_received_report_table', $data);
+
+        if ($output === 1) {
+            ExportExcel($content, 'Old_Payment_Received_' . date('YmdHis'));
+            return $this->response->setBody('');
+        }
+
+        if ($output === 2) {
+            $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+            if (! is_dir($mpdfTempDir)) {
+                mkdir($mpdfTempDir, 0755, true);
+            }
+
+            $mpdf = new Mpdf([
+                'tempDir' => $mpdfTempDir,
+                'format' => 'A4-L',
+                'margin_top' => 8,
+                'margin_bottom' => 8,
+                'margin_left' => 8,
+                'margin_right' => 8,
+            ]);
+
+            $pdfHtml = '<style>'
+                . 'body{font-family:Arial,sans-serif;color:#111;font-size:12px;}'
+                . 'table{width:100%;border-collapse:collapse;}'
+                . 'th,td{border:1px solid #9aa4ad;padding:6px 8px;}'
+                . 'th{text-align:left;background:#f5f6f7;}'
+                . '.text-end{text-align:right;}'
+                . '</style>'
+                . '<h3 style="margin:0 0 10px 0;">Old Payment Received Report</h3>'
+                . $content;
+
+            $mpdf->WriteHTML($pdfHtml);
+            $fileName = 'Old_Payment_Received_' . date('Ymd_His') . '.pdf';
+
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                ->setBody($mpdf->Output($fileName, 'S'));
+        }
+
+        return $this->response->setBody($content);
+    }
+
     public function report_total_payment_total_amount_show(
         string $dateRange,
         string $employeeIds,
@@ -1386,7 +1472,59 @@ class Report extends BaseController
         return $this->response->setBody($content);
     }
 
-    // ==================== Insurance Credit Reports ====================
+    public function reconciliation_mismatch_report(string $dateRange = '')
+    {
+        if ($dateRange === '') {
+            $dateRange = date('Y-m-d\T00:00:00') . 'S' . date('Y-m-d\T23:59:00');
+        }
+
+        [$minRange, $maxRange] = $this->parseDateRange($dateRange);
+
+        $sql = "SELECT 
+            i.id AS invoice_id,
+            i.invoice_code,
+            i.inv_date AS invoice_date,
+            pm.p_fname AS patient_name,
+            pm.p_code AS patient_code,
+            SUM(ROUND(ii.item_amount - (ii.item_amount * i.discount_amount / NULLIF(i.total_amount, 0)), 2)) AS diagnosis_billed_amount,
+            IFNULL(pay.paid_on_date, 0) AS collected_on_date,
+            IFNULL(pay_other.paid_other_date, 0) AS collected_other_dates,
+            i.payment_part_balance AS unpaid_balance,
+            (SUM(ROUND(ii.item_amount - (ii.item_amount * i.discount_amount / NULLIF(i.total_amount, 0)), 2)) - IFNULL(pay.paid_on_date, 0)) AS date_mismatch_diff
+        FROM invoice_master i
+        JOIN invoice_item ii ON i.id = ii.inv_master_id
+        JOIN hc_item_type ht ON ii.item_type = ht.itype_id
+        LEFT JOIN patient_master pm ON i.attach_id = pm.id
+        LEFT JOIN (
+            SELECT payof_id, SUM(amount) AS paid_on_date
+            FROM payment_history
+            WHERE payof_type = 2 AND credit_debit = 0 
+              AND payment_date >= ? AND payment_date <= ?
+            GROUP BY payof_id
+        ) pay ON i.id = pay.payof_id
+        LEFT JOIN (
+            SELECT payof_id, SUM(amount) AS paid_other_date
+            FROM payment_history
+            WHERE payof_type = 2 AND credit_debit = 0 
+              AND (payment_date < ? OR payment_date > ?)
+            GROUP BY payof_id
+        ) pay_other ON i.id = pay_other.payof_id
+        WHERE i.invoice_status = 1
+          AND i.inv_date >= ? AND i.inv_date <= ?
+          AND i.ipd_id = 0 AND IFNULL(i.insurance_case_id, 0) = 0
+        GROUP BY i.id
+        HAVING date_mismatch_diff != 0 OR unpaid_balance > 0 OR collected_other_dates > 0
+        ORDER BY i.id DESC";
+
+        $mismatches = $this->db->query($sql, [$minRange, $maxRange, $minRange, $maxRange, $minRange, $maxRange])->getResultArray();
+
+        return $this->response->setJSON([
+            'status' => 'success',
+            'date_range' => ['min' => $minRange, 'max' => $maxRange],
+            'count' => count($mismatches),
+            'mismatches' => $mismatches,
+        ]);
+    }
 
     public function insurance_credit_main()
     {

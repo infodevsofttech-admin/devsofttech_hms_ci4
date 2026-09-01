@@ -191,18 +191,24 @@ if (! function_exists('hospital_setting_value')) {
             try {
                 $db = db_connect();
                 if ($db && method_exists($db, 'tableExists') && $db->tableExists('hospital_setting')) {
-                    $rows = $db->table('hospital_setting')
-                        ->select('s_name, s_value')
-                        ->get()
-                        ->getResultArray();
+                    $fields = $db->getFieldNames('hospital_setting') ?? [];
+                    $nameCol = in_array('s_name', $fields, true) ? 's_name' : (in_array('title', $fields, true) ? 'title' : '');
+                    $valCol = in_array('s_value', $fields, true) ? 's_value' : (in_array('value', $fields, true) ? 'value' : '');
 
-                    foreach ($rows as $row) {
-                        $key = trim((string) ($row['s_name'] ?? ''));
-                        if ($key === '') {
-                            continue;
+                    if ($nameCol !== '' && $valCol !== '') {
+                        $rows = $db->table('hospital_setting')
+                            ->select("{$nameCol}, {$valCol}")
+                            ->get()
+                            ->getResultArray();
+
+                        foreach ($rows as $row) {
+                            $key = trim((string) ($row[$nameCol] ?? ''));
+                            if ($key === '') {
+                                continue;
+                            }
+
+                            $settings[$key] = trim((string) ($row[$valCol] ?? ''));
                         }
-
-                        $settings[$key] = trim((string) ($row['s_value'] ?? ''));
                     }
                 }
             } catch (\Throwable $e) {

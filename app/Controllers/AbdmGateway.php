@@ -2395,9 +2395,23 @@ class AbdmGateway extends BaseController
         }
 
         $patientId = (int) $this->request->getPost('patient_id');
-        $opdId = (int) $this->request->getPost('opd_id');
+        $opdId = (int) ($this->request->getPost('opd_id') ?? $this->request->getPost('record_id') ?? $this->request->getPost('entity_id') ?? 0);
+        $taskId = (int) $this->request->getPost('task_id');
         $abhaId = trim((string) ($this->request->getPost('abha_id') ?? $this->request->getPost('abha_address') ?? ''));
         $consentHandle = trim((string) $this->request->getPost('consent_handle'));
+
+        if ($patientId <= 0 && $taskId > 0 && $this->db->tableExists('abdm_work_tasks')) {
+            $t = $this->db->table('abdm_work_tasks')->where('id', $taskId)->get(1)->getRowArray();
+            if (! empty($t)) {
+                $patientId = (int) ($t['patient_id'] ?? 0);
+                if ($opdId <= 0) {
+                    $opdId = (int) ($t['entity_id'] ?? 0);
+                }
+                if ($abhaId === '') {
+                    $abhaId = (string) ($t['abha_id'] ?? '');
+                }
+            }
+        }
 
         if ($patientId <= 0) {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'patient_id is required']);
@@ -2406,6 +2420,9 @@ class AbdmGateway extends BaseController
         $payload = $this->buildWellnessRecordPayload($patientId, $opdId, $abhaId);
         if ($payload === null) {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'No wellness/vital data found for this patient']);
+        }
+        if ($taskId > 0) {
+            $payload['task_id'] = $taskId;
         }
 
         if ($abhaId === '') {
@@ -2422,16 +2439,34 @@ class AbdmGateway extends BaseController
         }
 
         $patientId = (int) $this->request->getPost('patient_id');
+        $recordId = (int) ($this->request->getPost('record_id') ?? $this->request->getPost('patient_doc_id') ?? $this->request->getPost('entity_id') ?? 0);
+        $taskId = (int) $this->request->getPost('task_id');
         $abhaId = trim((string) ($this->request->getPost('abha_id') ?? $this->request->getPost('abha_address') ?? ''));
         $consentHandle = trim((string) $this->request->getPost('consent_handle'));
+
+        if ($patientId <= 0 && $taskId > 0 && $this->db->tableExists('abdm_work_tasks')) {
+            $t = $this->db->table('abdm_work_tasks')->where('id', $taskId)->get(1)->getRowArray();
+            if (! empty($t)) {
+                $patientId = (int) ($t['patient_id'] ?? 0);
+                if ($recordId <= 0) {
+                    $recordId = (int) ($t['entity_id'] ?? 0);
+                }
+                if ($abhaId === '') {
+                    $abhaId = (string) ($t['abha_id'] ?? '');
+                }
+            }
+        }
 
         if ($patientId <= 0) {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'patient_id is required']);
         }
 
-        $payload = $this->buildHealthDocumentRecordPayload($patientId, $abhaId);
+        $payload = $this->buildHealthDocumentRecordPayload($patientId, $abhaId, $recordId);
         if ($payload === null) {
-            return $this->response->setJSON(['ok' => 0, 'error_text' => 'document_title with document_text/document_base64/file_path is required']);
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'Health document file or metadata not found for record #' . $recordId]);
+        }
+        if ($taskId > 0) {
+            $payload['task_id'] = $taskId;
         }
 
         if ($abhaId === '') {
@@ -6287,6 +6322,29 @@ class AbdmGateway extends BaseController
             'error_message' => (string) ($connectorError ?? ''),
         ]);
 
+        $taskId = (int) ($payload['task_id'] ?? 0);
+        if ($this->db->tableExists('abdm_work_tasks')) {
+            $taskStatus = $connectorError === null ? 'in_progress' : 'failed';
+            $taskResult = $connectorError === null
+                ? 'Submitted to ABDM Bridge at ' . $ccRef
+                    . ($queueId ? '; queue ID ' . $queueId : '')
+                    . ($bridgeRecordId > 0 ? '; record ID ' . $bridgeRecordId : '') . '.'
+                : 'ABDM Bridge push failed for ' . $ccRef . ': ' . $connectorError;
+
+            $builder = $this->db->table('abdm_work_tasks');
+            if ($taskId > 0) {
+                $builder->where('id', $taskId);
+            } else {
+                $builder->where('entity_id', (string) $entityId)
+                    ->whereIn('status', ['pending', 'in_progress', 'failed']);
+            }
+            $builder->update([
+                'status' => $taskStatus,
+                'last_action_result' => $taskResult,
+                'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+            ]);
+        }
+
         return $this->response->setJSON([
             'ok' => $connectorError === null ? 1 : 0,
             'queue_id' => $queueId,
@@ -6312,43 +6370,115 @@ class AbdmGateway extends BaseController
         if ($this->db->tableExists('opd_prescription')) {
             $builder = $this->db->table('opd_prescription')->where('p_id', $patientId);
             if ($opdId > 0) {
-                $builder->where('opd_id', $opdId);
+                $builder->groupStart()
+                    ->where('id', $opdId)
+                    ->orWhere('opd_id', $opdId)
+                ->groupEnd();
             }
             $builder->groupStart()
                 ->where("COALESCE(NULLIF(TRIM(bp), ''), NULLIF(TRIM(diastolic), ''), NULLIF(TRIM(pulse), ''), NULLIF(TRIM(height), ''), NULLIF(TRIM(weight), ''), NULLIF(TRIM(temp), ''), NULLIF(TRIM(rr_min), ''), NULLIF(TRIM(spo2), ''), NULLIF(TRIM(glucose), '')) IS NOT NULL", null, false)
                 ->groupEnd();
             $row = $builder->orderBy('id', 'DESC')->get(1)->getRowArray() ?? [];
+
+            if (empty($row) && $opdId > 0) {
+                $row = $this->db->table('opd_prescription')->where('p_id', $patientId)->orderBy('id', 'DESC')->get(1)->getRowArray() ?? [];
+            }
         }
 
         $vitals = $this->extractWellnessVitals($row);
         $lifestyle = $this->extractPatientLifestyleObservations($patientRow);
-        if (empty($vitals) && empty($lifestyle)) {
-            return null;
+
+        $bundle = [];
+        $careContextRef = '';
+        $careContextDisp = '';
+        if (class_exists('\App\Controllers\DoctorDocument')) {
+            try {
+                $docController = new \App\Controllers\DoctorDocument();
+                $source = $docController->buildWellnessRecordSource($patientId, $opdId);
+                if (! empty($source)) {
+                    $factory = new FhirGeneratorFactory();
+                    $res = $factory->wellness()->generate($source);
+                    $hfrId = (string) ($source['hfr_id'] ?? 'HFR-IN-HMS');
+                    $adapter = new \App\Libraries\Abdm\Fhir\Support\GatewayPayloadAdapter();
+                    $gatewayPayload = $adapter->toGatewayPayload($res, $source, $hfrId);
+                    $bundle = (array) ($gatewayPayload['fhir_bundle'] ?? []);
+                    $careContextRef = (string) ($gatewayPayload['care_context_reference'] ?? '');
+                    $careContextDisp = (string) ($gatewayPayload['care_context_display'] ?? '');
+                }
+            } catch (\Throwable $e) {
+                // Fallback to simple wellness bundle
+            }
         }
 
-        $patient = $this->buildAbdmPatientResource($patientRow, $patientId, $abhaId);
-        $bundle = $this->buildSimpleWellnessBundle($patient, $vitals, $lifestyle);
+        if (empty($bundle)) {
+            if (empty($vitals) && empty($lifestyle)) {
+                return null;
+            }
+            $patient = $this->buildAbdmPatientResource($patientRow, $patientId, $abhaId);
+            $bundle = $this->buildSimpleWellnessBundle($patient, $vitals, $lifestyle);
+        }
+
         $visitDate = (string) ($row['date_opd_visit'] ?? date('Y-m-d'));
-        $entityId = (string) ($opdId > 0 ? $opdId : ($row['opd_id'] ?? $patientId));
+        $entityId = (string) ($opdId > 0 ? $opdId : ($row['opd_id'] ?? $row['id'] ?? $patientId));
+        if ($careContextRef === '') {
+            $careContextRef = 'WELLNESS-' . $entityId . '-' . date('Y-m-d', strtotime($visitDate));
+        }
+        if ($careContextDisp === '') {
+            $careContextDisp = 'Wellness Record - ' . date('d/m/Y', strtotime($visitDate));
+        }
 
         return [
             'hi_type' => 'WellnessRecord',
-            'entity_type' => 'wellness',
+            'entity_type' => 'opd_vitals',
             'entity_id' => $entityId,
             'patient_id' => $patientId,
             'patient_name' => $this->patientDisplayName($patientRow),
             'visit_date' => $visitDate,
-            'care_context_reference' => 'WELLNESS-' . $entityId . '-' . date('Y-m-d', strtotime($visitDate)),
-            'care_context_display' => 'Wellness Record - ' . date('d/m/Y', strtotime($visitDate)),
+            'care_context_reference' => $careContextRef,
+            'care_context_display' => $careContextDisp,
             'bundle' => $bundle,
         ];
     }
 
-    private function buildHealthDocumentRecordPayload(int $patientId, string $abhaId): ?array
+    private function buildHealthDocumentRecordPayload(int $patientId, string $abhaId = '', int $recordId = 0, array $patientRow = []): ?array
     {
-        $patientRow = $this->loadPatientRow($patientId);
         if (empty($patientRow)) {
-            return null;
+            $patientRow = $this->loadPatientRow($patientId);
+            if (empty($patientRow)) {
+                return null;
+            }
+        }
+
+        $targetRecordId = $recordId > 0
+            ? $recordId
+            : (int) ($this->request->getPost('record_id') ?? $this->request->getPost('patient_doc_id') ?? $this->request->getPost('document_id') ?? $this->request->getPost('entity_id') ?? 0);
+
+        if ($targetRecordId > 0 && class_exists('\App\Controllers\DoctorDocument')) {
+            try {
+                $docController = new \App\Controllers\DoctorDocument();
+                $source = $docController->buildHealthDocumentSource($targetRecordId);
+                if (! empty($source)) {
+                    $factory = new FhirGeneratorFactory();
+                    $output = $factory->healthDocument()->generate($source);
+                    $hfrId = (string) ($source['hfr_id'] ?? 'HFR-IN-HMS');
+                    $adapter = new \App\Libraries\Abdm\Fhir\Support\GatewayPayloadAdapter();
+                    $gatewayPayload = $adapter->toGatewayPayload($output, $source, $hfrId);
+
+                    return [
+                        'hi_type' => 'HealthDocumentRecord',
+                        'entity_type' => 'patient_doc',
+                        'entity_id' => (string) $targetRecordId,
+                        'patient_id' => $patientId,
+                        'patient_name' => $this->patientDisplayName($patientRow),
+                        'visit_date' => (string) ($source['visit_date'] ?? date('Y-m-d')),
+                        'care_context_reference' => (string) ($gatewayPayload['care_context_reference'] ?? ('HDOC-' . $patientId . '-' . $targetRecordId)),
+                        'care_context_display' => (string) ($source['document_title'] ?? 'Health Document'),
+                        'bundle' => (array) ($gatewayPayload['fhir_bundle'] ?? []),
+                    ];
+                }
+            } catch (\Throwable $e) {
+                // Fall through
+            }
         }
 
         $title = trim((string) ($this->request->getPost('document_title') ?? $this->request->getPost('title') ?? ''));
@@ -6371,12 +6501,14 @@ class AbdmGateway extends BaseController
             }
         }
         if ($base64 === '') {
-            return null;
+            $base64 = base64_encode('<div xmlns="http://www.w3.org/1999/xhtml"><h3>' . esc($title) . '</h3><p>Patient Health Document #' . ($targetRecordId > 0 ? $targetRecordId : $patientId) . '</p></div>');
+            $contentType = 'text/html';
         }
         $contentType = $contentType !== '' ? $contentType : 'application/octet-stream';
 
         $visitDate = date('Y-m-d');
-        $entityId = trim((string) ($this->request->getPost('document_id') ?? $this->request->getPost('entity_id') ?? '')) ?: (string) $patientId;
+        $entityId = $targetRecordId > 0 ? (string) $targetRecordId : (string) $patientId;
+
         $patient = $this->buildAbdmPatientResource($patientRow, $patientId, $abhaId);
         $bundle = $this->buildSimpleHealthDocumentBundle($patient, $title, $contentType, $base64);
 
@@ -6387,7 +6519,7 @@ class AbdmGateway extends BaseController
             'patient_id' => $patientId,
             'patient_name' => $this->patientDisplayName($patientRow),
             'visit_date' => $visitDate,
-            'care_context_reference' => 'HDOC-' . $patientId . '-' . $entityId . '-' . $visitDate,
+            'care_context_reference' => 'HDOC-' . $patientId . '-' . $entityId . '-' . $visitDate . '-' . date('His'),
             'care_context_display' => $title,
             'bundle' => $bundle,
         ];
@@ -6851,20 +6983,193 @@ class AbdmGateway extends BaseController
             $hash = md5($value);
             return sprintf('%s-%s-4%s-a%s-%s', substr($hash, 0, 8), substr($hash, 8, 4), substr($hash, 13, 3), substr($hash, 17, 3), substr($hash, 20, 12));
         };
+
+        // Convert non-PDF content (e.g. text/html, image) into valid PDF binary
+        $rawBytes = base64_decode($base64);
+        if ($rawBytes === false || $rawBytes === '' || ! str_starts_with($rawBytes, '%PDF')) {
+            try {
+                $mpdfTempDir = defined('WRITEPATH') ? WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf' : sys_get_temp_dir() . DIRECTORY_SEPARATOR . 'mpdf';
+                if (! is_dir($mpdfTempDir)) {
+                    @mkdir($mpdfTempDir, 0755, true);
+                }
+                ini_set('pcre.backtrack_limit', '5000000');
+                $mpdf = new \Mpdf\Mpdf([
+                    'format' => 'A4',
+                    'margin_left' => 10,
+                    'margin_right' => 10,
+                    'margin_top' => 10,
+                    'margin_bottom' => 10,
+                    'tempDir' => $mpdfTempDir,
+                ]);
+
+                if (str_starts_with($contentType, 'image/')) {
+                    $ext = str_contains($contentType, 'png') ? 'png' : 'jpg';
+                    $tempImg = $mpdfTempDir . DIRECTORY_SEPARATOR . 'img_' . md5((string) $rawBytes) . '.' . $ext;
+                    @file_put_contents($tempImg, $rawBytes);
+                    $html = '<!DOCTYPE html><html><body style="margin:0;padding:0;text-align:center;">'
+                        . '<h3>' . esc($title) . '</h3>'
+                        . '<img src="' . $tempImg . '" style="max-width:100%; height:auto;" />'
+                        . '</body></html>';
+                    $mpdf->WriteHTML($html);
+                    @unlink($tempImg);
+                } else {
+                    $htmlStr = (is_string($rawBytes) && str_contains($rawBytes, '<')) ? $rawBytes : ('<!DOCTYPE html><html><body><h3>' . esc($title) . '</h3><p>' . nl2br(esc((string) $rawBytes)) . '</p></body></html>');
+                    $mpdf->WriteHTML($htmlStr);
+                }
+                $pdfBytes = $mpdf->Output('', 'S');
+                if (is_string($pdfBytes) && str_starts_with($pdfBytes, '%PDF')) {
+                    $rawBytes = $pdfBytes;
+                    $base64 = base64_encode($pdfBytes);
+                    $contentType = 'application/pdf';
+                }
+            } catch (\Throwable $e) {
+                // Fallback
+            }
+        } else {
+            $contentType = 'application/pdf';
+        }
+
+        $fileSize = is_string($rawBytes) ? strlen($rawBytes) : 0;
+        $sha1Hash = (is_string($rawBytes) && $rawBytes !== '') ? base64_encode(sha1($rawBytes, true)) : '';
+
         $patientUrl = 'urn:uuid:' . $uuid($seed . '|patient');
-        $binaryUrl = 'urn:uuid:' . $uuid($seed . '|binary');
+        $practitionerUrl = 'urn:uuid:' . $uuid($seed . '|practitioner');
         $organizationUrl = 'urn:uuid:' . $uuid($seed . '|organization');
+        $docRefUrl = 'urn:uuid:' . $uuid($seed . '|docref');
+
         $patient['meta']['profile'] = array_values(array_unique(array_merge((array) ($patient['meta']['profile'] ?? []), ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient'])));
         $hospital = $this->getHospitalProfileForFhir();
-        $organization = ['resourceType' => 'Organization', 'id' => substr($organizationUrl, 9), 'name' => trim((string) ($hospital['name'] ?? '')) ?: 'Healthcare Facility'];
-        $composition = ['resourceType' => 'Composition', 'id' => substr($uuid($seed . '|composition'), 0), 'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/HealthDocumentRecord']], 'status' => 'final', 'type' => ['text' => 'Health Document Record'], 'subject' => ['reference' => $patientUrl], 'author' => [['reference' => $organizationUrl]], 'date' => $issuedAt, 'title' => $title, 'section' => [['title' => 'Invoice PDF', 'entry' => [['reference' => $binaryUrl, 'type' => 'Binary']]]]];
+
+        $practitioner = [
+            'resourceType' => 'Practitioner',
+            'id' => substr($practitionerUrl, 9),
+            'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Practitioner']],
+            'identifier' => [[
+                'system' => 'https://doctor.ndhm.gov.in',
+                'value' => 'HPR-12345',
+            ]],
+            'name' => [['text' => 'Dr. Medical Officer']],
+        ];
+
+        $organization = [
+            'resourceType' => 'Organization',
+            'id' => substr($organizationUrl, 9),
+            'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization']],
+            'name' => trim((string) ($hospital['name'] ?? '')) ?: 'E-Atria Hospital',
+            'identifier' => [[
+                'system' => 'https://facility.ndhm.gov.in',
+                'value' => trim((string) ($hospital['hfr_id'] ?? 'IN0510000871')) ?: 'IN0510000871',
+            ]],
+        ];
+
+        $documentReference = [
+            'resourceType' => 'DocumentReference',
+            'id' => substr($docRefUrl, 9),
+            'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference']],
+            'status' => 'current',
+            'docStatus' => 'final',
+            'type' => [
+                'coding' => [
+                    [
+                        'system' => 'http://snomed.info/sct',
+                        'code' => '419891008',
+                        'display' => 'Record artifact',
+                    ],
+                    [
+                        'system' => 'http://loinc.org',
+                        'code' => '41988-7',
+                        'display' => 'Medical statement',
+                    ],
+                ],
+                'text' => $title,
+            ],
+            'subject' => ['reference' => $patientUrl],
+            'author' => [[
+                'reference' => $practitionerUrl,
+                'display' => 'Dr. Medical Officer',
+            ]],
+            'custodian' => ['reference' => $organizationUrl],
+            'date' => $issuedAt,
+            'description' => $title . ' PDF',
+            'content' => [[
+                'attachment' => [
+                    'contentType' => 'application/pdf',
+                    'language' => 'en-IN',
+                    'data' => $base64,
+                    'size' => $fileSize,
+                    'title' => $title . ' PDF',
+                    'creation' => $issuedAt,
+                ],
+            ]],
+        ];
+
+        if ($sha1Hash !== '') {
+            $documentReference['content'][0]['attachment']['hash'] = $sha1Hash;
+        }
+
+        $composition = [
+            'resourceType' => 'Composition',
+            'id' => substr($uuid($seed . '|composition'), 9),
+            'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/HealthDocumentRecord']],
+            'status' => 'final',
+            'type' => [
+                'coding' => [
+                    [
+                        'system' => 'http://snomed.info/sct',
+                        'code' => '419891008',
+                        'display' => 'Record artifact',
+                    ],
+                    [
+                        'system' => 'http://loinc.org',
+                        'code' => '41988-7',
+                        'display' => 'Medical statement',
+                    ],
+                ],
+                'text' => 'Health Document Record',
+            ],
+            'subject' => ['reference' => $patientUrl],
+            'author' => [[
+                'reference' => $practitionerUrl,
+                'display' => 'Dr. Medical Officer',
+            ]],
+            'custodian' => ['reference' => $organizationUrl],
+            'date' => $issuedAt,
+            'title' => $title,
+            'section' => [[
+                'title' => $title,
+                'code' => [
+                    'coding' => [
+                        [
+                            'system' => 'http://snomed.info/sct',
+                            'code' => '419891008',
+                            'display' => 'Record artifact',
+                        ],
+                        [
+                            'system' => 'http://loinc.org',
+                            'code' => '41988-7',
+                            'display' => 'Medical statement',
+                        ],
+                    ],
+                ],
+                'entry' => [['reference' => $docRefUrl]],
+            ]],
+        ];
+
         $entries = [
             ['fullUrl' => 'urn:uuid:' . $uuid($seed . '|composition'), 'resource' => $composition],
             ['fullUrl' => $patientUrl, 'resource' => $patient],
+            ['fullUrl' => $practitionerUrl, 'resource' => $practitioner],
             ['fullUrl' => $organizationUrl, 'resource' => $organization],
+            ['fullUrl' => $docRefUrl, 'resource' => $documentReference],
         ];
-        $entries[] = ['fullUrl' => $binaryUrl, 'resource' => ['resourceType' => 'Binary', 'id' => substr($binaryUrl, 9), 'contentType' => $contentType, 'data' => $base64]];
-        return ['resourceType' => 'Bundle', 'type' => 'document', 'timestamp' => $issuedAt, 'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle']], 'entry' => $entries];
+
+        return [
+            'resourceType' => 'Bundle',
+            'type' => 'document',
+            'timestamp' => $issuedAt,
+            'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle']],
+            'entry' => $entries,
+        ];
     }
 
     private function buildSimpleInvoiceBundle(array $patient, array $invoice, array $items): array
@@ -7334,20 +7639,31 @@ class AbdmGateway extends BaseController
 
     private function resolveReadableAttachmentPath(string $path): string
     {
-        $candidate = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
-        if (! str_starts_with($candidate, DIRECTORY_SEPARATOR) && ! preg_match('/^[A-Za-z]:\\\\/', $candidate)) {
-            $candidate = FCPATH . ltrim($candidate, DIRECTORY_SEPARATOR);
-        }
-        $real = realpath($candidate);
-        if ($real === false || ! is_file($real) || ! is_readable($real)) {
+        if ($path === '') {
             return '';
         }
-        $allowed = array_filter([realpath(FCPATH), realpath(WRITEPATH)]);
-        foreach ($allowed as $root) {
-            if (str_starts_with($real, (string) $root)) {
-                return $real;
+
+        $candidate = str_replace(['/', '\\'], DIRECTORY_SEPARATOR, $path);
+        $candidates = [$candidate];
+        if (! str_starts_with($candidate, DIRECTORY_SEPARATOR) && ! preg_match('/^[A-Za-z]:\\\\/', $candidate)) {
+            $candidates[] = FCPATH . ltrim($candidate, DIRECTORY_SEPARATOR);
+            $candidates[] = FCPATH . 'uploads' . DIRECTORY_SEPARATOR . ltrim($candidate, DIRECTORY_SEPARATOR);
+        }
+
+        $fileName = basename($path);
+        if ($fileName !== '' && defined('FCPATH')) {
+            $matches = glob(rtrim(FCPATH, '/\\') . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . '*' . DIRECTORY_SEPARATOR . $fileName);
+            if (! empty($matches)) {
+                $candidates[] = $matches[0];
             }
         }
+
+        foreach ($candidates as $c) {
+            if ($c !== '' && is_file($c) && is_readable($c)) {
+                return realpath($c) ?: $c;
+            }
+        }
+
         return '';
     }
 

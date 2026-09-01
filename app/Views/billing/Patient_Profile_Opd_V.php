@@ -229,13 +229,19 @@ if ($patientPhotoPath === '') {
                                     </div>
                                 </div>
 
-                                <div class="mt-2 d-flex flex-wrap gap-2">
+                                <div class="mt-2 d-flex flex-wrap gap-2 align-items-center">
                                     <?php if ((int) ($group['rx_session_id'] ?? 0) > 0) { ?>
                                         <a class="btn btn-primary btn-sm" target="_blank"
                                            href="<?= base_url('Opd_prescription/opd_prescription_print/' . (int) $group['opd_id'] . '/' . (int) $group['rx_session_id']) ?>">
                                             Prescription Print
                                         </a>
                                     <?php } ?>
+                                    <button type="button" class="btn btn-outline-info btn-sm" onclick="previewWellnessFhir(<?= (int) ($patient->id ?? 0) ?>, <?= (int) ($group['opd_id'] ?? 0) ?>)">
+                                        <i class="bi bi-activity me-1"></i>Wellness Record FHIR Preview
+                                    </button>
+                                    <button type="button" class="btn btn-success btn-sm text-white" onclick="generateWellnessFhir(<?= (int) ($patient->id ?? 0) ?>, <?= (int) ($group['opd_id'] ?? 0) ?>)">
+                                        <i class="bi bi-lightning-charge me-1"></i>Push ABDM Wellness
+                                    </button>
                                 </div>
 
                                 <?php if (!empty($group['bp']) || !empty($group['diastolic']) || !empty($group['pulse']) || !empty($group['temp']) || !empty($group['spo2'])) { ?>
@@ -389,14 +395,19 @@ if ($patientPhotoPath === '') {
                 <?php endif; ?>
 
                 <div class="tab-pane fade pt-3" id="opd-documents-tab" role="tabpanel">
-                    <div class="d-flex justify-content-between align-items-center mb-3">
+                    <div class="d-flex justify-content-between align-items-center mb-3 flex-wrap gap-2">
                         <div>
-                            <h5 class="card-title mb-0 py-0">Patient Scanned & Uploaded Documents</h5>
-                            <div class="text-muted small">All documents attached to this patient ordered by date (Latest First)</div>
+                            <h5 class="card-title mb-0 py-0"><i class="bi bi-file-earmark-medical text-primary me-1"></i>Patient Scanned & Uploaded Documents</h5>
+                            <div class="text-muted small">Scanned copies, webcam captures, and uploaded reports formatted for ABDM HealthDocumentRecord</div>
                         </div>
-                        <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
-                            Total Documents: <?= count($patientDocuments ?? []) ?>
-                        </span>
+                        <div class="d-flex align-items-center gap-2">
+                            <button type="button" class="btn btn-sm btn-success text-white shadow-sm fw-semibold" onclick="generateAllFhirDocuments(<?= (int) ($patient->id ?? 0) ?>)" id="btnGenerateAllFhirDocs">
+                                <i class="bi bi-diagram-3-fill me-1"></i>Generate ABDM FHIR Bundle (All)
+                            </button>
+                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">
+                                Total Documents: <?= count($patientDocuments ?? []) ?>
+                            </span>
+                        </div>
                     </div>
 
                     <?php if (empty($patientDocuments)) : ?>
@@ -406,15 +417,28 @@ if ($patientPhotoPath === '') {
                     <?php else : ?>
                         <div class="row row-cols-1 row-cols-md-2 row-cols-lg-3 g-3">
                             <?php foreach ($patientDocuments as $doc) : ?>
-                                <div class="col">
+                                <div class="col" id="doc-card-col-<?= (int) $doc['id'] ?>">
                                     <div class="card h-100 border shadow-sm">
                                         <div class="card-header py-2 d-flex justify-content-between align-items-center bg-light">
-                                            <span class="fw-bold text-truncate" style="max-width: 180px;" title="<?= esc($doc['title']) ?>"><?= esc($doc['title']) ?></span>
-                                            <?php if ($doc['isPdf']) : ?>
-                                                <span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="bi bi-file-earmark-pdf me-1"></i>PDF</span>
-                                            <?php else : ?>
-                                                <span class="badge bg-primary-subtle text-primary border border-primary-subtle"><i class="bi bi-file-earmark-image me-1"></i><?= esc(strtoupper($doc['ext'] ?: 'IMAGE')) ?></span>
-                                            <?php endif; ?>
+                                            <span class="fw-bold text-truncate" style="max-width: 170px;" title="<?= esc($doc['title']) ?>">
+                                                <i class="bi bi-folder2-open me-1 text-primary"></i><?= esc($doc['title']) ?>
+                                            </span>
+                                            <div class="d-flex align-items-center gap-1">
+                                                <?php if (! empty($doc['hasSync']) || ! empty($doc['hasTask'])) : ?>
+                                                    <span class="badge bg-success-subtle text-success border border-success-subtle" title="HealthDocumentRecord FHIR bundle created & enqueued for ABDM sync">
+                                                        <i class="bi bi-check-circle-fill me-1"></i>FHIR Ready
+                                                    </span>
+                                                <?php else : ?>
+                                                    <span class="badge bg-info-subtle text-info border border-info-subtle" title="Document uploaded and ready for FHIR bundling">
+                                                        <i class="bi bi-file-earmark-code me-1"></i>FHIR Available
+                                                    </span>
+                                                <?php endif; ?>
+                                                <?php if ($doc['isPdf']) : ?>
+                                                    <span class="badge bg-danger-subtle text-danger border border-danger-subtle"><i class="bi bi-file-earmark-pdf me-1"></i>PDF</span>
+                                                <?php else : ?>
+                                                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle"><i class="bi bi-file-earmark-image me-1"></i><?= esc(strtoupper($doc['ext'] ?: 'IMAGE')) ?></span>
+                                                <?php endif; ?>
+                                            </div>
                                         </div>
                                         <div class="card-body p-2 text-center bg-light-subtle d-flex align-items-center justify-content-center" style="height: 180px;">
                                             <?php if ($doc['isPdf']) : ?>
@@ -428,9 +452,19 @@ if ($patientPhotoPath === '') {
                                         </div>
                                         <div class="card-footer py-2 d-flex justify-content-between align-items-center bg-white text-muted small">
                                             <span><i class="bi bi-clock me-1"></i><?= esc($doc['insertDate'] ?: '-') ?></span>
-                                            <a href="<?= base_url(ltrim($doc['path'], '/')) ?>" target="_blank" class="btn btn-sm btn-outline-primary py-0" style="font-size: 12px;">
-                                                <i class="bi bi-box-arrow-up-right me-1"></i>Open
-                                            </a>
+                                            <div class="btn-group btn-group-sm" role="group">
+                                                <a href="<?= base_url(ltrim($doc['path'], '/')) ?>" target="_blank" class="btn btn-outline-secondary py-0" style="font-size: 11px;">
+                                                    <i class="bi bi-box-arrow-up-right me-1"></i>Open
+                                                </a>
+                                                <button type="button" class="btn btn-outline-info py-0" style="font-size: 11px;" onclick="previewDocumentFhir(<?= (int) $doc['id'] ?>, '<?= esc($doc['title'], 'js') ?>')">
+                                                    <i class="bi bi-eye me-1"></i>FHIR Preview
+                                                </button>
+                                                <?php if (empty($doc['hasSync']) && empty($doc['hasTask'])) : ?>
+                                                    <button type="button" class="btn btn-outline-success py-0" style="font-size: 11px;" onclick="generateSingleDocumentFhir(<?= (int) $doc['id'] ?>)" id="btn-fhir-single-<?= (int) $doc['id'] ?>">
+                                                        <i class="bi bi-lightning-charge me-1"></i>Push ABDM
+                                                    </button>
+                                                <?php endif; ?>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
@@ -1858,5 +1892,198 @@ $(function() {
     applyNewRequestButtonState();
     loadAbdmConsentRequests();
 });
+</script>
+
+<!-- ABDM Scanned Document FHIR Preview Modal -->
+<div class="modal fade" id="patientDocFhirModal" tabindex="-1" aria-hidden="true">
+    <div class="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+        <div class="modal-content border-0 shadow-lg">
+            <div class="modal-header bg-primary text-white py-2">
+                <h6 class="modal-title mb-0 fw-bold" id="patientDocFhirTitle">
+                    <i class="bi bi-file-earmark-code me-2"></i>HealthDocumentRecord FHIR Bundle Preview
+                </h6>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
+            </div>
+            <div class="modal-body p-0">
+                <div class="bg-light border-bottom px-3 py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+                    <div class="d-flex align-items-center gap-2">
+                        <span class="badge bg-success" id="patientDocFhirBadge">HAS FHIR</span>
+                        <span class="badge bg-info text-dark" id="patientDocProfileBadge">HealthDocumentRecord</span>
+                        <small class="text-muted" id="patientDocFhirStatusText">Loaded (200)</small>
+                    </div>
+                    <ul class="nav nav-pills nav-sm" id="patientDocFhirTab" role="tablist">
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link active py-1 px-3 fs-7" id="patientDocFormTabBtn" data-bs-toggle="pill" data-bs-target="#patientDocFormTab" type="button" role="tab">Summary View</button>
+                        </li>
+                        <li class="nav-item" role="presentation">
+                            <button class="nav-link py-1 px-3 fs-7" id="patientDocJsonTabBtn" data-bs-toggle="pill" data-bs-target="#patientDocJsonTab" type="button" role="tab">JSON View</button>
+                        </li>
+                    </ul>
+                </div>
+                <div class="tab-content p-3" id="patientDocFhirTabContent">
+                    <div class="tab-pane fade show active" id="patientDocFormTab" role="tabpanel">
+                        <div id="patientDocFormView" class="small">
+                            <div class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm me-2"></div>Loading FHIR HealthDocumentRecord...</div>
+                        </div>
+                    </div>
+                    <div class="tab-pane fade" id="patientDocJsonTab" role="tabpanel">
+                        <div class="d-flex justify-content-end mb-2">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="copyDocFhirJson()">
+                                <i class="bi bi-clipboard me-1"></i>Copy JSON
+                            </button>
+                        </div>
+                        <pre id="patientDocJsonView" class="bg-dark text-success p-3 rounded fs-7 mb-0" style="max-height: 500px; overflow-y: auto;"></pre>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-footer py-2 bg-light">
+                <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
+            </div>
+        </div>
+    </div>
+</div>
+
+<script>
+function copyDocFhirJson() {
+    var jsonText = document.getElementById('patientDocJsonView').textContent;
+    if (jsonText && navigator.clipboard) {
+        navigator.clipboard.writeText(jsonText).then(function() {
+            alert('FHIR JSON copied to clipboard!');
+        });
+    }
+}
+
+function previewDocumentFhir(docId, docTitle) {
+    var modalEl = document.getElementById('patientDocFhirModal');
+    var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    document.getElementById('patientDocFhirTitle').innerHTML = '<i class="bi bi-file-earmark-code me-2"></i>FHIR Preview - ' + (docTitle || ('Document #' + docId));
+    document.getElementById('patientDocFormView').innerHTML = '<div class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Building ABDM HealthDocumentRecord FHIR bundle...</div>';
+    document.getElementById('patientDocJsonView').textContent = 'Loading...';
+    modal.show();
+
+    fetch('<?= base_url('DoctorDocument/health_document_fhir_preview') ?>/' + docId, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var bundle = data.fhir_bundle || data.bundle || (data.resourceType === 'Bundle' ? data : null);
+        document.getElementById('patientDocJsonView').textContent = JSON.stringify(data, null, 2);
+        if (bundle) {
+            document.getElementById('patientDocFhirBadge').className = 'badge bg-success';
+            document.getElementById('patientDocFhirBadge').textContent = 'HAS FHIR';
+            var html = '<div class="card mb-3 border-primary-subtle"><div class="card-header bg-primary text-white py-1 font-monospace fw-bold">' + (data.source?.document_title || docTitle || 'Health Document') + '</div>';
+            html += '<div class="card-body py-2 small">';
+            html += '<p class="mb-1"><strong>Patient:</strong> ' + (data.source?.patient?.name || '-') + ' (ABHA: ' + (data.source?.patient?.abha_id || '-') + ')</p>';
+            html += '<p class="mb-1"><strong>Content Type:</strong> <code>' + (data.source?.content_type || 'application/pdf') + '</code></p>';
+            html += '<p class="mb-1"><strong>Facility HFR:</strong> ' + (data.source?.hfr_id || '-') + ' (' + (data.source?.organization?.name || '-') + ')</p>';
+            html += '<p class="mb-0"><strong>Care Context:</strong> DOC-' + docId + ' (' + (data.source?.visit_date || '') + ')</p>';
+            html += '</div></div>';
+            document.getElementById('patientDocFormView').innerHTML = html;
+        } else {
+            document.getElementById('patientDocFhirBadge').className = 'badge bg-warning';
+            document.getElementById('patientDocFhirBadge').textContent = 'NOT READY';
+            document.getElementById('patientDocFormView').innerHTML = '<div class="alert alert-warning">Unable to build FHIR bundle for this document. Check file upload details.</div>';
+        }
+    })
+    .catch(function(err) {
+        document.getElementById('patientDocFhirBadge').className = 'badge bg-danger';
+        document.getElementById('patientDocFhirBadge').textContent = 'ERROR';
+        document.getElementById('patientDocFormView').innerHTML = '<div class="alert alert-danger">Failed to load FHIR preview: ' + err.message + '</div>';
+    });
+}
+
+function generateSingleDocumentFhir(docId) {
+    var btn = document.getElementById('btn-fhir-single-' + docId);
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Pushing...'; }
+
+    $.post('<?= base_url('patient/generate_fhir_for_file') ?>/' + docId, function(res) {
+        if (res && res.ok === 1) {
+            alert(res.message || 'FHIR HealthDocumentRecord bundle generated and enqueued for ABDM sync!');
+            location.reload();
+        } else {
+            alert((res && res.error_text) ? res.error_text : 'Unable to generate FHIR for document.');
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-lightning-charge me-1"></i>Push ABDM'; }
+        }
+    }, 'json').fail(function() {
+        alert('Network request failed while pushing to ABDM.');
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-lightning-charge me-1"></i>Push ABDM'; }
+    });
+}
+
+function generateAllFhirDocuments(patientId) {
+    var btn = document.getElementById('btnGenerateAllFhirDocs');
+    if (btn) { btn.disabled = true; btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Bundling FHIR...'; }
+
+    $.post('<?= base_url('patient/generate_fhir_bundle_for_all_files') ?>/' + patientId, function(res) {
+        if (res && res.ok === 1) {
+            alert(res.message || 'Scanned documents bundled into HealthDocumentRecord FHIR tasks!');
+            location.reload();
+        } else {
+            alert((res && res.error_text) ? res.error_text : 'Failed to bundle documents.');
+            if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-diagram-3-fill me-1"></i>Generate ABDM FHIR Bundle (All)'; }
+        }
+    }, 'json').fail(function() {
+        alert('Network request failed.');
+        if (btn) { btn.disabled = false; btn.innerHTML = '<i class="bi bi-diagram-3-fill me-1"></i>Generate ABDM FHIR Bundle (All)'; }
+    });
+}
+
+function previewWellnessFhir(patientId, opdId) {
+    var modalEl = document.getElementById('patientDocFhirModal');
+    var modal = bootstrap.Modal.getOrCreateInstance(modalEl);
+    document.getElementById('patientDocFhirTitle').innerHTML = '<i class="bi bi-activity me-2"></i>WellnessRecord FHIR Bundle Preview';
+    document.getElementById('patientDocFormView').innerHTML = '<div class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Building ABDM WellnessRecord FHIR bundle...</div>';
+    document.getElementById('patientDocJsonView').textContent = 'Loading...';
+    modal.show();
+
+    var url = '<?= base_url('DoctorDocument/wellness_record_fhir_preview') ?>/' + patientId + (opdId ? ('/' + opdId) : '');
+    fetch(url, {
+        headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+    })
+    .then(function(r) { return r.json(); })
+    .then(function(data) {
+        var bundle = data.fhir_bundle || data.bundle || (data.resourceType === 'Bundle' ? data : null);
+        document.getElementById('patientDocJsonView').textContent = JSON.stringify(data, null, 2);
+        if (bundle) {
+            document.getElementById('patientDocFhirBadge').className = 'badge bg-success';
+            document.getElementById('patientDocFhirBadge').textContent = 'HAS FHIR';
+            document.getElementById('patientDocProfileBadge').textContent = 'WellnessRecord';
+            var html = '<div class="card mb-3 border-success-subtle"><div class="card-header bg-success text-white py-1 font-monospace fw-bold"><i class="bi bi-activity me-1"></i>Wellness & Vitals Assessment</div>';
+            html += '<div class="card-body py-2 small">';
+            html += '<p class="mb-1"><strong>Patient:</strong> ' + (data.source?.patient?.name || '-') + ' (ABHA: ' + (data.source?.patient?.abha_id || '-') + ')</p>';
+            html += '<p class="mb-1"><strong>Doctor:</strong> ' + (data.source?.doctor_name || '-') + '</p>';
+            html += '<p class="mb-1"><strong>Vitals Count:</strong> ' + (data.source?.vitals?.length || 0) + ' recorded observations</p>';
+            if (data.source?.women_wellness && Object.keys(data.source.women_wellness).length > 0) {
+                html += '<p class="mb-1"><strong>Women Wellness:</strong> ' + JSON.stringify(data.source.women_wellness) + '</p>';
+            }
+            html += '<p class="mb-0"><strong>Care Context:</strong> ' + (data.care_context_reference || 'WELLNESS-' + patientId) + '</p>';
+            html += '</div></div>';
+            document.getElementById('patientDocFormView').innerHTML = html;
+        } else {
+            document.getElementById('patientDocFhirBadge').className = 'badge bg-warning';
+            document.getElementById('patientDocFhirBadge').textContent = 'NOT READY';
+            document.getElementById('patientDocFormView').innerHTML = '<div class="alert alert-warning">No vitals or wellness observations found to build WellnessRecord FHIR bundle.</div>';
+        }
+    })
+    .catch(function(err) {
+        document.getElementById('patientDocFhirBadge').className = 'badge bg-danger';
+        document.getElementById('patientDocFhirBadge').textContent = 'ERROR';
+        document.getElementById('patientDocFormView').innerHTML = '<div class="alert alert-danger">Failed to load FHIR preview: ' + err.message + '</div>';
+    });
+}
+
+function generateWellnessFhir(patientId, opdId) {
+    var url = '<?= base_url('patient/generate_wellness_fhir') ?>/' + patientId + (opdId ? ('/' + opdId) : '');
+    $.post(url, function(res) {
+        if (res && res.ok === 1) {
+            alert(res.message || 'WellnessRecord FHIR bundle enqueued for ABDM sync!');
+            location.reload();
+        } else {
+            alert((res && res.error_text) ? res.error_text : 'Unable to generate WellnessRecord FHIR.');
+        }
+    }, 'json').fail(function() {
+        alert('Network request failed.');
+    });
+}
 </script>
 

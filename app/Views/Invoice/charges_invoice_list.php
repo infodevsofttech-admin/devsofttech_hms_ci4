@@ -24,6 +24,7 @@
                         <th>Mobile</th>
                         <th>Type</th>
                         <th>Amount</th>
+                        <th>Balance</th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -32,6 +33,7 @@
                         <?php
                             $invType = ((int) ($row->insurance_id ?? 0) > 1) ? 'Org.' : 'Direct';
                             $invDate = ! empty($row->inv_date) ? date('d-m-Y', strtotime((string) $row->inv_date)) : '-';
+                            $balance = (float) ($row->payment_part_balance ?? 0);
                         ?>
                         <tr>
                             <td><?= esc((string) ($row->invoice_code ?? '-')) ?></td>
@@ -41,6 +43,13 @@
                             <td><?= esc((string) ($row->mphone1 ?? '-')) ?></td>
                             <td><?= esc($invType) ?></td>
                             <td><?= esc(number_format((float) ($row->net_amount ?? 0), 2, '.', '')) ?></td>
+                            <td>
+                                <?php if ($balance > 0): ?>
+                                    <span class="badge bg-danger-subtle text-danger font-monospace fs-6"><?= esc(number_format($balance, 2, '.', '')) ?></span>
+                                <?php else: ?>
+                                    <span class="text-muted font-monospace"><?= esc(number_format($balance, 2, '.', '')) ?></span>
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <button type="button" class="btn btn-outline-primary btn-sm" onclick="navigateOrLoad('<?= base_url('billing/charges/show') ?>/<?= (int) ($row->inv_id ?? 0) ?>','Charges Invoice');">Open</button>
                             </td>

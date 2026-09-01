@@ -20,6 +20,7 @@ class AbdmTaskBoard extends BaseController
         $this->backfillLabRadiologyTasks();
         $this->backfillImmunizationTasks();
         $this->backfillHealthDocumentTasks();
+        $this->backfillWellnessTasks();
         $tasks = $this->enrichImmunizationPushState($this->taskService->getOpenTasks(300));
 
         $dateFrom = trim((string) ($this->request->getGet('date_from') ?? date('Y-m-d')));
@@ -52,6 +53,7 @@ class AbdmTaskBoard extends BaseController
         $this->backfillLabRadiologyTasks();
         $this->backfillImmunizationTasks();
         $this->backfillHealthDocumentTasks();
+        $this->backfillWellnessTasks();
         return $this->response->setJSON([
             'ok' => 1,
             'tasks' => $this->enrichImmunizationPushState($this->taskService->getOpenTasks(300)),
@@ -154,11 +156,51 @@ class AbdmTaskBoard extends BaseController
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'ABHA ID must be a 14-digit number']);
         }
 
+        $taskType = (string) ($task['task_type'] ?? '');
+        $patientId = (int) ($task['patient_id'] ?? 0);
+        $entityId = (int) ($task['entity_id'] ?? 0);
+
+        if (strtolower($action) === 'submit') {
+            $gateway = new AbdmGateway();
+            $gateway->initController($this->request, $this->response, service('logger'));
+
+            $_POST['task_id'] = $taskId;
+            $_POST['patient_id'] = $patientId;
+            $_POST['abha_id'] = $abhaId;
+            $_POST['push_to_gateway'] = 1;
+
+            if ($taskType === 'wellness_record_publish') {
+                $_POST['opd_id'] = $entityId;
+                return $gateway->shareWellnessBundle();
+            }
+            if ($taskType === 'health_document_publish') {
+                $_POST['record_id'] = $entityId;
+                $_POST['patient_doc_id'] = $entityId;
+                return $gateway->shareHealthDocumentBundle();
+            }
+            if ($taskType === 'immunization_record_publish') {
+                $_POST['record_id'] = $entityId;
+                return $gateway->shareImmunizationBundle();
+            }
+            if ($taskType === 'opd_prescription_publish') {
+                $_POST['opd_id'] = $entityId;
+                return $gateway->sharePrescriptionBundle();
+            }
+            if ($taskType === 'lab_report_publish' || $taskType === 'radiology_report_publish') {
+                $_POST['lab_req_id'] = $entityId;
+                return $gateway->shareDiagnosisReportBundle();
+            }
+            if ($taskType === 'ipd_discharge_publish') {
+                $_POST['ipd_id'] = $entityId;
+                return $gateway->shareIpdDischargeBundle();
+            }
+        }
+
         $payload = [
             'task_id' => $taskId,
             'task_code' => (string) ($task['task_code'] ?? ''),
-            'task_type' => (string) ($task['task_type'] ?? ''),
-            'patient_id' => (int) ($task['patient_id'] ?? 0),
+            'task_type' => $taskType,
+            'patient_id' => $patientId,
             'patient_name' => (string) ($task['patient_name'] ?? ''),
             'abha_id' => $abhaId,
             'entity_type' => (string) ($task['entity_type'] ?? ''),
@@ -166,7 +208,7 @@ class AbdmTaskBoard extends BaseController
             'opd_session_id' => (int) $this->request->getPost('opd_session_id'),
         ];
 
-        $eventType = $this->resolveActionEventType($action, (string) ($task['task_type'] ?? ''));
+        $eventType = $this->resolveActionEventType($action, $taskType);
         if ($eventType === '') {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'Unsupported action']);
         }
@@ -221,6 +263,12 @@ class AbdmTaskBoard extends BaseController
             }
             if ($taskType === 'health_document_publish') {
                 return 'abdm.health_document.share.requested';
+            }
+            if ($taskType === 'wellness_record_publish') {
+                return 'abdm.wellness_record.share.requested';
+            }
+            if ($taskType === 'immunization_record_publish') {
+                return 'abdm.immunization_record.share.requested';
             }
         }
 
@@ -1076,6 +1124,107 @@ class AbdmTaskBoard extends BaseController
                 [
                     'patient_doc_id' => $docId,
                     'trigger' => 'patient_doc.compiled',
+                ]
+            );
+        }
+
+        if ($this->db->tableExists('file_upload_data')) {
+            $fileRows = $this->db->table('file_upload_data f')
+                ->select('f.id, f.pid, f.insert_date, p.p_fname, p.' . $abhaCol . ' as abha_id', false)
+                ->join('patient_master p', 'p.id = f.pid', 'inner')
+                ->where('p.' . $abhaCol . ' !=', '')
+                ->where('f.insert_date >=', date('Y-m-d H:i:s', strtotime('-30 days')))
+                ->orderBy('f.id', 'DESC')
+                ->limit(200)
+                ->get()
+                ->getResultArray();
+
+            foreach ($fileRows as $fRow) {
+                $patientId = (int) ($fRow['pid'] ?? 0);
+                $fileId = (int) ($fRow['id'] ?? 0);
+                $abhaId = trim((string) ($fRow['abha_id'] ?? ''));
+                if ($patientId <= 0 || $fileId <= 0 || preg_match('/^\d{14}$/', $abhaId) !== 1) {
+                    continue;
+                }
+
+                $patientName = trim((string) ($fRow['p_fname'] ?? ''));
+                $this->taskService->createOrRefreshTask(
+                    'health_document_publish',
+                    'file_upload_data',
+                    'patient_document',
+                    (string) $fileId,
+                    $patientId,
+                    $patientName,
+                    $abhaId,
+                    'submit',
+                    [
+                        'file_upload_id' => $fileId,
+                        'trigger' => 'file_upload_data.created',
+                    ]
+                );
+            }
+        }
+    }
+
+    private function backfillWellnessTasks(): void
+    {
+        if (! $this->db->tableExists('opd_prescription') || ! $this->db->tableExists('patient_master')) {
+            return;
+        }
+
+        $patientFields = $this->db->getFieldNames('patient_master') ?? [];
+        $abhaCol = $this->resolveExistingColumn($patientFields, ['abha_id', 'abha_no', 'abha_address', 'abha']);
+        if ($abhaCol === null) {
+            return;
+        }
+
+        $opdPrescFields = $this->db->getFieldNames('opd_prescription') ?? [];
+        $vitalCols = array_values(array_intersect(['bp', 'diastolic', 'pulse', 'height', 'weight', 'temp', 'rr_min', 'spo2', 'glucose'], $opdPrescFields));
+        if ($vitalCols === []) {
+            return;
+        }
+
+        $coalesceExpr = [];
+        foreach ($vitalCols as $vc) {
+            $coalesceExpr[] = "NULLIF(TRIM(pr." . $vc . "), '')";
+        }
+        $whereSql = "COALESCE(" . implode(', ', $coalesceExpr) . ") IS NOT NULL";
+
+        $dateCol = in_array('date_opd_visit', $opdPrescFields, true) ? 'pr.date_opd_visit' : 'pr.id';
+
+        $rows = $this->db->table('opd_prescription pr')
+            ->select('pr.id, pr.p_id, pr.opd_id, ' . $dateCol . ', p.p_fname, p.' . $abhaCol . ' as abha_id', false)
+            ->join('patient_master p', 'p.id = pr.p_id', 'inner')
+            ->where('p.' . $abhaCol . ' !=', '')
+            ->where($whereSql, null, false)
+            ->orderBy('pr.id', 'DESC')
+            ->limit(200)
+            ->get()
+            ->getResultArray();
+
+        foreach ($rows as $row) {
+            $patientId = (int) ($row['p_id'] ?? 0);
+            $rxId = (int) ($row['id'] ?? 0);
+            $opdId = (int) ($row['opd_id'] ?? 0);
+            $abhaId = trim((string) ($row['abha_id'] ?? ''));
+            if ($patientId <= 0 || $rxId <= 0 || preg_match('/^\d{14}$/', $abhaId) !== 1) {
+                continue;
+            }
+
+            $patientName = trim((string) ($row['p_fname'] ?? ''));
+            $this->taskService->createOrRefreshTask(
+                'wellness_record_publish',
+                'opd_prescription',
+                'opd_vitals',
+                (string) $rxId,
+                $patientId,
+                $patientName,
+                $abhaId,
+                'submit',
+                [
+                    'opd_prescription_id' => $rxId,
+                    'opd_session_id' => $opdId,
+                    'trigger' => 'vitals.backfilled',
                 ]
             );
         }

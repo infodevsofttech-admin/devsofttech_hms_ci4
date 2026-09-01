@@ -488,6 +488,12 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
             </a>
         </li>
         <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/old_payment_received_report') ?>','Old Payment Received Report')">
+                <i class="bi bi-clock-history"></i>
+                <span>Old Payment Received</span>
+            </a>
+        </li>
+        <li class="nav-item">
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/report_opd_total') ?>','OPD Total Report')">
                 <i class="bi bi-bar-chart"></i>
                 <span>OPD Total Report</span>

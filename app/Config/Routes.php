@@ -571,6 +571,17 @@ $routes->get('patient/abdm_consent_requests/(:num)', 'Patient::abdm_consent_requ
 $routes->get('patient/abdm_check_live_status/(:num)', 'Patient::abdm_check_live_status/$1');
 $routes->post('patient/abdm_content_request_custom/(:num)', 'Patient::abdm_content_request_custom/$1');
     $routes->get('patient/abdm_timeline/(:num)', 'Patient::abdm_timeline/$1');
+    $routes->get('DoctorDocument/wellness_record_fhir_preview', 'DoctorDocument::wellness_record_fhir_preview');
+    $routes->get('DoctorDocument/wellness_record_fhir_preview/(:num)', 'DoctorDocument::wellness_record_fhir_preview/$1');
+    $routes->get('DoctorDocument/wellness_record_fhir_preview/(:num)/(:num)', 'DoctorDocument::wellness_record_fhir_preview/$1/$2');
+    $routes->post('patient/generate_wellness_fhir/(:num)', 'Patient::generate_wellness_fhir/$1');
+    $routes->post('patient/generate_wellness_fhir/(:num)/(:num)', 'Patient::generate_wellness_fhir/$1/$2');
+    $routes->post('billing/patient/generate_wellness_fhir/(:num)', 'Patient::generate_wellness_fhir/$1');
+    $routes->post('billing/patient/generate_wellness_fhir/(:num)/(:num)', 'Patient::generate_wellness_fhir/$1/$2');
+    $routes->post('patient/generate_fhir_for_file/(:num)', 'Patient::generate_fhir_for_file/$1');
+    $routes->post('patient/generate_fhir_bundle_for_all_files/(:num)', 'Patient::generate_fhir_bundle_for_all_files/$1');
+    $routes->post('billing/patient/generate_fhir_for_file/(:num)', 'Patient::generate_fhir_for_file/$1');
+    $routes->post('billing/patient/generate_fhir_bundle_for_all_files/(:num)', 'Patient::generate_fhir_bundle_for_all_files/$1');
     $routes->post('patient/save_profile_image/(:num)', 'Patient::save_profile_image/$1');
     $routes->match(['GET', 'POST'], 'patient/patient_file_upload/(:num)', 'Patient::patient_file_upload/$1');
     $routes->get('patient/patient_file_list/(:num)', 'Patient::patient_file_list/$1');
@@ -764,6 +775,8 @@ $routes->post('AbdmGateway/share_health_document_bundle', 'AbdmGateway::shareHea
 $routes->post('AbdmGateway/share_invoice_bundle', 'AbdmGateway::shareInvoiceBundle', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmGateway/invoice_fhir_preview', 'AbdmGateway::invoiceFhirPreview', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/share_invoice_source_bundle', 'AbdmGateway::shareInvoiceSourceBundle', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmTaskBoard/perform_action', 'AbdmTaskBoard::performAction', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmTaskBoard/performAction', 'AbdmTaskBoard::performAction', ['filter' => $abdmPermFilter]);
 $routes->get('Immunization', 'Immunization::index', ['filter' => 'permission:doctor_work.immunization.access']);
 $routes->get('Immunization/schedule_master', 'Immunization::scheduleMaster', ['filter' => 'permission:doctor_work.immunization.schedule-manage']);
 $routes->post('Immunization/sync_uip_master', 'Immunization::syncUipMaster', ['filter' => 'permission:doctor_work.immunization.schedule-manage']);
@@ -1084,6 +1097,10 @@ $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segme
 $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segment)/(:segment)/(:num)', 'Report::report_total_payment_app_show/$1/$2/$3/$4/$5', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/report_total_payment_total_amount_show/(:segment)/(:segment)/(:segment)', 'Report::report_total_payment_total_amount_show/$1/$2/$3', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/report_total_payment_total_amount_show/(:segment)/(:segment)/(:segment)/(:num)', 'Report::report_total_payment_total_amount_show/$1/$2/$3/$4', ['filter' => $reportsCollectionFilter]);
+$routes->get('Report/old_payment_received_report', 'Report::old_payment_received_report', ['filter' => $reportsCollectionFilter]);
+$routes->get('Report/old_payment_received_report_data', 'Report::old_payment_received_report_data', ['filter' => $reportsCollectionFilter]);
+$routes->get('Report/old_payment_received_report_data/(:segment)', 'Report::old_payment_received_report_data/$1', ['filter' => $reportsCollectionFilter]);
+$routes->get('Report/old_payment_received_report_data/(:segment)/(:num)', 'Report::old_payment_received_report_data/$1/$2', ['filter' => $reportsCollectionFilter]);
 
 $reportsIpdCensusFilter = 'permission:reports.ipd_census.view';
 $routes->get('Report/ipd_census_report', 'Report::ipd_census_report', ['filter' => $reportsIpdCensusFilter]);
@@ -1112,7 +1129,8 @@ $routes->get('Report/diagnosis_report', 'Report::diagnosis_report', ['filter' =>
 $routes->get('Report/diagnosis_report_data/(:segment)', 'Report::diagnosis_report_data/$1', ['filter' => 'permission:diagnosis.report.view,diagnosis.access']);
 $routes->get('Report/diagnosis_report_data/(:segment)/(:segment)', 'Report::diagnosis_report_data/$1/$2', ['filter' => 'permission:diagnosis.report.view,diagnosis.access']);
 $routes->get('Report/diagnosis_report_data/(:segment)/(:segment)/(:segment)', 'Report::diagnosis_report_data/$1/$2/$3', ['filter' => 'permission:diagnosis.report.view,diagnosis.access']);
-$routes->get('Report/diagnosis_report_data/(:segment)/(:segment)/(:segment)/(:num)', 'Report::diagnosis_report_data/$1/$2/$3/$4', ['filter' => 'permission:diagnosis.report.view,diagnosis.access']);
+$routes->get('Report/reconciliation_mismatch_report', 'Report::reconciliation_mismatch_report');
+$routes->get('Report/reconciliation_mismatch_report/(:segment)', 'Report::reconciliation_mismatch_report/$1');
 
 $reportsNabhFilter = 'permission:reports.nabh_audit.view,reports.access';
 $routes->get('Report/nabh_audit_report', 'Report::nabh_audit_report', ['filter' => $reportsNabhFilter]);
@@ -1554,11 +1572,23 @@ $routes->group('Item_IPD', ['filter' => 'permission:billing.items.view,billing.i
 $routes->get('DoctorDocument', 'DoctorDocument::index');
 $routes->get('DoctorDocument/index', 'DoctorDocument::index');
 $routes->get('DoctorDocument/workspace', 'DoctorDocument::workspace');
+$routes->get('DoctorDocument/search_ipd_patient', 'DoctorDocument::search_ipd_patient');
+$routes->post('DoctorDocument/upload_ipd_nabh_document', 'DoctorDocument::upload_ipd_nabh_document');
+$routes->post('DoctorDocument/push_ipd_nabh_to_abdm', 'DoctorDocument::push_ipd_nabh_to_abdm');
 $routes->get('DoctorDocument/health_document_fhir_preview/(:num)', 'DoctorDocument::health_document_fhir_preview/$1');
+$routes->get('DoctorDocument/wellness_record_fhir_preview', 'DoctorDocument::wellness_record_fhir_preview');
+$routes->get('DoctorDocument/wellness_record_fhir_preview/(:num)', 'DoctorDocument::wellness_record_fhir_preview/$1');
+$routes->get('DoctorDocument/wellness_record_fhir_preview/(:num)/(:num)', 'DoctorDocument::wellness_record_fhir_preview/$1/$2');
 $routes->get('Document_Patient', 'DoctorDocument::index');
 $routes->get('Document_Patient/index', 'DoctorDocument::index');
 $routes->get('Document_Patient/workspace', 'DoctorDocument::workspace');
+$routes->get('Document_Patient/search_ipd_patient', 'DoctorDocument::search_ipd_patient');
+$routes->post('Document_Patient/upload_ipd_nabh_document', 'DoctorDocument::upload_ipd_nabh_document');
+$routes->post('Document_Patient/push_ipd_nabh_to_abdm', 'DoctorDocument::push_ipd_nabh_to_abdm');
 $routes->get('Document_Patient/health_document_fhir_preview/(:num)', 'DoctorDocument::health_document_fhir_preview/$1');
+$routes->get('Document_Patient/wellness_record_fhir_preview', 'DoctorDocument::wellness_record_fhir_preview');
+$routes->get('Document_Patient/wellness_record_fhir_preview/(:num)', 'DoctorDocument::wellness_record_fhir_preview/$1');
+$routes->get('Document_Patient/wellness_record_fhir_preview/(:num)/(:num)', 'DoctorDocument::wellness_record_fhir_preview/$1/$2');
 
 /*
  * --------------------------------------------------------------------

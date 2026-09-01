@@ -31,6 +31,7 @@
         <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="immunization_record_publish">Immunization Record</button>
         <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="invoice">Invoice</button>
         <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="health_document_publish">Health Document</button>
+        <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="wellness_record_publish">Wellness Record</button>
         <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="ipd_discharge_publish">IPD Discharge</button>
     </div>
 
@@ -124,7 +125,7 @@
                             $opdSessionId = (int) ($meta['opd_session_id'] ?? 0);
                             $showSandbox = ($type === 'opd_prescription_publish' && $opdId > 0);
                             $showPreview = ($type === 'opd_prescription_publish' && $opdId > 0)
-                                || in_array($type, ['lab_report_publish', 'radiology_report_publish', 'ipd_discharge_publish', 'immunization_record_publish', 'health_document_publish'], true);
+                                || in_array($type, ['lab_report_publish', 'radiology_report_publish', 'ipd_discharge_publish', 'immunization_record_publish', 'health_document_publish', 'wellness_record_publish'], true);
                             $bridgeSubmitted = (int) ($t['bridge_submitted'] ?? 0) === 1;
                             $bridgeCareContext = trim((string) ($t['bridge_care_context_reference'] ?? ''));
                         ?>
@@ -1121,6 +1122,17 @@
 
             previewUrl = '<?= base_url('DoctorDocument/health_document_fhir_preview') ?>/' + healthDocId;
             title = 'HealthDocumentRecord FHIR Preview — Document #' + healthDocId;
+        } else if (taskType === 'wellness_record_publish') {
+            var wellnessPatientId = parseInt(row.getAttribute('data-patient-id') || '0', 10) || 0;
+            var wellnessOpdId = parseInt(row.getAttribute('data-entity-id') || '0', 10) || 0;
+
+            if (wellnessPatientId <= 0) {
+                setStatus('Task data missing for Wellness Record FHIR preview.', true);
+                return true;
+            }
+
+            previewUrl = '<?= base_url('DoctorDocument/wellness_record_fhir_preview') ?>/' + wellnessPatientId + (wellnessOpdId > 0 ? ('/' + wellnessOpdId) : '');
+            title = 'WellnessRecord FHIR Preview — Patient #' + wellnessPatientId;
         } else {
             return false;
         }
@@ -2668,19 +2680,10 @@
         }
 
         if (btnRegenerateFhirModal) {
-            var taskType = _fhirSubmitTaskRow ? (_fhirSubmitTaskRow.getAttribute('data-task-type') || '').toLowerCase() : '';
-            var canRebuildDiagnostic = _fhirSubmitMode === 'task'
-                && (taskType === 'lab_report_publish' || taskType === 'radiology_report_publish');
             btnRegenerateFhirModal.disabled = false;
-            btnRegenerateFhirModal.style.display = _fhirSubmitMode === 'task' && !canRebuildDiagnostic ? 'none' : '';
-            btnRegenerateFhirModal.innerHTML = _fhirSubmitMode === 'invoice' || canRebuildDiagnostic
-                ? '<i class="bi bi-arrow-clockwise"></i> Rebuild Digital Record'
-                : '<i class="bi bi-arrow-clockwise"></i> Regenerate';
-            btnRegenerateFhirModal.title = canRebuildDiagnostic
-                ? 'Rebuild FHIR and Digital Share PDF from the latest report data'
-                : (_fhirSubmitMode === 'invoice'
-                    ? 'Rebuild FHIR and Digital Share PDF from current billing data'
-                    : 'Rebuild FHIR bundle from current prescription data');
+            btnRegenerateFhirModal.style.display = '';
+            btnRegenerateFhirModal.innerHTML = '<i class="bi bi-arrow-clockwise"></i> Recreate FHIR Record';
+            btnRegenerateFhirModal.title = 'Re-generate FHIR bundle fresh from current clinical and patient data';
         }
 
         fhirPreviewModal.show();
@@ -2690,7 +2693,7 @@
             .then(function (res) {
                 var parsed = null;
                 try { parsed = JSON.parse(res.body || '{}'); } catch (e) { parsed = { raw: res.body || '' }; }
-                var bundle = (parsed && parsed.resourceType === 'Bundle') ? parsed : ((parsed && parsed.bundle) ? parsed.bundle : null);
+                var bundle = (parsed && parsed.resourceType === 'Bundle') ? parsed : ((parsed && parsed.bundle) ? parsed.bundle : ((parsed && parsed.fhir_bundle) ? parsed.fhir_bundle : null));
                 var hasFhir = bundle !== null;
                 _fhirOpdId     = parseInt(parsed.opd_id     || '0', 10) || 0;
                 _fhirSessionId = parseInt(parsed.opd_session_id || '0', 10) || 0;
@@ -2714,71 +2717,21 @@
             });
     }
 
-    // Regenerate FHIR bundle in modal
+    // Regenerate / Recreate FHIR bundle in modal
     btnRegenerateFhirModal.addEventListener('click', function () {
-        var btn = this;
-        var taskType = _fhirSubmitTaskRow ? (_fhirSubmitTaskRow.getAttribute('data-task-type') || '').toLowerCase() : '';
-        if (_fhirSubmitMode === 'task' && (taskType === 'lab_report_publish' || taskType === 'radiology_report_publish')) {
-            if (_fhirPreviewUrl === '') {
-                alert('Diagnostic preview URL is unavailable.');
-                return;
-            }
-            if (!confirm('Rebuild this FHIR record and Digital Share PDF from the latest report data?')) return;
-            openFhirModal(_fhirPreviewUrl, fhirModalTitle ? fhirModalTitle.textContent : 'Diagnostic FHIR Preview', {
-                submitMode: 'task',
-                taskRow: _fhirSubmitTaskRow,
-                abhaId: _fhirSubmitAbha
-            });
+        if (!_fhirPreviewUrl) {
+            alert('No FHIR preview URL available for this record.');
             return;
         }
-        if (_fhirSubmitMode === 'invoice') {
-            if (!_fhirInvoiceSource || _fhirInvoiceBillId <= 0 || _fhirInvoicePatientId <= 0) {
-                alert('Invoice source data is incomplete.');
-                return;
-            }
-            if (!confirm('Rebuild this FHIR InvoiceRecord from current billing data?')) return;
-            var invoiceUrl = '<?= base_url('AbdmGateway/invoice_fhir_preview') ?>'
-                + '?source=' + encodeURIComponent(_fhirInvoiceSource)
-                + '&bill_id=' + encodeURIComponent(String(_fhirInvoiceBillId))
-                + '&patient_id=' + encodeURIComponent(String(_fhirInvoicePatientId));
-            openFhirModal(invoiceUrl, fhirModalTitle ? fhirModalTitle.textContent : 'FHIR Invoice Preview', {
-                submitMode: 'invoice',
-                taskRow: _fhirSubmitTaskRow,
-                invoiceSource: _fhirInvoiceSource,
-                invoiceBillId: _fhirInvoiceBillId,
-                invoicePatientId: _fhirInvoicePatientId
-            });
-            return;
-        }
-        if (_fhirOpdId <= 0) { alert('No FHIR bundle loaded.'); return; }
-        if (!confirm('Rebuild FHIR bundle for OPD #' + _fhirOpdId + '?\nThis overwrites the stored bundle with fresh data.')) return;
-        var origHtml = btn.innerHTML;
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Rebuilding…';
-        var body = new URLSearchParams({ opd_id: _fhirOpdId, opd_session_id: _fhirSessionId });
-        body.append(csrfName, csrfHash);
-        fetch('<?= base_url('Opd_prescription/fhir_bundle_regenerate') ?>', {
-            method: 'POST',
-            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body.toString()
-        })
-        .then(function (r) { return r.json(); })
-        .then(function (res) {
-            if (res.csrfName && res.csrfHash) { csrfName = res.csrfName; csrfHash = res.csrfHash; }
-            btn.disabled = false;
-            btn.innerHTML = origHtml;
-            if (res.ok === 1 || res.ok === '1') {
-                // Reload modal with fresh bundle
-                var reloadUrl = '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + _fhirOpdId + (_fhirSessionId > 0 ? '/' + _fhirSessionId : '');
-                openFhirModal(reloadUrl, fhirModalTitle ? fhirModalTitle.textContent : 'FHIR Preview');
-            } else {
-                alert('\u274c Regeneration failed: ' + (res.message || 'unknown error'));
-            }
-        })
-        .catch(function (e) {
-            btn.disabled = false;
-            btn.innerHTML = origHtml;
-            alert('\u274c ' + e.message);
+        if (!confirm('Recreate FHIR Record fresh from latest clinical and patient data?')) return;
+        var freshUrl = _fhirPreviewUrl + (_fhirPreviewUrl.indexOf('?') !== -1 ? '&' : '?') + 'force_rebuild=1&refresh=' + Date.now();
+        openFhirModal(freshUrl, fhirModalTitle ? fhirModalTitle.textContent : 'FHIR Preview', {
+            submitMode: _fhirSubmitMode,
+            taskRow: _fhirSubmitTaskRow,
+            abhaId: _fhirSubmitAbha,
+            invoiceSource: _fhirInvoiceSource,
+            invoiceBillId: _fhirInvoiceBillId,
+            invoicePatientId: _fhirInvoicePatientId
         });
     });
 
@@ -2977,6 +2930,66 @@
                     task_id: parseInt(_fhirSubmitTaskRow.getAttribute('data-task-id') || '0', 10) || 0,
                     patient_id: immunizationPatientId,
                     record_id: immunizationId,
+                    abha_id: _fhirSubmitAbha,
+                    push_to_gateway: 1
+                }, function (res) {
+                    if (!res || parseInt(res.ok || '0', 10) !== 1) {
+                        alert('ABDM Bridge push failed:\n' + ((res && (res.error_text || res.error || res.message)) || 'Unknown error'));
+                        return;
+                    }
+                    var badge = _fhirSubmitTaskRow.querySelector('.status-pill');
+                    if (badge) {
+                        badge.textContent = 'BRIDGE SUBMITTED';
+                        badge.className = 'badge bg-info status-pill';
+                    }
+                    setStatus('Submitted to ABDM Bridge. Queue ID: ' + (res.queue_id || '-') + '; care context: ' + (res.care_context_reference || '-'));
+                    fhirPreviewModal.hide();
+                });
+                return;
+            }
+
+            if (taskType === 'wellness_record_publish') {
+                var wellnessOpdId = parseInt(_fhirSubmitTaskRow.getAttribute('data-entity-id') || '0', 10) || 0;
+                var wellnessPatientId = parseInt(_fhirSubmitTaskRow.getAttribute('data-patient-id') || '0', 10) || 0;
+                if (wellnessPatientId <= 0) {
+                    alert('Task data missing (patient_id).');
+                    return;
+                }
+
+                post('<?= base_url('AbdmGateway/share_wellness_bundle') ?>', {
+                    task_id: parseInt(_fhirSubmitTaskRow.getAttribute('data-task-id') || '0', 10) || 0,
+                    patient_id: wellnessPatientId,
+                    opd_id: wellnessOpdId,
+                    abha_id: _fhirSubmitAbha,
+                    push_to_gateway: 1
+                }, function (res) {
+                    if (!res || parseInt(res.ok || '0', 10) !== 1) {
+                        alert('ABDM Bridge push failed:\n' + ((res && (res.error_text || res.error || res.message)) || 'Unknown error'));
+                        return;
+                    }
+                    var badge = _fhirSubmitTaskRow.querySelector('.status-pill');
+                    if (badge) {
+                        badge.textContent = 'BRIDGE SUBMITTED';
+                        badge.className = 'badge bg-info status-pill';
+                    }
+                    setStatus('Submitted to ABDM Bridge. Queue ID: ' + (res.queue_id || '-') + '; care context: ' + (res.care_context_reference || '-'));
+                    fhirPreviewModal.hide();
+                });
+                return;
+            }
+
+            if (taskType === 'health_document_publish') {
+                var healthDocId = parseInt(_fhirSubmitTaskRow.getAttribute('data-entity-id') || '0', 10) || 0;
+                var healthDocPatientId = parseInt(_fhirSubmitTaskRow.getAttribute('data-patient-id') || '0', 10) || 0;
+                if (healthDocPatientId <= 0 || healthDocId <= 0) {
+                    alert('Task data missing (record_id/patient_id).');
+                    return;
+                }
+
+                post('<?= base_url('AbdmGateway/share_health_document_bundle') ?>', {
+                    task_id: parseInt(_fhirSubmitTaskRow.getAttribute('data-task-id') || '0', 10) || 0,
+                    patient_id: healthDocPatientId,
+                    record_id: healthDocId,
                     abha_id: _fhirSubmitAbha,
                     push_to_gateway: 1
                 }, function (res) {
