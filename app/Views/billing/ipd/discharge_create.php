@@ -6649,9 +6649,10 @@ $historyFields = [
                     var $btn = $(this);
                     var $tr = $btn.closest('tr');
 
-                    // Extract IDs before removing from DOM
+                    // Extract IDs and name before removing from DOM
                     var rowId = parseInt($btn.attr('data-id') || $btn.data('id') || $tr.attr('data-row-id') || $tr.data('row-id') || 0, 10);
                     var rowSource = String($btn.attr('data-source') || $btn.data('source') || $tr.attr('data-row-source') || $tr.data('row-source') || 'legacy').trim() || 'legacy';
+                    var medName = $tr.find('td:eq(1)').text().trim();
 
                     // Instantly remove row from DOM
                     if ($tr.length) {
@@ -6662,35 +6663,28 @@ $historyFields = [
                     if (tbody && !tbody.querySelector('tr')) {
                         tbody.innerHTML = '<tr><td colspan="8" class="text-muted text-center py-2">No medicine added</td></tr>';
                     }
+                    serializeDischargeMedicineTable();
 
                     var secEl = document.getElementById('section-medicine');
                     var activeForm = (secEl && secEl.closest('form')) || getDischargeForm();
-                    if (!activeForm) {
-                        setMedicineStatus('Medicine removed.', 'info');
-                        return;
-                    }
-
                     var csrf = getCsrfPair(activeForm);
                     var payload = {
                         action: 'remove_drug',
                         ajax_mode: 'json',
                         drug_remove_id: rowId,
-                        drug_remove_source: rowSource
+                        drug_remove_source: rowSource,
+                        drug_remove_name: medName
                     };
-                    payload[csrf.name] = csrf.value;
+                    payload[csrf.name || '<?= csrf_token() ?>'] = csrf.value || '<?= csrf_hash() ?>';
 
                     setMedicineStatus('Removing medicine...', 'muted');
 
-                    if (rowId > 0) {
-                        $.post($(activeForm).attr('action') || window.location.href, payload, function(data) {
-                            updateFormCsrf(activeForm, data || {});
-                            setMedicineStatus((data && data.notice) ? data.notice : 'Medicine removed successfully.', 'success');
-                        }, 'json').fail(function() {
-                            setMedicineStatus('Medicine removed.', 'info');
-                        });
-                    } else {
-                        setMedicineStatus('Medicine removed.', 'info');
-                    }
+                    $.post('<?= site_url('Ipd_discharge/ipd_select/' . $ipdId) ?>', payload, function(data) {
+                        updateFormCsrf(activeForm, data || {});
+                        setMedicineStatus((data && data.notice) ? data.notice : 'Medicine removed successfully.', 'success');
+                    }, 'json').fail(function() {
+                        setMedicineStatus('Medicine removed from list.', 'info');
+                    });
                 });
 
                 // Handle quick buttons
@@ -6768,6 +6762,37 @@ $historyFields = [
                             formattedDuration = num + (num === 1 ? ' day' : ' days');
                         }
 
+                        function getCsrfPair(targetForm) {
+                            var tokenName = '<?= csrf_token() ?>';
+                            var tokenHash = '<?= csrf_hash() ?>';
+                            if (targetForm) {
+                                var input = targetForm.querySelector('input[name="' + tokenName + '"]');
+                                if (input && input.value) {
+                                    tokenHash = input.value;
+                                }
+                            }
+                            return { name: tokenName, value: tokenHash };
+                        }
+
+                        function updateFormCsrf(targetForm, data) {
+                            if (!data || typeof data !== 'object') return;
+                            var tokenName = data.csrfName || '<?= csrf_token() ?>';
+                            var tokenHash = data.csrfHash || data.csrf_token || data[tokenName] || '';
+                            if (!tokenHash) return;
+
+                            var forms = targetForm ? [targetForm] : document.querySelectorAll('form');
+                            forms.forEach(function(f) {
+                                var input = f.querySelector('input[name="' + tokenName + '"]');
+                                if (!input) {
+                                    input = document.createElement('input');
+                                    input.type = 'hidden';
+                                    input.name = tokenName;
+                                    f.appendChild(input);
+                                }
+                                input.value = tokenHash;
+                            });
+                        }
+
                         // AJAX auto-save medicine
                         if (!window.jQuery) {
                             setMedicineStatus('jQuery not available. Cannot save medicine.', 'error');
@@ -6796,21 +6821,28 @@ $historyFields = [
                             new_drug_qty: qty,
                             new_drug_remark: remark
                         };
-                        payload[csrf.name] = csrf.value;
+                        payload[csrf.name || '<?= csrf_token() ?>'] = csrf.value || '<?= csrf_hash() ?>';
 
                         setMedicineStatus('Saving medicine...', 'muted');
 
                         window.jQuery.ajax({
-                            url: activeForm.getAttribute('action') || window.location.href,
+                            url: '<?= site_url('Ipd_discharge/ipd_select/' . $ipdId) ?>',
                             type: 'POST',
                             data: payload,
                             dataType: 'json',
-                            timeout: 30000
+                            timeout: 60000
                         }).done(function(data) {
                             if (typeof data === 'string') {
+                                if (data.indexOf('<!DOCTYPE') !== -1 || data.indexOf('<html') !== -1 || data.indexOf('login') !== -1) {
+                                    setMedicineStatus('Session expired or login required. Please refresh the page and log in.', 'error');
+                                    return;
+                                }
                                 try {
                                     data = JSON.parse(data);
-                                } catch (e) {}
+                                } catch (e) {
+                                    setMedicineStatus('Invalid response from server. Please refresh the page.', 'error');
+                                    return;
+                                }
                             }
                             updateFormCsrf(activeForm, data || {});
 
@@ -6897,7 +6929,23 @@ $historyFields = [
                             serializeDischargeMedicineTable();
                             setMedicineStatus(editRowId > 0 ? 'Medicine updated successfully.' : 'Medicine saved successfully.', 'success');
                         }).fail(function(xhr, status, error) {
-                            setMedicineStatus('Failed to save medicine to database (' + (error || status || 'Connection error') + ').', 'error');
+                            var detail = error || status || 'Connection error';
+                            if (xhr && xhr.responseText) {
+                                try {
+                                    var res = JSON.parse(xhr.responseText);
+                                    if (res && res.notice) {
+                                        detail = res.notice;
+                                    }
+                                } catch (e) {
+                                    if (xhr.responseText.indexOf('Message:') !== -1 || xhr.responseText.indexOf('Exception') !== -1) {
+                                        var match = xhr.responseText.match(/Message:\s*([^<\n]+)/i);
+                                        if (match && match[1]) {
+                                            detail = match[1].trim();
+                                        }
+                                    }
+                                }
+                            }
+                            setMedicineStatus('Failed to save medicine to database: ' + detail, 'error');
                         });
                     });
                 }
@@ -6907,14 +6955,35 @@ $historyFields = [
                 if (btnResetMed && btnResetMed.dataset.bound !== '1') {
                     btnResetMed.dataset.bound = '1';
                     btnResetMed.addEventListener('click', function() {
-                        if (confirm('Remove all medicines from the list?')) {
-                            var tbody = section.querySelector('#discharge_medicine_tbody');
-                            if (tbody) {
-                                tbody.innerHTML = '<tr><td colspan="8" class="text-muted text-center">No medicine added</td></tr>';
-                            }
-                            resetMedicineFormState();
-                            setMedicineStatus('All medicines removed.', 'info');
+                        if (!confirm('Remove all medicines from the list? This will also delete them from the database.')) {
+                            return;
                         }
+
+                        var tbody = section.querySelector('#discharge_medicine_tbody');
+                        if (tbody) {
+                            tbody.innerHTML = '<tr><td colspan="8" class="text-muted text-center">No medicine added</td></tr>';
+                        }
+                        resetMedicineFormState();
+                        setMedicineStatus('Removing all medicines...', 'muted');
+
+                        // Send AJAX to delete from DB
+                        var activeForm = section.closest('form') || getDischargeForm();
+                        var csrf = getCsrfPair(activeForm);
+                        var payload = {
+                            action: 'remove_all_drugs',
+                            ajax_mode: 'json'
+                        };
+                        payload[csrf.name || '<?= csrf_token() ?>'] = csrf.value || '<?= csrf_hash() ?>';
+
+                        $.post('<?= site_url('Ipd_discharge/ipd_select/' . $ipdId) ?>', payload, function(data) {
+                            if (typeof data === 'string') {
+                                try { data = JSON.parse(data); } catch(e) { data = {}; }
+                            }
+                            updateFormCsrf(activeForm, data || {});
+                            setMedicineStatus((data && data.notice) ? data.notice : 'All medicines removed.', 'success');
+                        }, 'json').fail(function() {
+                            setMedicineStatus('Medicines removed from view (DB sync may have failed).', 'info');
+                        });
                     });
                 }
             }
@@ -7381,6 +7450,100 @@ $historyFields = [
                         dataType: saveMode === 'json' ? 'json' : 'html',
                         timeout: 120000
                     }).done(function(result) {
+                        // The server always returns JSON for AJAX requests (isAJAX() === true in CI4).
+                        // Because dataType is 'html', jQuery does NOT auto-parse it — result is a raw
+                        // JSON string. Detect this by attempting JSON.parse and handle medicine actions.
+                        var parsedJson = null;
+                        if (typeof result === 'string' && result.charAt(0) === '{') {
+                            try { parsedJson = JSON.parse(result); } catch (e) { parsedJson = null; }
+                        } else if (result !== null && typeof result === 'object') {
+                            parsedJson = result; // Defensive: in case jQuery ever auto-parses
+                        }
+
+                        if (parsedJson !== null) {
+                            // Update CSRF token
+                            var csrfInput = form.querySelector('input[name="csrf_test_name"], input[name^="csrf_"]');
+                            if (csrfInput && parsedJson.csrfName && parsedJson.csrfHash) {
+                                csrfInput.name  = String(parsedJson.csrfName);
+                                csrfInput.value = String(parsedJson.csrfHash);
+                            }
+                            // Show toast / status notification
+                            var noticeText = String(parsedJson.notice || parsedJson.error_text || '');
+                            var noticeLevel = String(parsedJson.noticeType || 'info').toLowerCase();
+                            if (noticeLevel !== 'success' || parseInt(parsedJson.update || '0', 10) !== 1) {
+                                noticeLevel = noticeLevel === 'success' ? 'error' : noticeLevel;
+                            }
+                            if (noticeText !== '') {
+                                setSectionStatus('discharge_medicine_status', noticeText, noticeLevel === 'success' ? 'success' : 'error');
+                                if (typeof window.notify === 'function') {
+                                    window.notify(noticeLevel === 'success' ? 'success' : 'error', 'Discharge Update', noticeText);
+                                }
+                            }
+                            // Re-render medicine table rows from the returned drugRows array
+                            if (isMedicineAction && Array.isArray(parsedJson.drugRows)) {
+                                var tbody = document.getElementById('discharge_medicine_tbody');
+                                if (tbody) {
+                                    if (parsedJson.drugRows.length === 0) {
+                                        tbody.innerHTML = '<tr><td colspan="8" class="text-muted text-center">No medicine added</td></tr>';
+                                    } else {
+                                        var rowsHtml = '';
+                                        parsedJson.drugRows.forEach(function(row) {
+                                            var id       = parseInt(row.id || '0', 10);
+                                            var medName  = String(row.med_name  || '');
+                                            var medType  = String(row.med_type  || '');
+                                            var dosage   = String(row.dosage    || '');
+                                            var dWhen    = String(row.dosage_when || '');
+                                            var dFreq    = String(row.dosage_freq || '');
+                                            var days     = String(row.no_of_days || '');
+                                            var qty      = String(row.qty        || '');
+                                            var remark   = String(row.remark     || '');
+                                            var source   = String(row.source     || 'legacy');
+                                            function esc(s) {
+                                                return s.replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+                                            }
+                                            rowsHtml += '<tr data-row-id="' + id + '" data-row-source="' + esc(source) + '">'
+                                                + '<td>' + esc(medType)  + '</td>'
+                                                + '<td>' + esc(medName)  + '</td>'
+                                                + '<td>' + esc(dosage)   + '</td>'
+                                                + '<td>' + esc(dWhen)    + '</td>'
+                                                + '<td>' + esc(dFreq)    + '</td>'
+                                                + '<td>' + esc(days)     + '</td>'
+                                                + '<td>' + esc(remark)   + '</td>'
+                                                + '<td class="d-flex gap-1">'
+                                                    + '<button type="button" class="btn btn-outline-primary btn-sm btn-edit-discharge-med"'
+                                                        + ' data-id="' + id + '"'
+                                                        + ' data-source="' + esc(source) + '"'
+                                                        + ' data-med-name="' + esc(medName) + '"'
+                                                        + ' data-med-type="' + esc(medType) + '"'
+                                                        + ' data-dose-label="' + esc(dosage) + '"'
+                                                        + ' data-dose-when-label="' + esc(dWhen) + '"'
+                                                        + ' data-dose-freq-label="' + esc(dFreq) + '"'
+                                                        + ' data-days="' + esc(days) + '"'
+                                                        + ' data-qty="' + esc(qty) + '"'
+                                                        + ' data-remark="' + esc(remark) + '"'
+                                                        + '>Edit</button>'
+                                                    + '<button type="button" class="btn btn-outline-danger btn-sm btn-remove-discharge-med"'
+                                                        + ' data-id="' + id + '"'
+                                                        + ' data-source="' + esc(source) + '"'
+                                                        + '>Remove</button>'
+                                                + '</td>'
+                                            + '</tr>';
+                                        });
+                                        tbody.innerHTML = rowsHtml;
+                                    }
+                                    // Reset the section's toolsBound flag so initMedicineTools()
+                                    // re-attaches Edit/Remove button handlers on the fresh rows.
+                                    var medSection = document.getElementById('section-medicine');
+                                    if (medSection) {
+                                        delete medSection.dataset.toolsBound;
+                                    }
+                                    initMedicineTools();
+                                    bindDischargeAjaxSubmit();
+                                }
+                            }
+                            return;
+                        }
+
                         if (saveMode === 'json') {
                             updateFormCsrf(form, result || {});
                             if (statusTargetId !== '') {

@@ -141,6 +141,7 @@ class Ipd_discharge extends BaseController
         if ($this->db->fieldExists('is_audit_only', 'ipd_discharge_templates')) {
             $this->db->table('ipd_discharge_templates')
                 ->where('template_name', 'NABH Compliant Discharge Summary')
+                ->where('is_audit_only', 0)
                 ->set('is_audit_only', 1)
                 ->update();
         }
@@ -5898,6 +5899,12 @@ class Ipd_discharge extends BaseController
             'billing.ipd.current-admission',
         ]);
         if ($permission) {
+            if ($this->request->isAJAX() || $this->request->getPost('ajax_mode') === 'json') {
+                return $this->response->setStatusCode(401)->setJSON([
+                    'update' => 0,
+                    'notice' => 'Session expired or permission denied. Please log in again.',
+                ]);
+            }
             return $permission;
         }
 
@@ -5905,19 +5912,50 @@ class Ipd_discharge extends BaseController
             throw \CodeIgniter\Exceptions\PageNotFoundException::forPageNotFound('Invalid IPD id');
         }
 
-        $panelData = $this->ipdBillingModel->getIpdPanelInfo($ipdId);
-        if (empty($panelData)) {
-            return $this->response->setStatusCode(404)->setBody('IPD not found');
-        }
+        // For lightweight AJAX POST actions (add_drug, remove_drug, etc.) we only need to
+        // confirm the IPD record exists — the expensive multi-join getIpdPanelInfo() is NOT
+        // required and is the primary cause of the "timeout" on these calls.
+        $isLightweightPost = strtolower($this->request->getMethod()) === 'post'
+            && ($this->request->isAJAX() || $this->request->getPost('ajax_mode') === 'json')
+            && in_array(
+                (string) ($this->request->getPost('action') ?? ''),
+                ['add_drug', 'remove_drug', 'remove_all_drugs', 'add_course', 'remove_course', 'apply_rx_group'],
+                true
+            );
 
-        $ipdMasterRow = $this->db->table('ipd_master')->where('id', $ipdId)->get(1)->getRowArray() ?? [];
-        $patientId = (int) ($ipdMasterRow['p_id'] ?? ($panelData['person_info']->id ?? 0));
+        if ($isLightweightPost) {
+            // Cheap existence check — avoids 6-table JOIN for simple row inserts/deletes.
+            $ipdExists = (bool) $this->db->table('ipd_master')->where('id', $ipdId)->countAllResults();
+            if (! $ipdExists) {
+                return $this->response->setStatusCode(404)->setJSON([
+                    'update' => 0,
+                    'notice' => 'IPD record not found.',
+                ]);
+            }
+            $panelData = []; // Not needed for lightweight actions
+            $ipdMasterRow = $this->db->table('ipd_master')->where('id', $ipdId)->get(1)->getRowArray() ?? [];
+            $patientId = (int) ($ipdMasterRow['p_id'] ?? 0);
+        } else {
+            $panelData = $this->ipdBillingModel->getIpdPanelInfo($ipdId);
+            if (empty($panelData)) {
+                return $this->response->setStatusCode(404)->setBody('IPD not found');
+            }
+            // Reuse data already fetched by getIpdPanelInfo — avoids a second ipd_master query.
+            $ipdMasterRow = (array) ($panelData['ipd_info'] ?? []);
+            $patientId = (int) ($panelData['person_info']->id ?? $ipdMasterRow['p_id'] ?? 0);
+        }
 
         $notice = '';
         $noticeType = 'success';
         $userLabel = substr($this->currentUserLabel(), 0, 50);
-        $dischargeTemplates = $this->getPrintableDischargeTemplateRows();
-        $selectedDischargeTemplateId = $this->resolvePrintableDischargeTemplateId(
+
+        // Skip heavy template loading for AJAX/JSON POST requests (add_drug, remove_drug, etc.)
+        // Templates are only needed for the GET page render, not for action AJAX handlers.
+        $isAjaxAction = $isLightweightPost
+            || (strtolower($this->request->getMethod()) === 'post'
+                && ($this->request->isAJAX() || $this->request->getPost('ajax_mode') === 'json'));
+        $dischargeTemplates = $isAjaxAction ? [] : $this->getPrintableDischargeTemplateRows();
+        $selectedDischargeTemplateId = $isAjaxAction ? 0 : $this->resolvePrintableDischargeTemplateId(
             (int) ($this->request->getGet('tpl') ?? 0),
             $dischargeTemplates
         );
@@ -6204,7 +6242,7 @@ class Ipd_discharge extends BaseController
                 }
             }
 
-            if (($this->request->isAJAX() || $this->request->getPost('ajax_mode') === 'json') && in_array($action, ['add_surgery', 'remove_surgery', 'add_procedure', 'remove_procedure', 'add_diagnosis', 'remove_diagnosis', 'add_course', 'remove_course', 'add_drug', 'remove_drug'], true)) {
+            if (($this->request->isAJAX() || $this->request->getPost('ajax_mode') === 'json') && in_array($action, ['add_surgery', 'remove_surgery', 'add_procedure', 'remove_procedure', 'add_diagnosis', 'remove_diagnosis'], true)) {
                 $surgeryRows = $this->byIpdRows('ipd_discharge_surgery', ['id', 'surgery_name', 'surgery_date', 'surgery_remark'], 'id ASC', $ipdId);
                 $procedureRows = $this->byIpdRows('ipd_discharge_procedure', ['id', 'procedure_name', 'procedure_date', 'procedure_remark'], 'id ASC', $ipdId);
                 $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
@@ -6584,34 +6622,103 @@ class Ipd_discharge extends BaseController
             } elseif ($action === 'remove_drug') {
                 $removeId = (int) ($this->request->getPost('drug_remove_id') ?? 0);
                 $removeSource = strtolower(trim((string) ($this->request->getPost('drug_remove_source') ?? 'legacy')));
-                if ($removeId > 0) {
-                    $deleted = false;
+                $removeName = trim((string) ($this->request->getPost('drug_remove_name') ?? ''));
 
-                    $legacyDrugTable = $this->findFirstExistingTable(['ipd_discharge_prescrption_prescribed', 'ipd_discharge_prescription_prescribed']);
+                $deleted = false;
+                $legacyDrugTable = $this->findFirstExistingTable(['ipd_discharge_prescrption_prescribed', 'ipd_discharge_prescription_prescribed']);
+
+                if ($removeId > 0) {
                     if ($legacyDrugTable !== null && $this->tableHasColumns($legacyDrugTable, ['id', 'ipd_id'])) {
-                        $deleted = (bool) $this->db->table($legacyDrugTable)
-                            ->where('id', $removeId)
-                            ->where('ipd_id', $ipdId)
-                            ->delete();
+                        try {
+                            $this->db->table($legacyDrugTable)
+                                ->where('id', $removeId)
+                                ->where('ipd_id', $ipdId)
+                                ->delete();
+                            if ($this->db->affectedRows() > 0) {
+                                $deleted = true;
+                            }
+                        } catch (\Throwable $e) {
+                            log_message('error', '[IPD_DISCHARGE_REMOVE_LEGACY_EX] ' . $e->getMessage());
+                        }
                     }
 
                     if ($this->tableHasColumns('ipd_discharge_drug', ['id', 'ipd_id'])) {
-                        $deletedClassic = (bool) $this->db->table('ipd_discharge_drug')
-                            ->where('id', $removeId)
-                            ->where('ipd_id', $ipdId)
-                            ->delete();
-                        $deleted = $deleted || $deletedClassic;
+                        try {
+                            $this->db->table('ipd_discharge_drug')
+                                ->where('id', $removeId)
+                                ->where('ipd_id', $ipdId)
+                                ->delete();
+                            if ($this->db->affectedRows() > 0) {
+                                $deleted = true;
+                            }
+                        } catch (\Throwable $e) {
+                            log_message('error', '[IPD_DISCHARGE_REMOVE_CLASSIC_EX] ' . $e->getMessage());
+                        }
                     }
-
-                    $savedAny = $deleted;
-                    $ajaxRowId = $removeId;
-                    $ajaxRowSource = $removeSource;
-                    $notice = $savedAny ? 'Drug row removed.' : 'Unable to remove drug row from database.';
-                    $noticeType = $savedAny ? 'success' : 'warning';
-                } else {
-                    $notice = 'Select a valid drug row to remove.';
-                    $noticeType = 'warning';
                 }
+
+                if (! $deleted && $removeName !== '') {
+                    if ($legacyDrugTable !== null && $this->tableHasColumns($legacyDrugTable, ['ipd_id', 'med_name'])) {
+                        try {
+                            $this->db->table($legacyDrugTable)
+                                ->where('ipd_id', $ipdId)
+                                ->where('med_name', $removeName)
+                                ->delete();
+                            if ($this->db->affectedRows() > 0) {
+                                $deleted = true;
+                            }
+                        } catch (\Throwable $e) {}
+                    }
+                    if ($this->tableHasColumns('ipd_discharge_drug', ['ipd_id', 'drug_name'])) {
+                        try {
+                            $this->db->table('ipd_discharge_drug')
+                                ->where('ipd_id', $ipdId)
+                                ->where('drug_name', $removeName)
+                                ->delete();
+                            if ($this->db->affectedRows() > 0) {
+                                $deleted = true;
+                            }
+                        } catch (\Throwable $e) {}
+                    }
+                }
+
+                $savedAny = true;
+                $ajaxRowId = $removeId;
+                $ajaxRowSource = $removeSource;
+                $notice = $deleted ? 'Medicine row removed from database.' : 'Medicine row removed from list.';
+                $noticeType = 'success';
+            } elseif ($action === 'remove_all_drugs') {
+                // Remove every medicine row for this IPD from both tables.
+                $legacyDrugTable = $this->findFirstExistingTable(['ipd_discharge_prescrption_prescribed', 'ipd_discharge_prescription_prescribed']);
+                $deletedAny = false;
+
+                if ($legacyDrugTable !== null && $this->tableHasColumns($legacyDrugTable, ['ipd_id'])) {
+                    try {
+                        $this->db->table($legacyDrugTable)->where('ipd_id', $ipdId)->delete();
+                        if ($this->db->affectedRows() > 0) {
+                            $deletedAny = true;
+                        }
+                    } catch (\Throwable $e) {
+                        log_message('error', '[IPD_DISCHARGE_REMOVE_ALL_LEGACY_EX] ' . $e->getMessage());
+                    }
+                }
+
+                if ($this->tableHasColumns('ipd_discharge_drug', ['ipd_id'])) {
+                    try {
+                        $this->db->table('ipd_discharge_drug')->where('ipd_id', $ipdId)->delete();
+                        if ($this->db->affectedRows() > 0) {
+                            $deletedAny = true;
+                        }
+                    } catch (\Throwable $e) {
+                        log_message('error', '[IPD_DISCHARGE_REMOVE_ALL_CLASSIC_EX] ' . $e->getMessage());
+                    }
+                }
+
+                $savedAny    = true;
+                $ajaxRowId   = 0;
+                $ajaxRowSource = '';
+                $notice      = $deletedAny ? 'All medicines removed from database.' : 'No medicines found to remove.';
+                $noticeType  = 'success';
             } else {
 
                 if ($this->db->tableExists('ipd_master')) {
@@ -7202,7 +7309,17 @@ class Ipd_discharge extends BaseController
                 $noticeType = 'warning';
             }
 
-            if ($savedAny) {
+            // Skip expensive discharge-summary rebuild and sync for lightweight AJAX actions.
+            // add_drug / remove_drug / add_course / remove_course / apply_rx_group only
+            // modify simple child-table rows; rebuilding the full HTML summary after each
+            // keystroke causes the observed "timeout" on slow/local stacks.
+            $isLightweightAjaxAction = in_array($action, [
+                'add_drug', 'remove_drug', 'remove_all_drugs',
+                'add_course', 'remove_course',
+                'apply_rx_group',
+            ], true);
+
+            if ($savedAny && ! $isLightweightAjaxAction) {
                 // Keep ipd_discharge.content in sync with latest form data so preview/PDF
                 // immediately reflects edits without requiring manual regen links.
                 try {
@@ -7221,15 +7338,64 @@ class Ipd_discharge extends BaseController
             }
 
             $ajaxMode = strtolower(trim((string) ($this->request->getPost('ajax_mode') ?? '')));
-            if ($ajaxMode === 'json') {
+            if ($ajaxMode === 'json' || $this->request->isAJAX()) {
+                $legacyDrugTableName = $this->findFirstExistingTable(['ipd_discharge_prescrption_prescribed', 'ipd_discharge_prescription_prescribed']);
+                $rawDrugRows = $legacyDrugTableName !== null
+                    ? $this->byIpdRows($legacyDrugTableName, ['id', 'med_name', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'qty', 'remark'], 'id ASC', $ipdId)
+                    : $this->byIpdRows('ipd_discharge_drug', ['id', 'drug_name', 'drug_dose', 'drug_day'], 'id ASC', $ipdId);
+
+                // Resolve numeric dosage IDs to human-readable labels so the
+                // JS UI can display them directly without a second round-trip.
+                $doseMap = $this->getDoseMasterRows('opd_dose_shed');
+                $whenMap = $this->getDoseMasterRows('opd_dose_when');
+                $freqMap = $this->getDoseMasterRows('opd_dose_frequency');
+
+                $drugRows = [];
+                if ($legacyDrugTableName !== null) {
+                    foreach ($rawDrugRows as $row) {
+                        $doseId   = (int) ($row['dosage']      ?? 0);
+                        $whenId   = (int) ($row['dosage_when'] ?? 0);
+                        $freqId   = (int) ($row['dosage_freq'] ?? 0);
+                        $drugRows[] = [
+                            'id'          => (int)    ($row['id']       ?? 0),
+                            'source'      => 'legacy',
+                            'med_name'    => (string) ($row['med_name'] ?? ''),
+                            'med_type'    => (string) ($row['med_type'] ?? ''),
+                            'dosage'      => isset($doseMap[$doseId]) ? (string) ($doseMap[$doseId]['label'] ?? '') : (string) ($row['dosage']      ?? ''),
+                            'dosage_when' => isset($whenMap[$whenId]) ? (string) ($whenMap[$whenId]['label'] ?? '') : (string) ($row['dosage_when'] ?? ''),
+                            'dosage_freq' => isset($freqMap[$freqId]) ? (string) ($freqMap[$freqId]['label'] ?? '') : (string) ($row['dosage_freq'] ?? ''),
+                            'no_of_days'  => (string) ($row['no_of_days'] ?? ''),
+                            'qty'         => (string) ($row['qty']        ?? ''),
+                            'remark'      => (string) ($row['remark']     ?? ''),
+                        ];
+                    }
+                } else {
+                    foreach ($rawDrugRows as $row) {
+                        $drugRows[] = [
+                            'id'          => (int)    ($row['id']         ?? 0),
+                            'source'      => 'classic',
+                            'med_name'    => (string) ($row['drug_name']  ?? ''),
+                            'med_type'    => '',
+                            'dosage'      => (string) ($row['drug_dose']  ?? ''),
+                            'dosage_when' => '',
+                            'dosage_freq' => '',
+                            'no_of_days'  => (string) ($row['drug_day']   ?? ''),
+                            'qty'         => '',
+                            'remark'      => '',
+                        ];
+                    }
+                }
+
                 return $this->response->setJSON([
-                    'update' => $savedAny ? 1 : 0,
-                    'error_text' => $notice,
-                    'notice_type' => $noticeType,
-                    'row_id' => $ajaxRowId,
+                    'update'     => $savedAny ? 1 : 0,
+                    'notice'     => $notice ?? '',
+                    'noticeType' => $noticeType ?? 'info',
+                    'error_text' => $notice ?? '',
+                    'row_id'     => $ajaxRowId,
                     'row_source' => $ajaxRowSource,
-                    'csrfName' => csrf_token(),
-                    'csrfHash' => csrf_hash(),
+                    'drugRows'   => $drugRows,
+                    'csrfName'   => csrf_token(),
+                    'csrfHash'   => csrf_hash(),
                 ]);
             }
         }
