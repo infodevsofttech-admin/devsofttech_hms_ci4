@@ -6807,9 +6807,15 @@ $historyFields = [
                             dataType: 'json',
                             timeout: 30000
                         }).done(function(data) {
+                            if (typeof data === 'string') {
+                                try {
+                                    data = JSON.parse(data);
+                                } catch (e) {}
+                            }
                             updateFormCsrf(activeForm, data || {});
 
-                            if (!data || typeof data !== 'object' || parseInt(data.update || '0', 10) !== 1) {
+                            var isSuccess = data && (data.update === 1 || data.update === '1' || data.update === true || (data.row_id && parseInt(data.row_id, 10) > 0));
+                            if (!isSuccess) {
                                 setMedicineStatus((data && data.notice) ? data.notice : 'Failed to save medicine to database.', 'error');
                                 return;
                             }
@@ -7297,8 +7303,7 @@ $historyFields = [
                         return;
                     }
                     syncEditorValues();
-                    // DISABLED: No longer needed since medicines are saved via AJAX on Add button
-                    // serializeDischargeMedicineTable();
+                    serializeDischargeMedicineTable();
                     syncClinicalLabSelection(form);
                     syncCoMorbidityHidden(form);
 
