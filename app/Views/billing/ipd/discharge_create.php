@@ -6643,19 +6643,32 @@ $historyFields = [
                     $('#discharge_med_name').trigger('focus');
                 });
 
-                $(document).on('click', '.btn-remove-discharge-med', function(ev) {
+                $(document).off('click', '.btn-remove-discharge-med').on('click', '.btn-remove-discharge-med', function(ev) {
                     if (ev) ev.preventDefault();
                     var $btn = $(this);
                     var $tr = $btn.closest('tr');
-                    var tbody = section.querySelector('#discharge_medicine_tbody');
-                    if (!$tr.length || !tbody) {
-                        return;
-                    }
 
+                    // Extract IDs before removing from DOM
                     var rowId = parseInt($btn.attr('data-id') || $btn.data('id') || $tr.attr('data-row-id') || $tr.data('row-id') || 0, 10);
                     var rowSource = String($btn.attr('data-source') || $btn.data('source') || $tr.attr('data-row-source') || $tr.data('row-source') || 'legacy').trim() || 'legacy';
 
-                    var activeForm = section.closest('form') || getDischargeForm();
+                    // Instantly remove row from DOM
+                    if ($tr.length) {
+                        $tr.remove();
+                    }
+
+                    var tbody = document.getElementById('discharge_medicine_tbody');
+                    if (tbody && !tbody.querySelector('tr')) {
+                        tbody.innerHTML = '<tr><td colspan="8" class="text-muted text-center py-2">No medicine added</td></tr>';
+                    }
+
+                    var secEl = document.getElementById('section-medicine');
+                    var activeForm = (secEl && secEl.closest('form')) || getDischargeForm();
+                    if (!activeForm) {
+                        setMedicineStatus('Medicine removed.', 'info');
+                        return;
+                    }
+
                     var csrf = getCsrfPair(activeForm);
                     var payload = {
                         action: 'remove_drug',
@@ -6666,12 +6679,6 @@ $historyFields = [
                     payload[csrf.name] = csrf.value;
 
                     setMedicineStatus('Removing medicine...', 'muted');
-
-                    // Instantly remove row from DOM
-                    $tr.remove();
-                    if (!tbody.querySelector('tr')) {
-                        tbody.innerHTML = '<tr><td colspan="8" class="text-muted text-center">No medicine added</td></tr>';
-                    }
 
                     if (rowId > 0) {
                         $.post($(activeForm).attr('action') || window.location.href, payload, function(data) {
