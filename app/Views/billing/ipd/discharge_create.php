@@ -6587,14 +6587,31 @@ $historyFields = [
                     $('#discharge_med_item_id').val('0');
                     $('#discharge_med_item_source').val('legacy');
                     $('#btn_discharge_med_add').text('+ADD / Update');
+                    $('#btn_discharge_med_cancel').hide();
                 }
 
-                function medicineActionButtonsHtml(rowId, rowSource) {
+                function medicineActionButtonsHtml(rowId, rowSource, data) {
                     var id = parseInt(rowId || 0, 10);
                     var source = String(rowSource || 'legacy').trim() || 'legacy';
+                    data = data || {};
                     return '<td class="d-flex gap-1">'
-                        + '<button type="button" class="btn btn-outline-primary btn-sm btn-edit-discharge-med" data-id="' + id + '" data-source="' + $('<div>').text(source).html() + '">Edit</button>'
-                        + '<button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_drug" data-reload-section="section-medicine" onclick="document.getElementById(\'drug_remove_id\').value=\'' + id + '\';document.getElementById(\'drug_remove_source\').value=\'' + $('<div>').text(source).html() + '\';">Remove</button>'
+                        + '<button type="button" class="btn btn-outline-primary btn-sm btn-edit-discharge-med" '
+                        + 'data-id="' + id + '" '
+                        + 'data-source="' + $('<div>').text(source).html() + '" '
+                        + 'data-med-name="' + $('<div>').text(data.med_name || '').html() + '" '
+                        + 'data-med-salt="' + $('<div>').text(data.med_salt || '').html() + '" '
+                        + 'data-med-type="' + $('<div>').text(data.med_type || '').html() + '" '
+                        + 'data-dose-id="' + $('<div>').text(data.dosage || '').html() + '" '
+                        + 'data-dose-when-id="' + $('<div>').text(data.dosage_when || '').html() + '" '
+                        + 'data-dose-freq-id="' + $('<div>').text(data.dosage_freq || '').html() + '" '
+                        + 'data-dose-label="' + $('<div>').text(data.dose_label || '').html() + '" '
+                        + 'data-dose-when-label="' + $('<div>').text(data.when_label || '').html() + '" '
+                        + 'data-dose-freq-label="' + $('<div>').text(data.freq_label || '').html() + '" '
+                        + 'data-days="' + $('<div>').text(data.no_of_days || '').html() + '" '
+                        + 'data-qty="' + $('<div>').text(data.qty || '').html() + '" '
+                        + 'data-remark="' + $('<div>').text(data.remark || '').html() + '"'
+                        + '>Edit</button>'
+                        + '<button type="button" class="btn btn-outline-danger btn-sm btn-remove-discharge-med" data-id="' + id + '" data-source="' + $('<div>').text(source).html() + '">Remove</button>'
                         + '</td>';
                 }
 
@@ -6617,8 +6634,13 @@ $historyFields = [
                     var whenLabel = String($(this).data('dose-when-label') || row.find('td:eq(3)').text() || '').trim();
                     var freqLabel = String($(this).data('dose-freq-label') || row.find('td:eq(4)').text() || '').trim();
                     var noOfDays = String($(this).data('days') || row.find('td:eq(5)').text() || '').trim();
-                    var qty = String($(this).data('qty') || row.find('td:eq(6)').text() || '').trim();
-                    var remark = String($(this).data('remark') || row.find('td:eq(7)').text() || '').trim();
+                    var qty = String($(this).data('qty') || '').trim();
+
+                    // Read remark from data attribute or 7th column (index 6). Column 8 (index 7) contains action buttons.
+                    var rawRemark = $(this).attr('data-remark') !== undefined
+                        ? $(this).attr('data-remark')
+                        : ($(this).data('remark') !== undefined ? $(this).data('remark') : (row.find('td:eq(6)').text() || ''));
+                    var remark = String(rawRemark || '').replace(/^(edit\s*remove|remove\s*edit|edit|remove|delete)\s*$/i, '').trim();
 
                     $('#discharge_med_item_id').val(rowId > 0 ? rowId : 0);
                     $('#discharge_med_item_source').val(rowSource);
@@ -6628,11 +6650,23 @@ $historyFields = [
 
                     $('#discharge_dosage').val(doseLabel || doseId || '');
 
+                    // Relation to Food (When): If empty or 0, reset dropdown to empty placeholder
                     if (whenId !== '' && whenId !== '0') {
                         $('#discharge_dosage_when').val(whenId);
-                    } else {
+                        if (!$('#discharge_dosage_when').val() && whenLabel) {
+                            ensureDoseOption('#discharge_dosage_when', whenLabel);
+                            $('#discharge_dosage_when').val(whenLabel);
+                        }
+                    } else if (whenLabel !== '' && whenLabel !== '-' && whenLabel !== '0' && whenLabel !== 'When') {
                         ensureDoseOption('#discharge_dosage_when', whenLabel);
                         $('#discharge_dosage_when').val(whenLabel);
+                        if (!$('#discharge_dosage_when').val()) {
+                            $('#discharge_dosage_when option').filter(function() {
+                                return $(this).text().trim().toLowerCase() === whenLabel.toLowerCase();
+                            }).prop('selected', true);
+                        }
+                    } else {
+                        $('#discharge_dosage_when').val('');
                     }
 
                     $('#discharge_dosage_freq').val(freqLabel || freqId || '');
@@ -6642,6 +6676,7 @@ $historyFields = [
                     $('#discharge_remark').val(remark);
 
                     $('#btn_discharge_med_add').text('Update Medicine');
+                    $('#btn_discharge_med_cancel').show();
                     setMedicineStatus('Edit mode: update fields and click Update Medicine.', 'info');
                     $('#discharge_med_name').trigger('focus');
                 });
@@ -6877,7 +6912,20 @@ $historyFields = [
                                 '<td>' + $('<div>').text(freqLabel).html() + '</td>' +
                                 '<td>' + $('<div>').text(formattedDuration).html() + '</td>' +
                                 '<td>' + $('<div>').text(remark).html() + '</td>' +
-                                medicineActionButtonsHtml(rowIdToUse, responseRowSource);
+                                medicineActionButtonsHtml(rowIdToUse, responseRowSource, {
+                                    med_name: medName,
+                                    med_salt: medSalt,
+                                    med_type: medType,
+                                    dosage: dosage,
+                                    dosage_when: dosageWhen,
+                                    dosage_freq: dosageFreq,
+                                    dose_label: doseLabel,
+                                    when_label: whenLabel,
+                                    freq_label: freqLabel,
+                                    no_of_days: noOfDays,
+                                    qty: qty,
+                                    remark: remark
+                                });
 
                             if (editRowId > 0) {
                                 var existingRow = tbody.querySelector('tr[data-row-id="' + editRowId + '"][data-row-source="' + editRowSource + '"]');
