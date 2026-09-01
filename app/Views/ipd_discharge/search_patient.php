@@ -127,23 +127,46 @@
 
         records.forEach(function(row) {
             var patientName = (row.p_fname || '') + ' ' + (row.p_rname || '');
-            var age = parseInt(row.p_age || 0);
-            var ageInMonth = parseInt(row.age_in_month || 0);
-            
-            // Determine age display
+            // Determine age display using server calculated age_display with DOB fallback
+            var rawAge = (row.age_display || '').trim();
             var ageDisplay = '';
-            if (age > 0) {
-                ageDisplay = age + 'Y';
-            } else if (ageInMonth > 0) {
-                if (ageInMonth >= 12) {
-                    ageDisplay = Math.floor(ageInMonth / 12) + 'Y';
-                } else if (ageInMonth > 1) {
-                    ageDisplay = ageInMonth + 'M';
+            if (rawAge !== '') {
+                if (/^\d+\s*year/i.test(rawAge)) {
+                    var m = rawAge.match(/^(\d+)/);
+                    ageDisplay = m ? m[1] + 'Y' : rawAge;
+                } else if (/^\d+\s*month/i.test(rawAge)) {
+                    var m = rawAge.match(/^(\d+)/);
+                    ageDisplay = m ? m[1] + 'M' : rawAge;
+                } else if (/^\d+\s*days/i.test(rawAge)) {
+                    var m = rawAge.match(/^(\d+)/);
+                    ageDisplay = m ? m[1] + 'D' : rawAge;
                 } else {
-                    ageDisplay = '1M';
+                    ageDisplay = rawAge;
                 }
             } else {
-                ageDisplay = '0Y';
+                var age = parseInt(row.p_age || 0);
+                var ageInMonth = parseInt(row.age_in_month || 0);
+                if (age > 0) {
+                    ageDisplay = age + 'Y';
+                } else if (ageInMonth > 0) {
+                    if (ageInMonth >= 12) {
+                        ageDisplay = Math.floor(ageInMonth / 12) + 'Y';
+                    } else {
+                        ageDisplay = ageInMonth + 'M';
+                    }
+                } else if (row.dob) {
+                    var dobDate = new Date(row.dob);
+                    if (!isNaN(dobDate.getTime())) {
+                        var diffMs = Date.now() - dobDate.getTime();
+                        var ageDate = new Date(diffMs);
+                        var calcYears = Math.abs(ageDate.getUTCFullYear() - 1970);
+                        ageDisplay = calcYears + 'Y';
+                    }
+                }
+            }
+            
+            if (!ageDisplay) {
+                ageDisplay = '-';
             }
             
             var gender = (row.xgender || 'Unknown').charAt(0).toUpperCase();

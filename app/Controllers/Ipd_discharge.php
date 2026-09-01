@@ -5788,8 +5788,10 @@ class Ipd_discharge extends BaseController
                 im.discarge_patient_status as discharge_status,
                 p.id as p_id, p.p_code as uhid, p.p_fname, p.p_rname, 
                 IF(p.gender = 1, 'Male', 'Female') as xgender,
+                p.dob,
                 p.age as p_age, 
                 p.age_in_month,
+                p.estimate_dob,
                 DATEDIFF(COALESCE(im.discharge_date, CURDATE()), im.register_date) as no_days
             FROM ipd_master im
             LEFT JOIN patient_master p ON p.id = im.p_id
@@ -5807,10 +5809,17 @@ class Ipd_discharge extends BaseController
                 $likePattern, $likePattern, $likePattern, $likePattern, $likePattern
             ])->getResult();
 
-            // Enrich each record with bed and doctor info
+            helper('age');
+
+            // Enrich each record with bed, doctor, and formatted age info
             foreach ($records as $record) {
                 $ipdId = (int) $record->id;
                 
+                // Calculate age using system age helper
+                $record->age_display = function_exists('get_age_1')
+                    ? trim((string) get_age_1($record->dob ?? null, $record->p_age ?? '', $record->age_in_month ?? '', $record->estimate_dob ?? '', $record->register_date ?? null))
+                    : '';
+
                 // Get bed info
                 $bedSql = "SELECT 
                     CONCAT('Bed No :', COALESCE(b.bed_number, ''), ' [', COALESCE(w.ward_name, ''), ']') as Bed_Desc
