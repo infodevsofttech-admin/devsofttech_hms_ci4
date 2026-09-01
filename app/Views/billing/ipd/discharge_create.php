@@ -109,22 +109,29 @@ if (! empty($legacyDrugRows)) {
         $doseLabel = $getDoseLabel($doseId, 'dose');
         $whenLabel = $getDoseLabel($whenId, 'when');
         $freqLabel = $getDoseLabel($freqId, 'freq');
-        $medicineRows[] = [
-            'id' => (int) ($row['id'] ?? 0),
-            'source' => 'legacy',
-            'med_name' => (string) ($row['med_name'] ?? ''),
-            'med_salt' => (string) ($row['med_salt'] ?? ''),
-            'med_type' => (string) ($row['med_type'] ?? ''),
-            'dosage' => $doseLabel !== '' ? $doseLabel : (string) ($row['dosage'] ?? ''),
-            'dosage_when' => $whenLabel !== '' ? $whenLabel : (string) ($row['dosage_when'] ?? ''),
-            'dosage_freq' => $freqLabel !== '' ? $freqLabel : (string) ($row['dosage_freq'] ?? ''),
-            'dosage_id' => $doseId,
-            'dosage_when_id' => $whenId,
-            'dosage_freq_id' => $freqId,
-            'no_of_days' => (string) ($row['no_of_days'] ?? ''),
-            'qty' => (string) ($row['qty'] ?? ''),
-            'remark' => (string) ($row['remark'] ?? ''),
-        ];
+            $rawRemark = trim((string) ($row['remark'] ?? ''));
+            if (stripos($rawRemark, 'edit') !== false && stripos($rawRemark, 'remove') !== false) {
+                $rawRemark = '';
+            }
+            if (preg_match('/^(edit|remove|delete|editremove|edit\s+remove|remove\s+edit)$/i', $rawRemark)) {
+                $rawRemark = '';
+            }
+            $medicineRows[] = [
+                'id' => (int) ($row['id'] ?? 0),
+                'source' => 'legacy',
+                'med_name' => (string) ($row['med_name'] ?? ''),
+                'med_salt' => (string) ($row['med_salt'] ?? ''),
+                'med_type' => (string) ($row['med_type'] ?? ''),
+                'dosage' => $doseLabel !== '' ? $doseLabel : (string) ($row['dosage'] ?? ''),
+                'dosage_when' => $whenLabel !== '' ? $whenLabel : (string) ($row['dosage_when'] ?? ''),
+                'dosage_freq' => $freqLabel !== '' ? $freqLabel : (string) ($row['dosage_freq'] ?? ''),
+                'dosage_id' => $doseId,
+                'dosage_when_id' => $whenId,
+                'dosage_freq_id' => $freqId,
+                'no_of_days' => (string) ($row['no_of_days'] ?? ''),
+                'qty' => (string) ($row['qty'] ?? ''),
+                'remark' => $rawRemark,
+            ];
     }
 }
 if (! empty($drugRows)) {
@@ -6636,11 +6643,18 @@ $historyFields = [
                     var noOfDays = String($(this).data('days') || row.find('td:eq(5)').text() || '').trim();
                     var qty = String($(this).data('qty') || '').trim();
 
-                    // Read remark from data attribute or 7th column (index 6). Column 8 (index 7) contains action buttons.
-                    var rawRemark = $(this).attr('data-remark') !== undefined
-                        ? $(this).attr('data-remark')
-                        : ($(this).data('remark') !== undefined ? $(this).data('remark') : (row.find('td:eq(6)').text() || ''));
-                    var remark = String(rawRemark || '').replace(/^(edit\s*remove|remove\s*edit|edit|remove|delete)\s*$/i, '').trim();
+                    // Read remark from data attribute or 7th column (index 6).
+                    var rawRemark = $(this).attr('data-remark');
+                    if (rawRemark === undefined || rawRemark === null || rawRemark === '') {
+                        rawRemark = row.children('td').eq(6).text() || '';
+                    }
+                    var remark = String(rawRemark || '').trim();
+                    if (/edit/i.test(remark) && /remove/i.test(remark)) {
+                        remark = '';
+                    }
+                    if (/^(edit|remove|delete|editremove|edit\s+remove|remove\s+edit)$/i.test(remark)) {
+                        remark = '';
+                    }
 
                     $('#discharge_med_item_id').val(rowId > 0 ? rowId : 0);
                     $('#discharge_med_item_source').val(rowSource);
@@ -7054,7 +7068,13 @@ $historyFields = [
                     if (cells.length >= 7) {
                         var editBtn = row.querySelector('.btn-edit-discharge-med');
                         var rawRemark = cells[6] ? cells[6].textContent.trim() : '';
-                        var cleanRemark = rawRemark.replace(/^(edit\s*remove|remove\s*edit|edit|remove|delete)\s*$/i, '').trim();
+                        var cleanRemark = rawRemark.trim();
+                        if (/edit/i.test(cleanRemark) && /remove/i.test(cleanRemark)) {
+                            cleanRemark = '';
+                        }
+                        if (/^(edit|remove|delete|editremove|edit\s+remove|remove\s+edit)$/i.test(cleanRemark)) {
+                            cleanRemark = '';
+                        }
 
                         var cellData = {
                             med_type: cells[0].textContent.trim(),
