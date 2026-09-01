@@ -6765,25 +6765,26 @@ class Ipd_discharge extends BaseController
                 $medicineJson = trim((string) ($this->request->getPost('discharge_medicine_json') ?? ''));
                 if ($medicineJson !== '') {
                     $medicines = json_decode($medicineJson, true);
-                    if (is_array($medicines) && ! empty($medicines)) {
+                    if (is_array($medicines)) {
                         $legacyTable = $this->findFirstExistingTable([
                             'ipd_discharge_prescrption_prescribed',
                             'ipd_discharge_prescription_prescribed',
                         ]);
 
                         if ($legacyTable !== null) {
+                            $validMeds = [];
                             foreach ($medicines as $med) {
                                 $medName = trim((string) ($med['med_name'] ?? ''));
-                                if ($medName === '' || $medName === 'No medicine added') {
-                                    continue;
+                                if ($medName !== '' && $medName !== 'No medicine added') {
+                                    $validMeds[] = $med;
                                 }
+                            }
 
-                                $exists = $this->db->table($legacyTable)
-                                    ->where('ipd_id', $ipdId)
-                                    ->where('med_name', $medName)
-                                    ->countAllResults();
+                            if (! empty($validMeds)) {
+                                $this->db->table($legacyTable)->where('ipd_id', $ipdId)->delete();
 
-                                if ($exists === 0) {
+                                foreach ($validMeds as $med) {
+                                    $medName = trim((string) ($med['med_name'] ?? ''));
                                     $insert = [
                                         'ipd_id' => $ipdId,
                                         'med_id' => 0,
