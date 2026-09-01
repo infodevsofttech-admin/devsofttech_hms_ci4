@@ -1488,6 +1488,7 @@ $historyFields = [
                                 <input type="hidden" name="discharge_medicine_json" id="discharge_medicine_json" value="">
                             </div>
                         </div>
+                        <div class="card border-secondary mt-3" id="section-instructions">
                             <div class="card-header py-2 d-flex justify-content-between align-items-center">
                                 <strong>Discharge Summary</strong>
                                 <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_discharge_manage_food_master">Dietary Master CRUD</button>
@@ -1578,6 +1579,7 @@ $historyFields = [
                                 </div>
                             </div>
                         </div>
+                        </div><!-- /#section-instructions -->
 
                     </form>
                 </div>
@@ -7001,16 +7003,21 @@ $historyFields = [
                 rows.forEach(function(row) {
                     var cells = row.querySelectorAll('td');
                     // Skip empty state row or rows with insufficient cells
-                    if (cells.length >= 8) {
+                    if (cells.length >= 7) {
+                        var editBtn = row.querySelector('.btn-edit-discharge-med');
+                        var rawRemark = cells[6] ? cells[6].textContent.trim() : '';
+                        var cleanRemark = rawRemark.replace(/^(edit\s*remove|remove\s*edit|edit|remove|delete)\s*$/i, '').trim();
+
                         var cellData = {
                             med_type: cells[0].textContent.trim(),
                             med_name: cells[1].textContent.trim(),
+                            med_salt: editBtn ? (editBtn.getAttribute('data-med-salt') || '') : '',
                             dosage: cells[2].textContent.trim(),
                             dosage_when: cells[3].textContent.trim(),
                             dosage_freq: cells[4].textContent.trim(),
                             no_of_days: cells[5].textContent.trim(),
-                            qty: cells[6].textContent.trim(),
-                            remark: cells[7].textContent.trim()
+                            qty: editBtn ? (editBtn.getAttribute('data-qty') || '') : '',
+                            remark: cleanRemark
                         };
 
                         // Only add non-empty medicine names

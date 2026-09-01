@@ -609,6 +609,7 @@ class Ipd_discharge extends BaseController
             'Personal History',
             'Drug Allergy / ADR',
             'Co-Morbidities',
+            'Prescribed Medicines',
             'Discharge Medications',
             'Discharge Advice/Instructions/Summary',
             'Dietary Advice',
@@ -631,11 +632,20 @@ class Ipd_discharge extends BaseController
         $instructionRow = $ipdId > 0 ? $this->firstRowByIpd('ipd_discharge_instructions', $ipdId) : [];
         $instructionMeta = $this->parseInstructionMetaPayload((string) ($instructionRow['comp_report'] ?? ''));
         $clinicalSummaryRaw = $this->normalizeRichText((string) ($instructionRow['comp_remark'] ?? ''));
-        $clinicalSummary = $clinicalSummaryRaw !== ''
-            ? '<div class="discharge-summary-content">' . $this->renderRichText($clinicalSummaryRaw) . '</div>'
-            : $section(['Discharge Summary']);
+        if ($clinicalSummaryRaw !== '') {
+            $clinicalSummary = '<div class="discharge-summary-content">' . $this->renderRichText($clinicalSummaryRaw) . '</div>';
+        } else {
+            $extracted = $section(['Discharge Summary']);
+            $plainText = trim(strip_tags((string) $extracted));
+            // If the extracted summary only contains the title "Discharge Summary" or is blank, treat as empty
+            if ($plainText === '' || strcasecmp($plainText, 'Discharge Summary') === 0) {
+                $clinicalSummary = '';
+            } else {
+                $clinicalSummary = $extracted;
+            }
+        }
         
-        // Replace "Discharge Summary" header with discharge status
+        // Replace "Discharge Summary" header with discharge status if non-default status exists
         if ($dischargeStatus !== ''
             && strcasecmp(trim($dischargeStatus), 'Discharge Summary') !== 0
             && $clinicalSummary !== '') {
@@ -663,7 +673,10 @@ class Ipd_discharge extends BaseController
             );
         }
 
-        if ($clinicalSummary !== '') {
+        $plainSummary = trim(strip_tags((string) $clinicalSummary));
+        if ($plainSummary === '' || strcasecmp($plainSummary, 'Discharge Summary') === 0) {
+            $clinicalSummary = '';
+        } elseif ($clinicalSummary !== '') {
             $hasSummaryHeading = preg_match(
                 '/<h[1-6][^>]*>\s*Discharge\s+Summary\s*<\/h[1-6]>|<(?:b|strong)[^>]*>\s*Discharge\s+Summary\s*<\/(?:b|strong)>/i',
                 $clinicalSummary
@@ -688,7 +701,21 @@ class Ipd_discharge extends BaseController
         $clinicalInvestigations = $section(['Clinical Investigation Reports']);
         $courseInHospital = $section(['Course in the hospital']);
         $examOnDischarge = $section(['Examination on Discharge']);
-        $dischargeMedications = $section(['Discharge Medications']);
+        $dischargeMedications = $section(['Prescribed Medicines', 'Discharge Medications']);
+        // Always prefer fresh OPD-style table from DB rows when rows exist.
+        // Also replace stale cached HTML that contains old-format columns or form artefacts
+        // (e.g. "Medicine Advice: EditRemove", "Medicine Name | Dosage | Qty | Day").
+        $opdStyleMedHtml = $this->buildOpdStyleMedicationsHtml($ipdId);
+        if ($opdStyleMedHtml !== '') {
+            $dischargeMedications = $opdStyleMedHtml;
+        } elseif ($dischargeMedications !== '') {
+            // Sanitize any leftover action links from cached HTML (Edit/Remove buttons)
+            $dischargeMedications = (string) preg_replace(
+                '/<\s*a\b[^>]*>\s*(?:Edit|Remove|Delete)\s*<\/a>/i',
+                '',
+                $dischargeMedications
+            );
+        }
         $dietaryAdvice = $section(['Dietary Advice'], ['Review after', 'Review After']);
         $dietaryAdvice = $this->trimDietaryAdviceTail($dietaryAdvice);
         $drugAllergyAdr = $section(['Drug Allergy / ADR']);
@@ -810,6 +837,9 @@ class Ipd_discharge extends BaseController
             'EXAMINATION_ON_DISCHARGE' => $examOnDischarge,
             
             // Discharge instructions and advice
+            'PRESCRIBED_MEDICINES' => $dischargeMedications,
+            'Prescribed_Medicines' => $dischargeMedications,
+            'prescribed_medicines' => $dischargeMedications,
             'DISCHARGE_MEDICATIONS' => $dischargeMedications,
             'DIETARY_ADVICE' => $dietaryAdvice,
             'DISCHARGE_INSTRUCTIONS' => '',
@@ -2063,6 +2093,334 @@ class Ipd_discharge extends BaseController
     }
 
     /**
+     * Build an OPD-style medication table for the {{DISCHARGE_MEDICATIONS}} template placeholder.
+     *
+     * Output matches the OPD {{medical}} format:
+     *   | # | Medicine (bold) + generic (small blue) | Directions (English) + Hindi (orange) |
+     *
+     * Data sources (in priority order):
+     *   1. ipd_discharge_prescrption_prescribed  – structured prescription rows (dosage IDs)
+     *   2. ipd_discharge_drug                    – legacy simple drug rows
+     */
+    private function buildOpdStyleMedicationsHtml(int $ipdId): string
+    {
+        if ($ipdId <= 0) {
+            return '';
+        }
+
+        // ── 1. Try structured prescription rows ─────────────────────────────────
+        $prescTable = $this->findFirstExistingTable([
+            'ipd_discharge_prescrption_prescribed',
+            'ipd_discharge_prescription_prescribed',
+        ]);
+
+        $medRows = $prescTable !== null
+            ? $this->byIpdRows($prescTable, [
+                'med_name', 'med_salt', 'med_type',
+                'dosage', 'dosage_when', 'dosage_freq',
+                'qty', 'no_of_days', 'remark',
+              ], 'id ASC', $ipdId)
+            : [];
+
+        // ── 2. Fallback to legacy ipd_discharge_drug rows ───────────────────────
+        $useLegacy = empty($medRows);
+        if ($useLegacy) {
+            $drugRows = $this->byIpdRows(
+                'ipd_discharge_drug',
+                ['drug_name', 'drug_dose', 'drug_day'],
+                'id ASC',
+                $ipdId
+            );
+            // Convert legacy rows to the same shape as prescription rows
+            foreach ($drugRows as $dr) {
+                $name = trim((string) ($dr['drug_name'] ?? ''));
+                if ($name === '') {
+                    continue;
+                }
+                $medRows[] = [
+                    'med_name'     => $name,
+                    'med_salt'     => '',
+                    'med_type'     => '',
+                    'dosage'       => 0,
+                    'dosage_when'  => 0,
+                    'dosage_freq'  => 0,
+                    'qty'          => '',
+                    'no_of_days'   => trim((string) ($dr['drug_day'] ?? '')),
+                    'remark'       => trim((string) ($dr['drug_dose'] ?? '')), // dose string goes to remark column
+                ];
+            }
+        }
+
+        if (empty($medRows)) {
+            return '';
+        }
+
+        // ── Hindi lookup maps (mirrors OPD Opd.php maps) ────────────────────────
+        $whenCodeDescMap = [
+            'BF'  => 'BF (BEFORE FOOD)',  'AF'  => 'AF (AFTER FOOD)',
+            'WF'  => 'WF (WITH FOOD)',    'ES'  => 'ES (EMPTY STOMACH)',
+            'BBF' => 'BBF (BEFORE BREAKFAST)', 'ABF' => 'ABF (AFTER BREAKFAST)',
+            'BL'  => 'BL (BEFORE LUNCH)', 'AL'  => 'AL (AFTER LUNCH)',
+            'BD'  => 'BD (BEFORE DINNER)', 'AD'  => 'AD (AFTER DINNER)',
+            'BT'  => 'BT (BED TIME)',
+        ];
+        $whenHindiMap = [
+            'BF' => 'भोजन से पहले', 'BEFORE FOOD' => 'भोजन से पहले',
+            'AF' => 'भोजन के बाद',  'AFTER FOOD'  => 'भोजन के बाद',
+            'WF' => 'भोजन के साथ',  'WITH FOOD'   => 'भोजन के साथ',
+            'ES' => 'सुबह खाली पेट', 'EMPTY STOMACH' => 'सुबह खाली पेट',
+            'BBF'=> 'नाश्ते से पहले', 'BEFORE BREAKFAST' => 'नाश्ते से पहले',
+            'ABF'=> 'नाश्ते के बाद',  'AFTER BREAKFAST'  => 'नाश्ते के बाद',
+            'BL' => 'दोपहर के भोजन से पहले', 'BEFORE LUNCH' => 'दोपहर के भोजन से पहले',
+            'AL' => 'दोपहर के भोजन के बाद',  'AFTER LUNCH'  => 'दोपहर के भोजन के बाद',
+            'BD' => 'रात के भोजन से पहले',   'BEFORE DINNER'=> 'रात के भोजन से पहले',
+            'AD' => 'रात के भोजन के बाद',    'AFTER DINNER' => 'रात के भोजन के बाद',
+            'BT' => 'रात को सोते समय',       'BED TIME'     => 'रात को सोते समय',
+        ];
+        $freqHindiMap = [
+            'OD'  => 'दिन में एक बार (OD)',   'BD'  => 'दिन में दो बार (BD)',
+            'TDS' => 'दिन में तीन बार (TDS)', 'TID' => 'दिन में तीन बार (TID)',
+            'QID' => 'दिन में चार बार (QID)', 'HS'  => 'रात को सोते समय (HS)',
+            'SOS' => 'ज़रूरत पड़ने पर (SOS)',  'STAT'=> 'तुरंत एक बार (STAT)',
+            'ALTERNATE DAY' => 'एक दिन छोड़कर',
+            'DAILY'   => 'प्रतिदिन',
+            'WEEKLY'  => 'हफ़्ते में एक बार',
+            'MONTHLY' => 'महीने में एक बार',
+        ];
+        $remarkHindiMap = [
+            'TAKE WITH MILK'                    => 'दूध के साथ लें',
+            'TAKE WITH WARM WATER'              => 'गुनगुने पानी के साथ लें',
+            'AVOID SOUR FOOD AND DAIRY PRODUCTS'=> 'खट्टा और डेयरी उत्पाद न लें',
+            'TAKE AFTER MEALS'                  => 'भोजन के बाद लें',
+            'TAKE ON AN EMPTY STOMACH EARLY MORNING' => 'सुबह खाली पेट लें',
+            'CHEW WELL BEFORE SWALLOWING'       => 'चबाकर खाएं',
+            'DISSOLVE IN HALF GLASS OF WATER'   => 'आधे गिलास पानी में घोलकर लें',
+            'APPLY LOCALLY TWICE DAILY'         => 'दिन में दो बार लगाएं',
+            'DO NOT CRUSH OR CHEW TABLET'       => 'गोली को तोड़े या चबाएं नहीं',
+            'AVOID ALCOHOL WHILE TAKING THIS MEDICINE' => 'शराब का सेवन न करें',
+            'COMPLETE FULL COURSE OF ANTIBIOTICS'      => 'एंटीबायोटिक का पूरा कोर्स लें',
+            'DRINK PLENTY OF FLUIDS / WATER'    => 'प्रचुर मात्रा में पानी पिएं',
+        ];
+        $formulationPrefixMap = [
+            'tablet' => 'TAB', 'tab' => 'TAB',
+            'capsule'=> 'CAP', 'cap' => 'CAP',
+            'syrup'  => 'SYP', 'syp' => 'SYP', 'syr' => 'SYP',
+            'injection'=> 'INJ', 'inj'=> 'INJ',
+            'drop'   => 'DROP', 'drops' => 'DROPS',
+            'cream'  => 'CREAM', 'ointment' => 'OINT', 'gel' => 'GEL',
+            'lotion' => 'LOTION', 'powder' => 'POWDER', 'sachet' => 'SACHET',
+            'spray'  => 'SPRAY',
+        ];
+
+        // Also load opd_dose_when Hindi labels from DB (same as OPD controller)
+        $doseWhenHindiMap = [];
+        if ($this->db->tableExists('opd_dose_when')) {
+            $whenRows = $this->db->table('opd_dose_when')
+                ->select('dose_sign, dose_sign_hindi')->get()->getResultArray();
+            foreach ($whenRows as $r) {
+                $k = strtolower(trim((string) ($r['dose_sign'] ?? '')));
+                $v = trim((string) ($r['dose_sign_hindi'] ?? ''));
+                if ($k !== '' && $v !== '') {
+                    $doseWhenHindiMap[$k] = $v;
+                }
+            }
+        }
+        $doseFreqHindiMap = [];
+        if ($this->db->tableExists('opd_dose_frequency')) {
+            $freqRows = $this->db->table('opd_dose_frequency')
+                ->select('dose_sign, dose_sign_hindi')->get()->getResultArray();
+            foreach ($freqRows as $r) {
+                $k = strtolower(trim((string) ($r['dose_sign'] ?? '')));
+                $v = trim((string) ($r['dose_sign_hindi'] ?? ''));
+                if ($k !== '' && $v !== '') {
+                    $doseFreqHindiMap[$k] = $v;
+                }
+            }
+        }
+
+        // ── Build the table ─────────────────────────────────────────────────────
+        $html  = '<table width="100%" style="border-collapse:collapse;font-size:12px;border:1px solid #333333;margin-top:5px;margin-bottom:5px;">'
+               . '<thead><tr style="background:#f2f2f2;border-bottom:1px solid #333333;">'
+               . '<th style="padding:6px 8px;text-align:left;width:5%;font-weight:bold;color:#000000;border-right:1px solid #cccccc;">#</th>'
+               . '<th style="padding:6px 8px;text-align:left;width:40%;font-weight:bold;color:#000000;border-right:1px solid #cccccc;">Medicine</th>'
+               . '<th style="padding:6px 8px;text-align:left;width:55%;font-weight:bold;color:#000000;">Directions</th>'
+               . '</tr></thead><tbody>';
+
+        $i = 0;
+        foreach ($medRows as $med) {
+            $rawName       = trim((string) ($med['med_name'] ?? ''));
+            if ($rawName === '') {
+                continue;
+            }
+            $i++;
+            $formulationRaw = trim((string) ($med['med_type'] ?? ''));
+            $generic        = trim((string) ($med['med_salt'] ?? ''));
+            $remark         = trim((string) ($med['remark']   ?? ''));
+            $days           = trim((string) ($med['no_of_days'] ?? ''));
+
+            // Auto-resolve generic / salt name from master database if not present on row
+            if ($generic === '' && $this->db->tableExists('opd_med_master')) {
+                $cleanMedName = trim((string) preg_replace('/^(TAB|CAP|SYP|INJ|CREAM|OINT|GEL|DROPS|SPRAY)\s+/i', '', $rawName));
+                if ($cleanMedName !== '') {
+                    $masterRow = $this->db->table('opd_med_master')
+                        ->select('genericname, salt_name')
+                        ->groupStart()
+                            ->where('item_name', $cleanMedName)
+                            ->orLike('item_name', $cleanMedName, 'after')
+                            ->orLike('item_name', $cleanMedName, 'both')
+                        ->groupEnd()
+                        ->limit(1)
+                        ->get()
+                        ->getRowArray();
+
+                    if (!empty($masterRow)) {
+                        $generic = trim((string) (!empty($masterRow['genericname']) ? $masterRow['genericname'] : ($masterRow['salt_name'] ?? '')));
+                    }
+
+                    // Fallback to matching first significant keyword (e.g. "PANTOP" or "ACILOC")
+                    if ($generic === '') {
+                        $words = preg_split('/[\s\-_]+/', $cleanMedName);
+                        if (is_array($words)) {
+                            foreach ($words as $w) {
+                                if (strlen($w) >= 4) {
+                                    $kwRow = $this->db->table('opd_med_master')
+                                        ->select('genericname, salt_name')
+                                        ->groupStart()
+                                            ->like('item_name', $w, 'after')
+                                            ->orLike('genericname', $w, 'after')
+                                            ->orLike('salt_name', $w, 'after')
+                                        ->groupEnd()
+                                        ->limit(1)
+                                        ->get()
+                                        ->getRowArray();
+                                    if (!empty($kwRow)) {
+                                        $generic = trim((string) (!empty($kwRow['genericname']) ? $kwRow['genericname'] : ($kwRow['salt_name'] ?? '')));
+                                        if ($generic !== '') {
+                                            break;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+
+            // Determine formulation prefix (TAB, CAP, SYP …)
+            $formKey  = strtolower($formulationRaw);
+            $formType = $formulationPrefixMap[$formKey] ?? strtoupper($formulationRaw);
+            if ($formType === '') {
+                if (preg_match('/^(TAB|CAP|SYP|INJ|CREAM|OINT|GEL|DROPS|SPRAY)\b/i', $rawName, $m)) {
+                    $formType = strtoupper($m[1]);
+                } else {
+                    $formType = 'TAB';
+                }
+            }
+            $fullName = $rawName;
+            if ($formType !== '' && preg_match('/^' . preg_quote($formType, '/') . '\b/i', $fullName) !== 1) {
+                $fullName = $formType . ' ' . $fullName;
+            }
+
+            // Medicine column HTML (B&W printer friendly: bold black name with crisp dark-gray italic generic name)
+            $nameHtml = '<strong>' . esc($fullName) . '</strong>';
+            if ($generic !== '') {
+                $nameHtml .= '<div style="font-size:10px;color:#333333;font-style:italic;font-weight:normal;margin-top:2px;">' . esc($generic) . '</div>';
+            }
+
+            // Directions: dosage/dosage_when/dosage_freq are stored as plain text labels
+            // (e.g. "BBF (BEFORE BREAKFAST)", "EMPTY STOMACH", "BD"), NOT integer IDs.
+            $doseText = trim((string) ($med['dosage']      ?? ''));
+            $whenText = trim((string) ($med['dosage_when'] ?? ''));
+            $freqText = trim((string) ($med['dosage_freq'] ?? ''));
+
+            // Sanitize remark: strip known UI action-button artefacts stored by the serializer
+            $rawRemark = trim((string) ($med['remark'] ?? ''));
+            // Remove patterns like "Edit", "Remove", "EditRemove", "Edit Remove" (case-insensitive)
+            $cleanRemark = (string) preg_replace('/^(edit\s*remove|remove\s*edit|edit|remove|delete)\s*$/i', '', $rawRemark);
+            $cleanRemark = trim($cleanRemark);
+
+            $dirParts      = [];
+            $dirLocalParts = [];
+
+            // ── When (Relation to Food) ──────────────────────────────────────────
+            if ($whenText !== '') {
+                $upperWhen = strtoupper($whenText);
+                // Expand short codes to descriptive form
+                if (isset($whenCodeDescMap[$upperWhen])) {
+                    $dirParts[] = $whenCodeDescMap[$upperWhen];
+                } else {
+                    $dirParts[] = $whenText;
+                }
+                // Hindi translation
+                if (isset($whenHindiMap[$upperWhen])) {
+                    $dirLocalParts[] = $whenHindiMap[$upperWhen];
+                } elseif (isset($doseWhenHindiMap[strtolower($whenText)])) {
+                    $dirLocalParts[] = $doseWhenHindiMap[strtolower($whenText)];
+                }
+            }
+
+            // ── Dose / Schedule (e.g. "BBF (BEFORE BREAKFAST)", "1 Tab") ────────
+            if ($doseText !== '') {
+                $dirParts[] = $doseText;
+            }
+
+            // ── Frequency (OD, BD, TDS …) ────────────────────────────────────────
+            if ($freqText !== '') {
+                $upperFreq = strtoupper($freqText);
+                $dirParts[] = $freqText;
+                if (isset($freqHindiMap[$upperFreq])) {
+                    $dirLocalParts[] = $freqHindiMap[$upperFreq];
+                } elseif (isset($doseFreqHindiMap[strtolower($freqText)])) {
+                    $dirLocalParts[] = $doseFreqHindiMap[strtolower($freqText)];
+                }
+            }
+
+            // ── Remark (Medicine Advice) — only if clean ─────────────────────────
+            if ($cleanRemark !== '') {
+                $upperRemark = strtoupper($cleanRemark);
+                $dirParts[]  = $cleanRemark;
+                if (isset($remarkHindiMap[$upperRemark])) {
+                    $dirLocalParts[] = $remarkHindiMap[$upperRemark];
+                }
+            }
+
+            if ($days !== '') {
+                $daysText = is_numeric($days) ? $days . ' Days' : $days;
+                $dirParts[] = $daysText;
+                $daysNum = is_numeric($days) ? (int) $days : 0;
+                if ($daysNum > 0) {
+                    $dirLocalParts[] = $daysNum . ' दिन';
+                } elseif (stripos($days, 'week') !== false) {
+                    $dirLocalParts[] = '1 हफ़्ता';
+                } elseif (stripos($days, 'month') !== false) {
+                    $dirLocalParts[] = '1 महीना';
+                }
+            }
+
+            $directionsText = !empty($dirParts) ? implode(' | ', $dirParts) : '-';
+            $localText      = !empty($dirLocalParts)
+                ? implode(' | ', array_values(array_unique($dirLocalParts)))
+                : '';
+
+            $html .= '<tr style="border-bottom:1px solid #cccccc;">'
+                   . '<td style="padding:6px 8px;vertical-align:middle;text-align:left;border-right:1px solid #e0e0e0;color:#000000;">' . $i . '</td>'
+                   . '<td style="padding:6px 8px;vertical-align:middle;text-align:left;border-right:1px solid #e0e0e0;color:#000000;">' . $nameHtml . '</td>'
+                   . '<td style="padding:6px 8px;vertical-align:middle;text-align:left;color:#000000;">'
+                   . '<div>' . esc($directionsText) . '</div>'
+                   . ($localText !== '' ? '<div style="font-size:11px;color:#333333;line-height:1.4;margin-top:2px;" lang="hi">' . esc($localText) . '</div>' : '')
+                   . '</td>'
+                   . '</tr>';
+        }
+
+        if ($i === 0) {
+            return '';
+        }
+
+        $html .= '</tbody></table>';
+        return '<h4 class="discharge-section-heading">Prescribed Medicines</h4>' . $html;
+    }
+
+    /**
      * Build dosage display string from dosage IDs.
      * Returns format: "BID (TWO TIME A DAY) / दिन में दो बार लेना"
      */
@@ -2447,25 +2805,27 @@ class Ipd_discharge extends BaseController
         // This matches CI3 behavior where template controlled the patient info display.
 
         // Build Discharge Summary section with status and free-text content
-        // IMPORTANT: Keep "Discharge Summary" heading for template section extraction to work!
         $dischargeStatusText = $this->getDischargeStatusText($ipd);
+        $isStandardStatus = ($dischargeStatusText === '' || strcasecmp($dischargeStatusText, 'Discharge Summary') === 0);
         
         // Get discharge summary free-text content from ipd_discharge_instructions.comp_remark
-        // (instructionRowForMeta was already loaded above at line ~1856)
         $dischargeSummaryText = $this->normalizeRichText((string) ($instructionRowForMeta['comp_remark'] ?? ''));
         
-        if ($dischargeStatusText !== '' || $dischargeSummaryText !== '') {
-            $summaryHtml = '<h4 class="discharge-section-heading">Discharge Summary</h4>';
-            
-            if ($dischargeStatusText !== '') {
-                $summaryHtml .= '<div class="discharge-status"><strong>' . esc($dischargeStatusText) . '</strong></div>';
-            }
-            
+        // Only include the section if there is actual narrative text OR a non-default status (e.g. LAMA, Dead Summary)
+        if ($dischargeSummaryText !== '' || ! $isStandardStatus) {
+            $summaryHtml = '';
             if ($dischargeSummaryText !== '') {
+                $summaryHtml = '<h4 class="discharge-section-heading">Discharge Summary</h4>';
+                if (! $isStandardStatus) {
+                    $summaryHtml .= '<div class="discharge-status"><strong>' . esc($dischargeStatusText) . '</strong></div>';
+                }
                 $summaryHtml .= '<div class="discharge-summary-content">' . $this->renderRichText($dischargeSummaryText) . '</div>';
+            } elseif (! $isStandardStatus) {
+                $summaryHtml = '<div class="discharge-status"><strong>' . esc($dischargeStatusText) . '</strong></div>';
             }
-            
-            $sections[] = $summaryHtml;
+            if ($summaryHtml !== '') {
+                $sections[] = $summaryHtml;
+            }
         }
 
         $complaints = $this->byIpdRows('ipd_discharge_complaint', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
@@ -2773,89 +3133,11 @@ class Ipd_discharge extends BaseController
             $sections[] = $procedureBlock;
         }
 
-        $drugRows = $this->byIpdRows('ipd_discharge_drug', ['drug_name', 'drug_dose', 'drug_day'], 'id ASC', $ipdId);
-        if (! empty($drugRows)) {
-            $html = '<h4 class="discharge-section-heading">Discharge Medications</h4>'
-                . '<table class="discharge-medicine-table">'
-                . '<thead><tr><th>Medicine Name</th><th>Dosage</th><th>Qty</th><th>Day</th></tr></thead>'
-                . '<tbody>';
-            foreach ($drugRows as $row) {
-                $drugName = trim((string) ($row['drug_name'] ?? ''));
-                if ($drugName === '') {
-                    continue;
-                }
-
-                $dose = trim((string) ($row['drug_dose'] ?? ''));
-                $days = trim((string) ($row['drug_day'] ?? ''));
-
-                $html .= '<tr>'
-                    . '<td>' . esc($drugName) . '</td>'
-                    . '<td>' . esc($dose) . '</td>'
-                    . '<td></td>'
-                    . '<td>' . esc($days) . '</td>'
-                    . '</tr>';
-            }
-            $html .= '</tbody></table>';
-            $sections[] = $html;
-        } else {
-            $medRows = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['med_name', 'med_salt', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'qty', 'no_of_days', 'remark'], 'id ASC', $ipdId);
-            if (! empty($medRows)) {
-                $html = '<h4 class="discharge-section-heading">Discharge Medications</h4>'
-                    . '<table class="discharge-medicine-table">'
-                    . '<thead><tr><th>Medicine Name</th><th>Dosage</th><th>Qty</th><th>Day</th></tr></thead>'
-                    . '<tbody>';
-                foreach ($medRows as $row) {
-                    $medName = trim((string) ($row['med_name'] ?? ''));
-                    if ($medName === '') {
-                        continue;
-                    }
-                    $medType = trim((string) ($row['med_type'] ?? ''));
-                    $label = ($medType !== '' ? esc($medType) . ' ' : '') . esc($medName);
-                    
-                    // Build dosage display with English + Hindi labels
-                    $doseId = (int) ($row['dosage'] ?? 0);
-                    $whenId = (int) ($row['dosage_when'] ?? 0);
-                    $freqId = (int) ($row['dosage_freq'] ?? 0);
-                    $dosageDisplay = $this->buildDosageDisplay($doseId, $whenId, $freqId);
-                    
-                    // Add composition if med_type contains it (for legacy compatibility)
-                    $composition = '';
-                    if (stripos($medType, ':') !== false) {
-                        $parts = explode(':', $medType, 2);
-                        if (count($parts) === 2) {
-                            $medType = trim($parts[0]);
-                            $composition = trim($parts[1]);
-                            $label = ($medType !== '' ? esc($medType) . ' ' : '') . esc($medName);
-                        }
-                    }
-                    
-                    $html .= '<tr>'
-                        . '<td>' . $label;
-                    
-                    if ($composition !== '') {
-                        $html .= '<br><small class="discharge-composition">Composition : ' . esc($composition) . '</small>';
-                    }
-                    $advice = trim((string) ($row['remark'] ?? ''));
-                    if ($advice !== '') {
-                        $html .= '<br><span class="discharge-medicine-advice">Medicine Advice: ' . esc($advice) . '</span>';
-                    }
-                    
-                    $html .= '</td>'
-                        . '<td>' . ($dosageDisplay !== '' ? esc($dosageDisplay) : '-') . '</td>'
-                        . '<td>' . esc((string) ($row['qty'] ?? '')) . '</td>'
-                        . '<td>' . esc((string) ($row['no_of_days'] ?? '')) . '</td>'
-                        . '</tr>';
-
-                    $saltName = trim((string) ($row['med_salt'] ?? ''));
-                    if ($saltName !== '') {
-                        $html .= '<tr class="discharge-medicine-salt-row">'
-                            . '<td colspan="4" class="discharge-medicine-salt">' . esc($saltName) . '</td>'
-                            . '</tr>';
-                    }
-                }
-                $html .= '</tbody></table>';
-                $sections[] = $html;
-            }
+        // Build Discharge Medications in OPD-style table format
+        // (# | Medicine bold + generic | Directions English + Hindi)
+        $dischargeMedHtml = $this->buildOpdStyleMedicationsHtml($ipdId);
+        if ($dischargeMedHtml !== '') {
+            $sections[] = $dischargeMedHtml;
         }
 
         $instructions = $this->byIpdRows('ipd_discharge_instructions', ['comp_report', 'comp_remark', 'review_after', 'footer_text'], 'id DESC', $ipdId);
@@ -6963,6 +7245,7 @@ class Ipd_discharge extends BaseController
 
                                     $optionalFields = [
                                         'med_type' => 'med_type',
+                                        'med_salt' => 'med_salt',
                                         'dosage' => 'dosage',
                                         'dosage_when' => 'dosage_when',
                                         'dosage_freq' => 'dosage_freq',
@@ -8025,6 +8308,19 @@ class Ipd_discharge extends BaseController
         // Remove @page header/footer name bindings that require matching named header/footer blocks.
         $out = (string) preg_replace('/\bheader\s*:\s*html[_a-z0-9-]+\s*;?/i', '', $out);
         $out = (string) preg_replace('/\bfooter\s*:\s*html[_a-z0-9-]+\s*;?/i', '', $out);
+
+        // Clean empty "Discharge Summary" heading stubs that have no narrative content
+        $out = (string) preg_replace(
+            '/<h[1-6]\b[^>]*class="[^"]*discharge-section-heading[^"]*"[^>]*>\s*Discharge\s+Summary\s*<\/h[1-6]>\s*(?:<div class="discharge-status">\s*<strong>\s*Discharge\s+Summary\s*<\/strong>\s*<\/div>\s*)?(?!<div class="discharge-summary-content">)/i',
+            '',
+            $out
+        );
+        // Clean standalone discharge-status tag when it simply says "Discharge Summary"
+        $out = (string) preg_replace(
+            '/<div class="discharge-status">\s*<strong>\s*Discharge\s+Summary\s*<\/strong>\s*<\/div>/i',
+            '',
+            $out
+        );
 
         if ($this->looksLikeMalformedDischargeHtml($out)) {
             $out = $this->normalizeMalformedDischargeHtmlForMpdf($out);
