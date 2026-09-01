@@ -6277,19 +6277,58 @@ class Ipd_discharge extends BaseController
                     $noticeType = 'warning';
                 }
             } elseif ($action === 'add_drug') {
-                $name = trim((string) ($this->request->getPost('new_drug_name') ?? ''));
-                $type = trim((string) ($this->request->getPost('new_drug_type') ?? ''));
-                $dose = trim((string) ($this->request->getPost('new_drug_dose') ?? ''));
-                $when = trim((string) ($this->request->getPost('new_drug_when') ?? ''));
-                $freq = trim((string) ($this->request->getPost('new_drug_freq') ?? ''));
-                $day = trim((string) ($this->request->getPost('new_drug_day') ?? ''));
-                $qty = trim((string) ($this->request->getPost('new_drug_qty') ?? ''));
-                $remark = trim((string) ($this->request->getPost('new_drug_remark') ?? ''));
-                $salt = trim((string) ($this->request->getPost('new_drug_salt') ?? ''));
-                $editId = (int) ($this->request->getPost('drug_edit_id') ?? 0);
+                $name = trim((string) (
+                    $this->request->getPost('new_drug_name')
+                    ?? $this->request->getPost('med_name')
+                    ?? $this->request->getPost('drug_name')
+                    ?? ''
+                ));
+                $type = trim((string) (
+                    $this->request->getPost('new_drug_type')
+                    ?? $this->request->getPost('med_type')
+                    ?? ''
+                ));
+                $dose = trim((string) (
+                    $this->request->getPost('new_drug_dose')
+                    ?? $this->request->getPost('dosage')
+                    ?? ''
+                ));
+                $when = trim((string) (
+                    $this->request->getPost('new_drug_when')
+                    ?? $this->request->getPost('dosage_when')
+                    ?? ''
+                ));
+                $freq = trim((string) (
+                    $this->request->getPost('new_drug_freq')
+                    ?? $this->request->getPost('dosage_freq')
+                    ?? ''
+                ));
+                $day = trim((string) (
+                    $this->request->getPost('new_drug_day')
+                    ?? $this->request->getPost('no_of_days')
+                    ?? ''
+                ));
+                $qty = trim((string) (
+                    $this->request->getPost('new_drug_qty')
+                    ?? $this->request->getPost('qty')
+                    ?? ''
+                ));
+                $remark = trim((string) (
+                    $this->request->getPost('new_drug_remark')
+                    ?? $this->request->getPost('remark')
+                    ?? ''
+                ));
+                $salt = trim((string) (
+                    $this->request->getPost('new_drug_salt')
+                    ?? $this->request->getPost('med_salt')
+                    ?? ''
+                ));
+                $editId = (int) ($this->request->getPost('drug_edit_id') ?? $this->request->getPost('edit_id') ?? 0);
                 $editSource = strtolower(trim((string) ($this->request->getPost('drug_edit_source') ?? 'legacy')));
 
                 $legacyDrugTable = $this->findFirstExistingTable(['ipd_discharge_prescrption_prescribed', 'ipd_discharge_prescription_prescribed']);
+                log_message('error', '[IPD_DISCHARGE_ADD_DRUG] ipdId=' . $ipdId . ', name=' . $name . ', editId=' . $editId . ', legacyTable=' . var_export($legacyDrugTable, true));
+
                 if ($name !== '' && $editId > 0) {
                     $updated = false;
 
@@ -6315,10 +6354,15 @@ class Ipd_discharge extends BaseController
                         }
 
                         if (! empty($allowed)) {
-                            $updated = (bool) $this->db->table($legacyDrugTable)
-                                ->where('id', $editId)
-                                ->where('ipd_id', $ipdId)
-                                ->update($allowed);
+                            try {
+                                $updated = (bool) $this->db->table($legacyDrugTable)
+                                    ->where('id', $editId)
+                                    ->where('ipd_id', $ipdId)
+                                    ->update($allowed);
+                            } catch (\Throwable $e) {
+                                log_message('error', '[IPD_DISCHARGE_UPDATE_LEGACY_EX] ' . $e->getMessage());
+                                $notice = 'Update DB Error: ' . $e->getMessage();
+                            }
                         }
 
                         if ($updated) {
@@ -6337,10 +6381,15 @@ class Ipd_discharge extends BaseController
                             'update_by' => $userLabel,
                         ];
 
-                        $updated = (bool) $this->db->table('ipd_discharge_drug')
-                            ->where('id', $editId)
-                            ->where('ipd_id', $ipdId)
-                            ->update($update);
+                        try {
+                            $updated = (bool) $this->db->table('ipd_discharge_drug')
+                                ->where('id', $editId)
+                                ->where('ipd_id', $ipdId)
+                                ->update($update);
+                        } catch (\Throwable $e) {
+                            log_message('error', '[IPD_DISCHARGE_UPDATE_CLASSIC_EX] ' . $e->getMessage());
+                            $notice = 'Update DB Error: ' . $e->getMessage();
+                        }
 
                         if ($updated) {
                             $ajaxRowId = $editId;
@@ -6349,7 +6398,7 @@ class Ipd_discharge extends BaseController
                     }
 
                     $savedAny = $updated;
-                    $notice = $savedAny ? 'Medicine row updated.' : 'Unable to update medicine row.';
+                    $notice = $savedAny ? 'Medicine row updated.' : (empty($notice) ? 'Unable to update medicine row.' : $notice);
                     $noticeType = $savedAny ? 'success' : 'warning';
                 } elseif ($name !== '' && $legacyDrugTable !== null && $this->tableHasColumns($legacyDrugTable, ['ipd_id', 'med_name'])) {
                     $insert = [
@@ -6377,14 +6426,20 @@ class Ipd_discharge extends BaseController
                         }
                     }
 
-                    $savedAny = ! empty($allowed)
-                        ? (bool) $this->db->table($legacyDrugTable)->insert($allowed)
-                        : false;
-                    if ($savedAny) {
-                        $ajaxRowId = (int) ($this->db->insertID() ?? 0);
-                        $ajaxRowSource = 'legacy';
+                    try {
+                        $savedAny = ! empty($allowed)
+                            ? (bool) $this->db->table($legacyDrugTable)->insert($allowed)
+                            : false;
+                        if ($savedAny) {
+                            $ajaxRowId = (int) ($this->db->insertID() ?? 0);
+                            $ajaxRowSource = 'legacy';
+                        }
+                        $notice = $savedAny ? 'Medicine row added.' : 'Unable to insert into table ' . $legacyDrugTable;
+                    } catch (\Throwable $e) {
+                        log_message('error', '[IPD_DISCHARGE_INSERT_LEGACY_EX] ' . $e->getMessage());
+                        $savedAny = false;
+                        $notice = 'Database error: ' . $e->getMessage();
                     }
-                    $notice = $savedAny ? 'Medicine row added.' : 'Unable to add medicine row.';
                     $noticeType = $savedAny ? 'success' : 'warning';
                 } elseif ($name !== '' && $this->tableHasColumns('ipd_discharge_drug', ['ipd_id', 'drug_name'])) {
                     $doseText = trim(implode(' ', array_filter([$type, $dose, $when, $freq], static fn ($v) => trim((string) $v) !== '')));
@@ -6401,12 +6456,19 @@ class Ipd_discharge extends BaseController
                     if ($this->db->fieldExists('order_id', 'ipd_discharge_drug')) {
                         $insert['order_id'] = 0;
                     }
-                    $savedAny = (bool) $this->db->table('ipd_discharge_drug')->insert($insert);
-                    if ($savedAny) {
-                        $ajaxRowId = (int) ($this->db->insertID() ?? 0);
-                        $ajaxRowSource = 'classic';
+
+                    try {
+                        $savedAny = (bool) $this->db->table('ipd_discharge_drug')->insert($insert);
+                        if ($savedAny) {
+                            $ajaxRowId = (int) ($this->db->insertID() ?? 0);
+                            $ajaxRowSource = 'classic';
+                        }
+                        $notice = $savedAny ? 'Drug row added.' : 'Unable to insert into ipd_discharge_drug.';
+                    } catch (\Throwable $e) {
+                        log_message('error', '[IPD_DISCHARGE_INSERT_CLASSIC_EX] ' . $e->getMessage());
+                        $savedAny = false;
+                        $notice = 'Database error: ' . $e->getMessage();
                     }
-                    $notice = $savedAny ? 'Drug row added.' : 'Unable to add drug row.';
                     $noticeType = $savedAny ? 'success' : 'warning';
                 } else {
                     $notice = $name === ''
