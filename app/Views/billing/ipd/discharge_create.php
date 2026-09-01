@@ -1471,7 +1471,7 @@ $historyFields = [
                                                                 data-days="<?= esc((string) ($row['no_of_days'] ?? '')) ?>"
                                                                 data-qty="<?= esc((string) ($row['qty'] ?? '')) ?>"
                                                                 data-remark="<?= esc((string) ($row['remark'] ?? '')) ?>">Edit</button>
-                                                            <button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_drug" data-reload-section="section-medicine" onclick="document.getElementById('drug_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';document.getElementById('drug_remove_source').value='<?= esc((string) ($row['source'] ?? 'legacy')) ?>';">Remove</button>
+                                                            <button type="button" class="btn btn-outline-danger btn-sm btn-remove-discharge-med" data-id="<?= (int) ($row['id'] ?? 0) ?>" data-source="<?= esc((string) ($row['source'] ?? 'legacy')) ?>">Remove</button>
                                                         </td>
                                                     </tr>
                                             <?php endforeach;
@@ -1483,6 +1483,7 @@ $historyFields = [
                                     <button type="button" class="btn btn-sm btn-outline-danger" id="btn_discharge_med_reset" title="Remove all added medicines"><i class="bi bi-trash me-1"></i>Remove All</button>
                                 </div>
                                 <input type="hidden" name="drug_remove_id" id="drug_remove_id" value="0">
+                                <input type="hidden" name="drug_remove_source" id="drug_remove_source" value="legacy">
                                 <input type="hidden" name="discharge_medicine_json" id="discharge_medicine_json" value="">
                             </div>
                         </div>
