@@ -6809,6 +6809,11 @@ $historyFields = [
                         }).done(function(data) {
                             updateFormCsrf(activeForm, data || {});
 
+                            if (!data || typeof data !== 'object' || parseInt(data.update || '0', 10) !== 1) {
+                                setMedicineStatus((data && data.notice) ? data.notice : 'Failed to save medicine to database.', 'error');
+                                return;
+                            }
+
                             var tbody = section.querySelector('#discharge_medicine_tbody');
                             if (!tbody) {
                                 setMedicineStatus('Medicine table not found.', 'error');
@@ -6860,6 +6865,8 @@ $historyFields = [
                             if (targetRow) {
                                 var editBtn = targetRow.querySelector('.btn-edit-discharge-med');
                                 if (editBtn) {
+                                    editBtn.setAttribute('data-id', String(rowIdToUse));
+                                    editBtn.setAttribute('data-source', responseRowSource);
                                     editBtn.setAttribute('data-med-name', medName);
                                     editBtn.setAttribute('data-med-salt', medSalt);
                                     editBtn.setAttribute('data-med-type', medType);
@@ -6884,23 +6891,7 @@ $historyFields = [
                             serializeDischargeMedicineTable();
                             setMedicineStatus(editRowId > 0 ? 'Medicine updated successfully.' : 'Medicine saved successfully.', 'success');
                         }).fail(function(xhr, status, error) {
-                            var responseHtml = xhr && typeof xhr.responseText === 'string' ? xhr.responseText : '';
-                            if (responseHtml !== '' && responseHtml.indexOf('section-medicine') !== -1) {
-                                var holder = document.createElement('div');
-                                holder.innerHTML = responseHtml;
-                                if (patchSectionFromHtml(holder, 'section-medicine')) {
-                                    patchNoticeFromHtml(holder);
-                                    initMedicineTools();
-                                    bindDischargeAjaxSubmit();
-                                    syncNavOnScroll();
-                                    serializeDischargeMedicineTable();
-                                    setMedicineStatus('Medicine saved. Section refreshed from server response.', 'success');
-                                    return;
-                                }
-                            }
-
-                            serializeDischargeMedicineTable();
-                            setMedicineStatus('Medicine added to list. Click Save Discharge Summary to finalize.', 'info');
+                            setMedicineStatus('Failed to save medicine to database (' + (error || status || 'Connection error') + ').', 'error');
                         });
                     });
                 }
