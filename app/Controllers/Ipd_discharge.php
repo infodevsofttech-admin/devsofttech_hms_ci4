@@ -6204,7 +6204,7 @@ class Ipd_discharge extends BaseController
                 }
             }
 
-            if ($this->request->isAJAX() && in_array($action, ['add_surgery', 'remove_surgery', 'add_procedure', 'remove_procedure', 'add_diagnosis', 'remove_diagnosis', 'add_course', 'remove_course', 'add_drug', 'remove_drug'], true)) {
+            if (($this->request->isAJAX() || $this->request->getPost('ajax_mode') === 'json') && in_array($action, ['add_surgery', 'remove_surgery', 'add_procedure', 'remove_procedure', 'add_diagnosis', 'remove_diagnosis', 'add_course', 'remove_course', 'add_drug', 'remove_drug'], true)) {
                 $surgeryRows = $this->byIpdRows('ipd_discharge_surgery', ['id', 'surgery_name', 'surgery_date', 'surgery_remark'], 'id ASC', $ipdId);
                 $procedureRows = $this->byIpdRows('ipd_discharge_procedure', ['id', 'procedure_name', 'procedure_date', 'procedure_remark'], 'id ASC', $ipdId);
                 $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
@@ -6762,9 +6762,6 @@ class Ipd_discharge extends BaseController
                 }
 
                 // DISABLED: Legacy code that re-saved medicines on "Save Discharge Advice" button.
-                // Medicines are now saved immediately via Add button AJAX (action='add_drug').
-                // Keeping this code would create duplicate medicine entries.
-                /*
                 $medicineJson = trim((string) ($this->request->getPost('discharge_medicine_json') ?? ''));
                 if ($medicineJson !== '') {
                     $medicines = json_decode($medicineJson, true);
@@ -6777,40 +6774,46 @@ class Ipd_discharge extends BaseController
                         if ($legacyTable !== null) {
                             foreach ($medicines as $med) {
                                 $medName = trim((string) ($med['med_name'] ?? ''));
-                                if ($medName === '') {
+                                if ($medName === '' || $medName === 'No medicine added') {
                                     continue;
                                 }
 
-                                $insert = [
-                                    'ipd_id' => $ipdId,
-                                    'med_id' => 0,
-                                    'med_name' => $medName,
-                                    'update_by' => $userLabel,
-                                ];
+                                $exists = $this->db->table($legacyTable)
+                                    ->where('ipd_id', $ipdId)
+                                    ->where('med_name', $medName)
+                                    ->countAllResults();
 
-                                $optionalFields = [
-                                    'med_type' => 'med_type',
-                                    'dosage' => 'dosage',
-                                    'dosage_when' => 'dosage_when',
-                                    'dosage_freq' => 'dosage_freq',
-                                    'no_of_days' => 'no_of_days',
-                                    'qty' => 'qty',
-                                    'remark' => 'remark',
-                                ];
+                                if ($exists === 0) {
+                                    $insert = [
+                                        'ipd_id' => $ipdId,
+                                        'med_id' => 0,
+                                        'med_name' => $medName,
+                                        'update_by' => $userLabel,
+                                    ];
 
-                                foreach ($optionalFields as $jsonKey => $colName) {
-                                    if ($this->db->fieldExists($colName, $legacyTable)) {
-                                        $insert[$colName] = trim((string) ($med[$jsonKey] ?? ''));
+                                    $optionalFields = [
+                                        'med_type' => 'med_type',
+                                        'dosage' => 'dosage',
+                                        'dosage_when' => 'dosage_when',
+                                        'dosage_freq' => 'dosage_freq',
+                                        'no_of_days' => 'no_of_days',
+                                        'qty' => 'qty',
+                                        'remark' => 'remark',
+                                    ];
+
+                                    foreach ($optionalFields as $jsonKey => $colName) {
+                                        if ($this->db->fieldExists($colName, $legacyTable)) {
+                                            $insert[$colName] = trim((string) ($med[$jsonKey] ?? ''));
+                                        }
                                     }
-                                }
 
-                                $this->db->table($legacyTable)->insert($insert);
-                                $savedAny = true;
+                                    $this->db->table($legacyTable)->insert($insert);
+                                    $savedAny = true;
+                                }
                             }
                         }
                     }
                 }
-                */
 
                 // Examination on Admission (General Examination values).
                 if ($this->tableHasColumns('ipd_discharge_general_exam_col', ['id', 'col_name'])

@@ -126,7 +126,8 @@ if (! empty($legacyDrugRows)) {
             'remark' => (string) ($row['remark'] ?? ''),
         ];
     }
-} else {
+}
+if (! empty($drugRows)) {
     foreach ($drugRows as $row) {
         $medicineRows[] = [
             'id' => (int) ($row['id'] ?? 0),
@@ -6880,6 +6881,7 @@ $historyFields = [
                             resetMedicineFormState();
                             $('#discharge_med_name').focus();
 
+                            serializeDischargeMedicineTable();
                             setMedicineStatus(editRowId > 0 ? 'Medicine updated successfully.' : 'Medicine saved successfully.', 'success');
                         }).fail(function(xhr, status, error) {
                             var responseHtml = xhr && typeof xhr.responseText === 'string' ? xhr.responseText : '';
@@ -6891,12 +6893,14 @@ $historyFields = [
                                     initMedicineTools();
                                     bindDischargeAjaxSubmit();
                                     syncNavOnScroll();
+                                    serializeDischargeMedicineTable();
                                     setMedicineStatus('Medicine saved. Section refreshed from server response.', 'success');
                                     return;
                                 }
                             }
 
-                            setMedicineStatus('Medicine saved successfully.', 'success');
+                            serializeDischargeMedicineTable();
+                            setMedicineStatus('Medicine added to list. Click Save Discharge Summary to finalize.', 'info');
                         });
                     });
                 }
@@ -6955,6 +6959,7 @@ $historyFields = [
 
             function syncEditorValues() {
                 syncDischargeComplaintJsonField();
+                serializeDischargeMedicineTable();
 
                 if (!window.CKEDITOR) {
                     return;
