@@ -6525,25 +6525,26 @@ class Ipd_discharge extends BaseController
                 if ($removeId > 0) {
                     $deleted = false;
 
-                    if ($removeSource === 'legacy') {
-                        $legacyDrugTable = $this->findFirstExistingTable(['ipd_discharge_prescrption_prescribed', 'ipd_discharge_prescription_prescribed']);
-                        if ($legacyDrugTable !== null && $this->tableHasColumns($legacyDrugTable, ['id', 'ipd_id'])) {
-                            $deleted = (bool) $this->db->table($legacyDrugTable)
-                                ->where('id', $removeId)
-                                ->where('ipd_id', $ipdId)
-                                ->delete();
-                        }
-                    }
-
-                    if (! $deleted && $this->tableHasColumns('ipd_discharge_drug', ['id', 'ipd_id'])) {
-                        $deleted = (bool) $this->db->table('ipd_discharge_drug')
+                    $legacyDrugTable = $this->findFirstExistingTable(['ipd_discharge_prescrption_prescribed', 'ipd_discharge_prescription_prescribed']);
+                    if ($legacyDrugTable !== null && $this->tableHasColumns($legacyDrugTable, ['id', 'ipd_id'])) {
+                        $deleted = (bool) $this->db->table($legacyDrugTable)
                             ->where('id', $removeId)
                             ->where('ipd_id', $ipdId)
                             ->delete();
                     }
 
+                    if ($this->tableHasColumns('ipd_discharge_drug', ['id', 'ipd_id'])) {
+                        $deletedClassic = (bool) $this->db->table('ipd_discharge_drug')
+                            ->where('id', $removeId)
+                            ->where('ipd_id', $ipdId)
+                            ->delete();
+                        $deleted = $deleted || $deletedClassic;
+                    }
+
                     $savedAny = $deleted;
-                    $notice = $savedAny ? 'Drug row removed.' : 'Unable to remove drug row.';
+                    $ajaxRowId = $removeId;
+                    $ajaxRowSource = $removeSource;
+                    $notice = $savedAny ? 'Drug row removed.' : 'Unable to remove drug row from database.';
                     $noticeType = $savedAny ? 'success' : 'warning';
                 } else {
                     $notice = 'Select a valid drug row to remove.';
