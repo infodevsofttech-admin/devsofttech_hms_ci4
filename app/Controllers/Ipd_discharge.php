@@ -6204,7 +6204,7 @@ class Ipd_discharge extends BaseController
                 }
             }
 
-            if ($this->request->isAJAX() && in_array($action, ['add_surgery', 'remove_surgery', 'add_procedure', 'remove_procedure', 'add_diagnosis', 'remove_diagnosis', 'add_course', 'remove_course'], true)) {
+            if ($this->request->isAJAX() && in_array($action, ['add_surgery', 'remove_surgery', 'add_procedure', 'remove_procedure', 'add_diagnosis', 'remove_diagnosis', 'add_course', 'remove_course', 'add_drug', 'remove_drug'], true)) {
                 $surgeryRows = $this->byIpdRows('ipd_discharge_surgery', ['id', 'surgery_name', 'surgery_date', 'surgery_remark'], 'id ASC', $ipdId);
                 $procedureRows = $this->byIpdRows('ipd_discharge_procedure', ['id', 'procedure_name', 'procedure_date', 'procedure_remark'], 'id ASC', $ipdId);
                 $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
@@ -6213,6 +6213,8 @@ class Ipd_discharge extends BaseController
                     'update' => ($savedAny ?? false) ? 1 : 0,
                     'notice' => $notice ?? '',
                     'noticeType' => $noticeType ?? 'info',
+                    'row_id' => $ajaxRowId ?? 0,
+                    'row_source' => $ajaxRowSource ?? 'legacy',
                     'surgeryRows' => $surgeryRows,
                     'procedureRows' => $procedureRows,
                     'diagnosisRows' => $diagnosisRows,
