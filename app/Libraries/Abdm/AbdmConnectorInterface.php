@@ -120,6 +120,14 @@ interface AbdmConnectorInterface
     public function abhaEnrolMobileVerifyOtp(array $payload): array;
 
     /**
+     * ABDM M1: Select a specific ABHA account when multiple accounts are linked to mobile.
+     * Calls gateway POST /api/v3/abha/login/select-account
+     *
+     * @param array<string, mixed> $payload Must contain 'txnId', 'token', 'abha_number', 'abha_address'
+     */
+    public function abhaLoginSelectAccount(array $payload): array;
+
+    /**
      * ABDM M1: List ABHA address suggestions for an in-progress enrolment.
      *
      * @param array<string, mixed> $payload  Must contain 'txn_id'

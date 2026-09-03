@@ -999,6 +999,26 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         return $this->attachOfficialAbhaCard($result);
     }
 
+    public function abhaLoginSelectAccount(array $payload): array
+    {
+        $body = [
+            'txnId'        => (string) ($payload['txnId'] ?? $payload['txn_id'] ?? ''),
+            'token'        => (string) ($payload['token'] ?? ''),
+            'abha_number'  => (string) ($payload['abha_number'] ?? $payload['abhaNumber'] ?? ''),
+            'abha_address' => (string) ($payload['abha_address'] ?? $payload['abhaAddress'] ?? ''),
+        ];
+        if ($this->hfrId !== '' && empty($body['hfr_id'])) {
+            $body['hfr_id'] = $this->hfrId;
+        }
+
+        $result = $this->post('/v3/abha/login/select-account', $body);
+        if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+            return $result;
+        }
+
+        return $this->attachOfficialAbhaCard($result);
+    }
+
     public function abhaAddressSuggestions(array $payload): array
     {
         $txnId = (string) ($payload['txn_id'] ?? $payload['txnId'] ?? '');

@@ -376,10 +376,19 @@ class Abha extends BaseController
             'email' => $email,
         ];
 
+        $rawAccounts = is_array($payload['accounts'] ?? null)
+            ? $payload['accounts']
+            : (is_array($result['data']['accounts'] ?? null) ? $result['data']['accounts'] : []);
+        $txnIdOut = (string) ($payload['txnId'] ?? $payload['txn_id'] ?? $result['txn_id'] ?? $result['data']['txnId'] ?? $txnId);
+        $tokenOut = (string) ($payload['token'] ?? $result['data']['token'] ?? $result['token'] ?? '');
+
         $patientInfo = $this->tryAutoLinkByDirectMatch($abhaNum, $name, $mobile, $gender, $dob, $abhaMeta);
 
         $responseBase = [
             'ok'                => 1,
+            'txn_id'            => $txnIdOut,
+            'token'             => $tokenOut,
+            'accounts'          => $rawAccounts,
             'card_base64'       => $this->extractAbhaCardData($result),
             'card_content_type' => $this->resolveAbhaCardContentType($result),
             'card_source'       => $this->resolveAbhaCardSource($result),
@@ -417,6 +426,144 @@ class Abha extends BaseController
         $abhaNumClean = preg_replace('/\D/', '', $abhaNum);
         // No Aadhaar available on the pure mobile-OTP path.
         $candidates = $this->findMatchingCandidates($db, $fields, $name, $mobile, $gender, $dob, '', $abhaField, $abhaNumClean);
+
+        return $this->response->setJSON($responseBase + [
+            'need_confirmation' => true,
+            'patient_id'        => 0,
+            'p_code'            => '',
+            'is_new_patient'    => null,
+            'candidates'        => $candidates,
+        ]);
+    }
+
+    // -------------------------------------------------------------------------
+    // Multi-Account Selection for Mobile OTP (ABDM M1)
+    // POST abha/find/mobile/select-account
+    // -------------------------------------------------------------------------
+    public function selectAccount()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $txnId       = trim((string) ($this->request->getPost('txn_id') ?? $this->request->getPost('txnId') ?? ''));
+        $token       = trim((string) ($this->request->getPost('token') ?? ''));
+        $abhaNumber  = trim((string) ($this->request->getPost('abha_number') ?? $this->request->getPost('abhaNumber') ?? ''));
+        $abhaAddress = trim((string) ($this->request->getPost('abha_address') ?? $this->request->getPost('abhaAddress') ?? ''));
+        $mobile      = trim((string) ($this->request->getPost('mobile') ?? ''));
+
+        if ($txnId === '' && $token === '') {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'txn_id and token are required']);
+        }
+
+        try {
+            $result = AbdmConnectorFactory::make()->abhaLoginSelectAccount([
+                'txnId'        => $txnId,
+                'token'        => $token,
+                'abha_number'  => $abhaNumber,
+                'abha_address' => $abhaAddress,
+            ]);
+        } catch (\Throwable $e) {
+            return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
+        }
+
+        if (empty($result['ok']) || $result['ok'] != 1) {
+            return $this->response->setJSON([
+                'ok'         => 0,
+                'error_text' => $this->extractBridgeErrorText($result, 'Account selection failed'),
+                'request_id' => (string) ($result['request_id'] ?? ''),
+            ]);
+        }
+
+        $payload = $result;
+        if (is_array($result['data'] ?? null)) {
+            foreach ($result['data'] as $key => $value) {
+                if (! array_key_exists($key, $payload)) {
+                    $payload[$key] = $value;
+                }
+            }
+        }
+
+        $profile = $this->pickGatewayAbhaProfile($payload);
+        $abhaNum = (string) ($profile['ABHANumber'] ?? $profile['abha_id'] ?? $payload['ABHANumber'] ?? $payload['abha_id'] ?? $abhaNumber);
+        $resAbhaAddress = (string) (
+            ($profile['preferredAddress'] ?? '')
+            ?: ($profile['preferredAbhaAddress'] ?? '')
+            ?: ($profile['abha_address'] ?? '')
+            ?: ($payload['preferredAddress'] ?? '')
+            ?: ($payload['preferredAbhaAddress'] ?? '')
+            ?: ($payload['abha_address'] ?? '')
+            ?: $abhaAddress
+        );
+        $name             = $this->extractAbhaProfileName($profile, $payload);
+        $photo            = $this->extractAbhaProfilePhoto($profile, $payload);
+        $gender           = (string) ($profile['gender'] ?? $payload['gender'] ?? '');
+        $dob              = (string) ($profile['dob'] ?? $profile['date_of_birth'] ?? $payload['dob'] ?? $payload['date_of_birth'] ?? '');
+        $resMobile        = (string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? $mobile);
+        $verifiedStatus   = (string) (($payload['gateway_abha_profile']['status'] ?? '') ?: ($profile['verifiedStatus'] ?? '') ?: ($profile['status'] ?? '') ?: ($payload['verifiedStatus'] ?? '') ?: ($payload['status'] ?? ''));
+        $verificationType = (string) (($payload['gateway_abha_profile']['abha_type'] ?? '') ?: ($profile['verificationType'] ?? '') ?: ($profile['abhaType'] ?? '') ?: ($payload['verificationType'] ?? '') ?: ($payload['abhaType'] ?? ''));
+        $kycVerified      = $profile['kycVerified'] ?? $payload['kycVerified'] ?? null;
+        $mobileVerified   = $profile['mobileVerified'] ?? $payload['mobileVerified'] ?? null;
+        $address          = (string) (($profile['address'] ?? '') ?: ($profile['address_line'] ?? '') ?: ($payload['address'] ?? '') ?: ($payload['address_line'] ?? '') ?: ($payload['gateway_abha_profile']['address'] ?? '') ?: ($payload['gateway_patient']['address_line'] ?? ''));
+        $zip              = (string) (($profile['pinCode'] ?? '') ?: ($profile['pin_code'] ?? '') ?: ($payload['pinCode'] ?? '') ?: ($payload['pin_code'] ?? '') ?: ($payload['gateway_abha_profile']['pin_code'] ?? '') ?: ($payload['gateway_patient']['pincode'] ?? ''));
+        $stateName        = (string) (($profile['stateName'] ?? '') ?: ($profile['state_name'] ?? '') ?: ($payload['stateName'] ?? '') ?: ($payload['state_name'] ?? '') ?: ($payload['gateway_abha_profile']['state_name'] ?? '') ?: ($payload['gateway_patient']['state_name'] ?? ''));
+        $districtName     = (string) (($profile['districtName'] ?? '') ?: ($profile['district_name'] ?? '') ?: ($payload['districtName'] ?? '') ?: ($payload['district_name'] ?? '') ?: ($payload['gateway_abha_profile']['district_name'] ?? '') ?: ($payload['gateway_patient']['district'] ?? ''));
+        $email            = (string) (($profile['email'] ?? '') ?: ($payload['email'] ?? '') ?: ($payload['gateway_abha_profile']['email'] ?? '') ?: ($payload['gateway_patient']['email'] ?? ''));
+
+        $abhaMeta = [
+            'abha_address'      => $resAbhaAddress,
+            'profile_photo'     => $photo,
+            'verified_status'   => $verifiedStatus,
+            'verification_type' => $verificationType,
+            'kyc_verified'      => $kycVerified,
+            'mobile_verified'   => $mobileVerified,
+            'address'           => $address,
+            'district'          => $districtName,
+            'state'             => $stateName,
+            'zip'               => $zip,
+            'email'             => $email,
+        ];
+
+        $patientInfo = $this->tryAutoLinkByDirectMatch($abhaNum, $name, $resMobile, $gender, $dob, $abhaMeta);
+
+        $responseBase = [
+            'ok'                => 1,
+            'card_base64'       => $this->extractAbhaCardData($result),
+            'card_content_type' => $this->resolveAbhaCardContentType($result),
+            'card_source'       => $this->resolveAbhaCardSource($result),
+            'card_message'      => $this->resolveAbhaCardMessage($result),
+            'abha_number'       => $abhaNum,
+            'name'              => $name,
+            'photo'             => $photo,
+            'mobile'            => $resMobile,
+            'gender'            => $gender,
+            'dob'               => $dob,
+            'abha_address'      => $resAbhaAddress,
+            'verified_status'   => $verifiedStatus,
+            'verification_type' => $verificationType,
+            'kyc_verified'      => $kycVerified,
+            'mobile_verified'   => $mobileVerified,
+            'address'           => $address,
+            'district'          => $districtName,
+            'state'             => $stateName,
+            'zip'               => $zip,
+            'email'             => $email,
+        ];
+
+        if ($patientInfo !== null) {
+            return $this->response->setJSON($responseBase + [
+                'need_confirmation' => false,
+                'patient_id'        => $patientInfo['patient_id'],
+                'p_code'            => $patientInfo['p_code'],
+                'is_new_patient'    => $patientInfo['is_new'],
+            ]);
+        }
+
+        $db = \Config\Database::connect();
+        $fields = $db->getFieldNames('patient_master') ?? [];
+        $abhaField = $this->resolveAbhaFieldName($fields);
+        $abhaNumClean = preg_replace('/\D/', '', $abhaNum);
+        $candidates = $this->findMatchingCandidates($db, $fields, $name, $resMobile, $gender, $dob, '', $abhaField, $abhaNumClean);
 
         return $this->response->setJSON($responseBase + [
             'need_confirmation' => true,

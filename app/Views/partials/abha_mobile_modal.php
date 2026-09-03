@@ -7,6 +7,7 @@
  *
  *   1. Mobile number
  *   2. OTP
+ *   2b. Account Selection (when multiple ABHA profiles are linked to mobile)
  *   3. Verified profile + official ABHA card
  *
  * Handing the profile to the patient-match modal stays the caller's job.
@@ -32,7 +33,44 @@
     .abha-mobile-modal .abha-profile-list dd { margin:0; text-align:right; font-weight:600; overflow-wrap:anywhere; }
     .abha-mobile-modal .abha-card-preview { min-height:230px; display:grid; place-items:center; border:1px solid #dce3ec; background:#f8fafc; }
     .abha-mobile-modal .abha-card-preview img { max-width:100%; max-height:360px; object-fit:contain; }
-    @media (max-width:575.98px) { .abha-mobile-modal .modal-body{padding:16px}.abha-mobile-step:not(:last-child)::after{width:22px}.abha-mobile-modal .abha-profile-list>div{grid-template-columns:110px minmax(0,1fr)} }
+
+    /* Multi-Account Selection Card Styles */
+    .abha-account-card {
+        border: 1px solid #dce3ec;
+        border-radius: 10px;
+        padding: 14px 18px;
+        transition: all 0.2s ease-in-out;
+        cursor: pointer;
+        background: #ffffff;
+    }
+    .abha-account-card:hover {
+        border-color: #356cf4;
+        background: #f4f8ff;
+        box-shadow: 0 4px 12px rgba(53, 108, 244, 0.12);
+        transform: translateY(-1px);
+    }
+    .abha-account-card.selected {
+        border-color: #356cf4;
+        background: #edf4ff;
+        box-shadow: 0 0 0 2px #356cf4;
+    }
+    .abha-account-avatar {
+        width: 44px;
+        height: 44px;
+        border-radius: 50%;
+        background: #eef2f6;
+        display: grid;
+        place-items: center;
+        font-size: 1.25rem;
+        color: #356cf4;
+        flex-shrink: 0;
+    }
+
+    @media (max-width:575.98px) {
+        .abha-mobile-modal .modal-body{padding:16px}
+        .abha-mobile-step:not(:last-child)::after{width:22px}
+        .abha-mobile-modal .abha-profile-list>div{grid-template-columns:110px minmax(0,1fr)}
+    }
 </style>
 
 <div class="modal fade abha-mobile-modal" id="abhaMobileModal" tabindex="-1" aria-hidden="true" data-bs-backdrop="static" data-bs-keyboard="false">
@@ -50,6 +88,7 @@
                 </div>
                 <div id="abhaMobileAlert"></div>
 
+                <!-- Step 1: Mobile Input -->
                 <section id="abhaMobileStep1">
                     <label class="form-label fw-semibold" for="abhaMobileNumber">Mobile Number</label>
                     <div class="input-group input-group-lg">
@@ -60,6 +99,7 @@
                     <div class="form-text">Enter the mobile number registered with the patient's ABHA account to find and link it.</div>
                 </section>
 
+                <!-- Step 2: OTP Verification -->
                 <section id="abhaMobileStep2" class="d-none">
                     <p class="text-muted mb-2" id="abhaMobileOtpHint"></p>
                     <label class="form-label fw-semibold" for="abhaMobileOtp">6-digit OTP</label>
@@ -76,6 +116,21 @@
                     </div>
                 </section>
 
+                <!-- Step 2b: Multi-Account Selection (When >1 account returned) -->
+                <section id="abhaMobileStepAccounts" class="d-none">
+                    <div class="d-flex justify-content-between align-items-center mb-3">
+                        <div>
+                            <h6 class="mb-0 fw-bold text-dark"><i class="bi bi-people text-primary me-2"></i>Select ABHA Profile</h6>
+                            <small class="text-muted" id="abhaAccountsCountHint">Multiple ABHA profiles found linked to this mobile number. Choose the patient's account:</small>
+                        </div>
+                        <button type="button" class="btn btn-outline-secondary btn-sm" id="abhaAccountsBackBtn">&larr; Back to OTP</button>
+                    </div>
+                    <div class="vstack gap-2" id="abhaAccountsList">
+                        <!-- Populated by JavaScript -->
+                    </div>
+                </section>
+
+                <!-- Step 3: Verified Profile & Card -->
                 <section id="abhaMobileStep3" class="d-none">
                     <div class="row g-4">
                         <div class="col-lg-6">
@@ -100,7 +155,10 @@
                             <div class="abha-card-preview" id="abhaMobileCardWrap"><div class="text-center text-muted"><i class="bi bi-card-image fs-1 d-block mb-2"></i><span>Official ABHA card was not returned by the Bridge.</span></div></div>
                         </div>
                     </div>
-                    <div class="d-flex justify-content-end mt-4">
+                    <div class="d-flex justify-content-between align-items-center mt-4 gap-2 flex-wrap">
+                        <div>
+                            <button type="button" class="btn btn-outline-secondary d-none" id="abhaChangeAccountBtn">&larr; Choose Different ABHA Account</button>
+                        </div>
                         <button type="button" class="btn btn-success" id="abhaMobileCompareBtn"><i class="bi bi-people me-1"></i>Compare with HMS Patients</button>
                     </div>
                 </section>
@@ -115,8 +173,10 @@ window.AbhaMobileModal = (function () {
 
     var modal;
     var txnId = '';
+    var currentToken = '';
     var verifiedMobile = '';
     var verifiedProfile = null;
+    var linkedAccounts = [];
     var onVerified = null;
     var resendTimer = null;
     var resendRemaining = 0;
@@ -134,12 +194,20 @@ window.AbhaMobileModal = (function () {
         $('#abhaMobileAlert').html(message ? '<div class="alert alert-' + type + ' py-2">' + message + '</div>' : '');
     }
     function showStep(step) {
-        $('#abhaMobileStep1,#abhaMobileStep2,#abhaMobileStep3').addClass('d-none');
-        $('#abhaMobileStep' + step).removeClass('d-none');
-        $('.abha-mobile-step').each(function () {
-            var itemStep = Number($(this).data('step'));
-            $(this).toggleClass('active', itemStep === step).toggleClass('done', itemStep < step);
-        });
+        $('#abhaMobileStep1,#abhaMobileStep2,#abhaMobileStepAccounts,#abhaMobileStep3').addClass('d-none');
+        if (step === 'accounts') {
+            $('#abhaMobileStepAccounts').removeClass('d-none');
+            $('.abha-mobile-step').each(function () {
+                var itemStep = Number($(this).data('step'));
+                $(this).toggleClass('active', itemStep === 2).toggleClass('done', itemStep < 2);
+            });
+        } else {
+            $('#abhaMobileStep' + step).removeClass('d-none');
+            $('.abha-mobile-step').each(function () {
+                var itemStep = Number($(this).data('step'));
+                $(this).toggleClass('active', itemStep === step).toggleClass('done', itemStep < step);
+            });
+        }
         alertBox('', '');
     }
     function stopTimer() {
@@ -180,6 +248,7 @@ window.AbhaMobileModal = (function () {
         if (mobile.length !== 10) { alertBox('warning', 'Enter a valid 10-digit mobile number.'); return; }
 
         verifiedMobile = mobile;
+        linkedAccounts = [];
         var button = $('#abhaMobileSendOtpBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Sending');
         $.post('<?= base_url('abha/find/mobile/request-otp') ?>', { mobile: mobile, find_abha: 1, '<?= csrf_token() ?>': csrf() }, function (response) {
             button.prop('disabled', false).html('<i class="bi bi-send me-1"></i>Send OTP');
@@ -205,10 +274,108 @@ window.AbhaMobileModal = (function () {
             button.prop('disabled', false).html('<i class="bi bi-patch-check me-1"></i>Verify OTP');
             if (!response || response.ok != 1) { alertBox('danger', apiMessage(response, 'OTP verification failed.')); return; }
             stopTimer();
-            renderProfile(response);
+
+            txnId = response.txn_id || txnId;
+            currentToken = response.token || '';
+            linkedAccounts = Array.isArray(response.accounts) ? response.accounts : [];
+
+            if (linkedAccounts.length > 1) {
+                renderAccountsList(linkedAccounts, response);
+            } else {
+                renderProfile(response);
+            }
         }, 'json').fail(function (xhr) {
             button.prop('disabled', false).html('<i class="bi bi-patch-check me-1"></i>Verify OTP');
             alertBox('danger', apiMessage(xhr.responseJSON, 'OTP verification failed.'));
+        });
+    }
+
+    function renderAccountsList(accounts, defaultResponse) {
+        $('#abhaAccountsCountHint').text('Found ' + accounts.length + ' ABHA accounts linked with mobile ' + maskMobile(verifiedMobile) + '. Select the patient:');
+        var container = $('#abhaAccountsList').empty();
+
+        accounts.forEach(function (acc, index) {
+            var name = acc.name || 'ABHA Account #' + (index + 1);
+            var abhaNum = acc.ABHANumber || acc.abhaNumber || acc.abha_id || '-';
+            var abhaAddr = acc.preferredAbhaAddress || acc.preferredAddress || acc.abhaAddress || acc.abha_address || '-';
+            var gender = genderText(acc.gender);
+            var dob = acc.dob || acc.date_of_birth || '-';
+            var status = acc.status || 'ACTIVE';
+
+            var iconClass = (gender === 'Female') ? 'bi-person-standing-dress text-danger' : 'bi-person-standing text-primary';
+            if (gender === 'Other') iconClass = 'bi-person text-info';
+
+            var photoHtml = acc.profilePhoto
+                ? '<img src="' + (String(acc.profilePhoto).indexOf('data:') === 0 ? acc.profilePhoto : 'data:image/jpeg;base64,' + acc.profilePhoto) + '" class="rounded-circle" style="width:44px;height:44px;object-fit:cover">'
+                : '<div class="abha-account-avatar"><i class="bi ' + iconClass + '"></i></div>';
+
+            var cardHtml = $(
+                '<div class="abha-account-card d-flex align-items-center justify-content-between gap-3" data-index="' + index + '">' +
+                    '<div class="d-flex align-items-center gap-3">' +
+                        photoHtml +
+                        '<div>' +
+                            '<div class="d-flex align-items-center gap-2 flex-wrap">' +
+                                '<h6 class="mb-0 fw-bold text-dark">' + escapeHtml(name) + '</h6>' +
+                                '<span class="badge bg-primary-subtle text-primary border border-primary-subtle">' + escapeHtml(abhaAddr) + '</span>' +
+                                (status === 'ACTIVE' ? '<span class="badge bg-success-subtle text-success">Active</span>' : '') +
+                            '</div>' +
+                            '<div class="text-muted small mt-1">' +
+                                '<span class="me-3"><i class="bi bi-credit-card-2-front me-1"></i>ABHA: <strong>' + escapeHtml(formatAbha(abhaNum)) + '</strong></span>' +
+                                '<span class="me-3"><i class="bi bi-gender-ambiguous me-1"></i>' + escapeHtml(gender) + '</span>' +
+                                '<span><i class="bi bi-calendar-event me-1"></i>DOB: ' + escapeHtml(dob) + '</span>' +
+                            '</div>' +
+                        '</div>' +
+                    '</div>' +
+                    '<div>' +
+                        '<button type="button" class="btn btn-sm btn-outline-primary select-acc-btn">' +
+                            '<i class="bi bi-check2-circle me-1"></i>Select Account' +
+                        '</button>' +
+                    '</div>' +
+                '</div>'
+            );
+
+            cardHtml.on('click', function () {
+                selectAccount(acc, cardHtml);
+            });
+
+            container.append(cardHtml);
+        });
+
+        showStep('accounts');
+    }
+
+    function selectAccount(account, cardElement) {
+        if (cardElement) {
+            $('.abha-account-card').removeClass('selected');
+            cardElement.addClass('selected');
+            cardElement.find('.select-acc-btn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Loading');
+        }
+
+        var abhaNum = account.ABHANumber || account.abhaNumber || account.abha_id || '';
+        var abhaAddr = account.preferredAbhaAddress || account.preferredAddress || account.abhaAddress || account.abha_address || '';
+
+        $.post('<?= base_url('abha/find/mobile/select-account') ?>', {
+            txn_id: txnId,
+            token: currentToken,
+            abha_number: abhaNum,
+            abha_address: abhaAddr,
+            mobile: verifiedMobile,
+            find_abha: 1,
+            '<?= csrf_token() ?>': csrf()
+        }, function (response) {
+            if (cardElement) {
+                cardElement.find('.select-acc-btn').prop('disabled', false).html('<i class="bi bi-check2-circle me-1"></i>Select Account');
+            }
+            if (!response || response.ok != 1) {
+                alertBox('danger', apiMessage(response, 'Failed to select ABHA account.'));
+                return;
+            }
+            renderProfile(response);
+        }, 'json').fail(function (xhr) {
+            if (cardElement) {
+                cardElement.find('.select-acc-btn').prop('disabled', false).html('<i class="bi bi-check2-circle me-1"></i>Select Account');
+            }
+            alertBox('danger', apiMessage(xhr.responseJSON, 'Failed to select ABHA account.'));
         });
     }
 
@@ -237,6 +404,10 @@ window.AbhaMobileModal = (function () {
             var reason = profile.card_message ? escapeHtml(profile.card_message) : 'ABDM did not issue an official ABHA card for this session.';
             $('#abhaMobileCardWrap').html('<div class="text-center text-muted"><i class="bi bi-card-image fs-1 d-block mb-2"></i>' + reason + '</div>');
         }
+
+        // Show "Choose Different Account" button if multiple accounts exist
+        $('#abhaChangeAccountBtn').toggleClass('d-none', !(linkedAccounts && linkedAccounts.length > 1));
+
         showStep(3);
     }
 
@@ -247,6 +418,12 @@ window.AbhaMobileModal = (function () {
         $('#abhaMobileResendBtn').on('click', sendOtp);
         $('#abhaMobileVerifyBtn').on('click', verifyOtp);
         $('#abhaMobileChangeBtn').on('click', function () { stopTimer(); showStep(1); $('#abhaMobileNumber').trigger('focus'); });
+        $('#abhaAccountsBackBtn').on('click', function () { showStep(2); $('#abhaMobileOtp').trigger('focus'); });
+        $('#abhaChangeAccountBtn').on('click', function () {
+            if (linkedAccounts && linkedAccounts.length > 1) {
+                showStep('accounts');
+            }
+        });
         $('#abhaMobileNumber').on('keydown', function (event) { if (event.key === 'Enter') { event.preventDefault(); sendOtp(); } });
         $('#abhaMobileOtp').on('keydown', function (event) { if (event.key === 'Enter') { event.preventDefault(); verifyOtp(); } });
 
@@ -272,12 +449,15 @@ window.AbhaMobileModal = (function () {
         open: function (prefillMobile, callback) {
             onVerified = typeof prefillMobile === 'function' ? prefillMobile : callback;
             txnId = '';
+            currentToken = '';
             verifiedMobile = '';
             verifiedProfile = null;
+            linkedAccounts = [];
             stopTimer();
             $('#abhaMobileNumber').val(typeof prefillMobile === 'string' ? prefillMobile : '');
             $('#abhaMobileOtp').val('');
             $('#abhaMobilePhoto').addClass('d-none');
+            $('#abhaChangeAccountBtn').addClass('d-none');
             showStep(1);
             modal.show();
             window.setTimeout(function () { $('#abhaMobileNumber').trigger('focus'); }, 300);

@@ -814,6 +814,7 @@ $routes->post('abha/create/communication', 'Abha::communication', ['filter' => '
 $routes->post('abha/create/verify_comm_otp', 'Abha::verifyCommOtp', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/find/mobile/request-otp', 'Abha::communication', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/find/mobile/verify-otp', 'Abha::verifyCommOtp', ['filter' => 'permission:abdm.abha.create']);
+$routes->post('abha/find/mobile/select-account', 'Abha::selectAccount', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/create/confirm_patient', 'Abha::confirmPatient', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/create/address', 'Abha::address', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/create/address_suggestions', 'Abha::addressSuggestions', ['filter' => 'permission:abdm.abha.create']);

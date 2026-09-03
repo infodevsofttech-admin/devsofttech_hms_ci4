@@ -167,6 +167,11 @@ class DirectAbdmConnector implements AbdmConnectorInterface
         throw new \RuntimeException('DirectAbdmConnector::abhaEnrolMobileVerifyOtp() not implemented.');
     }
 
+    public function abhaLoginSelectAccount(array $payload): array
+    {
+        throw new \RuntimeException('DirectAbdmConnector::abhaLoginSelectAccount() not implemented.');
+    }
+
     public function abhaAddressSuggestions(array $payload): array
     {
         throw new \RuntimeException(
