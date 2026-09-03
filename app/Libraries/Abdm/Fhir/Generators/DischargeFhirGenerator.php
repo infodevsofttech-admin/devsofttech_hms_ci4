@@ -99,8 +99,18 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         }
 
         $conditionGroups = [
-            ['items' => $chiefComplaintsList, 'prefix' => 'discharge-chief-complaint-'],
-            ['items' => $diagnosesList, 'prefix' => 'discharge-diagnosis-'],
+            [
+                'items'            => $chiefComplaintsList,
+                'prefix'           => 'discharge-chief-complaint-',
+                'category_code'    => 'problem-list-item',
+                'category_display' => 'Problem List Item',
+            ],
+            [
+                'items'            => $diagnosesList,
+                'prefix'           => 'discharge-diagnosis-',
+                'category_code'    => 'encounter-diagnosis',
+                'category_display' => 'Encounter Diagnosis',
+            ],
         ];
         foreach ($conditionGroups as $group) {
             foreach ($group['items'] as $idx => $cond) {
@@ -134,8 +144,8 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     ]]],
                     'category' => [['coding' => [[
                         'system' => 'http://terminology.hl7.org/CodeSystem/condition-category',
-                        'code' => 'encounter-diagnosis',
-                        'display' => 'Encounter Diagnosis',
+                        'code' => $group['category_code'],
+                        'display' => $group['category_display'],
                     ]]]],
                     'code' => ['coding' => $coding, 'text' => $text],
                     'subject' => ['reference' => $patientRef],
@@ -269,7 +279,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             } else {
                 $coding[] = [
                     'system'  => 'http://snomed.info/sct',
-                    'code'    => '364075005',
+                    'code'    => $this->resolvePhysicalExamSnomedCode($text),
                     'display' => $text,
                 ];
             }
@@ -579,6 +589,9 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         if (str_contains($upper, 'SPO2') || str_contains($upper, 'OXYGEN')) {
             return ['code' => '2708-6', 'display' => 'Oxygen saturation in Arterial blood by Pulse oximetry'];
         }
+        if (str_contains($upper, 'RBS') || str_contains($upper, 'RANDOM BLOOD SUGAR') || str_contains($upper, 'GLUCOSE')) {
+            return ['code' => '2345-7', 'display' => 'Glucose [Mass/volume] in Serum or Plasma'];
+        }
         if (str_contains($upper, 'TEMP')) {
             return ['code' => '8310-5', 'display' => 'Body temperature'];
         }
@@ -613,8 +626,11 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         if (str_contains($upper, 'SPO2') || str_contains($upper, 'OXYGEN')) {
             return ['unit' => '%', 'code' => '%'];
         }
+        if (str_contains($upper, 'RBS') || str_contains($upper, 'RANDOM BLOOD SUGAR') || str_contains($upper, 'GLUCOSE')) {
+            return ['unit' => 'mg/dL', 'code' => 'mg/dL'];
+        }
         if (str_contains($upper, 'TEMP')) {
-            return ['unit' => 'degC', 'code' => 'Cel'];
+            return ['unit' => 'degF', 'code' => '[degF]'];
         }
         if (str_contains($upper, 'WEIGHT')) {
             return ['unit' => 'kg', 'code' => 'kg'];
@@ -626,14 +642,60 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         return ['unit' => '', 'code' => ''];
     }
 
+    private function resolvePhysicalExamSnomedCode(string $text): string
+    {
+        $upper = strtoupper(trim($text));
+        if (str_contains($upper, 'PALLOR')) {
+            return '89521008';
+        }
+        if (str_contains($upper, 'JAUNDICE') || str_contains($upper, 'ICTERUS')) {
+            return '18165004';
+        }
+        if (str_contains($upper, 'CYANOSIS')) {
+            return '119419001';
+        }
+        if (str_contains($upper, 'CLUBBING')) {
+            return '30760006';
+        }
+        if (str_contains($upper, 'EDEMA') || str_contains($upper, 'OEDEMA')) {
+            return '267038008';
+        }
+        if (str_contains($upper, 'JVP')) {
+            return '271649006';
+        }
+
+        return '364075005';
+    }
+
     private function resolveFallbackSnomedCode(string $text): string
     {
         $upper = strtoupper(trim($text));
+        if (str_contains($upper, 'VIRAL FEVER')) {
+            return '409702008';
+        }
+        if (str_contains($upper, 'TYPHOID')) {
+            return '4834000';
+        }
+        if (str_contains($upper, 'DENGUE')) {
+            return '38362002';
+        }
+        if (str_contains($upper, 'MALARIA')) {
+            return '61462000';
+        }
         if (str_contains($upper, 'FEVER') || str_contains($upper, 'PYREXIA')) {
             return '386661006';
         }
+        if (str_contains($upper, 'BREATHLESS') || str_contains($upper, 'DYSPNEA')) {
+            return '267036007';
+        }
         if (str_contains($upper, 'COUGH')) {
             return '49727002';
+        }
+        if (str_contains($upper, 'ABDOMINAL PAIN') || str_contains($upper, 'ABDOMEN PAIN')) {
+            return '21522000';
+        }
+        if (str_contains($upper, 'CHEST PAIN')) {
+            return '29857009';
         }
         if (str_contains($upper, 'PAIN')) {
             return '22253000';
