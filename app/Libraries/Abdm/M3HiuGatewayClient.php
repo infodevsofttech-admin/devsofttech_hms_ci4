@@ -170,27 +170,100 @@ class M3HiuGatewayClient
         }
         $response['gateway_request_id'] = $gatewayRequestId;
 
-        $abdmConsentRequestId = $this->findFirstValueByKeys($response, [
-            'consentRequestId',
-            'consent_request_id',
-            'abdm_consent_request_id',
-        ]);
-        if ($abdmConsentRequestId !== '' && $this->isGatewayRefId($abdmConsentRequestId)) {
-            $abdmConsentRequestId = '';
+        $abdmConsentRequestId = '';
+        if (isset($response['consent']) && is_array($response['consent'])) {
+            $abdmConsentRequestId = trim((string) (
+                $response['consent']['consent_request_id']
+                ?? $response['consent']['consentRequestId']
+                ?? $response['consent']['abdm_consent_request_id']
+                ?? ''
+            ));
         }
-        if ($abdmConsentRequestId !== '') {
+        if ($abdmConsentRequestId === '' && isset($response['consentDetail']) && is_array($response['consentDetail'])) {
+            $abdmConsentRequestId = trim((string) (
+                $response['consentDetail']['consent_request_id']
+                ?? $response['consentDetail']['consentRequestId']
+                ?? ''
+            ));
+        }
+        if ($abdmConsentRequestId === '' && isset($response['data']) && is_array($response['data'])) {
+            if (isset($response['data']['consent']) && is_array($response['data']['consent'])) {
+                $abdmConsentRequestId = trim((string) (
+                    $response['data']['consent']['consent_request_id']
+                    ?? $response['data']['consent']['consentRequestId']
+                    ?? ''
+                ));
+            }
+            if ($abdmConsentRequestId === '') {
+                $abdmConsentRequestId = trim((string) (
+                    $response['data']['consent_request_id']
+                    ?? $response['data']['consentRequestId']
+                    ?? $response['data']['abdm_consent_request_id']
+                    ?? ''
+                ));
+            }
+        }
+        if ($abdmConsentRequestId === '') {
+            $abdmConsentRequestId = $this->findFirstValueByKeys($response, [
+                'consentRequestId',
+                'consent_request_id',
+                'abdm_consent_request_id',
+            ]);
+        }
+        if ($abdmConsentRequestId !== '' && ! $this->isGatewayRefId($abdmConsentRequestId)) {
             $response['abdm_consent_request_id'] = $abdmConsentRequestId;
             $response['consent_request_id'] = $abdmConsentRequestId;
         }
 
-        $abdmConsentId = $this->findFirstValueByKeys($response, [
-            'consentId',
-            'consent_id',
-        ]);
-        if ($abdmConsentId !== '' && $this->isGatewayRefId($abdmConsentId)) {
-            $abdmConsentId = '';
+        $abdmConsentId = '';
+        if (isset($response['consent']) && is_array($response['consent'])) {
+            $abdmConsentId = trim((string) (
+                $response['consent']['id']
+                ?? $response['consent']['consent_id']
+                ?? $response['consent']['consentId']
+                ?? $response['consent']['consent_artifact_id']
+                ?? $response['consent']['consent_artefact_id']
+                ?? ''
+            ));
         }
-        if ($abdmConsentId !== '') {
+        if ($abdmConsentId === '' && isset($response['consentDetail']) && is_array($response['consentDetail'])) {
+            $abdmConsentId = trim((string) (
+                $response['consentDetail']['id']
+                ?? $response['consentDetail']['consent_id']
+                ?? $response['consentDetail']['consentId']
+                ?? ''
+            ));
+        }
+        if ($abdmConsentId === '' && isset($response['data']) && is_array($response['data'])) {
+            if (isset($response['data']['consent']) && is_array($response['data']['consent'])) {
+                $abdmConsentId = trim((string) (
+                    $response['data']['consent']['id']
+                    ?? $response['data']['consent']['consent_id']
+                    ?? $response['data']['consent']['consentId']
+                    ?? ''
+                ));
+            }
+            if ($abdmConsentId === '') {
+                $abdmConsentId = trim((string) (
+                    $response['data']['consent_id']
+                    ?? $response['data']['consentId']
+                    ?? $response['data']['consent_artifact_id']
+                    ?? ''
+                ));
+            }
+        }
+        if ($abdmConsentId === '') {
+            $abdmConsentId = $this->findFirstValueByKeys($response, [
+                'consent_id',
+                'consentId',
+                'abdm_consent_artifact_id',
+                'consent_artifact_id',
+                'consent_artefact_id',
+                'consentArtifactId',
+                'consentArtefactId',
+            ]);
+        }
+        if ($abdmConsentId !== '' && ! $this->isGatewayRefId($abdmConsentId)) {
             $response['consent_id'] = $abdmConsentId;
             $response['abdm_consent_artifact_id'] = $abdmConsentId;
         }
@@ -346,21 +419,99 @@ class M3HiuGatewayClient
         $gatewayRequestId = trim((string) ($response['request_id'] ?? $response['requestId'] ?? $cleanQuery['request_id'] ?? ''));
         $response['gateway_request_id'] = $gatewayRequestId;
 
-        $abdmConsentRequestId = $this->findFirstValueByKeys($response, [
-            'consentRequestId',
-            'consent_request_id',
-            'abdm_consent_request_id',
-        ]);
+        $abdmConsentRequestId = '';
+        if (isset($response['consent']) && is_array($response['consent'])) {
+            $abdmConsentRequestId = trim((string) (
+                $response['consent']['consent_request_id']
+                ?? $response['consent']['consentRequestId']
+                ?? $response['consent']['abdm_consent_request_id']
+                ?? ''
+            ));
+        }
+        if ($abdmConsentRequestId === '' && isset($response['consentDetail']) && is_array($response['consentDetail'])) {
+            $abdmConsentRequestId = trim((string) (
+                $response['consentDetail']['consent_request_id']
+                ?? $response['consentDetail']['consentRequestId']
+                ?? ''
+            ));
+        }
+        if ($abdmConsentRequestId === '' && isset($response['data']) && is_array($response['data'])) {
+            if (isset($response['data']['consent']) && is_array($response['data']['consent'])) {
+                $abdmConsentRequestId = trim((string) (
+                    $response['data']['consent']['consent_request_id']
+                    ?? $response['data']['consent']['consentRequestId']
+                    ?? ''
+                ));
+            }
+            if ($abdmConsentRequestId === '') {
+                $abdmConsentRequestId = trim((string) (
+                    $response['data']['consent_request_id']
+                    ?? $response['data']['consentRequestId']
+                    ?? $response['data']['abdm_consent_request_id']
+                    ?? ''
+                ));
+            }
+        }
+        if ($abdmConsentRequestId === '') {
+            $abdmConsentRequestId = $this->findFirstValueByKeys($response, [
+                'consentRequestId',
+                'consent_request_id',
+                'abdm_consent_request_id',
+            ]);
+        }
         if ($abdmConsentRequestId !== '' && ! $this->isGatewayRefId($abdmConsentRequestId)) {
             $response['abdm_consent_request_id'] = $abdmConsentRequestId;
             $response['consent_request_id'] = $abdmConsentRequestId;
         }
 
-        $abdmConsentId = $this->findFirstValueByKeys($response, [
-            'consentId',
-            'consent_id',
-            'abdm_consent_artifact_id',
-        ]);
+        $abdmConsentId = '';
+        if (isset($response['consent']) && is_array($response['consent'])) {
+            $abdmConsentId = trim((string) (
+                $response['consent']['id']
+                ?? $response['consent']['consent_id']
+                ?? $response['consent']['consentId']
+                ?? $response['consent']['consent_artifact_id']
+                ?? $response['consent']['consent_artefact_id']
+                ?? ''
+            ));
+        }
+        if ($abdmConsentId === '' && isset($response['consentDetail']) && is_array($response['consentDetail'])) {
+            $abdmConsentId = trim((string) (
+                $response['consentDetail']['id']
+                ?? $response['consentDetail']['consent_id']
+                ?? $response['consentDetail']['consentId']
+                ?? ''
+            ));
+        }
+        if ($abdmConsentId === '' && isset($response['data']) && is_array($response['data'])) {
+            if (isset($response['data']['consent']) && is_array($response['data']['consent'])) {
+                $abdmConsentId = trim((string) (
+                    $response['data']['consent']['id']
+                    ?? $response['data']['consent']['consent_id']
+                    ?? $response['data']['consent']['consentId']
+                    ?? ''
+                ));
+            }
+            if ($abdmConsentId === '') {
+                $abdmConsentId = trim((string) (
+                    $response['data']['consent_id']
+                    ?? $response['data']['consentId']
+                    ?? $response['data']['consent_artifact_id']
+                    ?? ''
+                ));
+            }
+        }
+        if ($abdmConsentId === '') {
+            $abdmConsentId = $this->findFirstValueByKeys($response, [
+                'consent_id',
+                'consentId',
+                'abdm_consent_artifact_id',
+                'consent_artifact_id',
+                'consent_artefact_id',
+                'consentArtifactId',
+                'consentArtefactId',
+            ]);
+        }
         if ($abdmConsentId !== '' && ! $this->isGatewayRefId($abdmConsentId)) {
             $response['consent_id'] = $abdmConsentId;
             $response['abdm_consent_artifact_id'] = $abdmConsentId;

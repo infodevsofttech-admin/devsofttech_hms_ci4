@@ -136,7 +136,7 @@
         var metaHtml = '<div class="row small text-muted mb-3">'
             + '<div class="col-md-6">Patient: <strong>' + escHtml(consent.patient_name || '-') + '</strong></div>'
             + '<div class="col-md-6">UHID: <strong>' + escHtml(consent.patient_code || '-') + '</strong></div>'
-            + '<div class="col-md-6">Consent ID: <strong>' + escHtml(consent.consent_id || '-') + '</strong></div>'
+            + '<div class="col-md-6">Consent ID: <strong>' + escHtml(consent.consent_id || consent.abdm_consent_artifact_id || consent.consent_request_id || consent.request_id || '-') + '</strong></div>'
             + '<div class="col-md-6">ABHA: <strong>' + escHtml(consent.abha_address || '-') + '</strong></div>'
             + '<div class="col-md-6">Purpose: <strong>' + escHtml(consent.purpose || '-') + '</strong></div>'
             + '<div class="col-md-6">Status: <strong>' + escHtml(consent.status || '-') + '</strong></div>'

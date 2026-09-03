@@ -5016,9 +5016,20 @@ class Patient extends BaseController
 				?? $row['consent_id']
 				?? $rowDecoded['consent_id']
 				?? $rowDecoded['consentId']
+				?? $rowDecoded['consent']['id']
+				?? $rowDecoded['consent']['consent_id']
+				?? $rowDecoded['consent']['consentId']
+				?? $rowDecoded['consentDetail']['id']
+				?? $rowDecoded['consentDetail']['consentId']
+				?? $rowDecoded['consent_artifact_id']
+				?? $rowDecoded['consent_artefact_id']
+				?? $rowDecoded['consentArtifactId']
+				?? $rowDecoded['consentArtefactId']
+				?? $rowDecoded['data']['consent']['id']
+				?? $rowDecoded['data']['consent_id']
 				?? ''
 			));
-			if ($rowConsentId !== '') {
+			if ($rowConsentId !== '' && ! preg_match('/^REQ-/i', $rowConsentId)) {
 				$consentId = $rowConsentId;
 			}
 
@@ -5027,11 +5038,19 @@ class Patient extends BaseController
 				?? $rowDecoded['abdm_consent_request_id']
 				?? $rowDecoded['consent_request_id']
 				?? $rowDecoded['consentRequestId']
+				?? $rowDecoded['consent']['consent_request_id']
+				?? $rowDecoded['consent']['consentRequestId']
+				?? $rowDecoded['consentDetail']['consent_request_id']
+				?? $rowDecoded['consentDetail']['consentRequestId']
+				?? $rowDecoded['data']['consent_request_id']
 				?? ''
 			));
-			if ($rowConsentRequestId !== '') {
+			if ($rowConsentRequestId !== '' && ! preg_match('/^REQ-/i', $rowConsentRequestId)) {
 				$consentRequestId = $rowConsentRequestId;
 			}
+		}
+		if ($consentId === '' && $consentRequestId !== '') {
+			$consentId = $consentRequestId;
 		}
 
 		// The session should start with its own CONSENT_REQUEST row.
@@ -5061,7 +5080,6 @@ class Patient extends BaseController
 			$displayId = (int) ($best['id'] ?? 0);
 		}
 
-
 		$requestedHiTypes = [];
 		$requestedOn = '';
 		$purpose = '';
@@ -5080,12 +5098,78 @@ class Patient extends BaseController
 			$requestedHiTypes = $this->normalizeHiTypesList($consentBlock['hiTypes'] ?? $consentBlock['hi_types'] ?? []);
 			$requestedOn = trim((string) ($consentRequestRow['created_at'] ?? ''));
 			$purpose = trim((string) ($consentBlock['purpose']['text'] ?? $consentBlock['purpose']['code'] ?? ''));
-			$validFrom = trim((string) ($consentBlock['permission']['dateRange']['from'] ?? ''));
-			$validTo = trim((string) ($consentBlock['permission']['dateRange']['to'] ?? ''));
-			$eraseAt = trim((string) ($consentBlock['permission']['dataEraseAt'] ?? ''));
+			$validFrom = trim((string) ($consentBlock['permission']['dateRange']['from'] ?? $consentBlock['permission']['date_range']['from'] ?? ''));
+			$validTo = trim((string) ($consentBlock['permission']['dateRange']['to'] ?? $consentBlock['permission']['date_range']['to'] ?? ''));
+			$eraseAt = trim((string) ($consentBlock['permission']['dataEraseAt'] ?? $consentBlock['permission']['data_erase_at'] ?? ''));
 			$requestedBy = trim((string) ($consentBlock['requester']['name'] ?? ''));
 			if ($hfrId === '') {
 				$hfrId = trim((string) ($consentRequestRow['hfr_id'] ?? ''));
+			}
+		}
+
+		// Fallback scanning across all session rows for missing metadata (dates, purpose, requestedBy)
+		foreach ($rows as $row) {
+			$rowReq = json_decode((string) ($row['request_json'] ?? ''), true);
+			$rowResp = json_decode((string) ($row['response_json'] ?? ''), true);
+			$containers = [
+				is_array($rowReq) ? ($rowReq['consent'] ?? null) : null,
+				is_array($rowReq) ? ($rowReq['consentDetail'] ?? null) : null,
+				is_array($rowReq) ? $rowReq : null,
+				is_array($rowResp) ? ($rowResp['consent'] ?? null) : null,
+				is_array($rowResp) ? ($rowResp['consentDetail'] ?? null) : null,
+				is_array($rowResp) ? $rowResp : null,
+			];
+
+			foreach ($containers as $c) {
+				if (! is_array($c)) {
+					continue;
+				}
+				if ($validFrom === '') {
+					$validFrom = trim((string) (
+						$c['permission']['dateRange']['from']
+						?? $c['permission']['date_range']['from']
+						?? $c['date_range']['from']
+						?? $c['dateRange']['from']
+						?? ''
+					));
+				}
+				if ($validTo === '') {
+					$validTo = trim((string) (
+						$c['permission']['dateRange']['to']
+						?? $c['permission']['date_range']['to']
+						?? $c['date_range']['to']
+						?? $c['dateRange']['to']
+						?? ''
+					));
+				}
+				if ($eraseAt === '') {
+					$eraseAt = trim((string) (
+						$c['permission']['dataEraseAt']
+						?? $c['permission']['data_erase_at']
+						?? $c['expiry']
+						?? $c['dataEraseAt']
+						?? $c['data_erase_at']
+						?? ''
+					));
+				}
+				if ($purpose === '') {
+					$purpose = trim((string) (
+						$c['purpose']['text']
+						?? $c['purpose']['code']
+						?? $c['purpose']
+						?? ''
+					));
+				}
+				if ($requestedBy === '') {
+					$requestedBy = trim((string) (
+						$c['requester']['name']
+						?? $c['requester']
+						?? ''
+					));
+				}
+				if ($requestedOn === '') {
+					$requestedOn = trim((string) ($row['created_at'] ?? ''));
+				}
 			}
 		}
 
