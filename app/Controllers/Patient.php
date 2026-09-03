@@ -1505,11 +1505,11 @@ class Patient extends BaseController
 			if (! empty($fileIds) && $this->db->tableExists('abdm_work_tasks')) {
 				$taskRows = $this->db->table('abdm_work_tasks')
 					->where('source_module', 'file_upload_data')
-					->whereIn('source_id', array_map('strval', $fileIds))
+					->whereIn('entity_id', array_map('strval', $fileIds))
 					->get()
 					->getResultArray();
 				foreach ($taskRows as $tRow) {
-					$taskMap[(int) ($tRow['source_id'] ?? 0)] = $tRow;
+					$taskMap[(int) ($tRow['entity_id'] ?? 0)] = $tRow;
 				}
 			}
 
