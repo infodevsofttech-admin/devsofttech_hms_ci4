@@ -1001,17 +1001,31 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
     public function abhaLoginSelectAccount(array $payload): array
     {
+        $abhaNumber  = (string) ($payload['abha_number'] ?? $payload['abhaNumber'] ?? $payload['ABHANumber'] ?? '');
+        $abhaAddress = (string) ($payload['abha_address'] ?? $payload['abhaAddress'] ?? $payload['preferredAbhaAddress'] ?? '');
+        $txnId       = (string) ($payload['txnId'] ?? $payload['txn_id'] ?? '');
+        $token       = (string) ($payload['token'] ?? '');
+
         $body = [
-            'txnId'        => (string) ($payload['txnId'] ?? $payload['txn_id'] ?? ''),
-            'token'        => (string) ($payload['token'] ?? ''),
-            'abha_number'  => (string) ($payload['abha_number'] ?? $payload['abhaNumber'] ?? ''),
-            'abha_address' => (string) ($payload['abha_address'] ?? $payload['abhaAddress'] ?? ''),
+            'txnId'                => $txnId,
+            'txn_id'               => $txnId,
+            'token'                => $token,
+            'abha_number'          => $abhaNumber,
+            'abhaNumber'           => $abhaNumber,
+            'ABHANumber'           => $abhaNumber,
+            'abha_address'         => $abhaAddress,
+            'abhaAddress'          => $abhaAddress,
+            'preferredAbhaAddress' => $abhaAddress,
         ];
         if ($this->hfrId !== '' && empty($body['hfr_id'])) {
             $body['hfr_id'] = $this->hfrId;
         }
 
         $result = $this->post('/v3/abha/login/select-account', $body);
+        if ((empty($result['ok']) || (int) $result['ok'] !== 1) && (int) ($result['http_code'] ?? 0) === 404) {
+            $result = $this->post('/v3/abha/mobile/select-account', $body);
+        }
+
         if (empty($result['ok']) || (int) $result['ok'] !== 1) {
             return $result;
         }

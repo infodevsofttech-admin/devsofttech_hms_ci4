@@ -360,6 +360,7 @@ window.AbhaMobileModal = (function () {
             abha_number: abhaNum,
             abha_address: abhaAddr,
             mobile: verifiedMobile,
+            account: JSON.stringify(account),
             find_abha: 1,
             '<?= csrf_token() ?>': csrf()
         }, function (response) {
