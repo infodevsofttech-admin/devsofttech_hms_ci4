@@ -2923,12 +2923,35 @@ class Patient extends BaseController
 			return;
 		}
 
-		$status = strtoupper(trim((string) (
-			$reconcile['consent']['status']
-			?? $reconcile['consent_status']
-			?? $reconcile['status']
-			?? ''
-		)));
+		$status = '';
+		if (isset($reconcile['consent']) && is_array($reconcile['consent'])) {
+			$status = trim((string) (
+				$reconcile['consent']['status']
+				?? $reconcile['consent']['consent_status']
+				?? $reconcile['consent']['consentStatus']
+				?? ''
+			));
+		}
+		if ($status === '' && isset($reconcile['consentDetail']) && is_array($reconcile['consentDetail'])) {
+			$status = trim((string) ($reconcile['consentDetail']['status'] ?? ''));
+		}
+		if ($status === '' && isset($reconcile['data']['consent']) && is_array($reconcile['data']['consent'])) {
+			$status = trim((string) ($reconcile['data']['consent']['status'] ?? ''));
+		}
+		if ($status === '') {
+			$status = trim((string) ($reconcile['consent_status'] ?? $reconcile['consentStatus'] ?? ''));
+		}
+		if ($status === '' || in_array(strtolower($status), ['success', 'ok', 'failed', 'error', 'status_checked'], true)) {
+			$status = trim((string) ($reconcile['workflow_state'] ?? ''));
+		}
+		if ($status === '' || in_array(strtolower($status), ['success', 'ok', 'failed', 'error', 'status_checked'], true)) {
+			$topStatus = trim((string) ($reconcile['status'] ?? ''));
+			if (! in_array(strtolower($topStatus), ['success', 'ok', 'failed', 'error', 'status_checked', '1', '0'], true)) {
+				$status = $topStatus;
+			}
+		}
+
+		$status = strtoupper($status);
 		$state = match ($status) {
 			'GRANTED', 'APPROVED', 'ACTIVE' => 'GRANTED',
 			'DENIED' => 'DENIED',
@@ -4293,13 +4316,31 @@ class Patient extends BaseController
 				$decoded = [];
 			}
 
-			$rawConsentStatus = strtoupper(trim((string) (
-				$decoded['consent']['status']
-				?? $decoded['consent_status']
-				?? $decoded['status']
-				?? $decoded['data']['consent']['status']
-				?? ''
-			)));
+			$rawConsentStatus = '';
+			if (isset($decoded['consent']) && is_array($decoded['consent'])) {
+				$rawConsentStatus = trim((string) (
+					$decoded['consent']['status']
+					?? $decoded['consent']['consent_status']
+					?? $decoded['consent']['consentStatus']
+					?? ''
+				));
+			}
+			if ($rawConsentStatus === '' && isset($decoded['consentDetail']) && is_array($decoded['consentDetail'])) {
+				$rawConsentStatus = trim((string) ($decoded['consentDetail']['status'] ?? ''));
+			}
+			if ($rawConsentStatus === '' && isset($decoded['data']['consent']) && is_array($decoded['data']['consent'])) {
+				$rawConsentStatus = trim((string) ($decoded['data']['consent']['status'] ?? ''));
+			}
+			if ($rawConsentStatus === '') {
+				$rawConsentStatus = trim((string) ($decoded['consent_status'] ?? $decoded['consentStatus'] ?? ''));
+			}
+			if ($rawConsentStatus === '' || in_array(strtolower($rawConsentStatus), ['success', 'ok', 'failed', 'error', 'status_checked'], true)) {
+				$topStatus = trim((string) ($decoded['status'] ?? ''));
+				if (! in_array(strtolower($topStatus), ['success', 'ok', 'failed', 'error', 'status_checked', '1', '0'], true)) {
+					$rawConsentStatus = $topStatus;
+				}
+			}
+			$rawConsentStatus = strtoupper($rawConsentStatus);
 
 			$requestId = trim((string) (
 				$row['gateway_request_id']
@@ -4811,13 +4852,31 @@ class Patient extends BaseController
 				$decoded = [];
 			}
 
-			$rawConsentStatus = strtoupper(trim((string) (
-				$decoded['consent']['status']
-				?? $decoded['consent_status']
-				?? $decoded['status']
-				?? $decoded['data']['consent']['status']
-				?? ''
-			)));
+			$rawConsentStatus = '';
+			if (isset($decoded['consent']) && is_array($decoded['consent'])) {
+				$rawConsentStatus = trim((string) (
+					$decoded['consent']['status']
+					?? $decoded['consent']['consent_status']
+					?? $decoded['consent']['consentStatus']
+					?? ''
+				));
+			}
+			if ($rawConsentStatus === '' && isset($decoded['consentDetail']) && is_array($decoded['consentDetail'])) {
+				$rawConsentStatus = trim((string) ($decoded['consentDetail']['status'] ?? ''));
+			}
+			if ($rawConsentStatus === '' && isset($decoded['data']['consent']) && is_array($decoded['data']['consent'])) {
+				$rawConsentStatus = trim((string) ($decoded['data']['consent']['status'] ?? ''));
+			}
+			if ($rawConsentStatus === '') {
+				$rawConsentStatus = trim((string) ($decoded['consent_status'] ?? $decoded['consentStatus'] ?? ''));
+			}
+			if ($rawConsentStatus === '' || in_array(strtolower($rawConsentStatus), ['success', 'ok', 'failed', 'error', 'status_checked'], true)) {
+				$topStatus = trim((string) ($decoded['status'] ?? ''));
+				if (! in_array(strtolower($topStatus), ['success', 'ok', 'failed', 'error', 'status_checked', '1', '0'], true)) {
+					$rawConsentStatus = $topStatus;
+				}
+			}
+			$rawConsentStatus = strtoupper($rawConsentStatus);
 			$operation = strtoupper(trim((string) ($row['operation'] ?? '')));
 			$status = strtoupper(trim((string) ($row['status'] ?? '')));
 			$state = strtoupper(trim((string) ($row['workflow_state'] ?? '')));
@@ -4887,7 +4946,7 @@ class Patient extends BaseController
 
 		// Phase selection above is priority-based, so a GRANTED/COMPLETED row
 		// would otherwise outrank a LATER revocation/expiry/denial reported by
-		// the PHR app. A terminal outcome recorded after the winning row wins.
+		// the PHR app. A terminal outcome recorded in this session wins.
 		$terminalPhase = '';
 		$terminalRowId = 0;
 		foreach ($rows as $row) {
@@ -4895,13 +4954,30 @@ class Patient extends BaseController
 			if (! is_array($rowDecoded)) {
 				$rowDecoded = [];
 			}
-			$rowStatus = strtoupper(trim((string) (
-				$rowDecoded['consent']['status']
-				?? $rowDecoded['consent_status']
-				?? $rowDecoded['status']
-				?? $rowDecoded['data']['consent']['status']
-				?? ''
-			)));
+			$rowStatus = '';
+			if (isset($rowDecoded['consent']) && is_array($rowDecoded['consent'])) {
+				$rowStatus = trim((string) (
+					$rowDecoded['consent']['status']
+					?? $rowDecoded['consent']['consent_status']
+					?? ''
+				));
+			}
+			if ($rowStatus === '' && isset($rowDecoded['consentDetail']) && is_array($rowDecoded['consentDetail'])) {
+				$rowStatus = trim((string) ($rowDecoded['consentDetail']['status'] ?? ''));
+			}
+			if ($rowStatus === '' && isset($rowDecoded['data']['consent']) && is_array($rowDecoded['data']['consent'])) {
+				$rowStatus = trim((string) ($rowDecoded['data']['consent']['status'] ?? ''));
+			}
+			if ($rowStatus === '') {
+				$rowStatus = trim((string) ($rowDecoded['consent_status'] ?? $rowDecoded['consentStatus'] ?? ''));
+			}
+			if ($rowStatus === '' || in_array(strtolower($rowStatus), ['success', 'ok', 'failed', 'error', 'status_checked'], true)) {
+				$rowState = strtoupper(trim((string) ($row['workflow_state'] ?? '')));
+				if (in_array($rowState, ['REVOKED', 'EXPIRED', 'DENIED'], true)) {
+					$rowStatus = $rowState;
+				}
+			}
+			$rowStatus = strtoupper($rowStatus);
 			if (! in_array($rowStatus, ['REVOKED', 'EXPIRED', 'DENIED'], true)) {
 				continue;
 			}
@@ -4911,7 +4987,7 @@ class Patient extends BaseController
 				$terminalRowId = $rowId;
 			}
 		}
-		if ($terminalPhase !== '' && $terminalRowId > (int) ($best['id'] ?? 0)) {
+		if ($terminalPhase !== '') {
 			$phase = $terminalPhase;
 		}
 

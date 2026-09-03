@@ -370,8 +370,55 @@ class M3HiuGatewayClient
         // under `consent{}` (e.g. { consent: { status: "GRANTED", ... } }) rather
         // than at the top level. Flatten them so resolveState()/snapshot logic
         // (which reads $response['consent_status']) can see the real value —
-        // otherwise GRANTED consents keep getting misclassified as pending.
-        $abdmConsentStatus = $this->findFirstValueByKeys($response, ['status']);
+        // otherwise GRANTED/EXPIRED/REVOKED consents keep getting misclassified.
+        $abdmConsentStatus = '';
+        if (isset($response['consent']) && is_array($response['consent'])) {
+            $abdmConsentStatus = trim((string) (
+                $response['consent']['status']
+                ?? $response['consent']['consent_status']
+                ?? $response['consent']['consentStatus']
+                ?? $response['consent']['state']
+                ?? ''
+            ));
+        }
+        if ($abdmConsentStatus === '' && isset($response['consentDetail']) && is_array($response['consentDetail'])) {
+            $abdmConsentStatus = trim((string) (
+                $response['consentDetail']['status']
+                ?? $response['consentDetail']['consent_status']
+                ?? $response['consentDetail']['consentStatus']
+                ?? ''
+            ));
+        }
+        if ($abdmConsentStatus === '' && isset($response['data']) && is_array($response['data'])) {
+            if (isset($response['data']['consent']) && is_array($response['data']['consent'])) {
+                $abdmConsentStatus = trim((string) (
+                    $response['data']['consent']['status']
+                    ?? $response['data']['consent']['consent_status']
+                    ?? $response['data']['consent']['consentStatus']
+                    ?? ''
+                ));
+            }
+            if ($abdmConsentStatus === '') {
+                $abdmConsentStatus = trim((string) (
+                    $response['data']['consent_status']
+                    ?? $response['data']['consentStatus']
+                    ?? ''
+                ));
+            }
+        }
+        if ($abdmConsentStatus === '') {
+            $abdmConsentStatus = trim((string) (
+                $response['consent_status']
+                ?? $response['consentStatus']
+                ?? ''
+            ));
+        }
+        if ($abdmConsentStatus === '') {
+            $potentialStatus = $this->findFirstValueByKeys($response, ['consent_status', 'consentStatus', 'status']);
+            if (! in_array(strtolower($potentialStatus), ['success', 'ok', 'failed', 'error', 'true', 'false', '1', '0'], true)) {
+                $abdmConsentStatus = $potentialStatus;
+            }
+        }
         if ($abdmConsentStatus !== '') {
             $response['consent_status'] = strtoupper($abdmConsentStatus);
         }

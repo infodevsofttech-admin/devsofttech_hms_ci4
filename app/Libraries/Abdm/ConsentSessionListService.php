@@ -232,13 +232,31 @@ class ConsentSessionListService
                 $decoded = [];
             }
 
-            $rawConsentStatus = strtoupper(trim((string) (
-                $decoded['consent']['status']
-                ?? $decoded['consent_status']
-                ?? $decoded['status']
-                ?? $decoded['data']['consent']['status']
-                ?? ''
-            )));
+            $rawConsentStatus = '';
+            if (isset($decoded['consent']) && is_array($decoded['consent'])) {
+                $rawConsentStatus = trim((string) (
+                    $decoded['consent']['status']
+                    ?? $decoded['consent']['consent_status']
+                    ?? $decoded['consent']['consentStatus']
+                    ?? ''
+                ));
+            }
+            if ($rawConsentStatus === '' && isset($decoded['consentDetail']) && is_array($decoded['consentDetail'])) {
+                $rawConsentStatus = trim((string) ($decoded['consentDetail']['status'] ?? ''));
+            }
+            if ($rawConsentStatus === '' && isset($decoded['data']['consent']) && is_array($decoded['data']['consent'])) {
+                $rawConsentStatus = trim((string) ($decoded['data']['consent']['status'] ?? ''));
+            }
+            if ($rawConsentStatus === '') {
+                $rawConsentStatus = trim((string) ($decoded['consent_status'] ?? $decoded['consentStatus'] ?? ''));
+            }
+            if ($rawConsentStatus === '' || in_array(strtolower($rawConsentStatus), ['success', 'ok', 'failed', 'error', 'status_checked'], true)) {
+                $topStatus = trim((string) ($decoded['status'] ?? ''));
+                if (! in_array(strtolower($topStatus), ['success', 'ok', 'failed', 'error', 'status_checked', '1', '0'], true)) {
+                    $rawConsentStatus = $topStatus;
+                }
+            }
+            $rawConsentStatus = strtoupper($rawConsentStatus);
             $operation = strtoupper(trim((string) ($row['operation'] ?? '')));
             $status = strtoupper(trim((string) ($row['status'] ?? '')));
             $state = strtoupper(trim((string) ($row['workflow_state'] ?? '')));
@@ -297,6 +315,50 @@ class ConsentSessionListService
         }
 
         $phase = (string) $best['_phase'];
+
+        $terminalPhase = '';
+        $terminalRowId = 0;
+        foreach ($rows as $row) {
+            $rowDecoded = json_decode((string) ($row['response_json'] ?? ''), true);
+            if (! is_array($rowDecoded)) {
+                $rowDecoded = [];
+            }
+            $rowStatus = '';
+            if (isset($rowDecoded['consent']) && is_array($rowDecoded['consent'])) {
+                $rowStatus = trim((string) (
+                    $rowDecoded['consent']['status']
+                    ?? $rowDecoded['consent']['consent_status']
+                    ?? ''
+                ));
+            }
+            if ($rowStatus === '' && isset($rowDecoded['consentDetail']) && is_array($rowDecoded['consentDetail'])) {
+                $rowStatus = trim((string) ($rowDecoded['consentDetail']['status'] ?? ''));
+            }
+            if ($rowStatus === '' && isset($rowDecoded['data']['consent']) && is_array($rowDecoded['data']['consent'])) {
+                $rowStatus = trim((string) ($rowDecoded['data']['consent']['status'] ?? ''));
+            }
+            if ($rowStatus === '') {
+                $rowStatus = trim((string) ($rowDecoded['consent_status'] ?? $rowDecoded['consentStatus'] ?? ''));
+            }
+            if ($rowStatus === '' || in_array(strtolower($rowStatus), ['success', 'ok', 'failed', 'error', 'status_checked'], true)) {
+                $rowState = strtoupper(trim((string) ($row['workflow_state'] ?? '')));
+                if (in_array($rowState, ['REVOKED', 'EXPIRED', 'DENIED'], true)) {
+                    $rowStatus = $rowState;
+                }
+            }
+            $rowStatus = strtoupper($rowStatus);
+            if (! in_array($rowStatus, ['REVOKED', 'EXPIRED', 'DENIED'], true)) {
+                continue;
+            }
+            $rowId = (int) ($row['id'] ?? 0);
+            if ($rowId >= $terminalRowId) {
+                $terminalPhase = $rowStatus;
+                $terminalRowId = $rowId;
+            }
+        }
+        if ($terminalPhase !== '') {
+            $phase = $terminalPhase;
+        }
         $consentId = trim((string) ($best['abdm_consent_artifact_id'] ?? $best['consent_id'] ?? $bestDecoded['consent_id'] ?? $bestDecoded['consentId'] ?? ''));
         $consentRequestId = trim((string) ($best['abdm_consent_request_id'] ?? $bestDecoded['abdm_consent_request_id'] ?? $bestDecoded['consent_request_id'] ?? $bestDecoded['consentRequestId'] ?? ''));
 

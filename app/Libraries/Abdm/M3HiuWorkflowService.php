@@ -1427,7 +1427,42 @@ class M3HiuWorkflowService
             return 'FAILED';
         }
 
-        $statusStr = strtolower(trim((string) ($result['status'] ?? $result['consent_status'] ?? '')));
+        $rawConsent = '';
+        if (isset($result['consent']) && is_array($result['consent'])) {
+            $rawConsent = (string) (
+                $result['consent']['status']
+                ?? $result['consent']['consent_status']
+                ?? $result['consent']['consentStatus']
+                ?? $result['consent']['state']
+                ?? ''
+            );
+        }
+        if ($rawConsent === '' && isset($result['consentDetail']) && is_array($result['consentDetail'])) {
+            $rawConsent = (string) (
+                $result['consentDetail']['status']
+                ?? $result['consentDetail']['consent_status']
+                ?? $result['consentDetail']['consentStatus']
+                ?? ''
+            );
+        }
+        if ($rawConsent === '' && isset($result['data']['consent']) && is_array($result['data']['consent'])) {
+            $rawConsent = (string) (
+                $result['data']['consent']['status']
+                ?? $result['data']['consent']['consent_status']
+                ?? ''
+            );
+        }
+        if ($rawConsent === '') {
+            $rawConsent = (string) ($result['consent_status'] ?? $result['consentStatus'] ?? '');
+        }
+        if ($rawConsent === '' || in_array(strtolower($rawConsent), ['success', 'ok', 'failed', 'error'], true)) {
+            $topStatus = (string) ($result['status'] ?? '');
+            if (! in_array(strtolower($topStatus), ['success', 'ok', 'failed', 'error', '1', '0'], true)) {
+                $rawConsent = $topStatus;
+            }
+        }
+
+        $statusStr = strtolower(trim($rawConsent));
         if (in_array($statusStr, ['revoked', 'denied'], true)) {
             return 'REVOKED';
         }
@@ -1437,13 +1472,13 @@ class M3HiuWorkflowService
 
         return match ($operation) {
             'consent_request' => 'REQUESTED',
-            'consent_status' => 'STATUS_CHECKED',
+            'consent_status' => ($statusStr === 'granted' || $statusStr === 'approved' || $statusStr === 'active' ? 'GRANTED' : ($statusStr === 'revoked' ? 'REVOKED' : ($statusStr === 'expired' ? 'EXPIRED' : ($statusStr === 'denied' ? 'DENIED' : 'STATUS_CHECKED')))),
             'consent_fetch' => 'CONSENT_FETCHED',
-            'consent_callback' => ($statusStr === 'granted' || $statusStr === 'approved' ? 'GRANTED' : ($statusStr === 'revoked' ? 'REVOKED' : ($statusStr === 'expired' ? 'EXPIRED' : 'STATUS_CHECKED'))),
+            'consent_callback' => ($statusStr === 'granted' || $statusStr === 'approved' || $statusStr === 'active' ? 'GRANTED' : ($statusStr === 'revoked' ? 'REVOKED' : ($statusStr === 'expired' ? 'EXPIRED' : ($statusStr === 'denied' ? 'DENIED' : 'STATUS_CHECKED')))),
             'hi_request' => ($statusStr === 'completed' ? 'COMPLETED' : 'DATA_REQUESTED'),
             'hi_on_request_callback' => (($statusStr === 'data_received' || isset($result['fhir_bundle']) || isset($result['bundles']) || isset($result['entries'])) ? 'DATA_RECEIVED' : ($ok ? 'DATA_PENDING' : 'FAILED')),
             'hi_data_push_callback' => (($statusStr === 'data_received' || isset($result['fhir_bundle']) || isset($result['bundles']) || isset($result['entries'])) ? 'DATA_RECEIVED' : ($ok ? 'DATA_PENDING' : 'FAILED')),
-            'consent_reconcile' => ($statusStr === 'granted' ? 'GRANTED' : ($statusStr === 'revoked' ? 'REVOKED' : ($statusStr === 'expired' ? 'EXPIRED' : 'STATUS_CHECKED'))),
+            'consent_reconcile' => ($statusStr === 'granted' || $statusStr === 'approved' || $statusStr === 'active' ? 'GRANTED' : ($statusStr === 'revoked' ? 'REVOKED' : ($statusStr === 'expired' ? 'EXPIRED' : ($statusStr === 'denied' ? 'DENIED' : 'STATUS_CHECKED')))),
             'data_fetch' => (($statusStr === 'completed' || isset($result['fhir_bundle']) || isset($result['bundles'])) ? 'DATA_RECEIVED' : 'DATA_PENDING'),
             default => 'COMPLETED',
         };
