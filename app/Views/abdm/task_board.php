@@ -25,7 +25,7 @@
     <div class="d-flex flex-wrap gap-2 mb-3" id="taskFilters">
         <button type="button" class="btn btn-sm btn-primary filter-btn" data-filter="dashboard">Dashboard</button>
         <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="opd_book">OPD Book</button>
-        <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="opd_consult_publish">OPD Consult Publish</button>
+        <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="opd_consult_publish">OPD Consult / Prescription Records</button>
         <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="lab_report_publish">Lab Reports</button>
         <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="radiology_report_publish">Radiology Reports</button>
         <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="immunization_record_publish">Immunization Record</button>
@@ -337,10 +337,10 @@
         </div>
     </div>
 
-    <!-- OPD Consult Publish Card -->
+    <!-- OPD Consult / Prescription Records Card -->
     <div class="card shadow-sm mt-3 d-none" id="opdConsultCard">
         <div class="card-header py-2 d-flex align-items-center gap-2">
-            <strong>OPD Consult Publish — Done Appointments with ABHA</strong>
+            <strong>OPD Consult / Prescription Records — Done Appointments with ABHA</strong>
             <span class="badge bg-success"><?= count($opd_consult_rows ?? []) ?></span>
             <small class="text-muted ms-1">Last 30 days · opd_status=Done · ABHA linked</small>
         </div>
