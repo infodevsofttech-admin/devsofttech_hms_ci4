@@ -273,6 +273,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             // ABDM PHR: use exam category for admission/discharge condition observations;
             // vital-signs category only for true vital measurements.
             $obsCategoryCode    = ($isAdm || $isDis) ? 'exam' : 'vital-signs';
+            $obsCategoryCanonicalDisplay = ($isAdm || $isDis) ? 'Exam' : 'Vital Signs';
             $obsCategorySystem  = 'http://terminology.hl7.org/CodeSystem/observation-category';
 
             $coding = [];
@@ -314,7 +315,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     'coding' => [[
                         'system'  => $obsCategorySystem,
                         'code'    => $obsCategoryCode,
-                        'display' => $obsCategoryDisplay,
+                        'display' => $obsCategoryCanonicalDisplay,
                     ]],
                 ]],
                 'code' => [
@@ -595,12 +596,17 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
 
             $docTitle = trim((string) ($document['title'] ?? 'Clinical document'));
             $snomedCode = trim((string) ($document['snomed_code'] ?? ''));
+            $snomedDisplay = trim((string) ($document['snomed_display'] ?? ''));
             if ($snomedCode === '') {
                 if (stripos($docTitle, 'Bill') !== false || stripos($docTitle, 'Invoice') !== false) {
                     $snomedCode = '823651000000106'; // Billing record
+                    $snomedDisplay = 'Billing record';
                 } else {
                     $snomedCode = '373942005'; // Discharge summary
+                    $snomedDisplay = 'Discharge summary';
                 }
+            } elseif ($snomedDisplay === '') {
+                $snomedDisplay = $docTitle;
             }
 
             $rawBytes = base64_decode($data);
@@ -620,7 +626,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 'type' => ['coding' => [[
                     'system' => 'http://snomed.info/sct',
                     'code' => $snomedCode,
-                    'display' => $docTitle,
+                    'display' => $snomedDisplay,
                 ]], 'text' => $docTitle],
                 'subject' => [
                     'reference' => $patientRef,
@@ -812,7 +818,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             return ['code' => '8462-4', 'display' => 'Diastolic blood pressure'];
         }
         if (str_contains($upper, 'SPO2') || str_contains($upper, 'OXYGEN')) {
-            return ['code' => '2708-6', 'display' => 'Oxygen saturation in Arterial blood by Pulse oximetry'];
+            return ['code' => '59408-5', 'display' => 'Oxygen saturation in Arterial blood by Pulse oximetry'];
         }
         if (str_contains($upper, 'RBS') || str_contains($upper, 'RANDOM BLOOD SUGAR') || str_contains($upper, 'GLUCOSE')) {
             return ['code' => '2345-7', 'display' => 'Glucose [Mass/volume] in Serum or Plasma'];
