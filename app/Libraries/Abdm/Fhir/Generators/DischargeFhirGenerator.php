@@ -114,7 +114,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         ];
         foreach ($conditionGroups as $group) {
             foreach ($group['items'] as $idx => $cond) {
-                $text = trim((string) ($cond['text'] ?? ''));
+                $text = trim((string) ($cond['text'] ?? $cond['name'] ?? ''));
                 if ($text === '') {
                     continue;
                 }
@@ -156,7 +156,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         }
 
         foreach ((array) ($source['procedures'] ?? []) as $idx => $proc) {
-            $text = trim((string) ($proc['text'] ?? ''));
+            $text = trim((string) ($proc['text'] ?? $proc['name'] ?? ''));
             if ($text === '') {
                 continue;
             }
@@ -306,7 +306,80 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 'effectiveDateTime' => (string) ($obs['effective_at'] ?? $timestamp),
             ];
 
-            if (is_numeric($value)) {
+            if ($loincCode === '85354-9' || str_contains(strtoupper($text), 'BP') || str_contains(strtoupper($text), 'BLOOD PRESSURE')) {
+                $loincCode = '85354-9';
+                $loincDisplay = 'Blood pressure panel with all children optional';
+                $coding = [[
+                    'system'  => 'http://loinc.org',
+                    'code'    => '85354-9',
+                    'display' => 'Blood pressure panel with all children optional',
+                ]];
+                $obsResource['code'] = [
+                    'coding' => $coding,
+                    'text'   => $text,
+                ];
+
+                if (preg_match('/(\d+(?:\.\d+)?)\s*[\/\-]\s*(\d+(?:\.\d+)?)/', $value, $bpMatches)) {
+                    $systolic = (float) $bpMatches[1];
+                    $diastolic = (float) $bpMatches[2];
+                    $obsResource['component'] = [
+                        [
+                            'code' => [
+                                'coding' => [[
+                                    'system'  => 'http://loinc.org',
+                                    'code'    => '8480-6',
+                                    'display' => 'Systolic blood pressure',
+                                ]],
+                                'text' => 'Systolic blood pressure',
+                            ],
+                            'valueQuantity' => [
+                                'value'  => $systolic,
+                                'unit'   => 'mmHg',
+                                'system' => 'http://unitsofmeasure.org',
+                                'code'   => 'mm[Hg]',
+                            ],
+                        ],
+                        [
+                            'code' => [
+                                'coding' => [[
+                                    'system'  => 'http://loinc.org',
+                                    'code'    => '8462-4',
+                                    'display' => 'Diastolic blood pressure',
+                                ]],
+                                'text' => 'Diastolic blood pressure',
+                            ],
+                            'valueQuantity' => [
+                                'value'  => $diastolic,
+                                'unit'   => 'mmHg',
+                                'system' => 'http://unitsofmeasure.org',
+                                'code'   => 'mm[Hg]',
+                            ],
+                        ],
+                    ];
+                } elseif (is_numeric($value)) {
+                    $systolic = (float) $value;
+                    $obsResource['component'] = [
+                        [
+                            'code' => [
+                                'coding' => [[
+                                    'system'  => 'http://loinc.org',
+                                    'code'    => '8480-6',
+                                    'display' => 'Systolic blood pressure',
+                                ]],
+                                'text' => 'Systolic blood pressure',
+                            ],
+                            'valueQuantity' => [
+                                'value'  => $systolic,
+                                'unit'   => 'mmHg',
+                                'system' => 'http://unitsofmeasure.org',
+                                'code'   => 'mm[Hg]',
+                            ],
+                        ],
+                    ];
+                } else {
+                    $obsResource['valueString'] = $value;
+                }
+            } elseif (is_numeric($value)) {
                 $unitInfo = $this->getVitalSignUnitInfo($text, trim((string) ($obs['unit'] ?? '')));
                 $obsResource['valueQuantity'] = [
                     'value'  => (float) $value,
@@ -805,7 +878,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $text = trim((string) $item['text']);
             $val = trim((string) $item['value']);
             $unit = trim((string) ($item['unit'] ?? ''));
-            $unitInfo = is_numeric($val) ? $this->getVitalSignUnitInfo($text, $unit) : ['unit' => ''];
+            $unitInfo = (is_numeric($val) || preg_match('/^\d+\s*[\/\-]\s*\d+/', $val)) ? $this->getVitalSignUnitInfo($text, $unit) : ['unit' => ''];
             $displayUnit = $unit !== '' ? $unit : ($unitInfo['unit'] ?? '');
             $valStr = $val . ($displayUnit !== '' && stripos($val, $displayUnit) === false ? ' ' . $displayUnit : '');
             return trim($text . ': ' . $valStr);

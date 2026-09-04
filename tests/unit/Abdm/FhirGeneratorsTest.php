@@ -734,4 +734,93 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertGreaterThanOrEqual(1, count($composition['section']));
         $this->assertNotEmpty($composition['section'][0]['entry']);
     }
+
+    public function testDischargeSummaryGeneratorCreatesFullSectionsAndComponents(): void
+    {
+        $generator = $this->factory->discharge();
+        $output = $generator->generate([
+            'record_id' => '3209',
+            'encounter' => [
+                'id' => 'A26090003209',
+                'start' => '2026-09-01T18:57:00+05:30',
+                'end' => '2026-09-04T19:00:00+05:30',
+                'ward' => 'General Ward',
+                'bed' => 'GW-05',
+            ],
+            'patient' => [
+                'id' => '15355',
+                'name' => 'JANVI BISHT',
+                'gender' => 'female',
+                'dob' => '2013-06-25',
+                'abha_id' => '91407564383062',
+            ],
+            'doctor_name' => 'Dr. Sanjay Kumar',
+            'chief_complaints' => [
+                ['name' => 'Fever'],
+                ['name' => 'Cough'],
+                ['name' => 'Breathlessness'],
+                ['name' => 'Vomiting'],
+            ],
+            'diagnoses' => [
+                ['name' => 'VIRAL FEVER'],
+            ],
+            'medications' => [
+                ['name' => 'DOZPANTA DSR', 'dosage' => 'BF | OD | for 5 Days'],
+                ['name' => 'WANAPOL', 'dosage' => 'AF | BD | for 2 Days'],
+            ],
+            'observations' => [
+                ['text' => 'Pulse', 'value' => '40', 'unit' => '/min', 'category' => 'Condition on Admission Time'],
+                ['text' => 'BP', 'value' => '120/80', 'unit' => 'mmHg', 'category' => 'Condition on Admission Time'],
+                ['text' => 'Pulse', 'value' => '25', 'unit' => '/min', 'category' => 'Condition on Discharge Time'],
+                ['text' => 'BP', 'value' => '110/70', 'unit' => 'mmHg', 'category' => 'Condition on Discharge Time'],
+            ],
+            'investigations' => [
+                ['text' => 'HB', 'value' => '11', 'unit' => 'g/dL', 'loinc_code' => '718-7'],
+            ],
+            'care_plans' => [
+                ['title' => 'Dietary Advice', 'description' => 'Hydration: 8-10 glasses of water daily.'],
+            ],
+        ]);
+
+        $this->assertSame('DischargeSummaryRecord', $output['hi_type']);
+        $bundle = $output['fhir_bundle'];
+        $this->assertSame('Bundle', $bundle['resourceType']);
+
+        $resourceTypes = array_column(array_column($bundle['entry'], 'resource'), 'resourceType');
+        $this->assertContains('Composition', $resourceTypes);
+        $this->assertContains('Patient', $resourceTypes);
+        $this->assertContains('Encounter', $resourceTypes);
+        $this->assertContains('Condition', $resourceTypes);
+        $this->assertContains('MedicationRequest', $resourceTypes);
+        $this->assertContains('Observation', $resourceTypes);
+        $this->assertContains('DiagnosticReport', $resourceTypes);
+        $this->assertContains('CarePlan', $resourceTypes);
+        $this->assertContains('DocumentReference', $resourceTypes);
+
+        // Verify BP observations have components
+        $bpObservations = [];
+        foreach ($bundle['entry'] as $entry) {
+            $res = $entry['resource'];
+            if (($res['resourceType'] ?? '') === 'Observation' && ($res['code']['coding'][0]['code'] ?? '') === '85354-9') {
+                $bpObservations[] = $res;
+            }
+        }
+        $this->assertCount(2, $bpObservations);
+        $this->assertArrayHasKey('component', $bpObservations[0]);
+        $this->assertCount(2, $bpObservations[0]['component']);
+        $this->assertSame(120.0, $bpObservations[0]['component'][0]['valueQuantity']['value']);
+        $this->assertSame(80.0, $bpObservations[0]['component'][1]['valueQuantity']['value']);
+        $this->assertSame('8480-6', $bpObservations[0]['component'][0]['code']['coding'][0]['code']);
+        $this->assertSame('8462-4', $bpObservations[0]['component'][1]['code']['coding'][0]['code']);
+
+        // Verify composition sections
+        $composition = $bundle['entry'][0]['resource'];
+        $sectionTitles = array_column($composition['section'], 'title');
+        $this->assertContains('Chief complaints', $sectionTitles);
+        $this->assertContains('Problems and Diagnoses', $sectionTitles);
+        $this->assertContains('Condition on Admission Time', $sectionTitles);
+        $this->assertContains('Condition on Discharge Time', $sectionTitles);
+        $this->assertContains('Medications', $sectionTitles);
+        $this->assertContains('Care plan', $sectionTitles);
+    }
 }
