@@ -310,14 +310,22 @@ class FhirDocumentBuilder
         return $clean === [] ? null : $clean;
     }
 
-    /** @param mixed $value */
+    /**
+     * Returns true only for display-level placeholder strings that should never
+     * appear in a rendered FHIR bundle (pure "no data" sentinel values).
+     * NOTE: '0' is intentionally excluded — it is a valid FHIR quantity value,
+     * coded value, and identifier string. Its earlier inclusion caused silent
+     * data loss in observation valueQuantity and numeric identifiers.
+     *
+     * @param mixed $value
+     */
     private function isPlaceholderValue($value): bool
     {
         if (! is_string($value)) {
             return false;
         }
 
-        return in_array(strtoupper(trim($value)), ['NA', 'N/A', 'NULL', 'NOT AVAILABLE'], true);
+        return in_array(strtoupper(trim($value)), ['NA', 'N/A', 'N / A', 'NULL', 'NOT AVAILABLE', 'UNDEFINED'], true);
     }
 
     private function newId(string $prefix): string

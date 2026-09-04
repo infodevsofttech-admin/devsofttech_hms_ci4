@@ -270,6 +270,10 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $isAdm = (stripos($catText, 'Admission') !== false || stripos($text, 'Admission') !== false);
             $isDis = (stripos($catText, 'Discharge') !== false || stripos($text, 'Discharge') !== false);
             $obsCategoryDisplay = $isAdm ? 'Condition on Admission Time' : ($isDis ? 'Condition on Discharge Time' : 'Vital Signs');
+            // ABDM PHR: use exam category for admission/discharge condition observations;
+            // vital-signs category only for true vital measurements.
+            $obsCategoryCode    = ($isAdm || $isDis) ? 'exam' : 'vital-signs';
+            $obsCategorySystem  = 'http://terminology.hl7.org/CodeSystem/observation-category';
 
             $coding = [];
             $loincCode = trim((string) ($obs['loinc_code'] ?? ''));
@@ -308,9 +312,9 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 'category' => [[
                     'text' => $obsCategoryDisplay,
                     'coding' => [[
-                        'system' => 'http://terminology.hl7.org/CodeSystem/observation-category',
-                        'code' => 'vital-signs',
-                        'display' => 'Vital Signs',
+                        'system'  => $obsCategorySystem,
+                        'code'    => $obsCategoryCode,
+                        'display' => $obsCategoryDisplay,
                     ]],
                 ]],
                 'code' => [
@@ -397,12 +401,13 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 }
             } elseif (is_numeric($value)) {
                 $unitInfo = $this->getVitalSignUnitInfo($text, trim((string) ($obs['unit'] ?? '')));
-                $obsResource['valueQuantity'] = [
-                    'value'  => (float) $value,
-                    'unit'   => $unitInfo['unit'],
-                    'system' => 'http://unitsofmeasure.org',
-                    'code'   => $unitInfo['code'],
-                ];
+                $vq = ['value' => (float) $value];
+                if ($unitInfo['unit'] !== '') {
+                    $vq['unit']   = $unitInfo['unit'];
+                    $vq['system'] = 'http://unitsofmeasure.org';
+                    $vq['code']   = $unitInfo['code'] !== '' ? $unitInfo['code'] : $unitInfo['unit'];
+                }
+                $obsResource['valueQuantity'] = $vq;
             } else {
                 $obsResource['valueString'] = $value;
             }
@@ -457,6 +462,15 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Investigation:</b> ' . htmlspecialchars($text) . ($resultValue !== '' ? (': ' . htmlspecialchars($resultValue)) : '') . '</p></div>',
                 ],
                 'status' => 'final',
+                // NRCES Observation profile requires at least one category.
+                'category' => [[
+                    'coding' => [[
+                        'system'  => 'http://terminology.hl7.org/CodeSystem/observation-category',
+                        'code'    => 'laboratory',
+                        'display' => 'Laboratory',
+                    ]],
+                    'text' => 'Laboratory',
+                ]],
                 'code' => [
                     'coding' => $coding,
                     'text' => $text,
@@ -1391,7 +1405,8 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             if ($secTitle === '' || $secDiv === '') {
                 continue;
             }
-            if (preg_match('/<div[^>]*>(.*)<\/div>/is', $secDiv, $m)) {
+            // Non-greedy match to avoid swallowing sibling tags in multi-div strings.
+            if (preg_match('/<div[^>]*>(.*?)<\/div>/is', $secDiv, $m)) {
                 $inner = trim($m[1]);
             } else {
                 $inner = $secDiv;
