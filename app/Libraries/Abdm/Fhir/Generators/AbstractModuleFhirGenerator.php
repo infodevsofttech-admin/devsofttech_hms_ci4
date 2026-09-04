@@ -206,7 +206,57 @@ abstract class AbstractModuleFhirGenerator
             ];
         }
 
-        return [
+        $start = trim((string) ($enc['start'] ?? $enc['admission_date'] ?? $source['admission_date'] ?? $source['completed_at'] ?? ''));
+        if ($start === '') {
+            $start = date(DATE_ATOM);
+        } else {
+            $ts = strtotime($start);
+            $start = $ts !== false ? date(DATE_ATOM, $ts) : $start;
+        }
+
+        $end = trim((string) ($enc['end'] ?? $enc['discharge_date'] ?? $source['discharge_date'] ?? $source['completed_at'] ?? ''));
+        if ($end === '') {
+            $end = date(DATE_ATOM);
+        } else {
+            $ts = strtotime($end);
+            $end = $ts !== false ? date(DATE_ATOM, $ts) : $end;
+        }
+
+        $locationList = [];
+        $locDisplay = trim((string) ($enc['location_display'] ?? $enc['location'] ?? $source['location_display'] ?? $source['location'] ?? ''));
+        $ward = trim((string) ($enc['ward'] ?? $enc['ward_name'] ?? $source['ward'] ?? $source['ward_name'] ?? ''));
+        $room = trim((string) ($enc['room'] ?? $enc['room_name'] ?? $source['room'] ?? $source['room_name'] ?? ''));
+        $bed = trim((string) ($enc['bed'] ?? $enc['bed_no'] ?? $enc['bed_number'] ?? $source['bed'] ?? $source['bed_no'] ?? $source['bed_number'] ?? ''));
+
+        if ($locDisplay === '') {
+            $locParts = [];
+            if ($ward !== '') {
+                $locParts[] = 'Ward: ' . $ward;
+            }
+            if ($room !== '') {
+                $locParts[] = 'Room: ' . $room;
+            }
+            if ($bed !== '') {
+                $locParts[] = 'Bed: ' . $bed;
+            }
+            $locDisplay = implode(', ', $locParts);
+        }
+
+        if ($locDisplay !== '') {
+            $locItem = [
+                'location' => [
+                    'display' => $locDisplay,
+                ],
+                'status' => 'active',
+                'period' => [
+                    'start' => $start,
+                    'end'   => $end,
+                ],
+            ];
+            $locationList[] = $locItem;
+        }
+
+        $encounterResource = [
             'resourceType' => 'Encounter',
             'id' => 'encounter-' . $id,
             'meta' => ['profile' => [
@@ -222,11 +272,17 @@ abstract class AbstractModuleFhirGenerator
                 'reference' => 'urn:uuid:patient-' . (string) ($source['patient']['id'] ?? ''),
             ],
             'period' => [
-                'start' => (string) ($enc['start'] ?? $source['completed_at'] ?? date(DATE_ATOM)),
-                'end' => (string) ($enc['end'] ?? $source['completed_at'] ?? date(DATE_ATOM)),
+                'start' => $start,
+                'end' => $end,
             ],
             'identifier' => $identifiers,
         ];
+
+        if (! empty($locationList)) {
+            $encounterResource['location'] = $locationList;
+        }
+
+        return $encounterResource;
     }
 
     /** @param array<string,mixed> $source */

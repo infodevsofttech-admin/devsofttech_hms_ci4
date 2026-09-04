@@ -229,6 +229,9 @@ final class FhirGeneratorsTest extends CIUnitTestCase
                 'class_code' => 'IMP',
                 'start' => '2026-09-01T04:53:00+05:30',
                 'end' => '2026-09-04T04:58:00+05:30',
+                'location_display' => 'Ward: General Ward, Bed: GW-05',
+                'ward' => 'General Ward',
+                'bed' => 'GW-05',
             ],
             'doctor' => ['id' => 9, 'name' => 'Dr. Sanjay Kumar', 'registration_number' => 'DOC12345'],
             'organization' => ['id' => 'IN0510000000', 'name' => 'DevSoft Tech'],
@@ -332,6 +335,18 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertGreaterThanOrEqual(14, count($observations));
         $this->assertSame('General Examination on Admission', $observations[0]['resource']['category'][0]['text']);
         $this->assertSame('Examination on Discharge', $observations[7]['resource']['category'][0]['text']);
+
+        // Verify Encounter period & location
+        $encounters = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'Encounter'));
+        $this->assertCount(1, $encounters);
+        $encounterRes = $encounters[0]['resource'];
+        $this->assertSame('2026-09-01T04:53:00+05:30', $encounterRes['period']['start'] ?? null);
+        $this->assertSame('2026-09-04T04:58:00+05:30', $encounterRes['period']['end'] ?? null);
+        $this->assertNotEmpty($encounterRes['location'] ?? []);
+        $this->assertSame('Ward: General Ward, Bed: GW-05', $encounterRes['location'][0]['location']['display'] ?? null);
+        $this->assertSame('active', $encounterRes['location'][0]['status'] ?? null);
+        $this->assertSame('2026-09-01T04:53:00+05:30', $encounterRes['location'][0]['period']['start'] ?? null);
+        $this->assertSame('2026-09-04T04:58:00+05:30', $encounterRes['location'][0]['period']['end'] ?? null);
 
         // Verify all references resolve
         $fullUrls = array_column($bundle['entry'], 'fullUrl');

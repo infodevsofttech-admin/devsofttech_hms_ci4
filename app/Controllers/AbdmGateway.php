@@ -2947,6 +2947,7 @@ class AbdmGateway extends BaseController
         $hospital = $this->getHospitalProfileForFhir();
         $hfrId = trim((string) ($hospital['hfr_id'] ?? ''));
         $documents = $this->buildIpdPdfDocuments($ipdId, $dischargeRaw);
+        $locationInfo = $this->resolveIpdLocation($ipdId);
 
         $source = [
             'record_id' => (string) $ipdId,
@@ -2977,9 +2978,14 @@ class AbdmGateway extends BaseController
             ],
             'encounter' => [
                 'id' => trim((string) ($ipdRow['ipd_code'] ?? '')) ?: (string) $ipdId,
+                'ipd_no' => trim((string) ($ipdRow['ipd_code'] ?? '')) ?: ('IPD-' . $ipdId),
                 'class_code' => 'IMP',
                 'start' => $this->toIsoDateTimeOrNow($admissionRaw),
                 'end' => $this->toIsoDateTimeOrNow($dischargeRaw),
+                'location_display' => (string) ($locationInfo['display'] ?? ''),
+                'ward' => (string) ($locationInfo['ward'] ?? ''),
+                'room' => (string) ($locationInfo['room'] ?? ''),
+                'bed' => (string) ($locationInfo['bed'] ?? ''),
             ],
             'chief_complaints' => $chiefComplaints,
             'chief_complaint_narrative' => $chiefComplaintNarrative,
@@ -3007,6 +3013,82 @@ class AbdmGateway extends BaseController
             'visit_date' => (string) ($payload['visit_date'] ?? $visitDate),
             'ipd_row' => $ipdRow,
             'attachment_path' => (string) ($documents[0]['path'] ?? ''),
+        ];
+    }
+
+    private function resolveIpdLocation(int $ipdId): array
+    {
+        $bedNo = '';
+        $wardName = '';
+        $roomName = '';
+
+        if ($ipdId > 0) {
+            if ($this->db->tableExists('bed_master')) {
+                $row = $this->db->table('bed_master bm')
+                    ->select('bm.bed_number, wm.ward_name, wm.ward_type')
+                    ->join('ward_master wm', 'wm.id = bm.ward_id', 'left')
+                    ->where('bm.current_ipd_id', $ipdId)
+                    ->limit(1)
+                    ->get()
+                    ->getRowArray();
+                if (! empty($row)) {
+                    $bedNo = trim((string) ($row['bed_number'] ?? ''));
+                    $wardName = trim((string) ($row['ward_name'] ?? $row['ward_type'] ?? ''));
+                }
+            }
+            if ($bedNo === '' && $this->db->tableExists('bed_assignment_history')) {
+                $bahRow = $this->db->table('bed_assignment_history bah')
+                    ->select('bm.bed_number, wm.ward_name, wm.ward_type')
+                    ->join('bed_master bm', 'bm.id = bah.bed_id', 'left')
+                    ->join('ward_master wm', 'wm.id = bah.ward_id', 'left')
+                    ->where('bah.ipd_id', $ipdId)
+                    ->orderBy('bah.id', 'DESC')
+                    ->limit(1)
+                    ->get()
+                    ->getRowArray();
+                if (! empty($bahRow)) {
+                    $bedNo = trim((string) ($bahRow['bed_number'] ?? ''));
+                    $wardName = trim((string) ($bahRow['ward_name'] ?? $bahRow['ward_type'] ?? ''));
+                }
+            }
+            if ($bedNo === '' && $this->db->tableExists('ward_beds')) {
+                $wbRow = $this->db->table('ward_beds wb')
+                    ->select('wb.bed_number, wm.ward_name')
+                    ->join('ward_master wm', 'wm.id = wb.ward_id', 'left')
+                    ->where('wb.ipd_id', $ipdId)
+                    ->limit(1)
+                    ->get()
+                    ->getRowArray();
+                if (! empty($wbRow)) {
+                    $bedNo = trim((string) ($wbRow['bed_number'] ?? ''));
+                    $wardName = trim((string) ($wbRow['ward_name'] ?? ''));
+                }
+            }
+            if ($bedNo === '' && $this->db->tableExists('ipd_master')) {
+                $ipd = $this->db->table('ipd_master')->where('id', $ipdId)->get(1)->getRowArray() ?? [];
+                $bedNo = trim((string) ($ipd['bed_no'] ?? $ipd['bed_id'] ?? ''));
+                $roomName = trim((string) ($ipd['room_no'] ?? $ipd['room_id'] ?? ''));
+            }
+        }
+
+        $parts = [];
+        if ($wardName !== '') {
+            $parts[] = 'Ward: ' . $wardName;
+        }
+        if ($roomName !== '') {
+            $parts[] = 'Room: ' . $roomName;
+        }
+        if ($bedNo !== '') {
+            $parts[] = 'Bed: ' . $bedNo;
+        }
+
+        $display = ! empty($parts) ? implode(', ', $parts) : ($bedNo !== '' ? ('Bed ' . $bedNo) : '');
+
+        return [
+            'ward' => $wardName,
+            'room' => $roomName,
+            'bed' => $bedNo,
+            'display' => $display,
         ];
     }
 
