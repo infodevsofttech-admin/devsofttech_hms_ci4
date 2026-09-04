@@ -348,6 +348,14 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertSame('2026-09-01T04:53:00+05:30', $encounterRes['location'][0]['period']['start'] ?? null);
         $this->assertSame('2026-09-04T04:58:00+05:30', $encounterRes['location'][0]['period']['end'] ?? null);
 
+        // Verify Composition narrative text, language, and confidentiality
+        $this->assertSame('en-IN', $composition['language'] ?? null);
+        $this->assertSame('N', $composition['confidentiality'] ?? null);
+        $this->assertSame('generated', $composition['text']['status'] ?? null);
+        $this->assertStringContainsString('xmlns="http://www.w3.org/1999/xhtml"', $composition['text']['div'] ?? '');
+        $this->assertStringContainsString('JANVI BISHT', $composition['text']['div'] ?? '');
+        $this->assertStringContainsString('DevSoft Tech', $composition['text']['div'] ?? '');
+
         // Verify all references resolve
         $fullUrls = array_column($bundle['entry'], 'fullUrl');
         $encoded = json_encode($bundle, JSON_UNESCAPED_SLASHES);

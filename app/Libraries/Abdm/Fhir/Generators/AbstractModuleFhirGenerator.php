@@ -57,6 +57,10 @@ abstract class AbstractModuleFhirGenerator
             'meta' => ['profile' => [
                 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient',
             ]],
+            'text' => [
+                'status' => 'generated',
+                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Patient:</b> ' . htmlspecialchars((string) ($source['patient']['name'] ?? 'Patient')) . ' (' . htmlspecialchars(ucfirst($gender)) . ')</p></div>',
+            ],
             'identifier' => [
                 [
                     'system' => 'https://hms.local/patient-id',
@@ -256,12 +260,18 @@ abstract class AbstractModuleFhirGenerator
             $locationList[] = $locItem;
         }
 
+        $patientName = trim((string) ($source['patient']['name'] ?? $source['patient_name'] ?? 'Patient'));
+
         $encounterResource = [
             'resourceType' => 'Encounter',
             'id' => 'encounter-' . $id,
             'meta' => ['profile' => [
                 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Encounter',
             ]],
+            'text' => [
+                'status' => 'generated',
+                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Encounter:</b> ' . htmlspecialchars($classDisplay) . ' ' . htmlspecialchars($id) . '</p></div>',
+            ],
             'status' => 'finished',
             'class' => [
                 'system' => 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
@@ -270,6 +280,7 @@ abstract class AbstractModuleFhirGenerator
             ],
             'subject' => [
                 'reference' => 'urn:uuid:patient-' . (string) ($source['patient']['id'] ?? ''),
+                'display' => $patientName !== '' ? $patientName : 'Patient',
             ],
             'period' => [
                 'start' => $start,
@@ -316,6 +327,10 @@ abstract class AbstractModuleFhirGenerator
             'meta' => ['profile' => [
                 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Practitioner',
             ]],
+            'text' => [
+                'status' => 'generated',
+                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Practitioner:</b> ' . htmlspecialchars($name) . '</p></div>',
+            ],
             'identifier' => [[
                 'system' => 'https://doctor.ndhm.gov.in',
                 'value' => $hprId,
@@ -347,6 +362,10 @@ abstract class AbstractModuleFhirGenerator
             'meta' => ['profile' => [
                 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization',
             ]],
+            'text' => [
+                'status' => 'generated',
+                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Organization:</b> ' . htmlspecialchars($name) . '</p></div>',
+            ],
             'name' => $name,
             'identifier' => [[
                 'system' => 'https://facility.ndhm.gov.in',
