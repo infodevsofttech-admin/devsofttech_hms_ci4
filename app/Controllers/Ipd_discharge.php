@@ -8703,7 +8703,12 @@ class Ipd_discharge extends BaseController
         $billPath = $directory . DIRECTORY_SEPARATOR . 'ipd-bill.pdf';
         if (! is_file($billPath) || filesize($billPath) === 0) {
             try {
-                (new \App\Controllers\Billing\Ipd())->generateIpdBillPdfBinary($ipdId, 1, true);
+                $billingCtrl = new \App\Controllers\Billing\Ipd();
+                $request = \Config\Services::request();
+                $response = \Config\Services::response();
+                $logger = \Config\Services::logger();
+                $billingCtrl->initController($request, $response, $logger);
+                $billingCtrl->generateIpdBillPdfBinary($ipdId, 1, true);
             } catch (\Throwable $e) {
                 log_message('error', 'Auto-generating IPD Bill PDF failed for IPD {ipd}: {msg}', [
                     'ipd' => $ipdId,
@@ -9448,52 +9453,86 @@ class Ipd_discharge extends BaseController
         $wardName = '';
         $roomName = '';
 
-        if ($ipdId > 0) {
-            if ($this->db->tableExists('bed_master')) {
-                $row = $this->db->table('bed_master bm')
-                    ->select('bm.bed_number, wm.ward_name, wm.ward_type')
-                    ->join('ward_master wm', 'wm.id = bm.ward_id', 'left')
-                    ->where('bm.current_ipd_id', $ipdId)
-                    ->limit(1)
-                    ->get()
-                    ->getRowArray();
-                if (! empty($row)) {
-                    $bedNo = trim((string) ($row['bed_number'] ?? ''));
-                    $wardName = trim((string) ($row['ward_name'] ?? $row['ward_type'] ?? ''));
+        if ($ipdId > 0 && $this->db) {
+            try {
+                if ($this->db->tableExists('bed_master')) {
+                    $builder = $this->db->table('bed_master bm')
+                        ->select('bm.bed_number');
+                    if ($this->db->tableExists('ward_master')) {
+                        $builder->select('wm.ward_name, wm.ward_type')
+                            ->join('ward_master wm', 'wm.id = bm.ward_id', 'left');
+                    }
+                    $row = $builder->where('bm.current_ipd_id', $ipdId)
+                        ->limit(1)
+                        ->get()
+                        ->getRowArray();
+                    if (! empty($row)) {
+                        $bedNo = trim((string) ($row['bed_number'] ?? ''));
+                        $wardName = trim((string) ($row['ward_name'] ?? $row['ward_type'] ?? ''));
+                    }
+                }
+            } catch (\Throwable $e) {
+            }
+
+            if ($bedNo === '') {
+                try {
+                    if ($this->db->tableExists('bed_assignment_history')) {
+                        $builder = $this->db->table('bed_assignment_history bah');
+                        if ($this->db->tableExists('bed_master')) {
+                            $builder->select('bm.bed_number')
+                                ->join('bed_master bm', 'bm.id = bah.bed_id', 'left');
+                        }
+                        if ($this->db->tableExists('ward_master')) {
+                            $builder->select('wm.ward_name, wm.ward_type')
+                                ->join('ward_master wm', 'wm.id = bah.ward_id', 'left');
+                        }
+                        $bahRow = $builder->where('bah.ipd_id', $ipdId)
+                            ->orderBy('bah.id', 'DESC')
+                            ->limit(1)
+                            ->get()
+                            ->getRowArray();
+                        if (! empty($bahRow)) {
+                            $bedNo = trim((string) ($bahRow['bed_number'] ?? ''));
+                            $wardName = trim((string) ($bahRow['ward_name'] ?? $bahRow['ward_type'] ?? ''));
+                        }
+                    }
+                } catch (\Throwable $e) {
                 }
             }
-            if ($bedNo === '' && $this->db->tableExists('bed_assignment_history')) {
-                $bahRow = $this->db->table('bed_assignment_history bah')
-                    ->select('bm.bed_number, wm.ward_name, wm.ward_type')
-                    ->join('bed_master bm', 'bm.id = bah.bed_id', 'left')
-                    ->join('ward_master wm', 'wm.id = bah.ward_id', 'left')
-                    ->where('bah.ipd_id', $ipdId)
-                    ->orderBy('bah.id', 'DESC')
-                    ->limit(1)
-                    ->get()
-                    ->getRowArray();
-                if (! empty($bahRow)) {
-                    $bedNo = trim((string) ($bahRow['bed_number'] ?? ''));
-                    $wardName = trim((string) ($bahRow['ward_name'] ?? $bahRow['ward_type'] ?? ''));
+
+            if ($bedNo === '') {
+                try {
+                    if ($this->db->tableExists('ward_beds')) {
+                        $builder = $this->db->table('ward_beds wb')
+                            ->select('wb.bed_number');
+                        if ($this->db->tableExists('ward_master')) {
+                            $builder->select('wm.ward_name')
+                                ->join('ward_master wm', 'wm.id = wb.ward_id', 'left');
+                        }
+                        $wbRow = $builder->where('wb.ipd_id', $ipdId)
+                            ->limit(1)
+                            ->get()
+                            ->getRowArray();
+                        if (! empty($wbRow)) {
+                            $bedNo = trim((string) ($wbRow['bed_number'] ?? ''));
+                            $wardName = trim((string) ($wbRow['ward_name'] ?? ''));
+                        }
+                    }
+                } catch (\Throwable $e) {
                 }
             }
-            if ($bedNo === '' && $this->db->tableExists('ward_beds')) {
-                $wbRow = $this->db->table('ward_beds wb')
-                    ->select('wb.bed_number, wm.ward_name')
-                    ->join('ward_master wm', 'wm.id = wb.ward_id', 'left')
-                    ->where('wb.ipd_id', $ipdId)
-                    ->limit(1)
-                    ->get()
-                    ->getRowArray();
-                if (! empty($wbRow)) {
-                    $bedNo = trim((string) ($wbRow['bed_number'] ?? ''));
-                    $wardName = trim((string) ($wbRow['ward_name'] ?? ''));
+
+            if ($bedNo === '' || $roomName === '') {
+                try {
+                    if ($this->db->tableExists('ipd_master')) {
+                        $ipd = $this->db->table('ipd_master')->where('id', $ipdId)->get(1)->getRowArray() ?? [];
+                        if ($bedNo === '') {
+                            $bedNo = trim((string) ($ipd['bed_no'] ?? $ipd['bed_id'] ?? ''));
+                        }
+                        $roomName = trim((string) ($ipd['room_no'] ?? $ipd['room_id'] ?? ''));
+                    }
+                } catch (\Throwable $e) {
                 }
-            }
-            if ($bedNo === '' && $this->db->tableExists('ipd_master')) {
-                $ipd = $this->db->table('ipd_master')->where('id', $ipdId)->get(1)->getRowArray() ?? [];
-                $bedNo = trim((string) ($ipd['bed_no'] ?? $ipd['bed_id'] ?? ''));
-                $roomName = trim((string) ($ipd['room_no'] ?? $ipd['room_id'] ?? ''));
             }
         }
 
