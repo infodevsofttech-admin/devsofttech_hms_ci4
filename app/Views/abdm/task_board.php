@@ -2700,7 +2700,16 @@
                 _fhirLiveComplaints = Array.isArray(parsed.live_complaints) ? parsed.live_complaints : [];
                 _fhirLiveDiagnoses  = Array.isArray(parsed.live_diagnoses)  ? parsed.live_diagnoses  : [];
                 if (fhirModalJson)  fhirModalJson.textContent = JSON.stringify(parsed, null, 2);
-                if (fhirFormView)   fhirFormView.innerHTML = hasFhir ? renderFhirBundleForm(bundle, _fhirLiveComplaints, _fhirLiveDiagnoses) : '<p class="text-muted p-3">No FHIR bundle generated yet.</p>';
+                if (fhirFormView) {
+                    if (hasFhir) {
+                        fhirFormView.innerHTML = renderFhirBundleForm(bundle, _fhirLiveComplaints, _fhirLiveDiagnoses);
+                    } else if (!res.ok) {
+                        var errMsg = (parsed && (parsed.message || parsed.error || parsed.error_text)) ? (parsed.message || parsed.error || parsed.error_text) : (parsed && parsed.raw ? parsed.raw : ('HTTP ' + res.status + ' error.'));
+                        fhirFormView.innerHTML = '<div class="alert alert-danger m-3"><i class="bi bi-exclamation-triangle"></i> <strong>Error (' + res.status + '):</strong> ' + hesc(errMsg) + '</div>';
+                    } else {
+                        fhirFormView.innerHTML = '<p class="text-muted p-3">No FHIR bundle generated yet.</p>';
+                    }
+                }
                 if (fhirModalMeta)  { fhirModalMeta.textContent = res.ok ? 'Loaded (' + res.status + ')' : 'Error (' + res.status + ')'; fhirModalMeta.className = 'flex-grow-1 small ' + (res.ok ? 'text-success' : 'text-danger'); }
                 if (fhirModalDataBadge) { fhirModalDataBadge.className = 'badge ' + (hasFhir ? 'bg-success' : 'bg-danger'); fhirModalDataBadge.textContent = hasFhir ? 'HAS FHIR' : 'NOT GENERATED'; }
                 if (fhirModalHttpBadge) { fhirModalHttpBadge.className = 'badge ' + (res.ok ? 'bg-success' : 'bg-danger'); fhirModalHttpBadge.textContent = 'HTTP ' + res.status; }
