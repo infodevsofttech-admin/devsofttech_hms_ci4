@@ -257,7 +257,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $catText = trim((string) ($obs['category'] ?? $obs['category_text'] ?? $obs['stage'] ?? $obs['timing'] ?? ''));
             $isAdm = (stripos($catText, 'Admission') !== false || stripos($text, 'Admission') !== false);
             $isDis = (stripos($catText, 'Discharge') !== false || stripos($text, 'Discharge') !== false);
-            $obsCategoryDisplay = $isAdm ? 'General Examination on Admission' : ($isDis ? 'Examination on Discharge' : 'Vital Signs');
+            $obsCategoryDisplay = $isAdm ? 'Condition on Admission Time' : ($isDis ? 'Condition on Discharge Time' : 'Vital Signs');
 
             $coding = [];
             $loincCode = trim((string) ($obs['loinc_code'] ?? ''));
@@ -484,7 +484,11 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 }
             }
 
-            $builder->addDocumentReference([
+            $rawBytes = base64_decode($data);
+            $fileSize = is_string($rawBytes) ? strlen($rawBytes) : 0;
+            $sha1Hash = is_string($rawBytes) && $rawBytes !== '' ? base64_encode(sha1($rawBytes, true)) : '';
+
+            $docRef = [
                 'resourceType' => 'DocumentReference',
                 'id' => 'discharge-document-' . $recordId . '-' . $idx,
                 'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference']],
@@ -509,11 +513,18 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                         'contentType' => (string) ($document['content_type'] ?? 'application/pdf'),
                         'language' => 'en-IN',
                         'data' => $data,
+                        'size' => $fileSize,
                         'title' => $docTitle,
                         'creation' => (string) ($document['created_at'] ?? $timestamp),
                     ],
                 ]],
-            ]);
+            ];
+
+            if ($sha1Hash !== '') {
+                $docRef['content'][0]['attachment']['hash'] = $sha1Hash;
+            }
+
+            $builder->addDocumentReference($docRef);
         }
 
         $rawObservations = (array) ($source['observations'] ?? []);
@@ -537,8 +548,24 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         ];
 
         if (! empty($admissionObsIndexed) && ! empty($dischargeObsIndexed)) {
-            $sectionDefinitions[] = ['title' => 'General Examination on Admission', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items_indexed' => $admissionObsIndexed];
-            $sectionDefinitions[] = ['title' => 'Examination on Discharge', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items_indexed' => $dischargeObsIndexed];
+            $sectionDefinitions[] = ['title' => 'Condition on Admission Time', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items_indexed' => $admissionObsIndexed];
+            $sectionDefinitions[] = ['title' => 'Condition on Discharge Time', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items_indexed' => $dischargeObsIndexed];
+        } elseif (! empty($admissionObsIndexed)) {
+            $sectionDefinitions[] = ['title' => 'Condition on Admission Time', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items_indexed' => $admissionObsIndexed];
+            if (! empty($rawObservations)) {
+                $otherObs = array_diff_key($rawObservations, $admissionObsIndexed);
+                if (! empty($otherObs)) {
+                    $sectionDefinitions[] = ['title' => 'Physical examination', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items_indexed' => $otherObs];
+                }
+            }
+        } elseif (! empty($dischargeObsIndexed)) {
+            $sectionDefinitions[] = ['title' => 'Condition on Discharge Time', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items_indexed' => $dischargeObsIndexed];
+            if (! empty($rawObservations)) {
+                $otherObs = array_diff_key($rawObservations, $dischargeObsIndexed);
+                if (! empty($otherObs)) {
+                    $sectionDefinitions[] = ['title' => 'Physical examination', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items_indexed' => $otherObs];
+                }
+            }
         } else {
             $sectionDefinitions[] = ['title' => 'Physical examination', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items' => $rawObservations];
         }

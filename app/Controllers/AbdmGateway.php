@@ -2718,11 +2718,24 @@ class AbdmGateway extends BaseController
         $abhaDigits = preg_replace('/\D/', '', $rawAbha);
         $abhaDigits = is_string($abhaDigits) ? $abhaDigits : '';
 
-        $admissionRaw = trim((string) ($ipdRow['register_date'] ?? ''));
-        $dischargeRaw = trim((string) ($ipdRow['discharge_date'] ?? ''));
-        $visitDate = $dischargeRaw !== ''
-            ? date('Y-m-d', strtotime($dischargeRaw))
-            : ($admissionRaw !== '' ? date('Y-m-d', strtotime($admissionRaw)) : date('Y-m-d'));
+        $admissionDate = trim((string) ($ipdRow['register_date'] ?? ''));
+        $admissionTime = trim((string) ($ipdRow['reg_time'] ?? $ipdRow['reg_time_bak'] ?? ''));
+        $admissionRaw = $admissionDate;
+        if ($admissionTime !== '' && ! str_contains($admissionDate, ':')) {
+            $admissionRaw = trim($admissionDate . ' ' . $admissionTime);
+        }
+
+        $dischargeDate = trim((string) ($ipdRow['discharge_date'] ?? ''));
+        $dischargeTime = trim((string) ($ipdRow['discharge_time'] ?? $ipdRow['discharge_time_bak'] ?? ''));
+        $dischargeAmpm = trim((string) ($ipdRow['discharge_time_ampm'] ?? ''));
+        $dischargeRaw = $dischargeDate;
+        if ($dischargeTime !== '' && ! str_contains($dischargeDate, ':')) {
+            $dischargeRaw = trim($dischargeDate . ' ' . $dischargeTime . ($dischargeAmpm !== '' ? ' ' . $dischargeAmpm : ''));
+        }
+
+        $visitDate = $dischargeDate !== ''
+            ? date('Y-m-d', strtotime($dischargeDate))
+            : ($admissionDate !== '' ? date('Y-m-d', strtotime($admissionDate)) : date('Y-m-d'));
 
         $diagnoses = [];
         foreach ($this->ipdRows('ipd_discharge_diagnosis', ['comp_report'], $ipdId) as $row) {

@@ -2371,14 +2371,16 @@
             }
 
             var admissionObservations = observations.filter(function(o) {
-                return getObservationCategoryText(o).toLowerCase() === 'condition on admission time';
+                var cat = getObservationCategoryText(o).toLowerCase();
+                return cat.indexOf('admission') !== -1;
             });
             var dischargeObservations = observations.filter(function(o) {
-                return getObservationCategoryText(o).toLowerCase() === 'condition on discharge time';
+                var cat = getObservationCategoryText(o).toLowerCase();
+                return cat.indexOf('discharge') !== -1;
             });
             var remainingObservations = observations.filter(function(o) {
                 var cat = getObservationCategoryText(o).toLowerCase();
-                return cat !== 'condition on admission time' && cat !== 'condition on discharge time';
+                return cat.indexOf('admission') === -1 && cat.indexOf('discharge') === -1;
             });
             var vitalObservations = remainingObservations.filter(isVitalObservation);
             var labObservations = remainingObservations.filter(function(o) { return !isVitalObservation(o); });

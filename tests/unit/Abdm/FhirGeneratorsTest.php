@@ -302,10 +302,10 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $bundle = $output['fhir_bundle'];
         $composition = $bundle['entry'][0]['resource'];
 
-        // Verify sections: should contain both General Examination on Admission and Examination on Discharge
+        // Verify sections: should contain both Condition on Admission Time and Condition on Discharge Time
         $sectionTitles = array_column($composition['section'], 'title');
-        $this->assertContains('General Examination on Admission', $sectionTitles);
-        $this->assertContains('Examination on Discharge', $sectionTitles);
+        $this->assertContains('Condition on Admission Time', $sectionTitles);
+        $this->assertContains('Condition on Discharge Time', $sectionTitles);
         $this->assertContains('Care plan', $sectionTitles);
         $this->assertContains('Document reference', $sectionTitles);
 
@@ -333,8 +333,8 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         // Verify Observation Categories on Admission vs Discharge
         $observations = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'Observation' && isset($e['resource']['category'])));
         $this->assertGreaterThanOrEqual(14, count($observations));
-        $this->assertSame('General Examination on Admission', $observations[0]['resource']['category'][0]['text']);
-        $this->assertSame('Examination on Discharge', $observations[7]['resource']['category'][0]['text']);
+        $this->assertSame('Condition on Admission Time', $observations[0]['resource']['category'][0]['text']);
+        $this->assertSame('Condition on Discharge Time', $observations[7]['resource']['category'][0]['text']);
 
         // Verify Encounter period & location
         $encounters = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'Encounter'));
