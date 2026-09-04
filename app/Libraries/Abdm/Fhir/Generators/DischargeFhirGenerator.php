@@ -122,10 +122,11 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 $resolved = $this->codingResolver->resolveSnomedForDiagnosisOrFinding((string) ($cond['code'] ?? ''), $text);
                 $coding = $this->withoutPlaceholderCoding((array) ($resolved['coding'] ?? []));
                 if ($coding === []) {
+                    $fallback = $this->resolveFallbackSnomedCode($text);
                     $coding = [[
                         'system'  => 'http://snomed.info/sct',
-                        'code'    => $this->resolveFallbackSnomedCode($text),
-                        'display' => $text,
+                        'code'    => $fallback['code'],
+                        'display' => $fallback['display'],
                     ]];
                 }
                 $builder->addCondition([
@@ -169,15 +170,18 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $coding = $this->withoutPlaceholderCoding((array) ($resolved['coding'] ?? []));
             if ($coding === []) {
                 $codeVal = '71388002'; // Procedure
+                $displayVal = 'Procedure';
                 if (stripos($text, 'laparo') !== false) {
                     $codeVal = '86174004'; // Laparoscopy
+                    $displayVal = 'Laparoscopy';
                 } elseif (stripos($text, 'surg') !== false) {
                     $codeVal = '387713003'; // Surgical procedure
+                    $displayVal = 'Surgical procedure';
                 }
                 $coding = [[
                     'system'  => 'http://snomed.info/sct',
                     'code'    => $codeVal,
-                    'display' => $text,
+                    'display' => $displayVal,
                 ]];
             }
             $builder->addProcedure([
@@ -217,7 +221,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 $medCoding[] = [
                     'system'  => 'http://snomed.info/sct',
                     'code'    => '105904009', // Type of drug
-                    'display' => $name,
+                    'display' => 'Type of drug',
                 ];
             }
 
@@ -294,10 +298,11 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     'display' => $loincDisplay !== '' ? $loincDisplay : $text,
                 ];
             } else {
+                $fallback = $this->resolvePhysicalExamSnomedCode($text);
                 $coding[] = [
                     'system'  => 'http://snomed.info/sct',
-                    'code'    => $this->resolvePhysicalExamSnomedCode($text),
-                    'display' => $text,
+                    'code'    => $fallback['code'],
+                    'display' => $fallback['display'],
                 ];
             }
 
@@ -450,7 +455,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 $coding = [[
                     'system'  => 'http://snomed.info/sct',
                     'code'    => '108252007',
-                    'display' => $text,
+                    'display' => 'Laboratory procedure',
                 ]];
             }
 
@@ -676,7 +681,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
 
         $sectionDefinitions = [
             ['title' => 'Chief complaints', 'code' => '422843007', 'display' => 'Chief complaint section', 'prefix' => 'discharge-chief-complaint-', 'items' => $chiefComplaintsList, 'narrative' => trim((string) ($source['chief_complaint_narrative'] ?? ''))],
-            ['title' => 'Problems and Diagnoses', 'code' => '1003642006', 'display' => 'Past medical history section', 'prefix' => 'discharge-diagnosis-', 'items' => $diagnosesList, 'narrative' => trim((string) ($source['diagnosis_narrative'] ?? ''))],
+            ['title' => 'Medical History', 'code' => '1003642006', 'display' => 'Past medical history section', 'prefix' => 'discharge-diagnosis-', 'items' => $diagnosesList, 'narrative' => trim((string) ($source['diagnosis_narrative'] ?? ''))],
             ['title' => 'Procedures', 'code' => '1003640003', 'display' => 'History of past procedure section', 'prefix' => 'discharge-procedure-', 'items' => (array) ($source['procedures'] ?? [])],
             ['title' => 'Medications', 'code' => '1003606003', 'display' => 'Medication history section', 'prefix' => 'discharge-medication-', 'items' => (array) ($source['medications'] ?? [])],
         ];
@@ -706,8 +711,8 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
 
         $sectionDefinitions[] = ['title' => 'Investigations', 'code' => '721981007', 'display' => 'Diagnostic studies report', 'prefix' => 'discharge-investigation-', 'items' => (array) ($source['investigations'] ?? [])];
         $sectionDefinitions[] = ['title' => 'Allergies', 'code' => '722446000', 'display' => 'Allergy record', 'prefix' => 'discharge-allergy-', 'items' => (array) ($source['allergies'] ?? [])];
-        $sectionDefinitions[] = ['title' => 'Care plan', 'code' => '734163000', 'display' => 'Care plan', 'prefix' => 'discharge-careplan-', 'items' => (array) ($source['care_plans'] ?? [])];
-        $sectionDefinitions[] = ['title' => 'Document reference', 'code' => '373942005', 'display' => 'Discharge summary', 'prefix' => 'discharge-document-', 'items' => $documentsList];
+        $sectionDefinitions[] = ['title' => 'Care Plan', 'code' => '734163000', 'display' => 'Care plan', 'prefix' => 'discharge-careplan-', 'items' => (array) ($source['care_plans'] ?? [])];
+        $sectionDefinitions[] = ['title' => 'Document Reference', 'code' => '373942005', 'display' => 'Discharge summary', 'prefix' => 'discharge-document-', 'items' => $documentsList];
 
         $sections = [];
         foreach ($sectionDefinitions as $definition) {
@@ -873,81 +878,83 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         return ['unit' => '', 'code' => ''];
     }
 
-    private function resolvePhysicalExamSnomedCode(string $text): string
+    /** @return array{code:string,display:string} */
+    private function resolvePhysicalExamSnomedCode(string $text): array
     {
         $upper = strtoupper(trim($text));
         if (str_contains($upper, 'PALLOR')) {
-            return '89521008';
+            return ['code' => '89521008', 'display' => 'Pallor'];
         }
         if (str_contains($upper, 'JAUNDICE') || str_contains($upper, 'ICTERUS')) {
-            return '18165004';
+            return ['code' => '18165004', 'display' => 'Jaundice'];
         }
         if (str_contains($upper, 'CYANOSIS')) {
-            return '119419001';
+            return ['code' => '119419001', 'display' => 'Cyanosis'];
         }
         if (str_contains($upper, 'CLUBBING')) {
-            return '30760006';
+            return ['code' => '30760006', 'display' => 'Clubbing of nail'];
         }
         if (str_contains($upper, 'EDEMA') || str_contains($upper, 'OEDEMA')) {
-            return '267038008';
+            return ['code' => '267038008', 'display' => 'Edema'];
         }
         if (str_contains($upper, 'JVP')) {
-            return '271649006';
+            return ['code' => '271649006', 'display' => 'Jugular venous pressure finding'];
         }
 
-        return '364075005';
+        return ['code' => '364075005', 'display' => 'Physical examination finding'];
     }
 
-    private function resolveFallbackSnomedCode(string $text): string
+    /** @return array{code:string,display:string} */
+    private function resolveFallbackSnomedCode(string $text): array
     {
         $upper = strtoupper(trim($text));
         if (str_contains($upper, 'VIRAL FEVER')) {
-            return '409702008';
+            return ['code' => '409702008', 'display' => 'Viral fever'];
         }
         if (str_contains($upper, 'TYPHOID')) {
-            return '4834000';
+            return ['code' => '4834000', 'display' => 'Typhoid fever'];
         }
         if (str_contains($upper, 'DENGUE')) {
-            return '38362002';
+            return ['code' => '38362002', 'display' => 'Dengue'];
         }
         if (str_contains($upper, 'MALARIA')) {
-            return '61462000';
+            return ['code' => '61462000', 'display' => 'Malaria'];
         }
         if (str_contains($upper, 'FEVER') || str_contains($upper, 'PYREXIA')) {
-            return '386661006';
+            return ['code' => '386661006', 'display' => 'Fever'];
         }
         if (str_contains($upper, 'BREATHLESS') || str_contains($upper, 'DYSPNEA')) {
-            return '267036007';
+            return ['code' => '267036007', 'display' => 'Dyspnea'];
         }
         if (str_contains($upper, 'COUGH')) {
-            return '49727002';
+            return ['code' => '49727002', 'display' => 'Cough'];
         }
         if (str_contains($upper, 'ABDOMINAL PAIN') || str_contains($upper, 'ABDOMEN PAIN')) {
-            return '21522000';
+            return ['code' => '21522000', 'display' => 'Abdominal pain'];
         }
         if (str_contains($upper, 'CHEST PAIN')) {
-            return '29857009';
+            return ['code' => '29857009', 'display' => 'Chest pain'];
         }
         if (str_contains($upper, 'PAIN')) {
-            return '22253000';
+            return ['code' => '22253000', 'display' => 'Pain'];
         }
         if (str_contains($upper, 'HEADACHE')) {
-            return '25064000';
+            return ['code' => '25064000', 'display' => 'Headache'];
         }
         if (str_contains($upper, 'DIARRHEA')) {
-            return '62315000';
+            return ['code' => '62315000', 'display' => 'Diarrhea'];
         }
         if (str_contains($upper, 'VOMITING')) {
-            return '422400008';
+            return ['code' => '422400008', 'display' => 'Vomiting'];
         }
         if (str_contains($upper, 'HYPERTENSION') || str_contains($upper, 'HTN')) {
-            return '38341003';
+            return ['code' => '38341003', 'display' => 'Hypertension'];
         }
         if (str_contains($upper, 'DIABETES') || str_contains($upper, 'DM')) {
-            return '73211009';
+            return ['code' => '73211009', 'display' => 'Diabetes mellitus'];
         }
 
-        return '404684003';
+        return ['code' => '404684003', 'display' => 'Clinical finding'];
     }
 
     /**
