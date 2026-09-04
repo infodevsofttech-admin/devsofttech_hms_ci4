@@ -8694,6 +8694,235 @@ class Ipd_discharge extends BaseController
         }
     }
 
+    private function buildIpdPdfDocumentsList(int $ipdId, string $dischargeRaw): array
+    {
+        $directory = WRITEPATH . 'uploads' . DIRECTORY_SEPARATOR . 'abdm' . DIRECTORY_SEPARATOR . 'ipd' . DIRECTORY_SEPARATOR . $ipdId;
+        $createdAt = $this->toIsoDateTimeOrNow($dischargeRaw);
+
+        // Ensure IPD Bill PDF is cached if missing
+        $billPath = $directory . DIRECTORY_SEPARATOR . 'ipd-bill.pdf';
+        if (! is_file($billPath) || filesize($billPath) === 0) {
+            try {
+                (new \App\Controllers\Billing\Ipd())->generateIpdBillPdfBinary($ipdId, 1, true);
+            } catch (\Throwable $e) {
+                log_message('error', 'Auto-generating IPD Bill PDF failed for IPD {ipd}: {msg}', [
+                    'ipd' => $ipdId,
+                    'msg' => $e->getMessage(),
+                ]);
+            }
+        }
+
+        $documents = [];
+        $definitions = [
+            ['file' => 'discharge-summary.pdf', 'title' => 'IPD Discharge Summary', 'loinc' => '18842-5', 'snomed' => '373942005'],
+            ['file' => 'ipd-bill.pdf', 'title' => 'IPD Bill / Invoice', 'loinc' => '75490-3', 'snomed' => '823651000000106'],
+        ];
+
+        foreach ($definitions as $definition) {
+            $path = $directory . DIRECTORY_SEPARATOR . $definition['file'];
+            if (! is_file($path) || filesize($path) === 0) {
+                continue;
+            }
+            $binary = file_get_contents($path);
+            if (! is_string($binary) || ! str_starts_with($binary, '%PDF-')) {
+                continue;
+            }
+            $documents[] = [
+                'title' => $definition['title'],
+                'loinc_code' => $definition['loinc'],
+                'snomed_code' => $definition['snomed'],
+                'content_type' => 'application/pdf',
+                'data' => base64_encode($binary),
+                'created_at' => $createdAt,
+                'path' => $path,
+            ];
+        }
+
+        return $documents;
+    }
+
+    private function formatDischargeMedDirections($doseVal, $whenVal, $freqVal, string $days = '', string $remark = ''): string
+    {
+        static $whenCodeDescMap = [
+            'BF'  => 'BF (BEFORE FOOD)',  'AF'  => 'AF (AFTER FOOD)',
+            'WF'  => 'WF (WITH FOOD)',    'ES'  => 'ES (EMPTY STOMACH)',
+            'BBF' => 'BBF (BEFORE BREAKFAST)', 'ABF' => 'ABF (AFTER BREAKFAST)',
+            'BL'  => 'BL (BEFORE LUNCH)', 'AL'  => 'AL (AFTER LUNCH)',
+            'BD'  => 'BD (BEFORE DINNER)', 'AD'  => 'AD (AFTER DINNER)',
+            'BT'  => 'BT (BED TIME)',
+        ];
+        static $whenHindiMap = [
+            'BF' => 'भोजन से पहले', 'BEFORE FOOD' => 'भोजन से पहले',
+            'AF' => 'भोजन के बाद',  'AFTER FOOD'  => 'भोजन के बाद',
+            'WF' => 'भोजन के साथ',  'WITH FOOD'   => 'भोजन के साथ',
+            'ES' => 'सुबह खाली पेट', 'EMPTY STOMACH' => 'सुबह खाली पेट',
+            'BBF'=> 'नाश्ते से पहले', 'BEFORE BREAKFAST' => 'नाश्ते से पहले',
+            'ABF'=> 'नाश्ते के बाद',  'AFTER BREAKFAST'  => 'नाश्ते के बाद',
+            'BL' => 'दोपहर के भोजन से पहले', 'BEFORE LUNCH' => 'दोपहर के भोजन से पहले',
+            'AL' => 'दोपहर के भोजन के बाद',  'AFTER LUNCH'  => 'दोपहर के भोजन के बाद',
+            'BD' => 'रात के भोजन से पहले',   'BEFORE DINNER'=> 'रात के भोजन से पहले',
+            'AD' => 'रात के भोजन के बाद',    'AFTER DINNER' => 'रात के भोजन के बाद',
+            'BT' => 'रात को सोते समय',       'BED TIME'     => 'रात को सोते समय',
+        ];
+        static $freqHindiMap = [
+            'OD'  => 'दिन में एक बार (OD)',   'BD'  => 'दिन में दो बार (BD)',
+            'TDS' => 'दिन में तीन बार (TDS)', 'TID' => 'दिन में तीन बार (TID)',
+            'QID' => 'दिन में चार बार (QID)', 'HS'  => 'रात को सोते समय (HS)',
+            'SOS' => 'ज़रूरत पड़ने पर (SOS)',  'STAT'=> 'तुरंत एक बार (STAT)',
+            'ALTERNATE DAY' => 'एक दिन छोड़कर',
+            'DAILY'   => 'प्रतिदिन',
+            'WEEKLY'  => 'हफ़्ते में एक बार',
+            'MONTHLY' => 'महीने में एक बार',
+        ];
+        static $remarkHindiMap = [
+            'TAKE WITH MILK'                    => 'दूध के साथ लें',
+            'TAKE WITH WARM WATER'              => 'गुनगुने पानी के साथ लें',
+            'AVOID SOUR FOOD AND DAIRY PRODUCTS'=> 'खट्टा और डेयरी उत्पाद न लें',
+            'TAKE AFTER MEALS'                  => 'भोजन के बाद लें',
+            'TAKE ON AN EMPTY STOMACH EARLY MORNING' => 'सुबह खाली पेट लें',
+            'CHEW WELL BEFORE SWALLOWING'       => 'चबाकर खाएं',
+            'DISSOLVE IN HALF GLASS OF WATER'   => 'आधे गिलास पानी में घोलकर लें',
+            'APPLY LOCALLY TWICE DAILY'         => 'दिन में दो बार लगाएं',
+            'DO NOT CRUSH OR CHEW TABLET'       => 'गोली को तोड़े या चबाएं नहीं',
+            'AVOID ALCOHOL WHILE TAKING THIS MEDICINE' => 'शराब का सेवन न करें',
+            'COMPLETE FULL COURSE OF ANTIBIOTICS'      => 'एंटीबायोटिक का पूरा कोर्स लें',
+            'DRINK PLENTY OF FLUIDS / WATER'    => 'प्रचुर मात्रा में पानी पिएं',
+        ];
+
+        static $doseCache = null;
+        static $whenCache = null;
+        static $freqCache = null;
+        static $whenHindiCache = null;
+        static $freqHindiCache = null;
+
+        if ($doseCache === null && $this->db->tableExists('opd_dose_shed')) {
+            $doseCache = [];
+            foreach ($this->db->table('opd_dose_shed')->select('id, dose_desc')->get()->getResultArray() as $r) {
+                $doseCache[(int) $r['id']] = trim((string) ($r['dose_desc'] ?? ''));
+            }
+        }
+        if ($whenCache === null && $this->db->tableExists('opd_dose_when')) {
+            $whenCache = [];
+            $whenHindiCache = [];
+            $fields = $this->db->getFieldNames('opd_dose_when') ?? [];
+            $hasHindi = in_array('dose_sign_hindi', $fields, true);
+            foreach ($this->db->table('opd_dose_when')->select('id, dose_sign' . ($hasHindi ? ', dose_sign_hindi' : ''))->get()->getResultArray() as $r) {
+                $whenCache[(int) $r['id']] = trim((string) ($r['dose_sign'] ?? ''));
+                if ($hasHindi) {
+                    $whenHindiCache[(int) $r['id']] = trim((string) ($r['dose_sign_hindi'] ?? ''));
+                }
+            }
+        }
+        if ($freqCache === null && $this->db->tableExists('opd_dose_frequency')) {
+            $freqCache = [];
+            $freqHindiCache = [];
+            $fields = $this->db->getFieldNames('opd_dose_frequency') ?? [];
+            $hasHindi = in_array('dose_sign_hindi', $fields, true);
+            foreach ($this->db->table('opd_dose_frequency')->select('id, dose_sign' . ($hasHindi ? ', dose_sign_hindi' : ''))->get()->getResultArray() as $r) {
+                $freqCache[(int) $r['id']] = trim((string) ($r['dose_sign'] ?? ''));
+                if ($hasHindi) {
+                    $freqHindiCache[(int) $r['id']] = trim((string) ($r['dose_sign_hindi'] ?? ''));
+                }
+            }
+        }
+
+        $doseText = '';
+        if (is_numeric($doseVal) && (int) $doseVal > 0) {
+            $doseText = $doseCache[(int) $doseVal] ?? '';
+        } elseif (is_string($doseVal) && trim($doseVal) !== '' && trim($doseVal) !== '0') {
+            $doseText = trim($doseVal);
+        }
+
+        $whenText = '';
+        $whenHindi = '';
+        if (is_numeric($whenVal) && (int) $whenVal > 0) {
+            $whenText = $whenCache[(int) $whenVal] ?? '';
+            $whenHindi = $whenHindiCache[(int) $whenVal] ?? '';
+        } elseif (is_string($whenVal) && trim($whenVal) !== '' && trim($whenVal) !== '0') {
+            $whenText = trim($whenVal);
+        }
+        if ($whenText !== '') {
+            $upperWhen = strtoupper($whenText);
+            if (isset($whenCodeDescMap[$upperWhen])) {
+                $whenText = $whenCodeDescMap[$upperWhen];
+            }
+            if ($whenHindi === '' && isset($whenHindiMap[$upperWhen])) {
+                $whenHindi = $whenHindiMap[$upperWhen];
+            }
+        }
+
+        $freqText = '';
+        $freqHindi = '';
+        if (is_numeric($freqVal) && (int) $freqVal > 0) {
+            $freqText = $freqCache[(int) $freqVal] ?? '';
+            $freqHindi = $freqHindiCache[(int) $freqVal] ?? '';
+        } elseif (is_string($freqVal) && trim($freqVal) !== '' && trim($freqVal) !== '0') {
+            $freqText = trim($freqVal);
+        }
+        if ($freqText !== '') {
+            $upperFreq = strtoupper($freqText);
+            if ($freqHindi === '' && isset($freqHindiMap[$upperFreq])) {
+                $freqHindi = $freqHindiMap[$upperFreq];
+            }
+        }
+
+        $cleanRemark = (string) preg_replace('/^(edit\s*remove|remove\s*edit|edit|remove|delete)\s*$/i', '', trim($remark));
+        $cleanRemark = trim($cleanRemark);
+        $remarkHindi = '';
+        if ($cleanRemark !== '') {
+            $upperRemark = strtoupper($cleanRemark);
+            if (isset($remarkHindiMap[$upperRemark])) {
+                $remarkHindi = $remarkHindiMap[$upperRemark];
+            }
+        }
+
+        $dirParts = [];
+        $dirLocalParts = [];
+
+        if ($whenText !== '') {
+            $dirParts[] = $whenText;
+        }
+        if ($whenHindi !== '') {
+            $dirLocalParts[] = $whenHindi;
+        }
+
+        if ($doseText !== '') {
+            $dirParts[] = $doseText;
+        }
+
+        if ($freqText !== '') {
+            $dirParts[] = $freqText;
+        }
+        if ($freqHindi !== '') {
+            $dirLocalParts[] = $freqHindi;
+        }
+
+        if ($cleanRemark !== '') {
+            $dirParts[] = $cleanRemark;
+        }
+        if ($remarkHindi !== '') {
+            $dirLocalParts[] = $remarkHindi;
+        }
+
+        $daysClean = trim($days);
+        if ($daysClean !== '' && $daysClean !== '0') {
+            $daysNum = is_numeric($daysClean) ? (int) $daysClean : 0;
+            $dirParts[] = $daysNum > 0 ? ('for ' . $daysNum . ' days') : ('for ' . $daysClean);
+            if ($daysNum > 0) {
+                $dirLocalParts[] = $daysNum . ' दिन';
+            }
+        }
+
+        $engText = implode(' | ', array_values(array_unique(array_filter($dirParts))));
+        $hinText = implode(' | ', array_values(array_unique(array_filter($dirLocalParts))));
+
+        if ($engText !== '' && $hinText !== '') {
+            return $engText . ' | ' . $hinText;
+        }
+
+        return $engText !== '' ? $engText : $hinText;
+    }
+
     public function show_file3(int $ipdId)
     {
         return $this->show_discharge($ipdId, 3);
@@ -8870,29 +9099,22 @@ class Ipd_discharge extends BaseController
         }
 
         $medicationRows = [];
-        $legacyMeds = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['med_name', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days'], 'id ASC', $ipdId);
+        $legacyMeds = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['med_name', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'remark'], 'id ASC', $ipdId);
         if (empty($legacyMeds)) {
-            $legacyMeds = $this->byIpdRows('ipd_discharge_prescription_prescribed', ['med_name', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days'], 'id ASC', $ipdId);
+            $legacyMeds = $this->byIpdRows('ipd_discharge_prescription_prescribed', ['med_name', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'remark'], 'id ASC', $ipdId);
         }
         foreach ($legacyMeds as $row) {
             $name = trim((string) ($row['med_name'] ?? ''));
             if (! $this->isMeaningfulDischargeValue($name)) {
                 continue;
             }
-            $dosageDisplay = $this->buildDosageDisplay(
-                (int) ($row['dosage'] ?? 0),
-                (int) ($row['dosage_when'] ?? 0),
-                (int) ($row['dosage_freq'] ?? 0)
+            $dose = $this->formatDischargeMedDirections(
+                $row['dosage'] ?? '',
+                $row['dosage_when'] ?? '',
+                $row['dosage_freq'] ?? '',
+                (string) ($row['no_of_days'] ?? ''),
+                (string) ($row['remark'] ?? '')
             );
-            $days = trim((string) ($row['no_of_days'] ?? ''));
-            $doseParts = [];
-            if ($this->isMeaningfulDischargeValue($dosageDisplay)) {
-                $doseParts[] = $dosageDisplay;
-            }
-            if ($this->isMeaningfulDischargeValue($days)) {
-                $doseParts[] = 'for ' . $days . ' days';
-            }
-            $dose = implode(' ', $doseParts);
             $medicationRows[] = ['name' => $name, 'dosage' => $dose];
         }
         if (empty($medicationRows)) {
@@ -8909,6 +9131,186 @@ class Ipd_discharge extends BaseController
             }
         }
 
+        $observationRows = [];
+        if ($this->tableHasColumns('ipd_discharge_1_b', ['ipd_d_id'])) {
+            $cols = $this->db->getFieldNames('ipd_discharge_1_b') ?? [];
+            $sel = in_array('short_head', $cols, true) ? 'short_head,rdata' : '*';
+            foreach ($this->db->table('ipd_discharge_1_b')->select($sel)->where('ipd_d_id', $ipdId)->get()->getResultArray() as $row) {
+                $label = trim((string) ($row['short_head'] ?? ''));
+                $value = trim((string) ($row['rdata'] ?? ''));
+                if ($label === '' || ! $this->isMeaningfulDischargeValue($value)) {
+                    continue;
+                }
+                $observationRows[] = [
+                    'text' => $label,
+                    'value' => $value,
+                    'category' => 'Condition on Admission Time',
+                    'category_code' => 'vital-signs',
+                    'effective_at' => $admissionIso,
+                ];
+            }
+        }
+        if ($this->tableHasColumns('ipd_discharge_1_b_final', ['ipd_d_id'])) {
+            $cols = $this->db->getFieldNames('ipd_discharge_1_b_final') ?? [];
+            $sel = in_array('short_head', $cols, true) ? 'short_head,rdata' : '*';
+            foreach ($this->db->table('ipd_discharge_1_b_final')->select($sel)->where('ipd_d_id', $ipdId)->get()->getResultArray() as $row) {
+                $label = trim((string) ($row['short_head'] ?? ''));
+                $value = trim((string) ($row['rdata'] ?? ''));
+                if ($label === '' || ! $this->isMeaningfulDischargeValue($value)) {
+                    continue;
+                }
+                $observationRows[] = [
+                    'text' => $label,
+                    'value' => $value,
+                    'category' => 'Condition on Discharge Time',
+                    'category_code' => 'vital-signs',
+                    'effective_at' => $dischargeIso,
+                ];
+            }
+        }
+
+        $investigationRows = [];
+        if ($this->tableHasColumns('ipd_discharge_1_d', ['ipd_d_id'])) {
+            $cols = $this->db->getFieldNames('ipd_discharge_1_d') ?? [];
+            $sel = in_array('short_head', $cols, true) ? 'short_head,rdata' : '*';
+            foreach ($this->db->table('ipd_discharge_1_d')->select($sel)->where('ipd_d_id', $ipdId)->get()->getResultArray() as $row) {
+                $label = trim((string) ($row['short_head'] ?? ''));
+                $value = trim((string) ($row['rdata'] ?? ''));
+                if ($label === '' || ! $this->isMeaningfulDischargeValue($value)) {
+                    continue;
+                }
+                $investigationRows[] = [
+                    'text' => $label . ': ' . $value,
+                    'authored_on' => $admissionIso,
+                ];
+            }
+        }
+        if ($this->tableHasColumns('ipd_discharge_1_e', ['ipd_d_id'])) {
+            $cols = $this->db->getFieldNames('ipd_discharge_1_e') ?? [];
+            $sel = in_array('short_head', $cols, true) ? 'short_head,rdata' : '*';
+            foreach ($this->db->table('ipd_discharge_1_e')->select($sel)->where('ipd_d_id', $ipdId)->get()->getResultArray() as $row) {
+                $label = trim((string) ($row['short_head'] ?? ''));
+                $value = trim((string) ($row['rdata'] ?? ''));
+                if ($label === '' || ! $this->isMeaningfulDischargeValue($value)) {
+                    continue;
+                }
+                $investigationRows[] = [
+                    'text' => $label . ': ' . $value,
+                    'authored_on' => $admissionIso,
+                ];
+            }
+        }
+
+        $allergyRows = [];
+        $carePlanRows = [];
+        $instructionRows = $this->byIpdRows('ipd_discharge_instructions', ['comp_report', 'comp_remark', 'review_after'], 'id DESC', $ipdId);
+        if (! empty($instructionRows)) {
+            $instructionRow = $instructionRows[0];
+            $instructionMeta = $this->parseInstructionMetaPayload((string) ($instructionRow['comp_report'] ?? ''));
+            $nabhMeta = is_array($instructionMeta['nabh'] ?? null) ? $instructionMeta['nabh'] : [];
+
+            $allergyStatus = strtolower(trim((string) ($nabhMeta['drug_allergy_status'] ?? '')));
+            $allergyDetails = trim((string) ($nabhMeta['drug_allergy_details'] ?? ''));
+            if ($allergyStatus !== '' || $allergyDetails !== '') {
+                $allergyRows[] = [
+                    'text' => $allergyDetails !== '' ? $allergyDetails : ('Drug allergy status: ' . $allergyStatus),
+                    'note' => $allergyStatus,
+                    'criticality' => $allergyStatus === 'yes' ? 'high' : 'low',
+                    'recorded_at' => $dischargeIso,
+                ];
+            }
+
+            $dischargeAdvice = trim((string) ($instructionRow['comp_remark'] ?? ''));
+            if ($dischargeAdvice !== '') {
+                $carePlanRows[] = [
+                    'title' => 'Discharge Advice',
+                    'description' => $dischargeAdvice,
+                    'created_at' => $dischargeIso,
+                ];
+            }
+
+            $foodIds = is_array($instructionMeta['food_ids'] ?? null) ? ($instructionMeta['food_ids'] ?? []) : [];
+            if (empty($foodIds) && $this->tableHasColumns('ipd_discharge_drug_food_interaction', ['ipd_id', 'food_id_list'])) {
+                $legacyFoodRow = $this->firstRowByIpd('ipd_discharge_drug_food_interaction', $ipdId);
+                $foodIds = $this->parseFoodIdCsv((string) ($legacyFoodRow['food_id_list'] ?? ''));
+            }
+            if (! empty($foodIds) && $this->tableHasColumns('ipd_discharge_master_food', ['id', 'food_short', 'food_desc'])) {
+                $foodRows = $this->db->table('ipd_discharge_master_food')
+                    ->select('id,food_short,food_desc,food_desc_lang')
+                    ->whereIn('id', array_map('intval', $foodIds))
+                    ->get()
+                    ->getResultArray();
+                $foodMap = [];
+                foreach ($foodRows as $fr) {
+                    $foodMap[(int) $fr['id']] = $fr;
+                }
+                $foodLines = [];
+                $fIndex = 1;
+                foreach ($foodIds as $fid) {
+                    $fr = $foodMap[(int) $fid] ?? null;
+                    if (! $fr) {
+                        continue;
+                    }
+                    $heading = trim((string) ($fr['food_short'] ?? ''));
+                    $line = trim((string) ($fr['food_desc_lang'] ?? ''));
+                    if ($line === '') {
+                        $line = trim((string) ($fr['food_desc'] ?? ''));
+                    }
+                    if ($heading === '' && $line === '') {
+                        continue;
+                    }
+                    $foodLines[] = $fIndex . '. ' . ($heading !== '' ? $heading . ': ' : '') . $line;
+                    $fIndex++;
+                }
+                if (! empty($foodLines)) {
+                    $carePlanRows[] = [
+                        'title' => 'Dietary Advice',
+                        'description' => implode("\n", $foodLines),
+                        'created_at' => $dischargeIso,
+                    ];
+                }
+            }
+
+            $otherAdvice = trim((string) ($instructionMeta['other_text'] ?? ''));
+            if ($otherAdvice !== '') {
+                $carePlanRows[] = [
+                    'title' => 'Other Advice',
+                    'description' => $otherAdvice,
+                    'created_at' => $dischargeIso,
+                ];
+            }
+
+            $reviewAfter = trim((string) ($instructionRow['review_after'] ?? ''));
+            if ($reviewAfter !== '') {
+                $reviewDate = '';
+                if ($dischargeRaw !== '' && is_numeric($reviewAfter)) {
+                    $reviewTs = strtotime($dischargeRaw . ' +' . (int) $reviewAfter . ' days');
+                    if ($reviewTs !== false) {
+                        $reviewDate = ' (' . date('d-m-Y', $reviewTs) . ')';
+                    }
+                }
+                $carePlanRows[] = [
+                    'title' => 'Follow Up',
+                    'description' => 'Review After: ' . $reviewAfter . ' Days' . $reviewDate . ' / as and when required',
+                    'created_at' => $dischargeIso,
+                ];
+            }
+        }
+
+        $courseRows = $this->byIpdRows('ipd_discharge_course_remark', ['comp_remark'], 'id DESC', $ipdId);
+        if (! empty($courseRows)) {
+            $courseText = trim((string) ($courseRows[0]['comp_remark'] ?? ''));
+            if ($courseText !== '') {
+                $carePlanRows[] = [
+                    'title' => 'Course In Hospital',
+                    'description' => $courseText,
+                    'created_at' => $dischargeIso,
+                ];
+            }
+        }
+
+        $documentsList = $this->buildIpdPdfDocumentsList($ipdId, $dischargeIso);
+
         $genderRaw = trim((string) ($patientRow['gender'] ?? ''));
         if ($genderRaw === '') {
             $genderRaw = trim((string) ($patientRow['xgender'] ?? ''));
@@ -8924,6 +9326,7 @@ class Ipd_discharge extends BaseController
 
         $source = [
             'record_id' => (string) $ipdId,
+            'bundle_identifier' => 'discharge-' . $ipdNo,
             'session_id' => (string) $ipdId,
             'visit_date' => $visitDate,
             'completed_at' => $dischargeIso,
@@ -8954,6 +9357,11 @@ class Ipd_discharge extends BaseController
             'conditions' => $conditionRows,
             'procedures' => $procedureRows,
             'medications' => $medicationRows,
+            'observations' => $observationRows,
+            'investigations' => $investigationRows,
+            'allergies' => $allergyRows,
+            'care_plans' => $carePlanRows,
+            'documents' => $documentsList,
             'template' => $this->resolveAbdmDischargeTemplate(),
         ];
 

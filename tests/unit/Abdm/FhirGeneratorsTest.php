@@ -207,6 +207,141 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertStringNotContainsString('UNMAPPED', (string) $encoded);
     }
 
+    public function testDischargeRecordWithDualVitalsAdviceAndMultiplePdfs(): void
+    {
+        $src = [
+            'record_id' => 3208,
+            'bundle_identifier' => 'discharge-A26090003208',
+            'session_id' => 3208,
+            'visit_date' => '2026-09-04',
+            'completed_at' => '2026-09-04T04:58:00+05:30',
+            'patient' => [
+                'id' => 15355,
+                'uhid' => 'P26091015355',
+                'name' => 'JANVI BISHT',
+                'gender' => 'female',
+                'dob' => '2013-05-10',
+                'abha_id' => '91407564383062',
+                'abha_address' => 'janvibisht@sbx',
+            ],
+            'encounter' => [
+                'id' => 'A26090003208',
+                'class_code' => 'IMP',
+                'start' => '2026-09-01T04:53:00+05:30',
+                'end' => '2026-09-04T04:58:00+05:30',
+            ],
+            'doctor' => ['id' => 9, 'name' => 'Dr. Sanjay Kumar', 'registration_number' => 'DOC12345'],
+            'organization' => ['id' => 'IN0510000000', 'name' => 'DevSoft Tech'],
+            'chief_complaints' => [
+                ['text' => 'Abdominal Pain'],
+                ['text' => 'Breathlessness'],
+                ['text' => 'Cough'],
+                ['text' => 'Fever'],
+            ],
+            'diagnoses' => [['text' => 'VIRAL FEVER']],
+            'procedures' => [['text' => 'Biphosphonate prophylaxis', 'performed_at' => '2026-09-03T00:00:00+05:30']],
+            'medications' => [
+                [
+                    'name' => 'TAB PANTAKOOL DSR',
+                    'dosage' => 'BF (BEFORE FOOD) | OD | भोजन से पहले | दिन में एक बार (OD)',
+                ],
+                [
+                    'name' => 'TAB AZIK-500',
+                    'dosage' => 'AF (AFTER FOOD) | BD | भोजन के बाद | दिन में दो बार (BD)',
+                ],
+            ],
+            'observations' => [
+                ['text' => 'Pulse /min', 'value' => '30/min', 'category' => 'Condition on Admission Time', 'effective_at' => '2026-09-01T04:53:00+05:30'],
+                ['text' => 'Respiration /min', 'value' => '120/min', 'category' => 'Condition on Admission Time', 'effective_at' => '2026-09-01T04:53:00+05:30'],
+                ['text' => 'BP mmHg', 'value' => '80mmHg', 'category' => 'Condition on Admission Time', 'effective_at' => '2026-09-01T04:53:00+05:30'],
+                ['text' => 'Pallor', 'value' => 'Negative', 'category' => 'Condition on Admission Time', 'effective_at' => '2026-09-01T04:53:00+05:30'],
+                ['text' => 'SPO2', 'value' => '95', 'unit' => '%', 'category' => 'Condition on Admission Time', 'effective_at' => '2026-09-01T04:53:00+05:30'],
+                ['text' => 'RBS', 'value' => '95', 'unit' => 'mg/dL', 'category' => 'Condition on Admission Time', 'effective_at' => '2026-09-01T04:53:00+05:30'],
+                ['text' => 'Temp F', 'value' => '99', 'unit' => 'degF', 'category' => 'Condition on Admission Time', 'effective_at' => '2026-09-01T04:53:00+05:30'],
+
+                ['text' => 'Pulse /min', 'value' => '30/min', 'category' => 'Condition on Discharge Time', 'effective_at' => '2026-09-04T04:58:00+05:30'],
+                ['text' => 'Respiration /min', 'value' => '110/min', 'category' => 'Condition on Discharge Time', 'effective_at' => '2026-09-04T04:58:00+05:30'],
+                ['text' => 'BP mmHg', 'value' => '90mmHg', 'category' => 'Condition on Discharge Time', 'effective_at' => '2026-09-04T04:58:00+05:30'],
+                ['text' => 'Pallor', 'value' => 'Negative', 'category' => 'Condition on Discharge Time', 'effective_at' => '2026-09-04T04:58:00+05:30'],
+                ['text' => 'SPO2', 'value' => '95', 'unit' => '%', 'category' => 'Condition on Discharge Time', 'effective_at' => '2026-09-04T04:58:00+05:30'],
+                ['text' => 'RBS', 'value' => '105', 'unit' => 'mg/dL', 'category' => 'Condition on Discharge Time', 'effective_at' => '2026-09-04T04:58:00+05:30'],
+                ['text' => 'Temp F', 'value' => '97', 'unit' => 'degF', 'category' => 'Condition on Discharge Time', 'effective_at' => '2026-09-04T04:58:00+05:30'],
+            ],
+            'investigations' => [
+                ['text' => 'Hb %: 11', 'loinc_code' => '718-7'],
+            ],
+            'care_plans' => [
+                ['title' => 'Discharge Advice', 'description' => 'To Continue the other medication if any systmic condition like hypertension , diabetic etc, as per adivised by treating physician'],
+                ['title' => 'Dietary Advice', 'description' => "1. Eat Nutritious diet,Stay away from smoking and alcohol altogether.\n2. Balanced Meals\n3. Fruits and Vegetables\n4. Avoid Processed Foods"],
+                ['title' => 'Follow Up', 'description' => 'Review After: 5 Days (09-09-2026) / as and when required'],
+            ],
+            'documents' => [
+                [
+                    'title' => 'IPD Discharge Summary',
+                    'content_type' => 'application/pdf',
+                    'data' => base64_encode('%PDF-discharge-summary'),
+                    'snomed_code' => '373942005',
+                    'loinc_code' => '18842-5',
+                    'created_at' => '2026-09-04T04:58:00+05:30',
+                ],
+                [
+                    'title' => 'IPD Bill / Invoice',
+                    'content_type' => 'application/pdf',
+                    'data' => base64_encode('%PDF-ipd-bill'),
+                    'snomed_code' => '823651000000106',
+                    'loinc_code' => '75490-3',
+                    'created_at' => '2026-09-04T04:58:00+05:30',
+                ],
+            ],
+        ];
+
+        $output = $this->factory->discharge()->generate($src);
+        $bundle = $output['fhir_bundle'];
+        $composition = $bundle['entry'][0]['resource'];
+
+        // Verify sections: should contain both General Examination on Admission and Examination on Discharge
+        $sectionTitles = array_column($composition['section'], 'title');
+        $this->assertContains('General Examination on Admission', $sectionTitles);
+        $this->assertContains('Examination on Discharge', $sectionTitles);
+        $this->assertContains('Care plan', $sectionTitles);
+        $this->assertContains('Document reference', $sectionTitles);
+
+        // Verify MedicationRequests have dosageInstruction text
+        $medRequests = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'MedicationRequest'));
+        $this->assertCount(2, $medRequests);
+        $this->assertSame('BF (BEFORE FOOD) | OD | भोजन से पहले | दिन में एक बार (OD)', $medRequests[0]['resource']['dosageInstruction'][0]['text']);
+        $this->assertSame('AF (AFTER FOOD) | BD | भोजन के बाद | दिन में दो बार (BD)', $medRequests[1]['resource']['dosageInstruction'][0]['text']);
+
+        // Verify CarePlans
+        $carePlans = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'CarePlan'));
+        $this->assertCount(3, $carePlans);
+        $carePlanTitles = array_column(array_column($carePlans, 'resource'), 'title');
+        $this->assertContains('Discharge Advice', $carePlanTitles);
+        $this->assertContains('Dietary Advice', $carePlanTitles);
+        $this->assertContains('Follow Up', $carePlanTitles);
+
+        // Verify DocumentReferences (both Discharge Summary and Invoice)
+        $docRefs = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'DocumentReference'));
+        $this->assertCount(2, $docRefs);
+        $this->assertSame('IPD Discharge Summary', $docRefs[0]['resource']['description']);
+        $this->assertSame('IPD Bill / Invoice', $docRefs[1]['resource']['description']);
+        $this->assertSame('823651000000106', $docRefs[1]['resource']['type']['coding'][0]['code']);
+
+        // Verify Observation Categories on Admission vs Discharge
+        $observations = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'Observation' && isset($e['resource']['category'])));
+        $this->assertGreaterThanOrEqual(14, count($observations));
+        $this->assertSame('General Examination on Admission', $observations[0]['resource']['category'][0]['text']);
+        $this->assertSame('Examination on Discharge', $observations[7]['resource']['category'][0]['text']);
+
+        // Verify all references resolve
+        $fullUrls = array_column($bundle['entry'], 'fullUrl');
+        $encoded = json_encode($bundle, JSON_UNESCAPED_SLASHES);
+        preg_match_all('/"reference":"(urn:uuid:[^"]+)"/', (string) $encoded, $matches);
+        foreach ($matches[1] as $reference) {
+            $this->assertContains($reference, $fullUrls, 'Unresolved reference: ' . $reference);
+        }
+    }
+
     public function testInvoiceRecordHasNrcesProfilesAndResolvableReferences(): void
     {
         $controller = new AbdmGateway();

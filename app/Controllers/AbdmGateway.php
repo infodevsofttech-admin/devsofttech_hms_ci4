@@ -2747,22 +2747,22 @@ class AbdmGateway extends BaseController
         }
 
         $medications = [];
-        $legacyMeds = $this->ipdRows('ipd_discharge_prescrption_prescribed', ['med_name', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days'], $ipdId);
+        $legacyMeds = $this->ipdRows('ipd_discharge_prescrption_prescribed', ['med_name', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'remark'], $ipdId);
         if (empty($legacyMeds)) {
-            $legacyMeds = $this->ipdRows('ipd_discharge_prescription_prescribed', ['med_name', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days'], $ipdId);
+            $legacyMeds = $this->ipdRows('ipd_discharge_prescription_prescribed', ['med_name', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'remark'], $ipdId);
         }
         foreach ($legacyMeds as $row) {
             $name = trim((string) ($row['med_name'] ?? ''));
             if ($name === '') {
                 continue;
             }
-            $dosageText = $this->resolveDischargeMedDosageLabel(
-                (int) ($row['dosage'] ?? 0),
-                (int) ($row['dosage_when'] ?? 0),
-                (int) ($row['dosage_freq'] ?? 0)
+            $dosage = $this->resolveDischargeMedDosageLabel(
+                $row['dosage'] ?? '',
+                $row['dosage_when'] ?? '',
+                $row['dosage_freq'] ?? '',
+                (string) ($row['no_of_days'] ?? ''),
+                (string) ($row['remark'] ?? '')
             );
-            $days = trim((string) ($row['no_of_days'] ?? ''));
-            $dosage = trim($dosageText . (($days !== '' && $days !== '0') ? ' for ' . $days . ' days' : ''));
             $medications[] = ['name' => $name, 'dosage' => $dosage];
         }
         if (empty($medications)) {
@@ -2861,6 +2861,51 @@ class AbdmGateway extends BaseController
                 ];
             }
 
+            // Dietary Advice from food items
+            $foodIds = is_array($instructionMeta['food_ids'] ?? null) ? ($instructionMeta['food_ids'] ?? []) : [];
+            if (empty($foodIds) && $this->db->tableExists('ipd_discharge_drug_food_interaction')) {
+                $legacyFoodRows = $this->ipdRows('ipd_discharge_drug_food_interaction', ['food_id_list'], $ipdId);
+                if (! empty($legacyFoodRows)) {
+                    $foodIds = array_values(array_filter(array_map('trim', explode(',', (string) ($legacyFoodRows[0]['food_id_list'] ?? ''))), 'strlen'));
+                }
+            }
+            if (! empty($foodIds) && $this->db->tableExists('ipd_discharge_master_food')) {
+                $foodRows = $this->db->table('ipd_discharge_master_food')
+                    ->select('id,food_short,food_desc,food_desc_lang')
+                    ->whereIn('id', array_map('intval', $foodIds))
+                    ->get()
+                    ->getResultArray();
+                $foodMap = [];
+                foreach ($foodRows as $fr) {
+                    $foodMap[(int) $fr['id']] = $fr;
+                }
+                $foodLines = [];
+                $fIndex = 1;
+                foreach ($foodIds as $fid) {
+                    $fr = $foodMap[(int) $fid] ?? null;
+                    if (! $fr) {
+                        continue;
+                    }
+                    $heading = trim((string) ($fr['food_short'] ?? ''));
+                    $line = trim((string) ($fr['food_desc_lang'] ?? ''));
+                    if ($line === '') {
+                        $line = trim((string) ($fr['food_desc'] ?? ''));
+                    }
+                    if ($heading === '' && $line === '') {
+                        continue;
+                    }
+                    $foodLines[] = $fIndex . '. ' . ($heading !== '' ? $heading . ': ' : '') . $line;
+                    $fIndex++;
+                }
+                if (! empty($foodLines)) {
+                    $carePlans[] = [
+                        'title' => 'Dietary Advice',
+                        'description' => implode("\n", $foodLines),
+                        'created_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
+                    ];
+                }
+            }
+
             $otherAdvice = trim((string) ($instructionMeta['other_text'] ?? ''));
             if ($otherAdvice !== '') {
                 $carePlans[] = [
@@ -2872,9 +2917,16 @@ class AbdmGateway extends BaseController
 
             $reviewAfter = trim((string) ($instructionRow['review_after'] ?? ''));
             if ($reviewAfter !== '') {
+                $reviewDate = '';
+                if ($dischargeRaw !== '' && is_numeric($reviewAfter)) {
+                    $reviewTs = strtotime($dischargeRaw . ' +' . (int) $reviewAfter . ' days');
+                    if ($reviewTs !== false) {
+                        $reviewDate = ' (' . date('d-m-Y', $reviewTs) . ')';
+                    }
+                }
                 $carePlans[] = [
                     'title' => 'Follow Up',
-                    'description' => 'Review After: ' . $reviewAfter,
+                    'description' => 'Review After: ' . $reviewAfter . ' Days' . $reviewDate . ' / as and when required',
                     'created_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
                 ];
             }
@@ -2963,10 +3015,27 @@ class AbdmGateway extends BaseController
     {
         $directory = WRITEPATH . 'uploads' . DIRECTORY_SEPARATOR . 'abdm' . DIRECTORY_SEPARATOR . 'ipd' . DIRECTORY_SEPARATOR . $ipdId;
         $createdAt = $this->toIsoDateTimeOrNow($dischargeRaw);
+
+        // Ensure IPD Bill PDF is cached if missing
+        $billPath = $directory . DIRECTORY_SEPARATOR . 'ipd-bill.pdf';
+        if (! is_file($billPath) || filesize($billPath) === 0) {
+            try {
+                (new \App\Controllers\Billing\Ipd())->generateIpdBillPdfBinary($ipdId, 1, true);
+            } catch (\Throwable $e) {
+                log_message('error', 'Auto-generating IPD Bill PDF failed for IPD {ipd}: {msg}', [
+                    'ipd' => $ipdId,
+                    'msg' => $e->getMessage(),
+                ]);
+            }
+        }
+
         $documents = [];
-        foreach ([
-            ['file' => 'discharge-summary.pdf', 'title' => 'IPD Discharge Summary', 'loinc' => '18842-5'],
-        ] as $definition) {
+        $definitions = [
+            ['file' => 'discharge-summary.pdf', 'title' => 'IPD Discharge Summary', 'loinc' => '18842-5', 'snomed' => '373942005'],
+            ['file' => 'ipd-bill.pdf', 'title' => 'IPD Bill / Invoice', 'loinc' => '75490-3', 'snomed' => '823651000000106'],
+        ];
+
+        foreach ($definitions as $definition) {
             $path = $directory . DIRECTORY_SEPARATOR . $definition['file'];
             if (! is_file($path) || filesize($path) === 0) {
                 continue;
@@ -3208,38 +3277,187 @@ class AbdmGateway extends BaseController
         return ! in_array($normalized, ['-', '--', 'na', 'n/a', 'nil', 'none', 'not done'], true);
     }
 
-    /** Resolve dose/when/freq IDs to a human-readable label for FHIR dosage text. */
-    private function resolveDischargeMedDosageLabel(int $doseId, int $whenId, int $freqId): string
+    /** Resolve dose/when/freq/days to a comprehensive human-readable label for FHIR dosage text. */
+    private function resolveDischargeMedDosageLabel($doseVal, $whenVal, $freqVal, string $days = '', string $remark = ''): string
     {
+        static $whenCodeDescMap = [
+            'BF'  => 'BF (BEFORE FOOD)',  'AF'  => 'AF (AFTER FOOD)',
+            'WF'  => 'WF (WITH FOOD)',    'ES'  => 'ES (EMPTY STOMACH)',
+            'BBF' => 'BBF (BEFORE BREAKFAST)', 'ABF' => 'ABF (AFTER BREAKFAST)',
+            'BL'  => 'BL (BEFORE LUNCH)', 'AL'  => 'AL (AFTER LUNCH)',
+            'BD'  => 'BD (BEFORE DINNER)', 'AD'  => 'AD (AFTER DINNER)',
+            'BT'  => 'BT (BED TIME)',
+        ];
+        static $whenHindiMap = [
+            'BF' => 'भोजन से पहले', 'BEFORE FOOD' => 'भोजन से पहले',
+            'AF' => 'भोजन के बाद',  'AFTER FOOD'  => 'भोजन के बाद',
+            'WF' => 'भोजन के साथ',  'WITH FOOD'   => 'भोजन के साथ',
+            'ES' => 'सुबह खाली पेट', 'EMPTY STOMACH' => 'सुबह खाली पेट',
+            'BBF'=> 'नाश्ते से पहले', 'BEFORE BREAKFAST' => 'नाश्ते से पहले',
+            'ABF'=> 'नाश्ते के बाद',  'AFTER BREAKFAST'  => 'नाश्ते के बाद',
+            'BL' => 'दोपहर के भोजन से पहले', 'BEFORE LUNCH' => 'दोपहर के भोजन से पहले',
+            'AL' => 'दोपहर के भोजन के बाद',  'AFTER LUNCH'  => 'दोपहर के भोजन के बाद',
+            'BD' => 'रात के भोजन से पहले',   'BEFORE DINNER'=> 'रात के भोजन से पहले',
+            'AD' => 'रात के भोजन के बाद',    'AFTER DINNER' => 'रात के भोजन के बाद',
+            'BT' => 'रात को सोते समय',       'BED TIME'     => 'रात को सोते समय',
+        ];
+        static $freqHindiMap = [
+            'OD'  => 'दिन में एक बार (OD)',   'BD'  => 'दिन में दो बार (BD)',
+            'TDS' => 'दिन में तीन बार (TDS)', 'TID' => 'दिन में तीन बार (TID)',
+            'QID' => 'दिन में चार बार (QID)', 'HS'  => 'रात को सोते समय (HS)',
+            'SOS' => 'ज़रूरत पड़ने पर (SOS)',  'STAT'=> 'तुरंत एक बार (STAT)',
+            'ALTERNATE DAY' => 'एक दिन छोड़कर',
+            'DAILY'   => 'प्रतिदिन',
+            'WEEKLY'  => 'हफ़्ते में एक बार',
+            'MONTHLY' => 'महीने में एक बार',
+        ];
+        static $remarkHindiMap = [
+            'TAKE WITH MILK'                    => 'दूध के साथ लें',
+            'TAKE WITH WARM WATER'              => 'गुनगुने पानी के साथ लें',
+            'AVOID SOUR FOOD AND DAIRY PRODUCTS'=> 'खट्टा और डेयरी उत्पाद न लें',
+            'TAKE AFTER MEALS'                  => 'भोजन के बाद लें',
+            'TAKE ON AN EMPTY STOMACH EARLY MORNING' => 'सुबह खाली पेट लें',
+            'CHEW WELL BEFORE SWALLOWING'       => 'चबाकर खाएं',
+            'DISSOLVE IN HALF GLASS OF WATER'   => 'आधे गिलास पानी में घोलकर लें',
+            'APPLY LOCALLY TWICE DAILY'         => 'दिन में दो बार लगाएं',
+            'DO NOT CRUSH OR CHEW TABLET'       => 'गोली को तोड़े या चबाएं नहीं',
+            'AVOID ALCOHOL WHILE TAKING THIS MEDICINE' => 'शराब का सेवन न करें',
+            'COMPLETE FULL COURSE OF ANTIBIOTICS'      => 'एंटीबायोटिक का पूरा कोर्स लें',
+            'DRINK PLENTY OF FLUIDS / WATER'    => 'प्रचुर मात्रा में पानी पिएं',
+        ];
+
         static $doseCache = null;
         static $whenCache = null;
         static $freqCache = null;
-        $load = function (string $table) {
-            $map = [];
-            if (! $this->db->tableExists($table)) {
-                return $map;
+        static $whenHindiCache = null;
+        static $freqHindiCache = null;
+
+        if ($doseCache === null && $this->db->tableExists('opd_dose_shed')) {
+            $doseCache = [];
+            foreach ($this->db->table('opd_dose_shed')->select('id, dose_desc')->get()->getResultArray() as $r) {
+                $doseCache[(int) $r['id']] = trim((string) ($r['dose_desc'] ?? ''));
             }
-            $fields = $this->db->getFieldNames($table) ?? [];
-            $labelField = in_array('dose_desc', $fields, true) ? 'dose_desc'
-                : (in_array('freq_desc', $fields, true) ? 'freq_desc'
-                : (in_array('when_desc', $fields, true) ? 'when_desc' : null));
-            if ($labelField === null) {
-                return $map;
+        }
+        if ($whenCache === null && $this->db->tableExists('opd_dose_when')) {
+            $whenCache = [];
+            $whenHindiCache = [];
+            $fields = $this->db->getFieldNames('opd_dose_when') ?? [];
+            $hasHindi = in_array('dose_sign_hindi', $fields, true);
+            foreach ($this->db->table('opd_dose_when')->select('id, dose_sign' . ($hasHindi ? ', dose_sign_hindi' : ''))->get()->getResultArray() as $r) {
+                $whenCache[(int) $r['id']] = trim((string) ($r['dose_sign'] ?? ''));
+                if ($hasHindi) {
+                    $whenHindiCache[(int) $r['id']] = trim((string) ($r['dose_sign_hindi'] ?? ''));
+                }
             }
-            foreach ($this->db->table($table)->select('id,' . $labelField)->get()->getResultArray() as $r) {
-                $map[(int) $r['id']] = trim((string) $r[$labelField]);
+        }
+        if ($freqCache === null && $this->db->tableExists('opd_dose_frequency')) {
+            $freqCache = [];
+            $freqHindiCache = [];
+            $fields = $this->db->getFieldNames('opd_dose_frequency') ?? [];
+            $hasHindi = in_array('dose_sign_hindi', $fields, true);
+            foreach ($this->db->table('opd_dose_frequency')->select('id, dose_sign' . ($hasHindi ? ', dose_sign_hindi' : ''))->get()->getResultArray() as $r) {
+                $freqCache[(int) $r['id']] = trim((string) ($r['dose_sign'] ?? ''));
+                if ($hasHindi) {
+                    $freqHindiCache[(int) $r['id']] = trim((string) ($r['dose_sign_hindi'] ?? ''));
+                }
             }
-            return $map;
-        };
-        if ($doseCache === null) { $doseCache = $load('opd_dose_shed'); }
-        if ($whenCache === null) { $whenCache = $load('opd_dose_when'); }
-        if ($freqCache === null) { $freqCache = $load('opd_dose_frequency'); }
-        $parts = array_filter([
-            $doseId > 0 ? ($doseCache[$doseId] ?? '') : '',
-            $whenId > 0 ? ($whenCache[$whenId] ?? '') : '',
-            $freqId > 0 ? ($freqCache[$freqId] ?? '') : '',
-        ], fn ($v) => $v !== '');
-        return implode(' ', $parts);
+        }
+
+        $doseText = '';
+        if (is_numeric($doseVal) && (int) $doseVal > 0) {
+            $doseText = $doseCache[(int) $doseVal] ?? '';
+        } elseif (is_string($doseVal) && trim($doseVal) !== '' && trim($doseVal) !== '0') {
+            $doseText = trim($doseVal);
+        }
+
+        $whenText = '';
+        $whenHindi = '';
+        if (is_numeric($whenVal) && (int) $whenVal > 0) {
+            $whenText = $whenCache[(int) $whenVal] ?? '';
+            $whenHindi = $whenHindiCache[(int) $whenVal] ?? '';
+        } elseif (is_string($whenVal) && trim($whenVal) !== '' && trim($whenVal) !== '0') {
+            $whenText = trim($whenVal);
+        }
+        if ($whenText !== '') {
+            $upperWhen = strtoupper($whenText);
+            if (isset($whenCodeDescMap[$upperWhen])) {
+                $whenText = $whenCodeDescMap[$upperWhen];
+            }
+            if ($whenHindi === '' && isset($whenHindiMap[$upperWhen])) {
+                $whenHindi = $whenHindiMap[$upperWhen];
+            }
+        }
+
+        $freqText = '';
+        $freqHindi = '';
+        if (is_numeric($freqVal) && (int) $freqVal > 0) {
+            $freqText = $freqCache[(int) $freqVal] ?? '';
+            $freqHindi = $freqHindiCache[(int) $freqVal] ?? '';
+        } elseif (is_string($freqVal) && trim($freqVal) !== '' && trim($freqVal) !== '0') {
+            $freqText = trim($freqVal);
+        }
+        if ($freqText !== '') {
+            $upperFreq = strtoupper($freqText);
+            if ($freqHindi === '' && isset($freqHindiMap[$upperFreq])) {
+                $freqHindi = $freqHindiMap[$upperFreq];
+            }
+        }
+
+        $cleanRemark = (string) preg_replace('/^(edit\s*remove|remove\s*edit|edit|remove|delete)\s*$/i', '', trim($remark));
+        $cleanRemark = trim($cleanRemark);
+        $remarkHindi = '';
+        if ($cleanRemark !== '') {
+            $upperRemark = strtoupper($cleanRemark);
+            if (isset($remarkHindiMap[$upperRemark])) {
+                $remarkHindi = $remarkHindiMap[$upperRemark];
+            }
+        }
+
+        $dirParts = [];
+        $dirLocalParts = [];
+
+        if ($whenText !== '') {
+            $dirParts[] = $whenText;
+        }
+        if ($whenHindi !== '') {
+            $dirLocalParts[] = $whenHindi;
+        }
+
+        if ($doseText !== '') {
+            $dirParts[] = $doseText;
+        }
+
+        if ($freqText !== '') {
+            $dirParts[] = $freqText;
+        }
+        if ($freqHindi !== '') {
+            $dirLocalParts[] = $freqHindi;
+        }
+
+        if ($cleanRemark !== '') {
+            $dirParts[] = $cleanRemark;
+        }
+        if ($remarkHindi !== '') {
+            $dirLocalParts[] = $remarkHindi;
+        }
+
+        $daysClean = trim($days);
+        if ($daysClean !== '' && $daysClean !== '0') {
+            $daysNum = is_numeric($daysClean) ? (int) $daysClean : 0;
+            $dirParts[] = $daysNum > 0 ? ('for ' . $daysNum . ' days') : ('for ' . $daysClean);
+            if ($daysNum > 0) {
+                $dirLocalParts[] = $daysNum . ' दिन';
+            }
+        }
+
+        $engText = implode(' | ', array_values(array_unique(array_filter($dirParts))));
+        $hinText = implode(' | ', array_values(array_unique(array_filter($dirLocalParts))));
+
+        if ($engText !== '' && $hinText !== '') {
+            return $engText . ' | ' . $hinText;
+        }
+
+        return $engText !== '' ? $engText : $hinText;
     }
 
     private function normalizeFhirGender(string $gender): string

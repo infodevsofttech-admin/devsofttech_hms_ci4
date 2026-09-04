@@ -254,10 +254,10 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 continue;
             }
 
-            $stage = trim((string) ($obs['stage'] ?? $obs['timing'] ?? $obs['category_text'] ?? ''));
-            if ($stage !== '' && stripos($text, 'Admission') === false && stripos($text, 'Discharge') === false) {
-                $text = $text . ' (' . $stage . ')';
-            }
+            $catText = trim((string) ($obs['category'] ?? $obs['category_text'] ?? $obs['stage'] ?? $obs['timing'] ?? ''));
+            $isAdm = (stripos($catText, 'Admission') !== false || stripos($text, 'Admission') !== false);
+            $isDis = (stripos($catText, 'Discharge') !== false || stripos($text, 'Discharge') !== false);
+            $obsCategoryDisplay = $isAdm ? 'General Examination on Admission' : ($isDis ? 'Examination on Discharge' : 'Vital Signs');
 
             $coding = [];
             $loincCode = trim((string) ($obs['loinc_code'] ?? ''));
@@ -290,7 +290,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation']],
                 'status' => 'final',
                 'category' => [[
-                    'text' => 'Vital Signs' . ($stage !== '' ? ' (' . $stage . ')' : ''),
+                    'text' => $obsCategoryDisplay,
                     'coding' => [[
                         'system' => 'http://terminology.hl7.org/CodeSystem/observation-category',
                         'code' => 'vital-signs',
@@ -474,6 +474,16 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 continue;
             }
 
+            $docTitle = trim((string) ($document['title'] ?? 'Clinical document'));
+            $snomedCode = trim((string) ($document['snomed_code'] ?? ''));
+            if ($snomedCode === '') {
+                if (stripos($docTitle, 'Bill') !== false || stripos($docTitle, 'Invoice') !== false) {
+                    $snomedCode = '823651000000106'; // Billing record
+                } else {
+                    $snomedCode = '373942005'; // Discharge summary
+                }
+            }
+
             $builder->addDocumentReference([
                 'resourceType' => 'DocumentReference',
                 'id' => 'discharge-document-' . $recordId . '-' . $idx,
@@ -482,9 +492,9 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 'docStatus' => 'final',
                 'type' => ['coding' => [[
                     'system' => 'http://snomed.info/sct',
-                    'code' => '373942005',
-                    'display' => 'Discharge summary',
-                ]], 'text' => 'Discharge Summary'],
+                    'code' => $snomedCode,
+                    'display' => $docTitle,
+                ]], 'text' => $docTitle],
                 'subject' => ['reference' => $patientRef],
                 'date' => (string) ($document['created_at'] ?? $timestamp),
                 'author' => is_array($practitioner) ? [[
@@ -493,17 +503,30 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 'custodian' => is_array($organization) ? [
                     'reference' => 'urn:uuid:' . (string) $organization['id'],
                 ] : null,
-                'description' => (string) ($document['title'] ?? 'Clinical document'),
+                'description' => $docTitle,
                 'content' => [[
                     'attachment' => [
                         'contentType' => (string) ($document['content_type'] ?? 'application/pdf'),
                         'language' => 'en-IN',
                         'data' => $data,
-                        'title' => (string) ($document['title'] ?? 'Clinical document'),
+                        'title' => $docTitle,
                         'creation' => (string) ($document['created_at'] ?? $timestamp),
                     ],
                 ]],
             ]);
+        }
+
+        $rawObservations = (array) ($source['observations'] ?? []);
+        $admissionObsIndexed = [];
+        $dischargeObsIndexed = [];
+        foreach ($rawObservations as $idx => $obs) {
+            $cat = trim((string) ($obs['category'] ?? $obs['category_text'] ?? $obs['stage'] ?? $obs['timing'] ?? ''));
+            $txt = trim((string) ($obs['text'] ?? ''));
+            if (stripos($cat, 'Admission') !== false || stripos($txt, 'Admission') !== false) {
+                $admissionObsIndexed[$idx] = $obs;
+            } elseif (stripos($cat, 'Discharge') !== false || stripos($txt, 'Discharge') !== false) {
+                $dischargeObsIndexed[$idx] = $obs;
+            }
         }
 
         $sectionDefinitions = [
@@ -511,17 +534,26 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             ['title' => 'Problems and Diagnoses', 'code' => '1003642006', 'display' => 'Past medical history section', 'prefix' => 'discharge-diagnosis-', 'items' => $diagnosesList, 'narrative' => trim((string) ($source['diagnosis_narrative'] ?? ''))],
             ['title' => 'Procedures', 'code' => '1003640003', 'display' => 'History of past procedure section', 'prefix' => 'discharge-procedure-', 'items' => (array) ($source['procedures'] ?? [])],
             ['title' => 'Medications', 'code' => '1003606003', 'display' => 'Medication history section', 'prefix' => 'discharge-medication-', 'items' => (array) ($source['medications'] ?? [])],
-            ['title' => 'Physical examination', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items' => (array) ($source['observations'] ?? [])],
-            ['title' => 'Investigations', 'code' => '721981007', 'display' => 'Diagnostic studies report', 'prefix' => 'discharge-investigation-', 'items' => (array) ($source['investigations'] ?? [])],
-            ['title' => 'Allergies', 'code' => '722446000', 'display' => 'Allergy record', 'prefix' => 'discharge-allergy-', 'items' => (array) ($source['allergies'] ?? [])],
-            ['title' => 'Care plan', 'code' => '734163000', 'display' => 'Care plan', 'prefix' => 'discharge-careplan-', 'items' => (array) ($source['care_plans'] ?? [])],
-            ['title' => 'Document reference', 'code' => '373942005', 'display' => 'Discharge summary', 'prefix' => 'discharge-document-', 'items' => (array) ($source['documents'] ?? [])],
         ];
+
+        if (! empty($admissionObsIndexed) && ! empty($dischargeObsIndexed)) {
+            $sectionDefinitions[] = ['title' => 'General Examination on Admission', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items_indexed' => $admissionObsIndexed];
+            $sectionDefinitions[] = ['title' => 'Examination on Discharge', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items_indexed' => $dischargeObsIndexed];
+        } else {
+            $sectionDefinitions[] = ['title' => 'Physical examination', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items' => $rawObservations];
+        }
+
+        $sectionDefinitions[] = ['title' => 'Investigations', 'code' => '721981007', 'display' => 'Diagnostic studies report', 'prefix' => 'discharge-investigation-', 'items' => (array) ($source['investigations'] ?? [])];
+        $sectionDefinitions[] = ['title' => 'Allergies', 'code' => '722446000', 'display' => 'Allergy record', 'prefix' => 'discharge-allergy-', 'items' => (array) ($source['allergies'] ?? [])];
+        $sectionDefinitions[] = ['title' => 'Care plan', 'code' => '734163000', 'display' => 'Care plan', 'prefix' => 'discharge-careplan-', 'items' => (array) ($source['care_plans'] ?? [])];
+        $sectionDefinitions[] = ['title' => 'Document reference', 'code' => '373942005', 'display' => 'Discharge summary', 'prefix' => 'discharge-document-', 'items' => (array) ($source['documents'] ?? [])];
+
         $sections = [];
         foreach ($sectionDefinitions as $definition) {
             $references = [];
             $narrativeParts = [];
-            foreach ($definition['items'] as $idx => $item) {
+            $items = isset($definition['items_indexed']) ? $definition['items_indexed'] : (array) ($definition['items'] ?? []);
+            foreach ($items as $idx => $item) {
                 $references[] = ['reference' => 'urn:uuid:' . $definition['prefix'] . $recordId . '-' . $idx];
                 $narrative = $this->sectionItemNarrative((array) $item);
                 if ($narrative !== '') {
@@ -734,13 +766,43 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
     /** @param array<string,mixed> $item */
     private function sectionItemNarrative(array $item): string
     {
+        // For medications: name + dosage
+        if (isset($item['name']) && $this->isMeaningfulValue((string) $item['name'])) {
+            $name = trim((string) $item['name']);
+            $dosage = trim((string) ($item['dosage'] ?? ''));
+            return trim($name . ($this->isMeaningfulValue($dosage) ? ' - ' . $dosage : ''));
+        }
+
+        // For observations: text + value (+ unit)
+        if (isset($item['text'], $item['value']) && $this->isMeaningfulValue((string) $item['text']) && $this->isMeaningfulValue((string) $item['value'])) {
+            $text = trim((string) $item['text']);
+            $val = trim((string) $item['value']);
+            $unit = trim((string) ($item['unit'] ?? ''));
+            $unitInfo = is_numeric($val) ? $this->getVitalSignUnitInfo($text, $unit) : ['unit' => ''];
+            $displayUnit = $unit !== '' ? $unit : ($unitInfo['unit'] ?? '');
+            $valStr = $val . ($displayUnit !== '' && stripos($val, $displayUnit) === false ? ' ' . $displayUnit : '');
+            return trim($text . ': ' . $valStr);
+        }
+
+        // For care plans: title + description
+        if (isset($item['title'], $item['description']) && $this->isMeaningfulValue((string) $item['description'])) {
+            $title = trim((string) $item['title']);
+            $desc = trim((string) $item['description']);
+            if ($title !== '' && stripos($desc, $title) === false) {
+                return trim($title . ': ' . strip_tags($desc));
+            }
+            return trim(strip_tags($desc));
+        }
+
+        // For documents
+        if (isset($item['title']) && $this->isMeaningfulValue((string) $item['title'])) {
+            return trim((string) $item['title']);
+        }
+
+        // Default fallback
         foreach (['text', 'description', 'title', 'name', 'value'] as $field) {
             $value = trim((string) ($item[$field] ?? ''));
             if ($this->isMeaningfulValue($value)) {
-                if ($field === 'name') {
-                    $dosage = trim((string) ($item['dosage'] ?? ''));
-                    return trim($value . ($this->isMeaningfulValue($dosage) ? ' - ' . $dosage : ''));
-                }
                 return trim(strip_tags($value));
             }
         }

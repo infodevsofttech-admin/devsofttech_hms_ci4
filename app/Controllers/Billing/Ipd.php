@@ -941,9 +941,34 @@ class Ipd extends BaseController
             return $permission;
         }
 
+        $showHeader = $this->request->getGet('header') !== '0';
+        $pdfBinary = $this->generateIpdBillPdfBinary($ipdId, $mode, $showHeader);
+        if ($pdfBinary === null) {
+            return $this->response->setStatusCode(404)->setBody('IPD not found');
+        }
+
+        $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
+        $ipdCode = (string) ($panelData['ipd_info']->ipd_code ?? ('IPD-' . $ipdId));
+        $fileName = 'IPD_Bill_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', $ipdCode) . '_M' . $mode . '.pdf';
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/pdf')
+            ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+            ->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->setHeader('Pragma', 'no-cache')
+            ->setHeader('Expires', '0')
+            ->setBody($pdfBinary);
+    }
+
+    public function generateIpdBillPdfBinary(int $ipdId, int $mode = 1, bool $showHeader = true): ?string
+    {
+        if ($ipdId <= 0) {
+            return null;
+        }
+
         $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
         if (empty($panelData)) {
-            return $this->response->setStatusCode(404)->setBody('IPD not found');
+            return null;
         }
 
         // Recalculate before print so PDF always reflects latest bill math.
@@ -951,10 +976,7 @@ class Ipd extends BaseController
         $panelData = $this->ipdModel->getIpdPanelInfo($ipdId);
 
         $mode = max(1, min(6, $mode));
-        
-        // Get header parameter from query string (default: show header)
-        $showHeader = $this->request->getGet('header') !== '0';
-        
+
         $data = $this->buildBillDetailsTabData($panelData, $ipdId);
         $data['show_print_actions'] = false;
         $data['show_payment_details'] = in_array($mode, [1, 6], true);
@@ -973,7 +995,7 @@ class Ipd extends BaseController
         // When header is hidden (letterhead mode), use larger top margin
         $marginTop = $showHeader ? 8 : 50;      // 50mm = ~5cm for letterhead
         $marginBottom = $showHeader ? 8 : 20;   // 20mm = 2cm
-        
+
         $mpdf = new Mpdf([
             'tempDir' => $mpdfTempDir,
             'format' => 'A4',
@@ -989,15 +1011,12 @@ class Ipd extends BaseController
         $fileName = 'IPD_Bill_' . preg_replace('/[^A-Za-z0-9_\-]/', '_', $ipdCode) . '_M' . $mode . '.pdf';
 
         $pdfBinary = $mpdf->Output($fileName, 'S');
-        $this->cacheAbdmIpdBillPdf($ipdId, $pdfBinary);
+        if (is_string($pdfBinary) && str_starts_with($pdfBinary, '%PDF-')) {
+            $this->cacheAbdmIpdBillPdf($ipdId, $pdfBinary);
+            return $pdfBinary;
+        }
 
-        return $this->response
-            ->setHeader('Content-Type', 'application/pdf')
-            ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
-            ->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
-            ->setHeader('Pragma', 'no-cache')
-            ->setHeader('Expires', '0')
-            ->setBody($pdfBinary);
+        return null;
     }
 
     private function cacheAbdmIpdBillPdf(int $ipdId, string $pdfBinary): void
