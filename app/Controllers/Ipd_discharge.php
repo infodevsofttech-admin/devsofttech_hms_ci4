@@ -8802,19 +8802,29 @@ class Ipd_discharge extends BaseController
 
         if ($doseCache === null && $this->db->tableExists('opd_dose_shed')) {
             $doseCache = [];
-            foreach ($this->db->table('opd_dose_shed')->select('id, dose_desc')->get()->getResultArray() as $r) {
-                $doseCache[(int) $r['id']] = trim((string) ($r['dose_desc'] ?? ''));
+            $fields = $this->db->getFieldNames('opd_dose_shed') ?? [];
+            $idCol = in_array('dose_shed_id', $fields, true) ? 'dose_shed_id' : (in_array('id', $fields, true) ? 'id' : '');
+            $descCol = in_array('dose_show_desc', $fields, true) ? 'dose_show_desc' : (in_array('dose_show_sign', $fields, true) ? 'dose_show_sign' : (in_array('dose_desc', $fields, true) ? 'dose_desc' : ''));
+            if ($idCol !== '' && $descCol !== '') {
+                foreach ($this->db->table('opd_dose_shed')->select("$idCol, $descCol")->get()->getResultArray() as $r) {
+                    $doseCache[(int) $r[$idCol]] = trim((string) ($r[$descCol] ?? ''));
+                }
             }
         }
         if ($whenCache === null && $this->db->tableExists('opd_dose_when')) {
             $whenCache = [];
             $whenHindiCache = [];
             $fields = $this->db->getFieldNames('opd_dose_when') ?? [];
+            $idCol = in_array('dose_when_id', $fields, true) ? 'dose_when_id' : (in_array('id', $fields, true) ? 'id' : '');
+            $signCol = in_array('dose_sign', $fields, true) ? 'dose_sign' : (in_array('dose_sign_desc', $fields, true) ? 'dose_sign_desc' : '');
             $hasHindi = in_array('dose_sign_hindi', $fields, true);
-            foreach ($this->db->table('opd_dose_when')->select('id, dose_sign' . ($hasHindi ? ', dose_sign_hindi' : ''))->get()->getResultArray() as $r) {
-                $whenCache[(int) $r['id']] = trim((string) ($r['dose_sign'] ?? ''));
-                if ($hasHindi) {
-                    $whenHindiCache[(int) $r['id']] = trim((string) ($r['dose_sign_hindi'] ?? ''));
+            if ($idCol !== '' && $signCol !== '') {
+                $selectCols = "$idCol, $signCol" . ($hasHindi ? ', dose_sign_hindi' : '');
+                foreach ($this->db->table('opd_dose_when')->select($selectCols)->get()->getResultArray() as $r) {
+                    $whenCache[(int) $r[$idCol]] = trim((string) ($r[$signCol] ?? ''));
+                    if ($hasHindi) {
+                        $whenHindiCache[(int) $r[$idCol]] = trim((string) ($r['dose_sign_hindi'] ?? ''));
+                    }
                 }
             }
         }
@@ -8822,11 +8832,16 @@ class Ipd_discharge extends BaseController
             $freqCache = [];
             $freqHindiCache = [];
             $fields = $this->db->getFieldNames('opd_dose_frequency') ?? [];
+            $idCol = in_array('dose_freq_id', $fields, true) ? 'dose_freq_id' : (in_array('id', $fields, true) ? 'id' : '');
+            $signCol = in_array('dose_sign', $fields, true) ? 'dose_sign' : (in_array('dose_sign_desc', $fields, true) ? 'dose_sign_desc' : '');
             $hasHindi = in_array('dose_sign_hindi', $fields, true);
-            foreach ($this->db->table('opd_dose_frequency')->select('id, dose_sign' . ($hasHindi ? ', dose_sign_hindi' : ''))->get()->getResultArray() as $r) {
-                $freqCache[(int) $r['id']] = trim((string) ($r['dose_sign'] ?? ''));
-                if ($hasHindi) {
-                    $freqHindiCache[(int) $r['id']] = trim((string) ($r['dose_sign_hindi'] ?? ''));
+            if ($idCol !== '' && $signCol !== '') {
+                $selectCols = "$idCol, $signCol" . ($hasHindi ? ', dose_sign_hindi' : '');
+                foreach ($this->db->table('opd_dose_frequency')->select($selectCols)->get()->getResultArray() as $r) {
+                    $freqCache[(int) $r[$idCol]] = trim((string) ($r[$signCol] ?? ''));
+                    if ($hasHindi) {
+                        $freqHindiCache[(int) $r[$idCol]] = trim((string) ($r['dose_sign_hindi'] ?? ''));
+                    }
                 }
             }
         }
