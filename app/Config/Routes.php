@@ -768,6 +768,7 @@ $routes->post('AbdmGateway/share_diagnosis_report_bundle', 'AbdmGateway::shareDi
 $routes->post('AbdmGateway/shareDiagnosisReportBundle', 'AbdmGateway::shareDiagnosisReportBundle', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmGateway/diagnosis_report_fhir_preview', 'AbdmGateway::diagnosisReportFhirPreview', ['filter' => $abdmPermFilter]);
 $routes->match(['GET', 'POST'], 'AbdmGateway/ipd_discharge_fhir_preview', 'AbdmGateway::ipdDischargeFhirPreview', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmGateway/save_ipd_discharge_fhir', 'AbdmGateway::saveIpdDischargeFhir', ['filter' => $abdmPermFilter]);
 $routes->get('AbdmGateway/immunization_fhir_preview', 'AbdmGateway::immunizationFhirPreview', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/share_immunization_bundle', 'AbdmGateway::shareImmunizationBundle', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/share_wellness_bundle', 'AbdmGateway::shareWellnessBundle', ['filter' => $abdmPermFilter]);

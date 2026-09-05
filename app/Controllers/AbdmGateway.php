@@ -874,8 +874,8 @@ class AbdmGateway extends BaseController
     }
 
     // =========================================================================
-    // HIP Consent Notify Callback — gateway forwards consent notify updates.
-    // POST /AbdmGateway/hip_consent_notify_callback (no auth filter — public webhook)
+    // HIP Consent Notify Callback - gateway forwards consent notify updates.
+    // POST /AbdmGateway/hip_consent_notify_callback (no auth filter - public webhook)
     // =========================================================================
 
     public function hipConsentNotifyCallback()
@@ -1711,9 +1711,32 @@ class AbdmGateway extends BaseController
         }
         $effectiveConsent = (string) ($consent['consent_handle'] ?? $consentHandle);
 
-        $fhirPayload = $this->buildIpdDischargeGatewayPayload($ipdId, $patientId, $abhaId);
+        $forceNewRecord = (int) $this->request->getPost('force_new_record');
+
+        $fhirPayload = $this->buildIpdDischargeGatewayPayload($ipdId, $patientId, $abhaId, $forceNewRecord === 1);
         if ($fhirPayload === null) {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'Unable to prepare IPD discharge FHIR payload']);
+        }
+
+        $bundle = (array) ($fhirPayload['bundle'] ?? []);
+
+        // Override bundle with user edits if provided
+        $overrideJson = trim((string) $this->request->getPost('fhir_override_json'));
+        if ($overrideJson !== '') {
+            $parsedOverride = json_decode($overrideJson, true);
+            if (is_array($parsedOverride)) {
+                if (($parsedOverride['resourceType'] ?? '') === 'Bundle') {
+                    $bundle = $parsedOverride;
+                    $fhirPayload['bundle'] = $bundle;
+                } elseif (isset($parsedOverride['bundle']) && is_array($parsedOverride['bundle']) && ($parsedOverride['bundle']['resourceType'] ?? '') === 'Bundle') {
+                    $bundle = $parsedOverride['bundle'];
+                    $fhirPayload['bundle'] = $bundle;
+                } else {
+                    return $this->response->setJSON(['ok' => 0, 'error_text' => 'Invalid JSON provided in the override editor.']);
+                }
+            } else {
+                return $this->response->setJSON(['ok' => 0, 'error_text' => 'Invalid JSON provided in the override editor.']);
+            }
         }
 
         $ipdRow = (array) ($fhirPayload['ipd_row'] ?? []);
@@ -1723,11 +1746,10 @@ class AbdmGateway extends BaseController
         $birthYear = (int) ($fhirPayload['year_of_birth'] ?? 0);
         $ccRef = (string) ($fhirPayload['care_context_reference'] ?? ('IPD-' . $ipdId . '-' . $visitDate));
         $ccDisplay = (string) ($fhirPayload['care_context_display'] ?? ('Discharge Summary ' . $visitDate));
-        $bundle = (array) ($fhirPayload['bundle'] ?? []);
         $attachmentPath = trim((string) ($fhirPayload['attachment_path'] ?? ''));
         $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-        // ── Store health_record ───────────────────────────────────────────────
+        // -- Store health_record -----------------------------------------------
         $healthRecordId = $this->storeHealthRecord([
             'patient_id'     => $patientId,
             'abha_id'        => $abhaId,
@@ -1769,7 +1791,7 @@ class AbdmGateway extends BaseController
             ]);
         }
 
-        // ── Push via pushRecord() (POST /v3/records/push) ─────────────────────
+        // -- Push via pushRecord() (POST /v3/records/push) ---------------------
         $queueId       = null;
         $bridgeRecordId = 0;
         $connectorError = null;
@@ -1846,7 +1868,7 @@ class AbdmGateway extends BaseController
             return $this->response->setJSON(['ok' => 0, 'error' => 'lab_req_id and patient_id are required']);
         }
 
-        // ── Load lab request ──────────────────────────────────────────────────
+        // -- Load lab request --------------------------------------------------
         $labReq = $this->db->table('lab_request')
             ->select('id, patient_name, lab_type, charge_id, Report_Data, report_data_Impression, status, reported_time')
             ->where('id', $labReqId)
@@ -1873,7 +1895,7 @@ class AbdmGateway extends BaseController
         }
         $effectiveConsent = (string) ($consentRecord['consent_handle'] ?? $consentHandle);
 
-        // ── Load patient ──────────────────────────────────────────────────────
+        // -- Load patient ------------------------------------------------------
         $patientRow = [];
         if ($this->db->tableExists('patient_master')) {
             $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
@@ -1884,7 +1906,7 @@ class AbdmGateway extends BaseController
         }
         $patientBirthYear = $this->resolvePatientBirthYear($patientRow, str_contains($abhaId, '@') ? $abhaId : '', str_contains($abhaId, '@') ? '' : $abhaId);
 
-        // ── Load test / charge name ────────────────────────────────────────────
+        // -- Load test / charge name --------------------------------------------
         $testTitle = '';
         $chargeId  = (int) ($labReq->charge_id ?? 0);
         if ($chargeId > 0 && $this->db->tableExists('charge_master')) {
@@ -1895,15 +1917,15 @@ class AbdmGateway extends BaseController
             $testTitle = $this->mapLabTypeToTitle((int) ($labReq->lab_type ?? 0));
         }
 
-        // ── Load hospital profile ─────────────────────────────────────────────
+        // -- Load hospital profile ---------------------------------------------
         $hospitalProfile = $this->getHospitalProfileForFhir();
 
-        // ── Parse reported time ───────────────────────────────────────────────
+        // -- Parse reported time -----------------------------------------------
         $reportedRaw  = trim((string) ($labReq->reported_time ?? ''));
         $reportedAt   = $reportedRaw !== '' ? (new \DateTime($reportedRaw, new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP') : '';
         $visitDate    = $reportedRaw !== '' ? date('Y-m-d', strtotime($reportedRaw)) : date('Y-m-d');
 
-        // ── Build FHIR DiagnosticReportRecord bundle ───────────────────────────
+        // -- Build FHIR DiagnosticReportRecord bundle ---------------------------
         $fhir = new FhirR4Builder();
 
         $patient = [
@@ -1931,7 +1953,7 @@ class AbdmGateway extends BaseController
             $diagnosticReport['section_snomed_display'] = 'Computed tomography imaging report';
         }
 
-        // ── Load LOINC code for the panel from lab_repo ───────────────────────
+        // -- Load LOINC code for the panel from lab_repo -----------------------
         $labRepoRow = $this->db->table('lab_request lr')
             ->select('lr.lab_repo_id, repo.loinc_code AS repo_loinc_code, repo.Title')
             ->join('lab_repo repo', 'repo.mstRepoKey = lr.lab_repo_id', 'left')
@@ -1944,7 +1966,7 @@ class AbdmGateway extends BaseController
             $diagnosticReport['loinc_code'] = $repoLoincCode;
         }
 
-        // ── Build structured observations from lab_request_item + lab_tests ───
+        // -- Build structured observations from lab_request_item + lab_tests ---
         $observations = $this->buildLabObservations($labReqId, (string) ($labReq->status ?? '0'));
 
         $organization = $hospitalProfile['name'] !== ''
@@ -1972,7 +1994,7 @@ class AbdmGateway extends BaseController
         $bundle     = $fhir->buildLabReportBundle($patient, $diagnosticReport, $observations, $practitioner, $organization, $encounter, $pdfAttachment);
         $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-        // ── Store health_record ───────────────────────────────────────────────
+        // -- Store health_record -----------------------------------------------
         $ccRef = 'LAB-' . $labReqId . '-' . $visitDate;
         $healthRecordId = $this->storeHealthRecord([
             'patient_id'     => $patientId,
@@ -2014,7 +2036,7 @@ class AbdmGateway extends BaseController
             ]);
         }
 
-        // ── Push via pushRecord() (POST /v3/records/push) ─────────────────────
+        // -- Push via pushRecord() (POST /v3/records/push) ---------------------
         $queueId        = null;
         $bridgeRecordId = 0;
         $connectorError = null;
@@ -2609,8 +2631,39 @@ class AbdmGateway extends BaseController
             $abhaId = $ident['abha_address'] ?: $ident['abha_id'];
         }
 
+        $forceNewRecord = (int) ($this->request->getGet('force_rebuild') ?? 0);
         try {
-            $fhirPayload = $this->buildIpdDischargeGatewayPayload($ipdId, $patientId, $abhaId);
+            if ($forceNewRecord !== 1 && $this->db && $this->db->tableExists('health_records')) {
+                $existing = $this->db->table('health_records')
+                    ->where('entity_type', 'ipd')
+                    ->where('entity_id', (string) $ipdId)
+                    ->whereIn('hi_type', ['DischargeSummaryRecord', 'DischargeSummary'])
+                    ->orderBy('id', 'DESC')
+                    ->get(1)
+                    ->getRowArray();
+                if (! empty($existing)) {
+                    $raw = (string) ($existing['record_data'] ?? '');
+                    if ($raw === '' && ! empty($existing['fhir_bundle_enc'])) {
+                        $enc = new FhirEncryptionService();
+                        $raw = $enc->decrypt((string) $existing['fhir_bundle_enc']);
+                    }
+                    if ($raw !== '') {
+                        $savedBundle = json_decode($raw, true);
+                        if (is_array($savedBundle) && ($savedBundle['resourceType'] ?? '') === 'Bundle') {
+                            return $this->response->setJSON([
+                                'status' => 'ok',
+                                'ipd_id' => $ipdId,
+                                'patient_id' => $patientId,
+                                'abha_id' => $abhaId,
+                                'bundle' => $savedBundle,
+                                'source' => 'saved_record',
+                            ]);
+                        }
+                    }
+                }
+            }
+
+            $fhirPayload = $this->buildIpdDischargeGatewayPayload($ipdId, $patientId, $abhaId, $forceNewRecord === 1);
             if ($fhirPayload === null) {
                 return $this->response->setStatusCode(404)->setJSON([
                     'status' => 'error',
@@ -2636,10 +2689,113 @@ class AbdmGateway extends BaseController
         }
     }
 
+    public function saveIpdDischargeFhir()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $ipdId     = (int) ($this->request->getPost('ipd_id') ?? 0);
+        $patientId = (int) ($this->request->getPost('patient_id') ?? 0);
+        $abhaId    = trim((string) ($this->request->getPost('abha_id') ?? ''));
+        $rawJson   = trim((string) ($this->request->getPost('fhir_json') ?? ''));
+
+        if ($ipdId <= 0) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'ipd_id is required']);
+        }
+
+        if ($rawJson === '') {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'fhir_json is required']);
+        }
+
+        $parsed = json_decode($rawJson, true);
+        if (! is_array($parsed)) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'Invalid JSON syntax: ' . json_last_error_msg()]);
+        }
+
+        $bundle = ($parsed['resourceType'] ?? '') === 'Bundle' ? $parsed : ($parsed['bundle'] ?? null);
+        if (! is_array($bundle) || ($bundle['resourceType'] ?? '') !== 'Bundle') {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'The provided JSON is not a valid FHIR Bundle']);
+        }
+
+        if ($patientId <= 0 && $this->db && $this->db->tableExists('ipd_master')) {
+            $ipdRow = $this->db->table('ipd_master')->where('id', $ipdId)->get(1)->getRowArray() ?? [];
+            $patientId = (int) ($ipdRow['p_id'] ?? $ipdRow['patient_id'] ?? 0);
+        }
+
+        if ($abhaId === '' && $patientId > 0) {
+            $ident = $this->resolvePatientAbhaIdentity($patientId);
+            $abhaId = $ident['abha_address'] ?: $ident['abha_id'];
+        }
+
+        $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        $ccRef = 'IPD-' . $ipdId . '-' . date('Y-m-d');
+
+        $healthRecordId = $this->storeHealthRecord([
+            'patient_id'     => $patientId > 0 ? $patientId : null,
+            'abha_id'        => $abhaId,
+            'hi_type'        => 'DischargeSummaryRecord',
+            'entity_type'    => 'ipd',
+            'entity_id'      => (string) $ipdId,
+            'fhir_bundle'    => $bundleJson,
+            'care_context_reference' => $ccRef,
+        ]);
+
+        $abhaIdentity = $this->resolvePatientAbhaIdentity($patientId, $abhaId);
+        $abhaNumber = $abhaIdentity['abha_id'];
+        $abhaAddress = $abhaIdentity['abha_address'];
+        
+        $patName = '';
+        if ($this->db && $this->db->tableExists('patient_master')) {
+            $pRow = $this->db->table('patient_master')->where('p_id', $patientId)->get(1)->getRowArray() ?? [];
+            $patName = trim((string) (($pRow['p_fname'] ?? '') . ' ' . ($pRow['p_lname'] ?? '')));
+        }
+        
+        $queueId = null;
+        $bridgeRecordId = 0;
+        $connectorError = null;
+        if ($abhaNumber !== '' || $abhaAddress !== '') {
+            try {
+                $pushResult = $this->connector->pushRecord([
+                    'patient_id'             => (string) $patientId,
+                    'patient_name'           => $patName !== '' ? $patName : ('PATIENT-' . $patientId),
+                    'abha_id'                => $abhaNumber,
+                    'abha_address'           => $abhaAddress,
+                    'hi_type'                => 'DischargeSummaryRecord',
+                    'record_type'            => 'DischargeSummaryRecord',
+                    'visit_date'             => date('Y-m-d'),
+                    'care_context_reference' => $ccRef,
+                    'care_context_display'   => 'Discharge Summary ' . date('Y-m-d'),
+                    'notes'                  => 'Discharge Summary ' . date('Y-m-d'),
+                    'queue_id'               => 'IPD-' . $ipdId . '-' . date('Y-m-d'),
+                    'record_data'            => $bundle,
+                ]);
+                $this->logGatewayPushResolution('ipd_discharge', $pushResult);
+                $queueId = $this->extractGatewayPushQueueId($pushResult);
+                $bridgeRecordId = $this->extractGatewayPushRecordId($pushResult);
+            } catch (\Throwable $e) {
+                $connectorError = $e->getMessage();
+                log_message('error', 'saveIpdDischargeFhir pushRecord error: ' . $e->getMessage());
+            }
+            if ($healthRecordId > 0) {
+                $this->updateHealthRecordTxn($healthRecordId, $queueId ?? '', $connectorError, $bridgeRecordId);
+            }
+        }
+
+        return $this->response->setJSON([
+            'ok'               => 1,
+            'status'           => 'ok',
+            'message'          => 'IPD discharge FHIR record updated, saved and pushed to bridge.',
+            'health_record_id' => $healthRecordId,
+            'queue_id'         => $queueId,
+            'bundle'           => $bundle,
+        ]);
+    }
+
     /**
      * @return array<string,mixed>|null
      */
-    private function buildIpdDischargeGatewayPayload(int $ipdId, int $patientId, string $preferredAbhaId = ''): ?array
+    private function buildIpdDischargeGatewayPayload(int $ipdId, int $patientId, string $preferredAbhaId = '', bool $isNewRecord = false): ?array
     {
         $ipdRow = ($this->db && $this->db->tableExists('ipd_master'))
             ? ($this->db->table('ipd_master')->where('id', $ipdId)->get(1)->getRowArray() ?? [])
@@ -2985,9 +3141,12 @@ class AbdmGateway extends BaseController
         $documents = $this->buildIpdPdfDocuments($ipdId, $dischargeRaw);
         $locationInfo = $this->resolveIpdLocation($ipdId);
 
+        $uniqueSuffix = $isNewRecord ? ('-v' . time()) : '';
+
         $source = [
             'record_id' => (string) $ipdId,
-            'bundle_identifier' => 'discharge-' . (trim((string) ($ipdRow['ipd_code'] ?? '')) ?: (string) $ipdId),
+            'care_context_reference' => 'DISCHARGE-' . $ipdId . '-S' . $ipdId . '-' . $visitDate . $uniqueSuffix,
+            'bundle_identifier' => 'discharge-' . (trim((string) ($ipdRow['ipd_code'] ?? '')) ?: (string) $ipdId) . $uniqueSuffix,
             'session_id' => (string) $ipdId,
             'visit_date' => $visitDate,
             'completed_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
@@ -3013,8 +3172,8 @@ class AbdmGateway extends BaseController
                 'abha_address' => $abhaAddress,
             ],
             'encounter' => [
-                'id' => trim((string) ($ipdRow['ipd_code'] ?? '')) ?: (string) $ipdId,
-                'ipd_no' => trim((string) ($ipdRow['ipd_code'] ?? '')) ?: ('IPD-' . $ipdId),
+                'id' => (trim((string) ($ipdRow['ipd_code'] ?? '')) ?: (string) $ipdId) . $uniqueSuffix,
+                'ipd_no' => (trim((string) ($ipdRow['ipd_code'] ?? '')) ?: ('IPD-' . $ipdId)) . $uniqueSuffix,
                 'class_code' => 'IMP',
                 'start' => $this->toIsoDateTimeOrNow($admissionRaw),
                 'end' => $this->toIsoDateTimeOrNow($dischargeRaw),
@@ -3446,41 +3605,41 @@ class AbdmGateway extends BaseController
             'BT'  => 'BT (BED TIME)',
         ];
         static $whenHindiMap = [
-            'BF' => 'भोजन से पहले', 'BEFORE FOOD' => 'भोजन से पहले',
-            'AF' => 'भोजन के बाद',  'AFTER FOOD'  => 'भोजन के बाद',
-            'WF' => 'भोजन के साथ',  'WITH FOOD'   => 'भोजन के साथ',
-            'ES' => 'सुबह खाली पेट', 'EMPTY STOMACH' => 'सुबह खाली पेट',
-            'BBF'=> 'नाश्ते से पहले', 'BEFORE BREAKFAST' => 'नाश्ते से पहले',
-            'ABF'=> 'नाश्ते के बाद',  'AFTER BREAKFAST'  => 'नाश्ते के बाद',
-            'BL' => 'दोपहर के भोजन से पहले', 'BEFORE LUNCH' => 'दोपहर के भोजन से पहले',
-            'AL' => 'दोपहर के भोजन के बाद',  'AFTER LUNCH'  => 'दोपहर के भोजन के बाद',
-            'BD' => 'रात के भोजन से पहले',   'BEFORE DINNER'=> 'रात के भोजन से पहले',
-            'AD' => 'रात के भोजन के बाद',    'AFTER DINNER' => 'रात के भोजन के बाद',
-            'BT' => 'रात को सोते समय',       'BED TIME'     => 'रात को सोते समय',
+            'BF' => '  ', 'BEFORE FOOD' => '  ',
+            'AF' => '  ',  'AFTER FOOD'  => '  ',
+            'WF' => '  ',  'WITH FOOD'   => '  ',
+            'ES' => '  ', 'EMPTY STOMACH' => '  ',
+            'BBF'=> '  ', 'BEFORE BREAKFAST' => '  ',
+            'ABF'=> '  ',  'AFTER BREAKFAST'  => '  ',
+            'BL' => '    ', 'BEFORE LUNCH' => '    ',
+            'AL' => '    ',  'AFTER LUNCH'  => '    ',
+            'BD' => '    ',   'BEFORE DINNER'=> '    ',
+            'AD' => '    ',    'AFTER DINNER' => '    ',
+            'BT' => '   ',       'BED TIME'     => '   ',
         ];
         static $freqHindiMap = [
-            'OD'  => 'दिन में एक बार (OD)',   'BD'  => 'दिन में दो बार (BD)',
-            'TDS' => 'दिन में तीन बार (TDS)', 'TID' => 'दिन में तीन बार (TID)',
-            'QID' => 'दिन में चार बार (QID)', 'HS'  => 'रात को सोते समय (HS)',
-            'SOS' => 'ज़रूरत पड़ने पर (SOS)',  'STAT'=> 'तुरंत एक बार (STAT)',
-            'ALTERNATE DAY' => 'एक दिन छोड़कर',
-            'DAILY'   => 'प्रतिदिन',
-            'WEEKLY'  => 'हफ़्ते में एक बार',
-            'MONTHLY' => 'महीने में एक बार',
+            'OD'  => '    (OD)',   'BD'  => '    (BD)',
+            'TDS' => '    (TDS)', 'TID' => '    (TID)',
+            'QID' => '    (QID)', 'HS'  => '    (HS)',
+            'SOS' => '   (SOS)',  'STAT'=> '   (STAT)',
+            'ALTERNATE DAY' => '  ',
+            'DAILY'   => '',
+            'WEEKLY'  => '   ',
+            'MONTHLY' => '   ',
         ];
         static $remarkHindiMap = [
-            'TAKE WITH MILK'                    => 'दूध के साथ लें',
-            'TAKE WITH WARM WATER'              => 'गुनगुने पानी के साथ लें',
-            'AVOID SOUR FOOD AND DAIRY PRODUCTS'=> 'खट्टा और डेयरी उत्पाद न लें',
-            'TAKE AFTER MEALS'                  => 'भोजन के बाद लें',
-            'TAKE ON AN EMPTY STOMACH EARLY MORNING' => 'सुबह खाली पेट लें',
-            'CHEW WELL BEFORE SWALLOWING'       => 'चबाकर खाएं',
-            'DISSOLVE IN HALF GLASS OF WATER'   => 'आधे गिलास पानी में घोलकर लें',
-            'APPLY LOCALLY TWICE DAILY'         => 'दिन में दो बार लगाएं',
-            'DO NOT CRUSH OR CHEW TABLET'       => 'गोली को तोड़े या चबाएं नहीं',
-            'AVOID ALCOHOL WHILE TAKING THIS MEDICINE' => 'शराब का सेवन न करें',
-            'COMPLETE FULL COURSE OF ANTIBIOTICS'      => 'एंटीबायोटिक का पूरा कोर्स लें',
-            'DRINK PLENTY OF FLUIDS / WATER'    => 'प्रचुर मात्रा में पानी पिएं',
+            'TAKE WITH MILK'                    => '   ',
+            'TAKE WITH WARM WATER'              => '    ',
+            'AVOID SOUR FOOD AND DAIRY PRODUCTS'=> '     ',
+            'TAKE AFTER MEALS'                  => '   ',
+            'TAKE ON AN EMPTY STOMACH EARLY MORNING' => '   ',
+            'CHEW WELL BEFORE SWALLOWING'       => ' ',
+            'DISSOLVE IN HALF GLASS OF WATER'   => '     ',
+            'APPLY LOCALLY TWICE DAILY'         => '    ',
+            'DO NOT CRUSH OR CHEW TABLET'       => '     ',
+            'AVOID ALCOHOL WHILE TAKING THIS MEDICINE' => '    ',
+            'COMPLETE FULL COURSE OF ANTIBIOTICS'      => '    ',
+            'DRINK PLENTY OF FLUIDS / WATER'    => '    ',
         ];
 
         static $doseCache = null;
@@ -3618,7 +3777,7 @@ class AbdmGateway extends BaseController
             $daysNum = is_numeric($daysClean) ? (int) $daysClean : 0;
             $dirParts[] = $daysNum > 0 ? ('for ' . $daysNum . ' days') : ('for ' . $daysClean);
             if ($daysNum > 0) {
-                $dirLocalParts[] = $daysNum . ' दिन';
+                $dirLocalParts[] = $daysNum . ' ';
             }
         }
 
@@ -3881,9 +4040,9 @@ class AbdmGateway extends BaseController
     }
 
     // =========================================================================
-    // Record Linked Callback — ABDM notifies HMS when a record is successfully
+    // Record Linked Callback - ABDM notifies HMS when a record is successfully
     // linked to an ABHA address.
-    // POST /AbdmGateway/record_linked_callback (no auth filter — public webhook)
+    // POST /AbdmGateway/record_linked_callback (no auth filter - public webhook)
     // =========================================================================
 
     public function recordLinkedCallback()
@@ -3987,8 +4146,8 @@ class AbdmGateway extends BaseController
     }
 
     // =========================================================================
-    // Consent Revoked Callback — ABDM notifies HMS when consent is revoked.
-    // POST /AbdmGateway/consent_revoked_callback (no auth filter — public webhook)
+    // Consent Revoked Callback - ABDM notifies HMS when consent is revoked.
+    // POST /AbdmGateway/consent_revoked_callback (no auth filter - public webhook)
     // =========================================================================
 
     public function consentRevokedCallback()
@@ -4044,7 +4203,7 @@ class AbdmGateway extends BaseController
             return $this->response->setStatusCode(404)->setJSON(['ok' => 0, 'error_text' => 'consent_handle not found']);
         }
 
-        // Idempotency — already revoked
+        // Idempotency - already revoked
         if (strtolower((string) ($existing['consent_status'] ?? '')) === 'revoked') {
             return $this->response->setJSON(['ok' => 1, 'consent_handle' => $consentHandle, 'status' => 'revoked', 'duplicate' => 1]);
         }
@@ -4183,7 +4342,7 @@ class AbdmGateway extends BaseController
             );
 
             // Use the new store-and-link flow (POST /v3/records/push) for re-push:
-            // No consent needed — bridge stores record and serves it when ABDM requests data.
+            // No consent needed - bridge stores record and serves it when ABDM requests data.
             $result  = $this->connector->pushRecord([
                 'patient_id'             => (string) $patientId,
                 'patient_name'           => $sanitizedPatientName !== '' ? $sanitizedPatientName : ('PATIENT-' . $patientId),
@@ -4238,7 +4397,7 @@ class AbdmGateway extends BaseController
     }
 
     // =========================================================================
-    // List health_records for a patient (AJAX — used by ABDM task board)
+    // List health_records for a patient (AJAX - used by ABDM task board)
     // GET /AbdmGateway/health_records_list?patient_id=X&abha_id=Y
     // =========================================================================
 
@@ -4516,7 +4675,7 @@ class AbdmGateway extends BaseController
     }
 
     // =========================================================================
-    // Bridge record status — proxy to GET /api/v3/records/{id}
+    // Bridge record status - proxy to GET /api/v3/records/{id}
     // GET /AbdmGateway/bridge_record_status/:id
     // =========================================================================
 
@@ -4536,7 +4695,7 @@ class AbdmGateway extends BaseController
     }
 
     // =========================================================================
-    // Trigger HIP-initiated ABDM linking — POST /api/v3/records/{id}/share
+    // Trigger HIP-initiated ABDM linking - POST /api/v3/records/{id}/share
     // POST /AbdmGateway/bridge_record_share/:id
     // =========================================================================
 
@@ -4570,7 +4729,7 @@ class AbdmGateway extends BaseController
     }
 
     // =========================================================================
-    // OPD running token status — GET /api/v3/opd/running-token-status
+    // OPD running token status - GET /api/v3/opd/running-token-status
     // GET /AbdmGateway/opd_running_token_status
     // =========================================================================
 
@@ -5084,7 +5243,7 @@ class AbdmGateway extends BaseController
             $append($rows, 'ABHA', 4);
         }
 
-        // Demographic matches — primary criteria
+        // Demographic matches - primary criteria
         $nameUpper = strtoupper(trim((string) ($identity['patient_name'] ?? '')));
         $rawGender = strtoupper(trim((string) ($identity['gender'] ?? '')));
         $genderDb  = ($rawGender === 'F' || $rawGender === '2') ? 2 : ($rawGender !== '' ? 1 : null);
@@ -5096,7 +5255,7 @@ class AbdmGateway extends BaseController
         $ageYears  = preg_match('/^\d{1,3}$/', $age) ? (int) $age : null;
 
         if ($nameUpper !== '' && $dobValid !== '') {
-            // Name + exact DOB [+ gender] — high confidence (score 3)
+            // Name + exact DOB [+ gender] - high confidence (score 3)
             $q = $this->db->table('patient_master')->select($select)
                 ->where('UPPER(p_fname)', $nameUpper)
                 ->where('dob', $dobValid);
@@ -5111,7 +5270,7 @@ class AbdmGateway extends BaseController
         }
 
         if ($nameUpper !== '' && $yearOnly > 0) {
-            // Name + year of birth [+ gender] — medium confidence (score 2)
+            // Name + year of birth [+ gender] - medium confidence (score 2)
             $q = $this->db->table('patient_master')->select($select)
                 ->where('UPPER(p_fname)', $nameUpper)
                 ->where('YEAR(dob)', $yearOnly);
@@ -5132,7 +5291,7 @@ class AbdmGateway extends BaseController
             $append([$row], $reason, $score);
         }
 
-        // Phone match — supplementary only (score 1), ambiguous for families
+        // Phone match - supplementary only (score 1), ambiguous for families
         if (($identity['phone'] ?? '') !== '') {
             $rows = $this->db->table('patient_master')->select($select)->where('mphone1', $identity['phone'])->limit(10)->get()->getResultArray();
             $append($rows, 'Phone', 1);
@@ -5506,7 +5665,7 @@ class AbdmGateway extends BaseController
     }
 
     /**
-     * HMS sits behind NAT, so ABDM/bridge discovery callbacks can never reach it —
+     * HMS sits behind NAT, so ABDM/bridge discovery callbacks can never reach it -
      * records must be pushed to the gateway to become discoverable in the PHR.
      * Set ABDM_GATEWAY_PUSH_MODE=0 only for a callback-reachable deployment.
      */
@@ -8211,7 +8370,7 @@ class AbdmGateway extends BaseController
 
     // =========================================================================
     // M1 ABHA OTP Flows
-    // Calls EAtriaBridgeConnector synchronously — requires eatria_bridge connector.
+    // Calls EAtriaBridgeConnector synchronously - requires eatria_bridge connector.
     // =========================================================================
 
     /**
@@ -8777,7 +8936,7 @@ class AbdmGateway extends BaseController
     }
 
     // =========================================================================
-    // Gateway status — hospital info + ABDM connectivity
+    // Gateway status - hospital info + ABDM connectivity
     // GET /AbdmGateway/gateway_status
     // =========================================================================
 
@@ -8792,7 +8951,7 @@ class AbdmGateway extends BaseController
     }
 
     // =========================================================================
-    // Bridge records — list stored records from bridge
+    // Bridge records - list stored records from bridge
     // GET /AbdmGateway/bridge_records_list
     // =========================================================================
 
@@ -8816,7 +8975,7 @@ class AbdmGateway extends BaseController
     }
 
     // =========================================================================
-    // HIP-Initiated Linking — Step 1: request link token
+    // HIP-Initiated Linking - Step 1: request link token
     // POST /AbdmGateway/hip_link_token
     // Body: { abha_address, name, gender, year_of_birth [, abha_number] }
     // =========================================================================
@@ -8841,7 +9000,7 @@ class AbdmGateway extends BaseController
     }
 
     // =========================================================================
-    // HIP-Initiated Linking — Step 2: link care contexts
+    // HIP-Initiated Linking - Step 2: link care contexts
     // POST /AbdmGateway/hip_link_carecontext
     // Body: { abha_address, link_token_id, patient_ref, display, hi_type, care_contexts[] }
     // =========================================================================
@@ -8866,7 +9025,7 @@ class AbdmGateway extends BaseController
     }
 
     // =========================================================================
-    // HIP-Initiated Linking — fetch all linked care contexts for a patient
+    // HIP-Initiated Linking - fetch all linked care contexts for a patient
     // GET /AbdmGateway/hip_patient_links?abha_address=xxx&limit=20
     // =========================================================================
 
@@ -8890,7 +9049,7 @@ class AbdmGateway extends BaseController
     }
 
     // =========================================================================
-    // HIP-Initiated Linking — notify ABDM of care-context update
+    // HIP-Initiated Linking - notify ABDM of care-context update
     // POST /AbdmGateway/hip_link_notify
     // Body: { abha_address, care_context_reference, hi_type, date_of_record }
     // =========================================================================
@@ -8915,7 +9074,7 @@ class AbdmGateway extends BaseController
     }
 
     // =========================================================================
-    // HIP-Initiated Linking — send ABDM deep-link SMS to patient
+    // HIP-Initiated Linking - send ABDM deep-link SMS to patient
     // POST /AbdmGateway/hip_sms_notify
     // Body: { phone_number [, hip_name] }
     // =========================================================================

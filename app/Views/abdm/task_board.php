@@ -283,7 +283,7 @@
     <div class="card shadow-sm mt-3 d-none" id="opdBookCard">
         <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
             <div>
-                <strong>OPD Book — ABDM Tokens</strong>
+                <strong>OPD Book - ABDM Tokens</strong>
                 <span class="badge bg-primary ms-2" id="hmsOpdBadge"><?= count($opd_book_rows ?? []) ?></span>
             </div>
             <div class="d-flex gap-2 align-items-center">
@@ -308,7 +308,7 @@
             <div class="px-3 pt-2 pb-1 bg-light border-bottom border-top d-flex align-items-center gap-2 mt-1">
                 <strong class="small">HMS ABDM OPD Token List</strong>
                 <span class="badge bg-success"><?= count($opd_book_rows ?? []) ?></span>
-                <span class="text-muted small">Last 7 days · synced and manual ABDM tokens only</span>
+                <span class="text-muted small">Last 7 days  synced and manual ABDM tokens only</span>
             </div>
             <div class="table-responsive">
                 <table class="table table-sm mb-0">
@@ -340,9 +340,9 @@
     <!-- OPD Consult / Prescription Records Card -->
     <div class="card shadow-sm mt-3 d-none" id="opdConsultCard">
         <div class="card-header py-2 d-flex align-items-center gap-2">
-            <strong>OPD Consult / Prescription Records — Done Appointments with ABHA</strong>
+            <strong>OPD Consult / Prescription Records - Done Appointments with ABHA</strong>
             <span class="badge bg-success"><?= count($opd_consult_rows ?? []) ?></span>
-            <small class="text-muted ms-1">Last 30 days · opd_status=Done · ABHA linked</small>
+            <small class="text-muted ms-1">Last 30 days  opd_status=Done  ABHA linked</small>
         </div>
         <div class="card-body p-0">
             <div class="table-responsive">
@@ -431,7 +431,7 @@
     <!-- Invoice Status Card -->
     <div class="card shadow-sm mt-3 d-none" id="invoiceCard">
         <div class="card-header py-2 d-flex align-items-center gap-2 flex-wrap">
-            <strong>Invoice — ABDM Billing Records</strong>
+            <strong>Invoice - ABDM Billing Records</strong>
             <span class="badge bg-primary"><?= count($invoice_rows ?? []) ?></span>
             <small class="text-muted">OPD, Charges and IPD Billing</small>
         </div>
@@ -526,10 +526,14 @@
                             </li>
                         </ul>
                     </div>
-                    <button type="button" class="btn btn-sm btn-outline-warning" id="btnRegenerateFhirModal" title="Rebuild FHIR bundle from current prescription data"><i class="bi bi-arrow-clockwise"></i> Regenerate</button>
-                    <button type="button" class="btn btn-sm btn-outline-success" id="btnSubmitFhirToAbdm" title="Push FHIR bundle to ABDM bridge"><i class="bi bi-cloud-upload"></i> Submit to ABDM</button>
-                    <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCopyFhirModal">Copy JSON</button>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    <button type="button" class="btn btn-sm btn-outline-warning" id="btnRegenerateFhirModal" title="Rebuild FHIR bundle from current clinical data"><i class="bi bi-arrow-clockwise"></i> Regenerate</button>
+                    <button type="button" class="btn btn-sm btn-primary" id="btnUpdateFhirJson" title="Validate and apply edited JSON changes to preview and database"><i class="bi bi-check2-circle"></i> Update JSON</button>
+                    <div>
+                        <label class="me-3 small text-muted"><input type="checkbox" id="chkForceNewRecord" checked> New Record ID (for PHR testing)</label>
+                        <button type="button" class="btn btn-sm btn-outline-success" id="btnSubmitFhirToAbdm" title="Push FHIR bundle to ABDM bridge"><i class="bi bi-cloud-upload"></i> Submit to ABDM</button>
+                        <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCopyFhirModal">Copy JSON</button>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
                 </div>
             </div>
             <div class="modal-body p-0">
@@ -546,7 +550,7 @@
                 </div>
                 <div class="px-3 pb-2 pt-1" id="fhirModalQuality" style="display:none;"></div>
                 <div id="fhirFormView" style="overflow-y:auto;max-height:62vh;padding:16px;"></div>
-                <pre id="fhirModalJson" style="display:none;margin:0;max-height:62vh;overflow:auto;background:#0b1020;color:#d9e2ff;padding:16px;border-radius:0;">{}</pre>
+                <textarea id="fhirModalJson" class="form-control" style="display:none;margin:0;max-height:62vh;height:500px;font-family:monospace;background:#0b1020;color:#d9e2ff;padding:16px;border-radius:0;" spellcheck="false">{}</textarea>
             </div>
         </div>
     </div>
@@ -844,7 +848,7 @@
                 var confBadgeClass = { definitive: 'bg-success', high: 'bg-primary', medium: 'bg-warning text-dark', low: 'bg-secondary' };
                 var confBadge = '<span class="badge ' + (confBadgeClass[conf] || 'bg-secondary') + ' ms-1 small">' + (confLabels[conf] || 'Low') + '</span>';
                 var reasons = Array.isArray(m.match_reasons) ? m.match_reasons.join(', ') : '';
-                var genderLabel = m.gender == 2 ? 'F' : m.gender == 1 ? 'M' : '—';
+                var genderLabel = m.gender == 2 ? 'F' : m.gender == 1 ? 'M' : '-';
                 var borderClass = conf === 'definitive' ? 'border-success' : conf === 'high' ? 'border-primary' : conf === 'medium' ? 'border-warning' : 'border-secondary';
                 var mLabel = ((m.p_code || 'UHID') + ' - ' + (m.p_fname || 'Unnamed'));
                 cardHtml += '<div class="border rounded p-1 mb-1 bg-white ' + borderClass + '">';
@@ -852,14 +856,14 @@
                 cardHtml += '<div class="small"><span class="fw-semibold">' + mLabel + '</span>' + confBadge + '</div>';
                 cardHtml += '<button type="button" class="btn btn-sm btn-outline-primary ms-2" data-scan-use-existing="1" data-patient-id="' + (m.id || 0) + '">Link</button>';
                 cardHtml += '</div>';
-                cardHtml += '<div class="small text-muted">DOB: ' + (m.dob || '—') + ' | Gender: ' + genderLabel + ' | Phone: ' + (m.mphone1 || '—') + '</div>';
+                cardHtml += '<div class="small text-muted">DOB: ' + (m.dob || '-') + ' | Gender: ' + genderLabel + ' | Phone: ' + (m.mphone1 || '-') + '</div>';
                 cardHtml += '<div class="small text-muted fst-italic">Matched by: ' + reasons + '</div>';
                 cardHtml += '</div>';
             });
             // Add "Create New Patient" as a selectable card option at the end of the list
             cardHtml += '<div class="border rounded border-2 border-secondary p-1 mb-1 bg-white">';
             cardHtml += '<div class="d-flex justify-content-between align-items-start">';
-            cardHtml += '<div class="small"><span class="fw-semibold text-secondary">None of the above — Register as New Patient</span></div>';
+            cardHtml += '<div class="small"><span class="fw-semibold text-secondary">None of the above - Register as New Patient</span></div>';
             cardHtml += '<button type="button" class="btn btn-sm btn-success ms-2" data-scan-create-new="1">Create New</button>';
             cardHtml += '</div>';
             cardHtml += '<div class="small text-muted">This ABHA does not belong to any listed record.</div>';
@@ -1069,7 +1073,7 @@
                 + '?lab_req_id=' + encodeURIComponent(labReqId)
                 + '&patient_id=' + encodeURIComponent(patientId)
                 + '&abha_id=' + encodeURIComponent(abhaId);
-            title = (taskType === 'radiology_report_publish' ? 'Radiology' : 'Lab') + ' FHIR Preview — Request #' + labReqId;
+            title = (taskType === 'radiology_report_publish' ? 'Radiology' : 'Lab') + ' FHIR Preview - Request #' + labReqId;
         } else if (taskType === 'opd_prescription_publish') {
             var opdId = parseInt(row.getAttribute('data-opd-id') || row.getAttribute('data-entity-id') || '0', 10) || 0;
             var opdSessionId = parseInt(row.getAttribute('data-opd-session-id') || '0', 10) || 0;
@@ -1082,7 +1086,7 @@
             previewUrl = opdSessionId > 0
                 ? '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId + '/' + opdSessionId
                 : '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId;
-            title = 'OPD FHIR Preview — OPD #' + opdId;
+            title = 'OPD FHIR Preview - OPD #' + opdId;
         } else if (taskType === 'ipd_discharge_publish') {
             var ipdId = parseInt(row.getAttribute('data-entity-id') || '0', 10) || 0;
             var ipdPatientId = parseInt(row.getAttribute('data-patient-id') || '0', 10) || 0;
@@ -1096,7 +1100,7 @@
                 + '?ipd_id=' + encodeURIComponent(ipdId)
                 + '&patient_id=' + encodeURIComponent(ipdPatientId)
                 + '&abha_id=' + encodeURIComponent(abhaId);
-            title = 'IPD Discharge FHIR Preview — IPD #' + ipdId;
+            title = 'IPD Discharge FHIR Preview - IPD #' + ipdId;
         } else if (taskType === 'immunization_record_publish') {
             var immunizationRecordId = parseInt(row.getAttribute('data-entity-id') || '0', 10) || 0;
             var immunizationPatientId = parseInt(row.getAttribute('data-patient-id') || '0', 10) || 0;
@@ -1110,7 +1114,7 @@
                 + '?record_id=' + encodeURIComponent(immunizationRecordId)
                 + '&patient_id=' + encodeURIComponent(immunizationPatientId)
                 + '&abha_id=' + encodeURIComponent(abhaId);
-            title = 'ImmunizationRecord FHIR Preview — Record #' + immunizationRecordId;
+            title = 'ImmunizationRecord FHIR Preview - Record #' + immunizationRecordId;
         } else if (taskType === 'health_document_publish') {
             var healthDocId = parseInt(row.getAttribute('data-entity-id') || '0', 10) || 0;
             var healthPatientId = parseInt(row.getAttribute('data-patient-id') || '0', 10) || 0;
@@ -1121,7 +1125,7 @@
             }
 
             previewUrl = '<?= base_url('DoctorDocument/health_document_fhir_preview') ?>/' + healthDocId;
-            title = 'HealthDocumentRecord FHIR Preview — Document #' + healthDocId;
+            title = 'HealthDocumentRecord FHIR Preview - Document #' + healthDocId;
         } else if (taskType === 'wellness_record_publish') {
             var wellnessPatientId = parseInt(row.getAttribute('data-patient-id') || '0', 10) || 0;
             var wellnessOpdId = parseInt(row.getAttribute('data-entity-id') || '0', 10) || 0;
@@ -1132,7 +1136,7 @@
             }
 
             previewUrl = '<?= base_url('DoctorDocument/wellness_record_fhir_preview') ?>/' + wellnessPatientId + (wellnessOpdId > 0 ? ('/' + wellnessOpdId) : '');
-            title = 'WellnessRecord FHIR Preview — Patient #' + wellnessPatientId;
+            title = 'WellnessRecord FHIR Preview - Patient #' + wellnessPatientId;
         } else {
             return false;
         }
@@ -1609,7 +1613,7 @@
         }
         navigator.clipboard.writeText(jsonText).then(function () {
             setStatus('FHIR JSON copied to clipboard.');
-            btn.textContent = 'Copied ✓';
+            btn.textContent = 'Copied v';
             btn.className = 'btn btn-sm btn-success';
             window.setTimeout(function () {
                 btn.textContent = originalText;
@@ -1645,13 +1649,13 @@
                 var stat  = (t.status || t.queue_status || '').toString();
                 var token = (t.token_number || t.tokenNumber || t.gateway_token_id || t.id || '').toString();
                 var time  = (t.created_at || t.token_time || t.arrival_time || '').toString();
-                var hms   = t.patient_id ? ('#' + t.patient_id + (t.p_fname ? ' ' + t.p_fname : '')) : '<span class="text-muted">—</span>';
+                var hms   = t.patient_id ? ('#' + t.patient_id + (t.p_fname ? ' ' + t.p_fname : '')) : '<span class="text-muted">-</span>';
                 return '<tr>' +
-                    '<td>' + (token || '—') + '</td>' +
-                    '<td><span class="text-primary small">' + (abha || '<span class="text-muted">—</span>') + '</span></td>' +
-                    '<td>' + (name || '—') + '</td>' +
-                    '<td><span class="badge bg-' + (stat === 'PENDING' ? 'warning text-dark' : 'secondary') + '">' + (stat || '—') + '</span></td>' +
-                    '<td class="small">' + (time ? time.substring(0, 16) : '—') + '</td>' +
+                    '<td>' + (token || '-') + '</td>' +
+                    '<td><span class="text-primary small">' + (abha || '<span class="text-muted">-</span>') + '</span></td>' +
+                    '<td>' + (name || '-') + '</td>' +
+                    '<td><span class="badge bg-' + (stat === 'PENDING' ? 'warning text-dark' : 'secondary') + '">' + (stat || '-') + '</span></td>' +
+                    '<td class="small">' + (time ? time.substring(0, 16) : '-') + '</td>' +
                     '<td>' + hms + '</td>' +
                     '</tr>';
             }).join('');
@@ -1673,18 +1677,38 @@
     var fhirModalDataBadge = document.getElementById('fhirModalDataBadge');
     var fhirModalHttpBadge = document.getElementById('fhirModalHttpBadge');
     var btnRegenerateFhirModal = document.getElementById('btnRegenerateFhirModal');
+    var btnUpdateFhirJson  = document.getElementById('btnUpdateFhirJson');
     var btnSubmitFhirToAbdm = document.getElementById('btnSubmitFhirToAbdm');
 
     var defaultSubmitBtnHtml = btnSubmitFhirToAbdm ? btnSubmitFhirToAbdm.innerHTML : '';
     var defaultSubmitBtnClass = btnSubmitFhirToAbdm ? btnSubmitFhirToAbdm.className : 'btn btn-sm btn-outline-success';
     var defaultSubmitBtnTitle = btnSubmitFhirToAbdm ? btnSubmitFhirToAbdm.title : 'Push FHIR bundle to ABDM bridge';
 
-    // ── Tab switching ──────────────────────────────────────────────────
+    // -- Tab switching --------------------------------------------------
     fhirTabForm.addEventListener('click', function () {
         fhirTabForm.classList.add('active');
         fhirTabJson.classList.remove('active');
         fhirFormView.style.display = '';
         fhirModalJson.style.display = 'none';
+
+        // Auto-refresh Form View from JSON if valid
+        try {
+            var curText = (fhirModalJson ? fhirModalJson.value : '').trim();
+            if (curText && curText !== '{\n  "loading": true\n}' && curText !== '{}') {
+                var p = JSON.parse(curText);
+                var b = (p && p.resourceType === 'Bundle') ? p : ((p && p.bundle) ? p.bundle : null);
+                if (b && fhirFormView) {
+                    fhirFormView.innerHTML = renderFhirBundleForm(b, _fhirLiveComplaints, _fhirLiveDiagnoses);
+                    if (fhirModalQuality) {
+                        var qs = fhirCodeQuality(b);
+                        if (qs) {
+                            fhirModalQuality.innerHTML = qs;
+                            fhirModalQuality.style.display = 'block';
+                        }
+                    }
+                }
+            }
+        } catch (e) {}
     });
     fhirTabJson.addEventListener('click', function () {
         fhirTabJson.classList.add('active');
@@ -1693,8 +1717,9 @@
         fhirFormView.style.display = 'none';
     });
 
-    // ── Track current bundle context for edits ──────────────────────
+    // -- Track current bundle context for edits ----------------------
     var _fhirOpdId = 0, _fhirSessionId = 0;
+    var _fhirIpdId = 0, _fhirPatientId = 0, _fhirAbhaId = '';
     var _fhirLiveComplaints = [], _fhirLiveDiagnoses = [];
     var _fhirSubmitMode = 'opd';
     var _fhirSubmitTaskRow = null;
@@ -1704,7 +1729,7 @@
     var _fhirInvoicePatientId = 0;
     var _fhirPreviewUrl = '';
 
-    // ── Inline complaint SNOMED edit (event delegation on fhirFormView) ─
+    // -- Inline complaint SNOMED edit (event delegation on fhirFormView) -
     var _editTimer = null;
     fhirFormView.addEventListener('click', function(e) {
         var editBtn  = e.target.closest('.fhir-complaint-edit');
@@ -1753,7 +1778,7 @@
             panel2.querySelector('.fhir-snomed-search').value = ddItem.dataset.term || '';
             panel2.querySelector('.fhir-snomed-dd').style.display = 'none';
             var sel = panel2.querySelector('.fhir-snomed-selected');
-            sel.textContent = '✓ ' + (ddItem.dataset.id || '') + ' — ' + (ddItem.dataset.term || '');
+            sel.textContent = 'v ' + (ddItem.dataset.id || '') + ' - ' + (ddItem.dataset.term || '');
             sel.style.display = '';
         }
         if (saveBtn) {
@@ -1776,7 +1801,7 @@
             });
             body.append(csrfName, csrfHash);
             saveBtn.disabled = true;
-            saveBtn.textContent = 'Saving…';
+            saveBtn.textContent = 'Saving...';
             fetch('<?= base_url('Opd_prescription/fhir_complaint_recode') ?>', {
                 method: 'POST',
                 headers: { 'X-Requested-With': 'XMLHttpRequest', 'Content-Type': 'application/x-www-form-urlencoded' },
@@ -1935,7 +1960,7 @@
         }, 200);
     });
 
-    // ── Arrow-key / Enter navigation for SNOMED dropdowns ─────────────
+    // -- Arrow-key / Enter navigation for SNOMED dropdowns -------------
     fhirFormView.addEventListener('keydown', function(e) {
         var key = e.key;
         if (key !== 'ArrowDown' && key !== 'ArrowUp' && key !== 'Enter' && key !== 'Escape') return;
@@ -1995,7 +2020,7 @@
         }
     });
 
-    // ── Render FHIR bundle as human-readable form ──────────────────────
+    // -- Render FHIR bundle as human-readable form ----------------------
     function hesc(s) {
         return String(s || '')
             .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
@@ -2066,7 +2091,7 @@
 
         var html = '';
 
-        // ── Patient header
+        // -- Patient header
         if (patient) {
             var pname = ((patient.name || [{}])[0].text || '').trim();
             var gender = (patient.gender || '').toUpperCase().charAt(0);
@@ -2089,7 +2114,7 @@
             html += '</div></div>';
         }
 
-        // ── Invoice Record document metadata
+        // -- Invoice Record document metadata
         if (composition && invoice) {
             var compositionCoding = ((((composition.type || {}).coding) || [])[0]) || {};
             var compositionIdentifier = (composition.identifier || {}).value || '';
@@ -2105,7 +2130,7 @@
             html += '</div></div></div>';
         }
 
-        // ── Invoice details and line items
+        // -- Invoice details and line items
         if (invoice) {
             var invoiceIdentifier = ((invoice.identifier || [])[0] || {}).value || '';
             var invoiceCoding = ((((invoice.type || {}).coding) || [])[0]) || {};
@@ -2155,7 +2180,7 @@
             html += '</div></div>';
         }
 
-        // ── Embedded invoice PDF
+        // -- Embedded invoice PDF
         documentRefs.forEach(function(documentReference) {
             var attachment = (((documentReference.content || [])[0] || {}).attachment) || {};
             if (attachment.contentType !== 'application/pdf') return;
@@ -2172,7 +2197,7 @@
             html += '</div></div>';
         });
 
-        // ── Immunization Record
+        // -- Immunization Record
         if (immunizations.length) {
             html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Vaccination Details</small></div>';
             html += '<div class="table-responsive"><table class="table table-sm table-bordered align-middle mb-0"><thead class="table-light"><tr>';
@@ -2200,7 +2225,7 @@
             html += '</tbody></table></div></div>';
         }
 
-        // ── Complaints
+        // -- Complaints
         if (complaints.length) {
             html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Chief Complaints</small></div><div class="card-body py-2">';
             html += '<ul class="mb-0 ps-3">';
@@ -2237,7 +2262,7 @@
                 html += '<div class="fhir-edit-panel border rounded p-2 mt-1 bg-light" data-idx="' + idx + '" data-complaint-text="' + hesc(doctorText) + '" style="display:none;">';
                 html += '<div class="mb-1 small text-muted">Doctor wrote: <em>' + hesc(doctorText) + '</em> &mdash; assign SNOMED code:</div>';
                 html += '<div class="position-relative mb-1">';
-                html += '<input type="text" class="form-control form-control-sm fhir-snomed-search" placeholder="Type to search SNOMED…" value="' + hesc(doctorText) + '">';
+                html += '<input type="text" class="form-control form-control-sm fhir-snomed-search" placeholder="Type to search SNOMED..." value="' + hesc(doctorText) + '">';
                 html += '<div class="list-group shadow position-absolute w-100 fhir-snomed-dd" style="z-index:2000;display:none;max-height:180px;overflow-y:auto;"></div>';
                 html += '</div>';
                 html += '<div class="fhir-snomed-selected small text-success mb-1" style="display:none;"></div>';
@@ -2251,7 +2276,7 @@
             html += '</ul></div></div>';
         }
 
-        // ── Diagnoses
+        // -- Diagnoses
         if (diagnoses.length) {
             html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Diagnosis</small></div><div class="card-body py-2">';
             html += '<ul class="mb-0 ps-3">';
@@ -2300,9 +2325,9 @@
             html += '</ul></div></div>';
         }
 
-        // ── Observation Groups (Vitals vs Lab Results)
+        // -- Observation Groups (Vitals vs Lab Results)
         if (observations.length) {
-            var loincLabel = { '8867-4':'HR','59408-5':'SpO₂','8480-6':'BP Sys','8462-4':'BP Dia','8310-5':'Temp','9279-1':'RR','8302-2':'Height','29463-7':'Weight' };
+            var loincLabel = { '8867-4':'HR','59408-5':'SpO','8480-6':'BP Sys','8462-4':'BP Dia','8310-5':'Temp','9279-1':'RR','8302-2':'Height','29463-7':'Weight' };
             var vitalLoincCodes = { '8867-4':1, '59408-5':1, '8480-6':1, '8462-4':1, '8310-5':1, '9279-1':1, '8302-2':1, '29463-7':1 };
 
             function meaningfulText(v) {
@@ -2391,7 +2416,7 @@
             renderObservationCard('Lab Results', labObservations);
         }
 
-        // ── Medications
+        // -- Medications
         if (medications.length) {
             html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Medications</small></div><div class="card-body py-2">';
             html += '<ol class="mb-0 ps-3">';
@@ -2401,13 +2426,13 @@
                 var dosage = di.text || '';
                 var method = (di.method || {}).text || '';
                 html += '<li class="mb-1"><strong>' + hesc(drug) + '</strong>';
-                if (dosage) html += ' <span class="text-muted small">— ' + hesc(dosage) + (method ? ' (' + hesc(method) + ')' : '') + '</span>';
+                if (dosage) html += ' <span class="text-muted small">- ' + hesc(dosage) + (method ? ' (' + hesc(method) + ')' : '') + '</span>';
                 html += '</li>';
             });
             html += '</ol></div></div>';
         }
 
-        // ── Procedures / Surgeries
+        // -- Procedures / Surgeries
         if (procedures.length) {
             html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Procedures</small></div><div class="card-body py-2">';
             html += '<ul class="mb-0 ps-3">';
@@ -2421,7 +2446,7 @@
             html += '</ul></div></div>';
         }
 
-        // ── Investigations
+        // -- Investigations
         if (serviceReqs.length) {
             html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Investigations</small></div><div class="card-body py-2">';
             html += '<ul class="mb-0 ps-3">';
@@ -2439,7 +2464,7 @@
             html += '</ul></div></div>';
         }
 
-        // ── Allergy & Risk Profile
+        // -- Allergy & Risk Profile
         if (allergies.length) {
             html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Allergies / Risk Profile</small></div><div class="card-body py-2">';
             html += '<ul class="mb-0 ps-3">';
@@ -2455,7 +2480,7 @@
             html += '</ul></div></div>';
         }
 
-        // ── Course In Hospital
+        // -- Course In Hospital
         if (coursePlans.length) {
             html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Course In Hospital</small></div><div class="card-body py-2">';
             html += '<ul class="mb-0 ps-3">';
@@ -2469,7 +2494,7 @@
             html += '</ul></div></div>';
         }
 
-        // ── Discharge Advice / Follow-up
+        // -- Discharge Advice / Follow-up
         if (advicePlans.length) {
             html += '<div class="card mb-2"><div class="card-header py-1 bg-light"><small class="fw-bold text-uppercase text-secondary">Discharge Advice & Follow-up</small></div><div class="card-body py-2">';
             html += '<ul class="mb-0 ps-3">';
@@ -2483,7 +2508,7 @@
             html += '</ul></div></div>';
         }
 
-        // ── Attached Documents & Reports (PDFs, Images, Scanned Documents, Invoices)
+        // -- Attached Documents & Reports (PDFs, Images, Scanned Documents, Invoices)
         if (documentRefs.length) {
             html += '<div class="card mb-2"><div class="card-header py-1 bg-light d-flex justify-content-between align-items-center"><small class="fw-bold text-uppercase text-secondary">Attached Documents & Reports</small><span class="badge bg-secondary">' + documentRefs.length + '</span></div><div class="card-body py-2">';
             html += '<div class="row g-2">';
@@ -2536,7 +2561,7 @@
             html += '</div></div></div>';
         }
 
-        // ── Practitioner
+        // -- Practitioner
         if (practitioner) {
             var pName  = ((practitioner.name || [{}])[0].text || '').trim();
             var pGiven = (((practitioner.name || [{}])[0].given) || []).join(' ').trim();
@@ -2551,7 +2576,7 @@
             html += '</div></div>';
         }
 
-        // ── Organization
+        // -- Organization
         if (organization) {
             var oName = (organization.name || '').trim();
             var oIdent = (organization.identifier || []).find(function(i){ return (i.system||'').includes('facility') || (i.system||'').includes('hfr'); });
@@ -2638,11 +2663,19 @@
         var rowPushStatus = (options.pushStatus || '').toString().trim().toLowerCase();
 
         _fhirOpdId = 0; _fhirSessionId = 0;
+        _fhirIpdId = 0; _fhirPatientId = 0; _fhirAbhaId = '';
+        try {
+            var urlObj = new URL(url, window.location.origin);
+            if (urlObj.searchParams.has('ipd_id')) _fhirIpdId = parseInt(urlObj.searchParams.get('ipd_id') || '0', 10) || 0;
+            if (urlObj.searchParams.has('patient_id')) _fhirPatientId = parseInt(urlObj.searchParams.get('patient_id') || '0', 10) || 0;
+            if (urlObj.searchParams.has('abha_id')) _fhirAbhaId = (urlObj.searchParams.get('abha_id') || '').trim();
+        } catch (e) {}
+
         if (fhirModalTitle)   fhirModalTitle.textContent = title || 'FHIR Preview';
         if (fhirModalMeta)    { fhirModalMeta.textContent = 'Loading...'; fhirModalMeta.className = 'flex-grow-1 small text-muted'; }
         if (fhirModalQuality) { fhirModalQuality.innerHTML = ''; fhirModalQuality.style.display = 'none'; }
         if (fhirFormView)     fhirFormView.innerHTML = '<p class="text-muted p-3">Loading...</p>';
-        if (fhirModalJson)    fhirModalJson.textContent = '{\n  "loading": true\n}';
+        if (fhirModalJson)    fhirModalJson.value = '{\n  "loading": true\n}';
         // Reset to Form View tab
         fhirTabForm.classList.add('active');    fhirTabJson.classList.remove('active');
         fhirFormView.style.display = '';        fhirModalJson.style.display = 'none';
@@ -2651,7 +2684,7 @@
 
         if (btnSubmitFhirToAbdm) {
             btnSubmitFhirToAbdm.disabled = false;
-            if (_fhirSubmitMode === 'task') {
+            if (_fhirSubmitMode === 'task' || _fhirIpdId > 0 || (url && url.indexOf('ipd_discharge') !== -1)) {
                 btnSubmitFhirToAbdm.className = 'btn btn-sm btn-outline-warning';
                 btnSubmitFhirToAbdm.innerHTML = '<i class="bi bi-check2-square"></i> Verify & Submit to Gateway';
                 btnSubmitFhirToAbdm.title = 'Submit directly to ABDM gateway after FHIR verification';
@@ -2699,9 +2732,12 @@
                 var hasFhir = bundle !== null;
                 _fhirOpdId     = parseInt(parsed.opd_id     || '0', 10) || 0;
                 _fhirSessionId = parseInt(parsed.opd_session_id || '0', 10) || 0;
+                if (parsed.ipd_id)     _fhirIpdId     = parseInt(parsed.ipd_id, 10) || _fhirIpdId;
+                if (parsed.patient_id) _fhirPatientId = parseInt(parsed.patient_id, 10) || _fhirPatientId;
+                if (parsed.abha_id)    _fhirAbhaId    = (parsed.abha_id || _fhirAbhaId).trim();
                 _fhirLiveComplaints = Array.isArray(parsed.live_complaints) ? parsed.live_complaints : [];
                 _fhirLiveDiagnoses  = Array.isArray(parsed.live_diagnoses)  ? parsed.live_diagnoses  : [];
-                if (fhirModalJson)  fhirModalJson.textContent = JSON.stringify(parsed, null, 2);
+                if (fhirModalJson)  fhirModalJson.value = JSON.stringify(bundle || parsed, null, 2);
                 if (fhirFormView) {
                     if (hasFhir) {
                         fhirFormView.innerHTML = renderFhirBundleForm(bundle, _fhirLiveComplaints, _fhirLiveDiagnoses);
@@ -2728,6 +2764,121 @@
             });
     }
 
+    // Apply JSON changes function
+    function applyFhirJsonChanges(onSaved) {
+        var raw = (fhirModalJson ? fhirModalJson.value : '').trim();
+        if (!raw) {
+            alert('JSON content is empty.');
+            return false;
+        }
+        var parsed = null;
+        try {
+            parsed = JSON.parse(raw);
+        } catch (e) {
+            alert('Invalid JSON syntax:\n' + e.message);
+            if (fhirModalMeta) {
+                fhirModalMeta.textContent = 'JSON syntax error: ' + e.message;
+                fhirModalMeta.className = 'flex-grow-1 small text-danger';
+            }
+            return false;
+        }
+
+        var bundle = (parsed && parsed.resourceType === 'Bundle') ? parsed : ((parsed && parsed.bundle) ? parsed.bundle : ((parsed && parsed.fhir_bundle) ? parsed.fhir_bundle : null));
+        if (!bundle || bundle.resourceType !== 'Bundle') {
+            alert('The JSON must be a valid FHIR Bundle (resourceType: "Bundle").');
+            return false;
+        }
+
+        // Format textarea neatly
+        if (fhirModalJson) {
+            fhirModalJson.value = JSON.stringify(bundle, null, 2);
+        }
+
+        // Refresh Form View
+        if (fhirFormView) {
+            fhirFormView.innerHTML = renderFhirBundleForm(bundle, _fhirLiveComplaints, _fhirLiveDiagnoses);
+        }
+
+        // Refresh Code Quality badges
+        if (fhirModalQuality) {
+            var qs = fhirCodeQuality(bundle);
+            if (qs) {
+                fhirModalQuality.innerHTML = qs;
+                fhirModalQuality.style.display = 'block';
+            } else {
+                fhirModalQuality.innerHTML = '';
+                fhirModalQuality.style.display = 'none';
+            }
+        }
+
+        if (fhirModalDataBadge) {
+            fhirModalDataBadge.className = 'badge bg-success';
+            fhirModalDataBadge.textContent = 'HAS FHIR';
+        }
+
+        var targetIpdId = _fhirIpdId || (_fhirSubmitTaskRow && (_fhirSubmitTaskRow.getAttribute('data-task-type') || '').toLowerCase() === 'ipd_discharge_publish' ? parseInt(_fhirSubmitTaskRow.getAttribute('data-entity-id') || '0', 10) : 0);
+        var targetPatientId = _fhirPatientId || (_fhirSubmitTaskRow ? parseInt(_fhirSubmitTaskRow.getAttribute('data-patient-id') || '0', 10) : 0);
+        var targetAbha = (_fhirSubmitAbha || _fhirAbhaId || '').trim();
+
+        if (targetIpdId > 0) {
+            var origBtnHtml = btnUpdateFhirJson ? btnUpdateFhirJson.innerHTML : '';
+            if (btnUpdateFhirJson) {
+                btnUpdateFhirJson.disabled = true;
+                btnUpdateFhirJson.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Saving...';
+            }
+
+            post('<?= base_url('AbdmGateway/save_ipd_discharge_fhir') ?>', {
+                ipd_id: targetIpdId,
+                patient_id: targetPatientId,
+                abha_id: targetAbha,
+                fhir_json: fhirModalJson.value
+            }, function (res) {
+                if (btnUpdateFhirJson) {
+                    btnUpdateFhirJson.disabled = false;
+                    btnUpdateFhirJson.innerHTML = '<i class="bi bi-check-lg"></i> JSON Updated!';
+                    window.setTimeout(function() {
+                        btnUpdateFhirJson.innerHTML = origBtnHtml || '<i class="bi bi-check2-circle"></i> Update JSON';
+                    }, 2000);
+                }
+                if (!res || parseInt(res.ok || '0', 10) !== 1) {
+                    var err = (res && (res.error_text || res.error || res.message)) || 'Failed to save updated JSON';
+                    if (fhirModalMeta) {
+                        fhirModalMeta.textContent = 'Updated in preview: ' + err;
+                        fhirModalMeta.className = 'flex-grow-1 small text-warning';
+                    }
+                    if (typeof onSaved === 'function') onSaved(false);
+                    return;
+                }
+                if (fhirModalMeta) {
+                    fhirModalMeta.textContent = 'JSON validated & saved to database.';
+                    fhirModalMeta.className = 'flex-grow-1 small text-success';
+                }
+                if (typeof onSaved === 'function') onSaved(true);
+            });
+            return true;
+        }
+
+        if (btnUpdateFhirJson) {
+            var prevHtml = btnUpdateFhirJson.innerHTML;
+            btnUpdateFhirJson.innerHTML = '<i class="bi bi-check-lg"></i> Updated!';
+            window.setTimeout(function() {
+                btnUpdateFhirJson.innerHTML = prevHtml;
+            }, 2000);
+        }
+        if (fhirModalMeta) {
+            fhirModalMeta.textContent = 'JSON validated and applied.';
+            fhirModalMeta.className = 'flex-grow-1 small text-success';
+        }
+        if (typeof onSaved === 'function') onSaved(true);
+        return true;
+    }
+
+    if (btnUpdateFhirJson) {
+        btnUpdateFhirJson.addEventListener('click', function () {
+            applyFhirJsonChanges();
+        });
+    }
+
     // Regenerate / Recreate FHIR bundle in modal
     btnRegenerateFhirModal.addEventListener('click', function () {
         if (!_fhirPreviewUrl) {
@@ -2746,7 +2897,7 @@
         });
     });
 
-    // Update Codes dropdown — navigate to master workspaces
+    // Update Codes dropdown - navigate to master workspaces
     (function () {
         function navTo(url, label) {
             fhirPreviewModal.hide();
@@ -2826,28 +2977,27 @@
             return;
         }
 
-        if (_fhirSubmitMode === 'task') {
-            if (!_fhirSubmitTaskRow) {
-                alert('No ABDM task selected for submission.');
-                return;
-            }
-            if (!/^\d{14}$/.test(_fhirSubmitAbha)) {
-                alert('ABHA must be a 14-digit number before queueing.');
-                return;
-            }
+        var isIpdMode = (_fhirSubmitTaskRow && (_fhirSubmitTaskRow.getAttribute('data-task-type') || '').toLowerCase() === 'ipd_discharge_publish') || (_fhirIpdId > 0 && !_fhirInvoiceSource);
+
+        if (_fhirSubmitMode === 'task' || isIpdMode) {
+            var effectiveAbha = (_fhirSubmitAbha || _fhirAbhaId || (_fhirSubmitTaskRow && _fhirSubmitTaskRow.querySelector('.abha-input') ? _fhirSubmitTaskRow.querySelector('.abha-input').value : '')).trim();
+
             if (!confirm('FHIR verified. Submit this record to ABDM gateway now?')) {
                 return;
             }
 
-            var rowInput = _fhirSubmitTaskRow.querySelector('.abha-input');
-            if (rowInput) {
-                rowInput.value = _fhirSubmitAbha;
+            if (_fhirSubmitTaskRow) {
+                var rowInput = _fhirSubmitTaskRow.querySelector('.abha-input');
+                if (rowInput && effectiveAbha) {
+                    rowInput.value = effectiveAbha;
+                }
             }
 
-            var taskType = (_fhirSubmitTaskRow.getAttribute('data-task-type') || '').toLowerCase();
+            var taskType = _fhirSubmitTaskRow ? (_fhirSubmitTaskRow.getAttribute('data-task-type') || '').toLowerCase() : (isIpdMode ? 'ipd_discharge_publish' : '');
+
             if (taskType === 'lab_report_publish' || taskType === 'radiology_report_publish') {
-                var labReqId = parseInt(_fhirSubmitTaskRow.getAttribute('data-entity-id') || '0', 10) || 0;
-                var patientId = parseInt(_fhirSubmitTaskRow.getAttribute('data-patient-id') || '0', 10) || 0;
+                var labReqId = _fhirSubmitTaskRow ? parseInt(_fhirSubmitTaskRow.getAttribute('data-entity-id') || '0', 10) : 0;
+                var patientId = _fhirSubmitTaskRow ? parseInt(_fhirSubmitTaskRow.getAttribute('data-patient-id') || '0', 10) : 0;
                 if (labReqId <= 0 || patientId <= 0) {
                     alert('Task data missing (lab_req_id/patient_id).');
                     return;
@@ -2855,12 +3005,12 @@
 
                 var origHtmlTask = btn.innerHTML;
                 btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Submitting…';
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Submitting...';
 
                 post('<?= base_url('AbdmGateway/share_diagnosis_report_bundle') ?>', {
                     lab_req_id: labReqId,
                     patient_id: patientId,
-                    abha_id: _fhirSubmitAbha,
+                    abha_id: effectiveAbha,
                     consent_handle: ''
                 }, function (res) {
                     btn.disabled = false;
@@ -2876,10 +3026,12 @@
                     var queueText = res.queue_id ? (' Queue ID: ' + res.queue_id) : '';
                     var warningText = res.warning ? (' Warning: ' + res.warning) : '';
                     setSubmissionStatus('Submitted to ABDM gateway.' + queueText + warningText, res.queue_id || '');
-                    var badge = _fhirSubmitTaskRow.querySelector('.status-pill');
-                    if (badge) {
-                        badge.textContent = 'IN_PROGRESS';
-                        badge.className = 'badge bg-info status-pill';
+                    if (_fhirSubmitTaskRow) {
+                        var badge = _fhirSubmitTaskRow.querySelector('.status-pill');
+                        if (badge) {
+                            badge.textContent = 'IN_PROGRESS';
+                            badge.className = 'badge bg-info status-pill';
+                        }
                     }
                     alert('Submitted to ABDM gateway.' + queueText + warningText);
                     fhirPreviewModal.hide();
@@ -2887,23 +3039,35 @@
                 return;
             }
 
-            if (taskType === 'ipd_discharge_publish') {
-                var ipdId = parseInt(_fhirSubmitTaskRow.getAttribute('data-entity-id') || '0', 10) || 0;
-                var ipdPatientId = parseInt(_fhirSubmitTaskRow.getAttribute('data-patient-id') || '0', 10) || 0;
-                if (ipdId <= 0 || ipdPatientId <= 0) {
-                    alert('Task data missing (ipd_id/patient_id).');
+            if (taskType === 'ipd_discharge_publish' || isIpdMode) {
+                var ipdId = _fhirIpdId || (_fhirSubmitTaskRow ? parseInt(_fhirSubmitTaskRow.getAttribute('data-entity-id') || '0', 10) : 0);
+                var ipdPatientId = _fhirPatientId || (_fhirSubmitTaskRow ? parseInt(_fhirSubmitTaskRow.getAttribute('data-patient-id') || '0', 10) : 0);
+                if (ipdId <= 0) {
+                    alert('Task data missing (ipd_id).');
                     return;
+                }
+
+                var currentJson = (fhirModalJson ? fhirModalJson.value : '').trim();
+                if (currentJson) {
+                    try {
+                        JSON.parse(currentJson);
+                    } catch (e) {
+                        alert('Cannot submit: JSON contains syntax errors:\n' + e.message);
+                        return;
+                    }
                 }
 
                 var origHtmlIpd = btn.innerHTML;
                 btn.disabled = true;
-                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Submitting…';
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Submitting...';
 
                 post('<?= base_url('AbdmGateway/share_ipd_discharge_bundle') ?>', {
                     ipd_id: ipdId,
                     patient_id: ipdPatientId,
-                    abha_id: _fhirSubmitAbha,
-                    consent_handle: ''
+                    abha_id: effectiveAbha,
+                    consent_handle: '',
+                    fhir_override_json: currentJson,
+                    force_new_record: document.getElementById('chkForceNewRecord') && document.getElementById('chkForceNewRecord').checked ? 1 : 0
                 }, function (res) {
                     btn.disabled = false;
                     btn.innerHTML = origHtmlIpd;
@@ -2918,10 +3082,12 @@
                     var queueText = res.queue_id ? (' Queue ID: ' + res.queue_id) : '';
                     var warningText = res.warning ? (' Warning: ' + res.warning) : '';
                     setSubmissionStatus('Submitted to ABDM gateway.' + queueText + warningText, res.queue_id || '');
-                    var badge = _fhirSubmitTaskRow.querySelector('.status-pill');
-                    if (badge) {
-                        badge.textContent = 'IN_PROGRESS';
-                        badge.className = 'badge bg-info status-pill';
+                    if (_fhirSubmitTaskRow) {
+                        var badge = _fhirSubmitTaskRow.querySelector('.status-pill');
+                        if (badge) {
+                            badge.textContent = 'IN_PROGRESS';
+                            badge.className = 'badge bg-info status-pill';
+                        }
                     }
                     alert('Submitted to ABDM gateway.' + queueText + warningText);
                     fhirPreviewModal.hide();
@@ -3029,7 +3195,7 @@
         if (!confirm(submitConfirm)) return;
         var origHtml = btn.innerHTML;
         btn.disabled = true;
-        btn.textContent = 'Submitting…';
+        btn.textContent = 'Submitting...';
         var body = new URLSearchParams({ opd_id: _fhirOpdId, opd_session_id: _fhirSessionId });
         body.append('push_to_gateway', '1');
         body.append(csrfName, csrfHash);
@@ -3063,7 +3229,7 @@
             if (res.csrfName && res.csrfHash) { csrfName = res.csrfName; csrfHash = res.csrfHash; }
             if (res.ok == 1) {
                 btn.className = 'btn btn-sm btn-success';
-                btn.innerHTML = '<i class="bi bi-check-circle"></i> Submitted ✓';
+                btn.innerHTML = '<i class="bi bi-check-circle"></i> Submitted v';
 
                 var rowSubmitBtn = document.querySelector('.btn-opd-consult-submit-gateway[data-opd-id="' + String(_fhirOpdId) + '"]');
                 if (rowSubmitBtn) {
@@ -3088,11 +3254,11 @@
                 }
 
                 var qInfo = res.queue_id ? ' Queue ID: ' + res.queue_id : '';
-                alert('✅ Bundle submitted to ABDM bridge.\n' + (res.message || '') + qInfo);
+                alert(' Bundle submitted to ABDM bridge.\n' + (res.message || '') + qInfo);
             } else {
                 btn.disabled = false;
                 btn.innerHTML = origHtml;
-                alert('❌ Submission failed:\n' + (res.message || res.error_text || 'Check bridge configuration.') + (res.http_code ? ' (HTTP ' + res.http_code + ')' : ''));
+                alert(' Submission failed:\n' + (res.message || res.error_text || 'Check bridge configuration.') + (res.http_code ? ' (HTTP ' + res.http_code + ')' : ''));
             }
         })
         .catch(function (e) {
@@ -3102,7 +3268,7 @@
             var msg = (e && e.name === 'AbortError')
                 ? 'Request timed out before server response. Please retry.'
                 : (e && e.message ? e.message : 'Request failed');
-            alert('❌ Error: ' + msg);
+            alert(' Error: ' + msg);
         });
     });
 
@@ -3111,19 +3277,19 @@
         var jsonText = fhirModalJson ? (fhirModalJson.textContent || '{}') : '{}';
         if (! navigator.clipboard || ! navigator.clipboard.writeText) { setStatus('Clipboard API unavailable.', true); return; }
         navigator.clipboard.writeText(jsonText).then(function () {
-            var orig = btn.textContent; btn.textContent = 'Copied ✓'; btn.className = 'btn btn-sm btn-success';
+            var orig = btn.textContent; btn.textContent = 'Copied v'; btn.className = 'btn btn-sm btn-success';
             window.setTimeout(function () { btn.textContent = orig; btn.className = 'btn btn-sm btn-outline-secondary'; }, 1500);
         }).catch(function (e) { setStatus('Copy failed: ' + e.message, true); });
     });
 
-    // OPD Consult Publish — FHIR preview buttons → open in modal
+    // OPD Consult Publish - FHIR preview buttons  open in modal
     document.querySelectorAll('.btn-opd-consult-fhir').forEach(function (btn) {
         btn.addEventListener('click', function () {
             var opdId = parseInt(btn.getAttribute('data-opd-id') || '0', 10);
             var tr = btn.closest('tr');
             var pushStatus = tr ? (tr.getAttribute('data-push-status') || '') : '';
             if (opdId <= 0) return;
-            openFhirModal('<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId, 'FHIR Preview — OPD #' + opdId, { pushStatus: pushStatus });
+            openFhirModal('<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId, 'FHIR Preview - OPD #' + opdId, { pushStatus: pushStatus });
         });
     });
 
@@ -3134,7 +3300,7 @@
             if (opdId <= 0) return;
             openFhirModal(
                 '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId,
-                'Gateway Submit — OPD #' + opdId,
+                'Gateway Submit - OPD #' + opdId,
                 { submitMode: 'opd_gateway', abhaId: abhaId }
             );
         });
@@ -3153,7 +3319,7 @@
             + '?source=' + encodeURIComponent(source)
             + '&bill_id=' + encodeURIComponent(String(billId))
             + '&patient_id=' + encodeURIComponent(String(patientId));
-        openFhirModal(previewUrl, (pushIntent ? 'Review & Push' : 'FHIR Preview') + ' — Invoice #' + billId, {
+        openFhirModal(previewUrl, (pushIntent ? 'Review & Push' : 'FHIR Preview') + ' - Invoice #' + billId, {
             submitMode: 'invoice',
             taskRow: row,
             pushStatus: pushStatus,

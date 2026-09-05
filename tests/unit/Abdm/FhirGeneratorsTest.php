@@ -344,7 +344,7 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertSame('2026-09-04T04:58:00+05:30', $encounterRes['period']['end'] ?? null);
         $this->assertNotEmpty($encounterRes['location'] ?? []);
         $this->assertSame('Ward: General Ward, Bed: GW-05', $encounterRes['location'][0]['location']['display'] ?? null);
-        $this->assertSame('active', $encounterRes['location'][0]['status'] ?? null);
+        $this->assertSame('completed', $encounterRes['location'][0]['status'] ?? null);
         $this->assertSame('2026-09-01T04:53:00+05:30', $encounterRes['location'][0]['period']['start'] ?? null);
         $this->assertSame('2026-09-04T04:58:00+05:30', $encounterRes['location'][0]['period']['end'] ?? null);
 

@@ -9189,6 +9189,13 @@ class Ipd_discharge extends BaseController
             }
         }
 
+        
+        $uiSummaryInvestigation = '';
+        if ($this->tableHasColumns('ipd_discharge_investigtions_inhos', ['ipd_id', 'comp_remark'])) {
+            $inhosRow = $this->firstRowByIpd('ipd_discharge_investigtions_inhos', $ipdId);
+            $uiSummaryInvestigation = trim((string) ($inhosRow['comp_remark'] ?? ''));
+        }
+
         $investigationRows = [];
         if ($this->tableHasColumns('ipd_discharge_1_d', ['ipd_d_id'])) {
             $cols = $this->db->getFieldNames('ipd_discharge_1_d') ?? [];
@@ -9329,6 +9336,59 @@ class Ipd_discharge extends BaseController
             }
         }
 
+        
+        $uiClinicalHistoryText = '';
+        $historyList = [];
+        
+        $opdHistorySnapshot = [];
+        if ($patientId > 0 && $this->db->tableExists('patient_master')) {
+            $historyFields = [
+                'is_smoking' => 'Smoking',
+                'is_alcohol' => 'Alcohol',
+                'is_drug_abuse' => 'Drug Abuse',
+                'is_tobacoo' => 'Tobacco',
+                'is_hypertesion' => 'Hypertension',
+                'is_diabetes' => 'Diabetes',
+                'is_ischaemic_heart_ds' => 'Ischemic Heart Disease',
+                'is_asthma_copd' => 'Asthma/COPD',
+                'is_bleeding_disorder' => 'Bleeding Disorder',
+                'is_heapatitis_type' => 'Hepatitis',
+                'is_blood_transfusion' => 'Blood Transfusion',
+                'is_hiv_std' => 'HIV/STD',
+                'is_epilepsy' => 'Epilepsy',
+                'is_tb' => 'TB',
+                'is_psychiatric_illness' => 'Psychiatric Illness',
+                'is_thyroid' => 'Thyroid',
+            ];
+            foreach ($historyFields as $f => $label) {
+                if ((int) ($patientRow[$f] ?? 0) === 1) {
+                    $historyList[] = $label . ': Yes';
+                }
+            }
+        }
+        
+        if (!empty($instructionRows)) {
+            $instructionRow = $instructionRows[0];
+            $instructionMeta = $this->parseInstructionMetaPayload((string) ($instructionRow['comp_report'] ?? ''));
+            $nabhMeta = is_array($instructionMeta['nabh'] ?? null) ? $instructionMeta['nabh'] : [];
+            
+            $historyLabels = [
+                'drug_allergy_status' => 'Drug Allergy Status', 
+                'drug_allergy_details' => 'Drug Allergy Details', 
+                'adr_history' => 'ADR History', 
+                'current_medications' => 'Current Medications', 
+                'co_morbidities' => 'Comorbidities', 
+                'hpi_note' => 'HPI Note'
+            ];
+            foreach ($historyLabels as $key => $label) {
+                $val = trim((string) ($nabhMeta[$key] ?? ''));
+                if ($val !== '') {
+                    $historyList[] = $label . ': ' . $val;
+                }
+            }
+        }
+        $uiClinicalHistoryText = implode("\n", $historyList);
+
         $documentsList = $this->buildIpdPdfDocumentsList($ipdId, $dischargeIso);
         $locationInfo = $this->resolveIpdLocation($ipdId);
 
@@ -9377,15 +9437,18 @@ class Ipd_discharge extends BaseController
                 'room' => (string) ($locationInfo['room'] ?? ''),
                 'bed' => (string) ($locationInfo['bed'] ?? ''),
             ],
-            'chief_complaints' => $chiefComplaintsList,
-            'chief_complaint_narrative' => $complaintRemarkText,
-            'conditions' => $conditionRows,
-            'procedures' => $procedureRows,
-            'medications' => $medicationRows,
-            'observations' => $observationRows,
-            'investigations' => $investigationRows,
+            'ui_complaints' => $chiefComplaintsList,
+            'ui_complaint_narrative' => $complaintRemarkText,
+            'ui_clinical_history' => $uiClinicalHistoryText,
+            'ui_physical_exam' => $observationRows,
+            'ui_investigations' => $investigationRows,
+            'ui_surgeries' => $procedureRows,
+            'ui_final_diagnosis' => $conditionRows,
+            'ui_summary_investigation' => $uiSummaryInvestigation,
+            'ui_course_treatment' => $courseRows, 
+            'ui_discharge_medicine' => $medicationRows,
+            'ui_discharge_summary' => $carePlanRows, 
             'allergies' => $allergyRows,
-            'care_plans' => $carePlanRows,
             'documents' => $documentsList,
             'template' => $this->resolveAbdmDischargeTemplate(),
         ];

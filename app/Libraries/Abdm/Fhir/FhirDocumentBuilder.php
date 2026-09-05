@@ -20,6 +20,15 @@ class FhirDocumentBuilder
     {
         $this->bundleMeta = [
             'resourceType' => 'Bundle',
+            'id' => $identifierValue,
+            'meta' => [
+                'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle'],
+                'security' => [[
+                    'system' => 'http://terminology.hl7.org/CodeSystem/v3-Confidentiality',
+                    'code' => 'V',
+                    'display' => 'very restricted'
+                ]]
+            ],
             'identifier' => [
                 'system' => 'https://hms.local/fhir/document',
                 'value' => $identifierValue,
@@ -174,13 +183,16 @@ class FhirDocumentBuilder
     private function normalizeEntryReferences(array $entries): array
     {
         $referenceMap = [];
+        $idMap = [];
         foreach ($entries as $entry) {
             $resource = (array) ($entry['resource'] ?? []);
             $id = (string) ($resource['id'] ?? '');
             if ($id === '') {
                 continue;
             }
-            $referenceMap['urn:uuid:' . $id] = 'urn:uuid:' . $this->uuidForResource($resource);
+            $newUuid = $this->uuidForResource($resource);
+            $referenceMap['urn:uuid:' . $id] = 'urn:uuid:' . $newUuid;
+            $idMap[$id] = $newUuid;
         }
 
         foreach ($entries as &$entry) {
@@ -189,7 +201,11 @@ class FhirDocumentBuilder
             if ($id !== '') {
                 $entry['fullUrl'] = $referenceMap['urn:uuid:' . $id];
             }
-            $entry['resource'] = $this->rewriteReferences($resource, $referenceMap);
+            $resource = $this->rewriteReferences($resource, $referenceMap);
+            if ($id !== '') {
+                $resource['id'] = $idMap[$id];
+            }
+            $entry['resource'] = $resource;
         }
         unset($entry);
 

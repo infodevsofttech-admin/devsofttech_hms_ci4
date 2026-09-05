@@ -59,7 +59,7 @@ abstract class AbstractModuleFhirGenerator
             ]],
             'text' => [
                 'status' => 'generated',
-                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Patient:</b> ' . htmlspecialchars((string) ($source['patient']['name'] ?? 'Patient')) . ' (' . htmlspecialchars(ucfirst($gender)) . ')</p></div>',
+                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Patient:</b> ' . $this->escapeXhtml((string) ($source['patient']['name'] ?? 'Patient')) . ' (' . $this->escapeXhtml(ucfirst($gender)) . ')</p></div>',
             ],
             'identifier' => [
                 [
@@ -185,12 +185,12 @@ abstract class AbstractModuleFhirGenerator
      */
     protected function buildEncounter(array $source): ?array
     {
-        if (! isset($source['encounter']) || ! is_array($source['encounter'])) {
-            return null;
+        $enc = $source['encounter'] ?? [];
+        if (! is_array($enc)) {
+            $enc = [];
         }
 
-        $enc = $source['encounter'];
-        $id = (string) ($enc['id'] ?? '');
+        $id = trim((string) ($enc['id'] ?? $source['record_id'] ?? ''));
         if ($id === '') {
             return null;
         }
@@ -251,7 +251,7 @@ abstract class AbstractModuleFhirGenerator
                 'location' => [
                     'display' => $locDisplay,
                 ],
-                'status' => 'active',
+                'status' => 'completed',
                 'period' => [
                     'start' => $start,
                     'end'   => $end,
@@ -270,7 +270,7 @@ abstract class AbstractModuleFhirGenerator
             ]],
             'text' => [
                 'status' => 'generated',
-                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Encounter:</b> ' . htmlspecialchars($classDisplay) . ' ' . htmlspecialchars($id) . '</p></div>',
+                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Encounter:</b> ' . $this->escapeXhtml($classDisplay) . ' ' . $this->escapeXhtml($id) . '</p></div>',
             ],
             'status' => 'finished',
             'class' => [
@@ -287,6 +287,16 @@ abstract class AbstractModuleFhirGenerator
                 'end' => $end,
             ],
             'identifier' => $identifiers,
+            'hospitalization' => [
+                'dischargeDisposition' => [
+                    'coding' => [[
+                        'system' => 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
+                        'code' => 'home',
+                        'display' => 'Home',
+                    ]],
+                    'text' => 'Discharged to Home Care',
+                ]
+            ],
         ];
 
         if (! empty($locationList)) {
@@ -329,7 +339,7 @@ abstract class AbstractModuleFhirGenerator
             ]],
             'text' => [
                 'status' => 'generated',
-                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Practitioner:</b> ' . htmlspecialchars($name) . '</p></div>',
+                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Practitioner:</b> ' . $this->escapeXhtml($name) . '</p></div>',
             ],
             'identifier' => [[
                 'system' => 'https://doctor.ndhm.gov.in',
@@ -364,7 +374,7 @@ abstract class AbstractModuleFhirGenerator
             ]],
             'text' => [
                 'status' => 'generated',
-                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Organization:</b> ' . htmlspecialchars($name) . '</p></div>',
+                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Organization:</b> ' . $this->escapeXhtml($name) . '</p></div>',
             ],
             'name' => $name,
             'identifier' => [[
@@ -402,5 +412,14 @@ abstract class AbstractModuleFhirGenerator
         $lines = array_filter($lines, static fn($l) => $l !== '');
 
         return trim(implode("\n", $lines));
+    }
+
+    /**
+     * Safely escapes text for inclusion in FHIR XHTML div sections.
+     * Ensures valid UTF-8 encoding so non-ASCII characters like Hindi script are preserved.
+     */
+    protected function escapeXhtml(string $text): string
+    {
+        return htmlspecialchars($text, ENT_QUOTES | ENT_XML1, 'UTF-8');
     }
 }
