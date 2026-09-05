@@ -2745,11 +2745,8 @@ class AbdmGateway extends BaseController
         $abhaNumber = $abhaIdentity['abha_id'];
         $abhaAddress = $abhaIdentity['abha_address'];
         
-        $patName = '';
-        if ($this->db && $this->db->tableExists('patient_master')) {
-            $pRow = $this->db->table('patient_master')->where('p_id', $patientId)->get(1)->getRowArray() ?? [];
-            $patName = trim((string) (($pRow['p_fname'] ?? '') . ' ' . ($pRow['p_lname'] ?? '')));
-        }
+        $pRow = $this->loadPatientRow($patientId);
+        $patName = $this->patientDisplayName($pRow);
         
         $queueId = null;
         $bridgeRecordId = 0;
