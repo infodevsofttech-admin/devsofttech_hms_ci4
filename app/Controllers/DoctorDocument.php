@@ -153,7 +153,14 @@ class DoctorDocument extends BaseController
             $logoSrc = str_replace('\\', '/', $logoAbsPath);
         }
         if ($logoSrc === '') {
-            $logoSrc = base_url('assets/images/' . $logoFile);
+            $globMatches = glob(FCPATH . 'assets/images/hospital_logo_*');
+            if (is_array($globMatches) && ! empty($globMatches)) {
+                usort($globMatches, fn($a, $b) => filemtime($b) <=> filemtime($a));
+                $logoSrc = $this->buildImageDataUriFromPath($globMatches[0]);
+            }
+        }
+        if ($logoSrc === '') {
+            $logoSrc = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAA=';
         }
         $logoHtml    = '<img style="width:100px;vertical-align:top;" src="'
             . $logoSrc . '" />';
@@ -171,20 +178,22 @@ class DoctorDocument extends BaseController
                 $drSignSrc = str_replace('\\', '/', $drSignAbsPath);
             }
             if ($drSignSrc === '') {
-                $drSignSrc = base_url('assets/images/' . $drSignFile);
+                $drSignSrc = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAA=';
             }
 
             $drSignImg = '<img style="height:40px;" src="' . $drSignSrc . '" />';
         }
 
         $map = [
+            'assets/images/{{H_logo}}' => $logoSrc,
+            'assets/images/{{h_logo}}' => $logoSrc,
             '{{H_Name}}'             => defined('H_Name')      ? (string) constant('H_Name')      : '',
             '{{H_address_1}}'        => defined('H_address_1') ? (string) constant('H_address_1') : '',
             '{{H_address_2}}'        => defined('H_address_2') ? (string) constant('H_address_2') : '',
             '{{H_phone_No}}'         => defined('H_phone_No')  ? (string) constant('H_phone_No')  : '',
             '{{H_Email}}'            => defined('H_Email')     ? (string) constant('H_Email')     : '',
-            '{{H_logo}}'             => $logoFile,
-            '{{H_logo_abs}}'         => $logoAbsPath,
+            '{{H_logo}}'             => $logoSrc,
+            '{{H_logo_abs}}'         => $logoSrc,
             '{{hospital_logo_html}}' => $logoHtml,
             '{{PATIENT_NAME}}'       => (string) ($doc['p_fname'] ?? ''),
             '{{pName}}'              => (string) ($doc['p_fname'] ?? ''),
@@ -264,7 +273,7 @@ class DoctorDocument extends BaseController
             return str_replace('\\', '/', $logoAbsPath);
         }
 
-        return base_url('assets/images/' . ($logoFile !== '' ? $logoFile : 'logo.png'));
+        return 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAA=';
     }
 
     private function hasColumn(string $table, string $column): bool
@@ -314,14 +323,16 @@ class DoctorDocument extends BaseController
     public function health_document_fhir_preview(int $patientDocId = 0)
     {
         if ($patientDocId <= 0) {
-            $patientDocId = (int) ($this->request->getGet('patient_doc_id') ?? $this->request->getGet('doc_id') ?? $this->request->getGet('health_doc_id') ?? 0);
+            $patientDocId = (int) ($this->request->getGet('patient_doc_id') ?? $this->request->getGet('doc_id') ?? $this->request->getGet('health_doc_id') ?? $this->request->getGet('record_id') ?? 0);
         }
+
+        $entityType = trim((string) ($this->request->getGet('entity_type') ?? ''));
 
         if ($patientDocId <= 0) {
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'patient_doc_id is required']);
         }
 
-        $source = $this->buildHealthDocumentSource($patientDocId);
+        $source = $this->buildHealthDocumentSource($patientDocId, $entityType);
         if (empty($source)) {
             return $this->response->setStatusCode(404)->setJSON(['ok' => 0, 'error_text' => 'Health document source data not found for ID: ' . $patientDocId]);
         }
@@ -336,6 +347,9 @@ class DoctorDocument extends BaseController
             'ok' => 1,
             'bundle' => $bundle,
             'fhir_bundle' => $bundle,
+            'patient_id' => (int) ($source['patient']['id'] ?? 0),
+            'abha_id' => (string) ($source['patient']['abha_id'] ?? ''),
+            'document_title' => (string) ($source['document_title'] ?? ''),
             'hi_type' => 'HealthDocumentRecord',
             'care_context_reference' => $res['care_context_reference'] ?? '',
             'care_context_display' => $res['care_context_display'] ?? '',
@@ -798,7 +812,15 @@ class DoctorDocument extends BaseController
             'session_id' => (string) $opdSessionId,
             'visit_date' => $visitDate,
             'completed_at' => $completedAt,
+            'encounter' => [
+                'id' => (string) ($rxRow['id'] ?? $patientId),
+                'class_code' => 'AMB',
+                'class_display' => 'ambulatory',
+                'start' => $completedAt,
+                'end' => $completedAt,
+            ],
             'vitals' => $vitals,
+
             'physical_examination' => $physicalExam,
             'women_wellness' => $womenWellness,
             'advice' => $lifestyle,
@@ -2026,9 +2048,19 @@ class DoctorDocument extends BaseController
         return '';
     }
 
-    private function buildHealthDocumentSource(int $patientDocId): array
+    public function buildHealthDocumentSource(int $patientDocId, string $entityType = ''): array
     {
         if ($patientDocId <= 0) {
+            return [];
+        }
+
+        if ($entityType === 'patient_document') {
+            if ($this->db->tableExists('file_upload_data')) {
+                $fileRow = $this->db->table('file_upload_data')->where('id', $patientDocId)->get(1)->getRowArray();
+                if (is_array($fileRow) && ! empty($fileRow)) {
+                    return $this->buildFileUploadHealthDocumentSource($fileRow);
+                }
+            }
             return [];
         }
 
@@ -2057,7 +2089,70 @@ class DoctorDocument extends BaseController
             $templateRow = $this->db->table('doc_format_master')->where('df_id', $docFormatId)->get(1)->getRowArray() ?? [];
         }
 
-        $docTitle = trim((string) ($templateRow['doc_name'] ?? 'Medical Certificate'));
+        $docTitle = trim((string) ($templateRow['doc_name'] ?? ''));
+
+        $rawDataStr = trim((string) ($patientDoc['raw_data'] ?? ''));
+        $pdfBytes = null;
+        $contentType = 'application/pdf';
+        $existingDocPath = '';
+
+        // Check if raw_data is a JSON payload describing an uploaded/scanned document (e.g. NABH scan)
+        if (str_starts_with($rawDataStr, '{') && str_ends_with($rawDataStr, '}')) {
+            $decoded = json_decode($rawDataStr, true);
+            if (is_array($decoded)) {
+                if (! empty($decoded['title'])) {
+                    $docTitle = trim((string) $decoded['title']);
+                }
+                $fileName = trim((string) ($decoded['file_name'] ?? ''));
+                if ($fileName !== '') {
+                    $candidates = [
+                        FCPATH . 'uploads/nabh_ipd/' . $fileName,
+                        FCPATH . 'uploads/' . $fileName,
+                        WRITEPATH . 'uploads/nabh_ipd/' . $fileName,
+                        defined('ROOTPATH') ? ROOTPATH . 'public/uploads/nabh_ipd/' . $fileName : '',
+                    ];
+                    foreach ($candidates as $cand) {
+                        if ($cand !== '' && is_file($cand) && is_readable($cand)) {
+                            $existingDocPath = $cand;
+                            break;
+                        }
+                    }
+                }
+            }
+        }
+
+        // Also check nabh_ipd_scans table if present
+        if ($existingDocPath === '' && $this->db->tableExists('nabh_ipd_scans')) {
+            $scanRow = $this->db->table('nabh_ipd_scans')
+                ->where('patient_doc_id', $patientDocId)
+                ->get(1)
+                ->getRowArray();
+            if (is_array($scanRow) && ! empty($scanRow['file_name'])) {
+                if (! empty($scanRow['category_title'])) {
+                    $docTitle = trim((string) $scanRow['category_title']);
+                }
+                $cand = FCPATH . 'uploads/nabh_ipd/' . trim((string) $scanRow['file_name']);
+                if (is_file($cand) && is_readable($cand)) {
+                    $existingDocPath = $cand;
+                }
+            }
+        }
+
+        if ($existingDocPath !== '') {
+            $pdfBytes = @file_get_contents($existingDocPath);
+            $ext = strtolower(pathinfo($existingDocPath, PATHINFO_EXTENSION));
+            $contentType = match ($ext) {
+                'pdf' => 'application/pdf',
+                'png' => 'image/png',
+                'webp' => 'image/webp',
+                'jpg', 'jpeg' => 'image/jpeg',
+                default => 'application/pdf',
+            };
+        } elseif ($docFormatId > 0 && ! empty($rawDataStr)) {
+            // It's a formatted certificate / letterhead document
+            $pdfBytes = $this->generatePatientDocPdfBytes($patientDocId);
+        }
+
         if ($docTitle === '') {
             $docTitle = 'Medical Certificate';
         }
@@ -2094,9 +2189,7 @@ class DoctorDocument extends BaseController
             $doctorName = 'Doctor';
         }
 
-        $pdfBytes = $this->generatePatientDocPdfBytes($patientDocId);
         $docDataBase64 = ($pdfBytes !== null && $pdfBytes !== '') ? base64_encode($pdfBytes) : '';
-        $contentType = ($pdfBytes !== null && $pdfBytes !== '') ? 'application/pdf' : 'text/html';
 
         if ($docDataBase64 === '') {
             $rawHtml = trim((string) ($patientDoc['raw_data'] ?? ''));
@@ -2108,6 +2201,20 @@ class DoctorDocument extends BaseController
                 $contentType = 'text/html';
             }
         }
+
+        $encounterId = 'encounter-' . $patientDocId;
+        $encounter = [
+            'id' => $encounterId,
+            'status' => 'finished',
+            'class' => 'AMB',
+            'start' => $visitDate . 'T09:00:00+05:30',
+            'end' => $visitDate . 'T09:30:00+05:30',
+            'period' => [
+                'start' => $visitDate . 'T09:00:00+05:30',
+                'end' => $visitDate . 'T09:30:00+05:30',
+            ],
+            'hospitalization' => false,
+        ];
 
         return [
             'record_id' => (string) $patientDocId,
@@ -2124,6 +2231,8 @@ class DoctorDocument extends BaseController
                 'id' => $hfrId,
                 'name' => $hospitalName,
             ],
+            'encounter' => $encounter,
+            'encounter_reference' => 'urn:uuid:' . $encounterId,
             'patient' => [
                 'id' => (string) $patientId,
                 'uhid' => (string) ($patientRow['uhid_no'] ?? $patientRow['uhid'] ?? $patientRow['patient_code'] ?? $patientId),
@@ -2285,7 +2394,7 @@ class DoctorDocument extends BaseController
         }
     }
 
-    private function buildFileUploadHealthDocumentSource(array $fileRow): array
+    public function buildFileUploadHealthDocumentSource(array $fileRow): array
     {
         $fileUploadId = (int) ($fileRow['id'] ?? 0);
         $pid = (int) ($fileRow['pid'] ?? 0);
@@ -2365,6 +2474,20 @@ class DoctorDocument extends BaseController
             $drName = 'Medical Officer';
         }
 
+        $encounterId = 'encounter-file-' . $fileUploadId;
+        $encounter = [
+            'id' => $encounterId,
+            'status' => 'finished',
+            'class' => 'AMB',
+            'start' => $visitDate . 'T09:00:00+05:30',
+            'end' => $visitDate . 'T09:30:00+05:30',
+            'period' => [
+                'start' => $visitDate . 'T09:00:00+05:30',
+                'end' => $visitDate . 'T09:30:00+05:30',
+            ],
+            'hospitalization' => false,
+        ];
+
         return [
             'record_id' => 'file-' . $fileUploadId,
             'session_id' => (string) ($fileRow['opd_id'] ?? $fileUploadId),
@@ -2379,6 +2502,8 @@ class DoctorDocument extends BaseController
                 'id' => $hfrId,
                 'name' => $hospitalName,
             ],
+            'encounter' => $encounter,
+            'encounter_reference' => 'urn:uuid:' . $encounterId,
             'patient' => [
                 'id' => (string) $pid,
                 'uhid' => (string) ($patientRow['uhid_no'] ?? $patientRow['uhid'] ?? $patientRow['patient_code'] ?? $pid),

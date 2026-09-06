@@ -729,9 +729,21 @@ final class FhirGeneratorsTest extends CIUnitTestCase
 
         $composition = $bundle['entry'][0]['resource'];
         $this->assertSame('https://nrces.in/ndhm/fhir/r4/StructureDefinition/WellnessRecord', $composition['meta']['profile'][0]);
+        $this->assertSame('Wellness Record', $composition['type']['coding'][0]['display'] ?? '');
+        $this->assertNotEmpty($composition['encounter']['reference'] ?? '');
+
+        $this->assertContains('Encounter', $resourceTypes);
+        $encounterEntries = array_values(array_filter($bundle['entry'], static fn ($e) => ($e['resource']['resourceType'] ?? '') === 'Encounter'));
+        $this->assertNotEmpty($encounterEntries);
+        $encResource = $encounterEntries[0]['resource'];
+        $this->assertSame('AMB', $encResource['class']['code'] ?? '');
+        $this->assertSame('ambulatory', $encResource['class']['display'] ?? '');
+        $this->assertArrayNotHasKey('hospitalization', $encResource);
+
         $this->assertGreaterThanOrEqual(1, count($composition['section']));
         $this->assertNotEmpty($composition['section'][0]['entry']);
     }
+
 
     public function testDischargeSummaryGeneratorCreatesFullSectionsAndComponents(): void
     {

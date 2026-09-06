@@ -1118,13 +1118,17 @@
         } else if (taskType === 'health_document_publish') {
             var healthDocId = parseInt(row.getAttribute('data-entity-id') || '0', 10) || 0;
             var healthPatientId = parseInt(row.getAttribute('data-patient-id') || '0', 10) || 0;
+            var healthEntityType = (row.getAttribute('data-entity-type') || '').trim();
 
             if (healthDocId <= 0 || healthPatientId <= 0) {
                 setStatus('Task data missing for Health Document FHIR preview.', true);
                 return true;
             }
 
-            previewUrl = '<?= base_url('DoctorDocument/health_document_fhir_preview') ?>/' + healthDocId;
+            previewUrl = '<?= base_url('DoctorDocument/health_document_fhir_preview') ?>/' + healthDocId
+                + '?entity_type=' + encodeURIComponent(healthEntityType)
+                + '&patient_id=' + encodeURIComponent(healthPatientId)
+                + '&abha_id=' + encodeURIComponent(abhaId);
             title = 'HealthDocumentRecord FHIR Preview - Document #' + healthDocId;
         } else if (taskType === 'wellness_record_publish') {
             var wellnessPatientId = parseInt(row.getAttribute('data-patient-id') || '0', 10) || 0;
@@ -2180,19 +2184,67 @@
             html += '</div></div>';
         }
 
-        // -- Embedded invoice PDF
+        // -- Health Document Record metadata
+        if (composition && !invoice && (documentRefs.length || (composition.title && (composition.title.toLowerCase().includes('document') || composition.title.toLowerCase().includes('certificate') || composition.title.toLowerCase().includes('form'))))) {
+            var compCoding = ((((composition.type || {}).coding) || [])[0]) || {};
+            var compIdentifier = (composition.identifier || {}).value || '';
+            var bundleIdentifier = (bundle.identifier || {}).value || '';
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light d-flex justify-content-between align-items-center">';
+            html += '<small class="fw-bold text-uppercase text-secondary">' + hesc(composition.title || 'Health Document Record') + '</small>';
+            html += '<span class="badge bg-success text-capitalize">' + hesc(composition.status || 'final') + '</span></div>';
+            html += '<div class="card-body py-2 small"><div class="row g-2">';
+            html += '<div class="col-md-4"><span class="text-muted">Document Title</span><div class="fw-semibold">' + hesc(composition.title || 'Health Document') + '</div></div>';
+            html += '<div class="col-md-3"><span class="text-muted">Document Date</span><div>' + hesc(fmtDate(composition.date || bundle.timestamp) || '-') + '</div></div>';
+            html += '<div class="col-md-5"><span class="text-muted">Record / Bundle ID</span><div><code>' + hesc(bundleIdentifier || compIdentifier || '-') + '</code></div></div>';
+            html += '<div class="col-md-4"><span class="text-muted">Type</span><div>' + hesc(compCoding.display || (composition.type || {}).text || 'Record artifact') + '</div></div>';
+            if (compCoding.code) {
+                html += '<div class="col-md-3"><span class="text-muted">Code</span><div><code>' + hesc(compCoding.code) + '</code></div></div>';
+            }
+            html += '</div></div></div>';
+        }
+
+        // -- Embedded Document / PDF / Image attachments
         documentRefs.forEach(function(documentReference) {
             var attachment = (((documentReference.content || [])[0] || {}).attachment) || {};
-            if (attachment.contentType !== 'application/pdf') return;
-            var pdfUrl = attachmentObjectUrl(attachment);
-            html += '<div class="card mb-2"><div class="card-body py-2 d-flex flex-wrap align-items-center gap-2">';
-            html += '<div class="flex-grow-1"><div class="fw-semibold">' + hesc(attachment.title || 'Invoice PDF') + '</div>';
-            html += '<small class="text-muted">Attached to this FHIR InvoiceRecord</small></div>';
-            if (pdfUrl) {
-                html += '<a class="btn btn-sm btn-outline-primary" href="' + hesc(pdfUrl) + '" target="_blank" rel="noopener">Open PDF</a>';
-                html += '<a class="btn btn-sm btn-primary" href="' + hesc(pdfUrl) + '" download="' + hesc(attachment.title || 'invoice.pdf') + '">Download</a>';
+            var cType = (attachment.contentType || '').toLowerCase();
+            var docName = attachment.title || documentReference.description || (invoice ? 'Invoice PDF' : 'Health Document');
+            var isPdf = cType.indexOf('pdf') !== -1;
+            var isImage = cType.indexOf('image/') === 0;
+            var docUrl = attachmentObjectUrl(attachment);
+
+            html += '<div class="card mb-2"><div class="card-header py-1 bg-light d-flex justify-content-between align-items-center">';
+            html += '<small class="fw-bold text-uppercase text-secondary">' + hesc(docName) + '</small>';
+            html += '<span class="badge bg-info text-dark">' + hesc(cType || 'document') + '</span></div>';
+            html += '<div class="card-body py-2">';
+            html += '<div class="d-flex flex-wrap align-items-center gap-2 mb-2">';
+            html += '<div class="flex-grow-1"><div class="fw-semibold">' + hesc(docName) + '</div>';
+            if (attachment.size) {
+                var sizeKb = (attachment.size / 1024).toFixed(1) + ' KB';
+                if (attachment.size > 1048576) sizeKb = (attachment.size / 1048576).toFixed(2) + ' MB';
+                html += '<small class="text-muted">Size: ' + sizeKb + ' &bull; ' + hesc(cType) + '</small>';
             } else {
-                html += '<span class="badge bg-danger">Invalid PDF attachment</span>';
+                html += '<small class="text-muted">' + (invoice ? 'Attached to this FHIR InvoiceRecord' : 'Attached health document payload') + '</small>';
+            }
+            html += '</div>';
+            if (docUrl) {
+                if (isPdf) {
+                    html += '<a class="btn btn-sm btn-outline-primary" href="' + hesc(docUrl) + '" target="_blank" rel="noopener"><i class="bi bi-file-earmark-pdf me-1"></i>Open PDF</a>';
+                    html += '<a class="btn btn-sm btn-primary" href="' + hesc(docUrl) + '" download="' + hesc(docName.replace(/\s+/g, '_') + '.pdf') + '"><i class="bi bi-download me-1"></i>Download PDF</a>';
+                } else if (isImage) {
+                    html += '<a class="btn btn-sm btn-outline-primary" href="' + hesc(docUrl) + '" target="_blank" rel="noopener"><i class="bi bi-image me-1"></i>View Full Image</a>';
+                    html += '<a class="btn btn-sm btn-primary" href="' + hesc(docUrl) + '" download="' + hesc(docName.replace(/\s+/g, '_')) + '"><i class="bi bi-download me-1"></i>Download</a>';
+                } else {
+                    html += '<a class="btn btn-sm btn-outline-primary" href="' + hesc(docUrl) + '" target="_blank" rel="noopener">Open Document</a>';
+                }
+            } else {
+                html += '<span class="badge bg-danger">Invalid document attachment</span>';
+            }
+            html += '</div>';
+
+            if (isImage && docUrl) {
+                html += '<div class="text-center p-2 bg-light rounded border"><img src="' + hesc(docUrl) + '" style="max-width:100%;max-height:400px;object-fit:contain;" class="rounded shadow-sm" alt="Document Preview" /></div>';
+            } else if (isPdf && docUrl) {
+                html += '<div class="ratio ratio-16x9 border rounded overflow-hidden mt-2" style="min-height:350px;max-height:550px;"><iframe src="' + hesc(docUrl) + '" class="w-100 h-100" style="border:none;"></iframe></div>';
             }
             html += '</div></div>';
         });
@@ -2723,8 +2775,18 @@
 
         fhirPreviewModal.show();
 
-        fetch(url, { method: 'GET', headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } })
-            .then(function (r) { return r.text().then(function (b) { return { ok: r.ok, status: r.status, body: b }; }); })
+        var controller = typeof AbortController !== 'undefined' ? new AbortController() : null;
+        var timeoutId = controller ? setTimeout(function () { controller.abort(); }, 25000) : null;
+
+        fetch(url, {
+            method: 'GET',
+            headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' },
+            signal: controller ? controller.signal : undefined
+        })
+            .then(function (r) {
+                if (timeoutId) clearTimeout(timeoutId);
+                return r.text().then(function (b) { return { ok: r.ok, status: r.status, body: b }; });
+            })
             .then(function (res) {
                 var parsed = null;
                 try { parsed = JSON.parse(res.body || '{}'); } catch (e) { parsed = { raw: res.body || '' }; }
@@ -2757,10 +2819,13 @@
                 }
             })
             .catch(function (e) {
-                if (fhirFormView)   fhirFormView.innerHTML = '<p class="text-danger p-3">Request failed: ' + hesc(e.message) + '</p>';
-                if (fhirModalMeta)  { fhirModalMeta.textContent = 'Request failed: ' + e.message; fhirModalMeta.className = 'flex-grow-1 small text-danger'; }
+                if (timeoutId) clearTimeout(timeoutId);
+                var isTimeout = e.name === 'AbortError';
+                var msg = isTimeout ? 'Request timed out after 25 seconds. Please check server or retry.' : e.message;
+                if (fhirFormView)   fhirFormView.innerHTML = '<div class="alert alert-danger m-3"><i class="bi bi-exclamation-triangle"></i> <strong>Request failed:</strong> ' + hesc(msg) + '</div>';
+                if (fhirModalMeta)  { fhirModalMeta.textContent = 'Request failed: ' + msg; fhirModalMeta.className = 'flex-grow-1 small text-danger'; }
                 if (fhirModalDataBadge) { fhirModalDataBadge.className = 'badge bg-danger'; fhirModalDataBadge.textContent = 'ERROR'; }
-                if (fhirModalHttpBadge) { fhirModalHttpBadge.className = 'badge bg-danger'; fhirModalHttpBadge.textContent = 'HTTP ERR'; }
+                if (fhirModalHttpBadge) { fhirModalHttpBadge.className = 'badge bg-danger'; fhirModalHttpBadge.textContent = isTimeout ? 'TIMEOUT' : 'HTTP ERR'; }
             });
     }
 

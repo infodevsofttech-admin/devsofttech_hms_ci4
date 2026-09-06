@@ -10,8 +10,8 @@ $customHeaderHtml = (string) ($custom_header_html ?? '');
 $customFooterHtml = (string) ($custom_footer_html ?? '');
 $hasSelectedPrintTemplate = ! empty($has_selected_print_template);
 $hospitalLogoSrc = trim((string) ($hospital_logo_src ?? ''));
-if ($hospitalLogoSrc === '') {
-    $hospitalLogoSrc = base_url('assets/images/' . (defined('H_logo') ? constant('H_logo') : 'logo.png'));
+if ($hospitalLogoSrc === '' || str_starts_with($hospitalLogoSrc, 'http://') || str_starts_with($hospitalLogoSrc, 'https://')) {
+    $hospitalLogoSrc = 'data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAA=';
 }
 ?>
 <style>

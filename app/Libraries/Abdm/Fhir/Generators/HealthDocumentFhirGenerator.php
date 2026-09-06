@@ -147,11 +147,11 @@ class HealthDocumentFhirGenerator extends AbstractModuleFhirGenerator
             'description' => $docTitle . ' PDF',
             'content' => [[
                 'attachment' => [
-                    'contentType' => 'application/pdf',
+                    'contentType' => $contentType,
                     'language' => 'en-IN',
                     'data' => $docData,
                     'size' => $fileSize,
-                    'title' => $docTitle . ' PDF',
+                    'title' => $docTitle,
                     'creation' => $timestamp,
                 ],
             ]],
@@ -210,10 +210,11 @@ class HealthDocumentFhirGenerator extends AbstractModuleFhirGenerator
                 $ext = str_contains($contentType, 'png') ? 'png' : 'jpg';
                 $tempImg = $mpdfTempDir . DIRECTORY_SEPARATOR . 'img_' . md5($rawBytes) . '.' . $ext;
                 @file_put_contents($tempImg, $rawBytes);
+                $tempImgUrl = str_replace('\\', '/', $tempImg);
 
                 $html = '<!DOCTYPE html><html><body style="margin:0;padding:0;text-align:center;">'
                     . '<h3>' . htmlspecialchars($docTitle, ENT_QUOTES, 'UTF-8') . '</h3>'
-                    . '<img src="' . $tempImg . '" style="max-width:100%; height:auto;" />'
+                    . '<img src="' . $tempImgUrl . '" style="max-width:100%; height:auto;" />'
                     . '</body></html>';
                 $mpdf->WriteHTML($html);
                 @unlink($tempImg);

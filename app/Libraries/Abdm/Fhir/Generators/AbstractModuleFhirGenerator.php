@@ -201,9 +201,11 @@ abstract class AbstractModuleFhirGenerator
         if ($patientName === '' || strcasecmp($patientName, 'NA') === 0) {
             $patientName = 'Patient';
         }
-        $encounterRef = isset($source['encounter']) ? 'urn:uuid:encounter-' . ((string) ($source['encounter']['id'] ?? $recordId)) : null;
+        $encId = trim((string) ($source['encounter']['id'] ?? $source['record_id'] ?? $recordId));
+        $encounterRef = $encId !== '' ? 'urn:uuid:encounter-' . $encId : null;
 
         $drId = (string) ($source['practitioner']['id'] ?? $source['doctor']['id'] ?? '1');
+
         if ($drId === '' || $drId === '0') {
             $drId = '1';
         }
@@ -278,7 +280,14 @@ abstract class AbstractModuleFhirGenerator
         if ($id === '') {
             return null;
         }
-        $classCode = strtoupper(trim((string) ($enc['class_code'] ?? 'IMP')));
+        $isIpd = (isset($source['hi_type']) && $source['hi_type'] === 'DischargeSummary')
+            || (isset($source['ipd_no']) && $source['ipd_no'] !== '')
+            || (isset($source['discharge_status']))
+            || (isset($source['admission_date']))
+            || (isset($enc['class_code']) && strtoupper((string) $enc['class_code']) === 'IMP');
+
+        $defaultClass = $isIpd ? 'IMP' : 'AMB';
+        $classCode = strtoupper(trim((string) ($enc['class_code'] ?? $defaultClass)));
         $classDisplay = $classCode === 'IMP' ? 'inpatient encounter' : 'ambulatory';
 
         $identifiers = [[
@@ -315,6 +324,10 @@ abstract class AbstractModuleFhirGenerator
         $statusInput = $enc['discharge_disposition'] ?? $enc['outcome'] ?? $source['discharge_status'] ?? $source['discarge_patient_status'] ?? 'home';
         $disposition = $this->resolveDischargeDisposition($statusInput);
 
+        $divText = $classCode === 'IMP'
+            ? '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Encounter:</b> ' . $this->escapeXhtml($classDisplay) . ' ' . $this->escapeXhtml($id) . ' - ' . $this->escapeXhtml($disposition['text']) . '</p></div>'
+            : '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Encounter:</b> ' . $this->escapeXhtml($classDisplay) . ' ' . $this->escapeXhtml($id) . '</p></div>';
+
         $encounterResource = [
             'resourceType' => 'Encounter',
             'id' => 'encounter-' . $id,
@@ -323,7 +336,7 @@ abstract class AbstractModuleFhirGenerator
             ]],
             'text' => [
                 'status' => 'generated',
-                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Encounter:</b> ' . $this->escapeXhtml($classDisplay) . ' ' . $this->escapeXhtml($id) . ' - ' . $this->escapeXhtml($disposition['text']) . '</p></div>',
+                'div' => $divText,
             ],
             'identifier' => $identifiers,
             'status' => 'finished',
@@ -340,7 +353,10 @@ abstract class AbstractModuleFhirGenerator
                 'start' => $start,
                 'end' => $end,
             ],
-            'hospitalization' => [
+        ];
+
+        if ($classCode === 'IMP') {
+            $encounterResource['hospitalization'] = [
                 'dischargeDisposition' => [
                     'coding' => [[
                         'system' => 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
@@ -349,10 +365,11 @@ abstract class AbstractModuleFhirGenerator
                     ]],
                     'text' => $disposition['text'],
                 ],
-            ],
-        ];
+            ];
+        }
 
         return $encounterResource;
+
     }
 
     /**

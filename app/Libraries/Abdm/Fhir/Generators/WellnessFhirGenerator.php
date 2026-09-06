@@ -28,7 +28,7 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
                 [
                     'system' => 'http://snomed.info/sct',
                     'code' => '419891008',
-                    'display' => 'Record artifact',
+                    'display' => 'Wellness Record',
                 ],
             ],
             'text' => 'Wellness Record',
@@ -47,7 +47,12 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
         $encounter = $this->buildEncounter($source);
         if (is_array($encounter)) {
             $builder->addEncounter($encounter);
+            $composition['encounter'] = [
+                'reference' => 'urn:uuid:' . (string) ($encounter['id'] ?? ('encounter-' . $recordId)),
+                'display' => 'Encounter',
+            ];
         }
+
 
         $practitioner = $this->buildPractitioner($source);
         if (is_array($practitioner)) {
