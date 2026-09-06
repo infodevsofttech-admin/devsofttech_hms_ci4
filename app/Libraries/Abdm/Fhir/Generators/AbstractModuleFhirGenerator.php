@@ -63,11 +63,17 @@ abstract class AbstractModuleFhirGenerator
             ],
             'identifier' => [
                 [
+                    'type' => ['coding' => [[
+                        'system' => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                        'code' => 'MR',
+                        'display' => 'Medical record number',
+                    ]]],
                     'system' => 'https://hms.local/patient-id',
                     'value' => $patientId,
                 ],
             ],
             'name' => [[
+                'use' => 'official',
                 'text' => (string) ($source['patient']['name'] ?? 'Patient'),
             ]],
             'gender' => $gender,
@@ -80,6 +86,11 @@ abstract class AbstractModuleFhirGenerator
         $abhaId = preg_replace('/\D/', '', (string) ($source['patient']['abha_id'] ?? ''));
         if (is_string($abhaId) && $abhaId !== '') {
             $patient['identifier'][] = [
+                'type' => ['coding' => [[
+                    'system' => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                    'code' => 'SB',
+                    'display' => 'Social Beneficiary Identifier',
+                ]]],
                 'system' => 'https://healthid.ndhm.gov.in',
                 'value' => $abhaId,
             ];
@@ -95,14 +106,6 @@ abstract class AbstractModuleFhirGenerator
                 ]], 'text' => 'UHID'],
                 'system' => 'https://hms.local/uhid',
                 'value' => $uhid,
-            ];
-        }
-
-        $abhaAddress = trim((string) ($source['patient']['abha_address'] ?? ''));
-        if ($abhaAddress !== '') {
-            $patient['identifier'][] = [
-                'system' => 'https://healthid.ndhm.gov.in/abha-address',
-                'value' => $abhaAddress,
             ];
         }
 
@@ -226,40 +229,6 @@ abstract class AbstractModuleFhirGenerator
             $end = $ts !== false ? date(DATE_ATOM, $ts) : $end;
         }
 
-        $locationList = [];
-        $locDisplay = trim((string) ($enc['location_display'] ?? $enc['location'] ?? $source['location_display'] ?? $source['location'] ?? ''));
-        $ward = trim((string) ($enc['ward'] ?? $enc['ward_name'] ?? $source['ward'] ?? $source['ward_name'] ?? ''));
-        $room = trim((string) ($enc['room'] ?? $enc['room_name'] ?? $source['room'] ?? $source['room_name'] ?? ''));
-        $bed = trim((string) ($enc['bed'] ?? $enc['bed_no'] ?? $enc['bed_number'] ?? $source['bed'] ?? $source['bed_no'] ?? $source['bed_number'] ?? ''));
-
-        if ($locDisplay === '') {
-            $locParts = [];
-            if ($ward !== '') {
-                $locParts[] = 'Ward: ' . $ward;
-            }
-            if ($room !== '') {
-                $locParts[] = 'Room: ' . $room;
-            }
-            if ($bed !== '') {
-                $locParts[] = 'Bed: ' . $bed;
-            }
-            $locDisplay = implode(', ', $locParts);
-        }
-
-        if ($locDisplay !== '') {
-            $locItem = [
-                'location' => [
-                    'display' => $locDisplay,
-                ],
-                'status' => 'completed',
-                'period' => [
-                    'start' => $start,
-                    'end'   => $end,
-                ],
-            ];
-            $locationList[] = $locItem;
-        }
-
         $patientName = trim((string) ($source['patient']['name'] ?? $source['patient_name'] ?? 'Patient'));
 
         $encounterResource = [
@@ -272,6 +241,7 @@ abstract class AbstractModuleFhirGenerator
                 'status' => 'generated',
                 'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Encounter:</b> ' . $this->escapeXhtml($classDisplay) . ' ' . $this->escapeXhtml($id) . '</p></div>',
             ],
+            'identifier' => $identifiers,
             'status' => 'finished',
             'class' => [
                 'system' => 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
@@ -286,7 +256,6 @@ abstract class AbstractModuleFhirGenerator
                 'start' => $start,
                 'end' => $end,
             ],
-            'identifier' => $identifiers,
             'hospitalization' => [
                 'dischargeDisposition' => [
                     'coding' => [[
@@ -298,10 +267,6 @@ abstract class AbstractModuleFhirGenerator
                 ]
             ],
         ];
-
-        if (! empty($locationList)) {
-            $encounterResource['location'] = $locationList;
-        }
 
         return $encounterResource;
     }
@@ -342,10 +307,18 @@ abstract class AbstractModuleFhirGenerator
                 'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Practitioner:</b> ' . $this->escapeXhtml($name) . '</p></div>',
             ],
             'identifier' => [[
+                'type' => ['coding' => [[
+                    'system' => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                    'code' => 'MD',
+                    'display' => 'Medical License number',
+                ]]],
                 'system' => 'https://doctor.ndhm.gov.in',
                 'value' => $hprId,
             ]],
-            'name' => [['text' => $name]],
+            'name' => [[
+                'use' => 'official',
+                'text' => $name,
+            ]],
         ];
     }
 
@@ -378,6 +351,11 @@ abstract class AbstractModuleFhirGenerator
             ],
             'name' => $name,
             'identifier' => [[
+                'type' => ['coding' => [[
+                    'system' => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                    'code' => 'PRN',
+                    'display' => 'Provider number',
+                ]]],
                 'system' => 'https://facility.ndhm.gov.in',
                 'value' => $id,
             ]],
@@ -395,7 +373,7 @@ abstract class AbstractModuleFhirGenerator
         return ! in_array($v, ['0', 'NA', 'N/A', 'N / A', 'N/ A', 'NONE', 'NIL', 'NULL', 'UNDEFINED', 'UNSPECIFIED'], true);
     }
 
-    /** Cleans HTML tags, entities, and line breaks into clean plain text for FHIR text fields. */
+    /** Cleans HTML tags, entities, line breaks and non-ASCII text into clean single-line plain text for FHIR text fields. */
     protected function cleanPlainText(string $text): string
     {
         $text = trim($text);
@@ -403,15 +381,21 @@ abstract class AbstractModuleFhirGenerator
             return '';
         }
 
-        $text = preg_replace('/<\/(p|div|h[1-6]|li|tr)>/i', "\n", $text);
-        $text = preg_replace('/<br\s*\/?>/i', "\n", $text);
+        $text = preg_replace('/<\/(p|div|h[1-6]|li|tr)>/i', " ", $text);
+        $text = preg_replace('/<br\s*\/?>/i', " ", $text);
         $text = strip_tags($text);
         $text = html_entity_decode($text, ENT_QUOTES | ENT_HTML5, 'UTF-8');
 
-        $lines = array_map('trim', explode("\n", $text));
-        $lines = array_filter($lines, static fn($l) => $l !== '');
+        // Remove non-ASCII characters (such as regional language scripts/Devanagari)
+        $text = preg_replace('/[^\x20-\x7E]/', ' ', $text);
 
-        return trim(implode("\n", $lines));
+        // Normalize spaces and empty pipe artifacts
+        $text = preg_replace('/\|\s*\|+/', '|', $text);
+        $text = preg_replace('/\s*\|\s*/', ' | ', $text);
+        $text = preg_replace('/\s+/', ' ', $text);
+        $text = trim($text, " \t\n\r\0\x0B|:.-");
+
+        return $text;
     }
 
     /**

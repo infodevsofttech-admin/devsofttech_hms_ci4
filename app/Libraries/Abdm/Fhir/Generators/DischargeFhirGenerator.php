@@ -26,7 +26,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         $builder = new \App\Libraries\Abdm\Fhir\FhirDocumentBuilder();
         $builder
             ->buildBundleMeta($bundleIdentifier, $timestamp)
-            ->buildComposition($this->buildBaseComposition($source, 'IPD Discharge Summary', '18842-5', 'Discharge summary'))
+            ->buildComposition($this->buildBaseComposition($source, 'Discharge Summary', '18842-5', 'Discharge summary'))
             ->updateComposition([
                 'meta' => [
                     'versionId' => '1',
@@ -35,6 +35,8 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                         'https://nrces.in/ndhm/fhir/r4/StructureDefinition/DischargeSummaryRecord',
                     ],
                 ],
+                // NRCES DischargeSummaryRecord profile requires SNOMED-only coding for Composition.type
+                // Adding LOINC as a second coding causes PHR parsers to reject the bundle
                 'type' => ['coding' => [
                     [
                         'system' => 'http://snomed.info/sct',
@@ -94,26 +96,15 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
 
         $diagnosesList = (array) ($source['diagnoses'] ?? $source['conditions'] ?? []);
         $chiefComplaintsList = (array) ($source['chief_complaints'] ?? []);
-        if ($diagnosesList === [] && $chiefComplaintsList !== []) {
-            $diagnosesList = $chiefComplaintsList;
-        }
-
-        $encounterDiagnoses = [];
 
         $conditionGroups = [
             [
-                'items'            => $chiefComplaintsList,
-                'prefix'           => 'discharge-chief-complaint-',
-                'category_code'    => 'problem-list-item',
-                'category_display' => 'Problem List Item',
-                'is_encounter_diagnosis' => false,
+                'items'  => $chiefComplaintsList,
+                'prefix' => 'discharge-chief-complaint-',
             ],
             [
-                'items'            => $diagnosesList,
-                'prefix'           => 'discharge-diagnosis-',
-                'category_code'    => 'encounter-diagnosis',
-                'category_display' => 'Encounter Diagnosis',
-                'is_encounter_diagnosis' => true,
+                'items'  => $diagnosesList,
+                'prefix' => 'discharge-diagnosis-',
             ],
         ];
         foreach ($conditionGroups as $group) {
@@ -135,19 +126,6 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 }
                 
                 $conditionId = $group['prefix'] . $recordId . '-' . $idx;
-                
-                if ($group['is_encounter_diagnosis']) {
-                    $encounterDiagnoses[] = [
-                        'condition' => ['reference' => 'urn:uuid:' . $conditionId, 'display' => $text],
-                        'use' => [
-                            'coding' => [[
-                                'system' => 'http://terminology.hl7.org/CodeSystem/diagnosis-role',
-                                'code' => 'DD',
-                                'display' => 'Discharge diagnosis'
-                            ]]
-                        ]
-                    ];
-                }
 
                 $builder->addCondition([
                     'resourceType' => 'Condition',
@@ -155,39 +133,26 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition']],
                     'text' => [
                         'status' => 'generated',
-                        'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>' . htmlspecialchars($group['category_display']) . ':</b> ' . htmlspecialchars($text) . '</p></div>',
+                        'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Condition:</b> ' . htmlspecialchars($text) . '</p></div>',
                     ],
                     'clinicalStatus' => ['coding' => [[
                         'system' => 'http://terminology.hl7.org/CodeSystem/condition-clinical',
                         'code' => 'active',
                         'display' => 'Active',
                     ]]],
-                    'verificationStatus' => ['coding' => [[
-                        'system' => 'http://terminology.hl7.org/CodeSystem/condition-ver-status',
-                        'code' => 'confirmed',
-                        'display' => 'Confirmed',
-                    ]]],
-                    'category' => [['coding' => [[
-                        'system' => 'http://terminology.hl7.org/CodeSystem/condition-category',
-                        'code' => $group['category_code'],
-                        'display' => $group['category_display'],
-                    ]]]],
                     'code' => ['coding' => $coding, 'text' => $text],
                     'subject' => ['reference' => $patientRef, 'display' => (string) ($source['patient']['name'] ?? $source['patient_name'] ?? 'Patient')],
-                    'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
-                    'recordedDate' => (string) ($cond['recorded_at'] ?? $timestamp),
+                    'recordedDate' => (string) ($cond['recorded_date'] ?? $source['admission_date'] ?? $timestamp),
                 ]);
             }
         }
         
         if (is_array($encounter)) {
-            if ($encounterDiagnoses !== []) {
-                $encounter['diagnosis'] = $encounterDiagnoses;
-            }
             $builder->addEncounter($encounter);
         }
 
-        foreach ((array) ($source['procedures'] ?? []) as $idx => $proc) {
+        // ── Procedures ─────────────────────────────────────────────────────────
+        foreach ((array) ($source['ui_surgeries'] ?? $source['procedures'] ?? []) as $idx => $proc) {
             $text = trim((string) ($proc['text'] ?? $proc['name'] ?? ''));
             if ($text === '') {
                 continue;
@@ -225,12 +190,13 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     'text' => $text,
                 ],
                 'subject' => ['reference' => $patientRef, 'display' => (string) ($source['patient']['name'] ?? $source['patient_name'] ?? 'Patient')],
-                'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
                 'performedDateTime' => (string) ($proc['performed_at'] ?? $timestamp),
             ]);
         }
 
-        foreach ((array) ($source['medications'] ?? []) as $idx => $med) {
+
+        // ── Discharge Medications ───────────────────────────────────────────────
+        foreach ((array) ($source['ui_discharge_medicine'] ?? $source['medications'] ?? []) as $idx => $med) {
             $name = trim((string) ($med['name'] ?? ''));
             if (! $this->isMeaningfulValue($name)) {
                 continue;
@@ -248,7 +214,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 $medCoding[] = [
                     'system'  => 'http://snomed.info/sct',
                     'code'    => '105904009', // Type of drug
-                    'display' => 'Type of drug',
+                    'display' => $name,
                 ];
             }
 
@@ -269,12 +235,12 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     [
                         'coding' => [
                             [
-                                'system' => 'http://terminology.hl7.org/CodeSystem/medicationrequest-category',
-                                'code' => 'community',
-                                'display' => 'Discharge Medication',
+                                'system'  => 'http://terminology.hl7.org/CodeSystem/medicationrequest-category',
+                                'code'    => 'discharge',
+                                'display' => 'Discharge',
                             ],
                         ],
-                        'text' => 'Discharge Medication',
+                        'text' => 'Discharge',
                     ],
                 ],
                 'subject' => ['reference' => $patientRef, 'display' => (string) ($source['patient']['name'] ?? $source['patient_name'] ?? 'Patient')],
@@ -284,10 +250,6 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     'text'   => $name,
                 ],
             ];
-
-            if ($encounterRef) {
-                $medResource['encounter'] = ['reference' => $encounterRef];
-            }
 
             if (is_array($practitioner)) {
                 $medResource['requester'] = [
@@ -300,171 +262,11 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 $medResource['dosageInstruction'] = $structuredDosage['dosageInstruction'];
             }
 
-            if (!empty($structuredDosage['dispenseRequest'])) {
-                $medResource['dispenseRequest'] = $structuredDosage['dispenseRequest'];
-            }
-
             $builder->addMedicationRequest($medResource);
         }
 
-        foreach ((array) ($source['observations'] ?? []) as $idx => $obs) {
-            $text = trim((string) ($obs['text'] ?? ''));
-            $value = trim((string) ($obs['value'] ?? ''));
-            if (! $this->isMeaningfulValue($text) || ! $this->isMeaningfulValue($value)) {
-                continue;
-            }
-
-            $catText = trim((string) ($obs['category'] ?? $obs['category_text'] ?? $obs['stage'] ?? $obs['timing'] ?? ''));
-            $isAdm = (stripos($catText, 'Admission') !== false || stripos($text, 'Admission') !== false);
-            $isDis = (stripos($catText, 'Discharge') !== false || stripos($text, 'Discharge') !== false);
-            $obsCategoryDisplay = $isAdm ? 'Condition on Admission Time' : ($isDis ? 'Condition on Discharge Time' : 'Vital Signs');
-            $coding = [];
-            $loincCode = trim((string) ($obs['loinc_code'] ?? ''));
-            $loincDisplay = trim((string) ($obs['loinc_display'] ?? ''));
-            if ($loincCode === '') {
-                $vitalLoinc = $this->resolveVitalSignLoinc($text);
-                if ($vitalLoinc['code'] !== '') {
-                    $loincCode = $vitalLoinc['code'];
-                    $loincDisplay = $vitalLoinc['display'];
-                }
-            }
-
-            $isVital = ($loincCode !== '' && $loincCode !== '108252007');
-            $obsCategoryCode    = $isVital ? 'vital-signs' : 'exam';
-            $obsCategoryCanonicalDisplay = $isVital ? 'Vital Signs' : 'Exam';
-            $obsCategorySystem  = 'http://terminology.hl7.org/CodeSystem/observation-category';
-
-            if ($loincCode !== '') {
-                $coding[] = [
-                    'system'  => 'http://loinc.org',
-                    'code'    => $loincCode,
-                    'display' => $loincDisplay !== '' ? $loincDisplay : $text,
-                ];
-            } else {
-                $fallback = $this->resolvePhysicalExamSnomedCode($text);
-                $coding[] = [
-                    'system'  => 'http://snomed.info/sct',
-                    'code'    => $fallback['code'],
-                    'display' => $fallback['display'],
-                ];
-            }
-
-            $obsResource = [
-                'resourceType' => 'Observation',
-                'id' => 'discharge-observation-' . $recordId . '-' . $idx,
-                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation']],
-                'text' => [
-                    'status' => 'generated',
-                    'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>' . htmlspecialchars($text) . ':</b> ' . htmlspecialchars($value) . '</p></div>',
-                ],
-                'status' => 'final',
-                'category' => [[
-                    'text' => $obsCategoryDisplay,
-                    'coding' => [[
-                        'system'  => $obsCategorySystem,
-                        'code'    => $obsCategoryCode,
-                        'display' => $obsCategoryCanonicalDisplay,
-                    ]],
-                ]],
-                'code' => [
-                    'coding' => $coding,
-                    'text' => $text,
-                ],
-                'subject' => ['reference' => $patientRef, 'display' => (string) ($source['patient']['name'] ?? $source['patient_name'] ?? 'Patient')],
-                'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
-                'effectiveDateTime' => (string) ($obs['effective_at'] ?? $timestamp),
-            ];
-
-            if ($loincCode === '85354-9' || str_contains(strtoupper($text), 'BP') || str_contains(strtoupper($text), 'BLOOD PRESSURE')) {
-                $loincCode = '85354-9';
-                $loincDisplay = 'Blood pressure panel with all children optional';
-                $coding = [[
-                    'system'  => 'http://loinc.org',
-                    'code'    => '85354-9',
-                    'display' => 'Blood pressure panel with all children optional',
-                ]];
-                $obsResource['code'] = [
-                    'coding' => $coding,
-                    'text'   => $text,
-                ];
-
-                if (preg_match('/(\d+(?:\.\d+)?)\s*[\/\-]\s*(\d+(?:\.\d+)?)/', $value, $bpMatches)) {
-                    $systolic = (float) $bpMatches[1];
-                    $diastolic = (float) $bpMatches[2];
-                    $obsResource['component'] = [
-                        [
-                            'code' => [
-                                'coding' => [[
-                                    'system'  => 'http://loinc.org',
-                                    'code'    => '8480-6',
-                                    'display' => 'Systolic blood pressure',
-                                ]],
-                                'text' => 'Systolic blood pressure',
-                            ],
-                            'valueQuantity' => [
-                                'value'  => $systolic,
-                                'unit'   => 'mmHg',
-                                'system' => 'http://unitsofmeasure.org',
-                                'code'   => 'mm[Hg]',
-                            ],
-                        ],
-                        [
-                            'code' => [
-                                'coding' => [[
-                                    'system'  => 'http://loinc.org',
-                                    'code'    => '8462-4',
-                                    'display' => 'Diastolic blood pressure',
-                                ]],
-                                'text' => 'Diastolic blood pressure',
-                            ],
-                            'valueQuantity' => [
-                                'value'  => $diastolic,
-                                'unit'   => 'mmHg',
-                                'system' => 'http://unitsofmeasure.org',
-                                'code'   => 'mm[Hg]',
-                            ],
-                        ],
-                    ];
-                } elseif (is_numeric($value)) {
-                    $systolic = (float) $value;
-                    $obsResource['component'] = [
-                        [
-                            'code' => [
-                                'coding' => [[
-                                    'system'  => 'http://loinc.org',
-                                    'code'    => '8480-6',
-                                    'display' => 'Systolic blood pressure',
-                                ]],
-                                'text' => 'Systolic blood pressure',
-                            ],
-                            'valueQuantity' => [
-                                'value'  => $systolic,
-                                'unit'   => 'mmHg',
-                                'system' => 'http://unitsofmeasure.org',
-                                'code'   => 'mm[Hg]',
-                            ],
-                        ],
-                    ];
-                } else {
-                    $obsResource['valueString'] = $value;
-                }
-            } elseif (is_numeric($value)) {
-                $unitInfo = $this->getVitalSignUnitInfo($text, trim((string) ($obs['unit'] ?? '')));
-                $vq = ['value' => (float) $value];
-                if ($unitInfo['unit'] !== '') {
-                    $vq['unit']   = $unitInfo['unit'];
-                    $vq['system'] = 'http://unitsofmeasure.org';
-                    $vq['code']   = $unitInfo['code'] !== '' ? $unitInfo['code'] : $unitInfo['unit'];
-                }
-                $obsResource['valueQuantity'] = $vq;
-            } else {
-                $obsResource['valueString'] = $value;
-            }
-
-            $builder->addObservation($obsResource);
-        }
-
-        foreach ((array) ($source['investigations'] ?? []) as $idx => $inv) {
+        // ── Investigations ─────────────────────────────────────────────────────
+        foreach ((array) ($source['ui_investigations'] ?? $source['investigations'] ?? []) as $idx => $inv) {
             $text = trim((string) ($inv['text'] ?? ''));
             if ($text === '') {
                 continue;
@@ -511,7 +313,6 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Investigation:</b> ' . htmlspecialchars($text) . ($resultValue !== '' ? (': ' . htmlspecialchars($resultValue)) : '') . '</p></div>',
                 ],
                 'status' => 'final',
-                // NRCES Observation profile requires at least one category.
                 'category' => [[
                     'coding' => [[
                         'system'  => 'http://terminology.hl7.org/CodeSystem/observation-category',
@@ -525,7 +326,6 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     'text' => $text,
                 ],
                 'subject' => ['reference' => $patientRef, 'display' => (string) ($source['patient']['name'] ?? $source['patient_name'] ?? 'Patient')],
-                'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
                 'effectiveDateTime' => (string) ($inv['reported_at'] ?? $inv['authored_on'] ?? $timestamp),
             ];
 
@@ -560,12 +360,12 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     'text' => $text,
                 ],
                 'subject' => ['reference' => $patientRef, 'display' => (string) ($source['patient']['name'] ?? $source['patient_name'] ?? 'Patient')],
-                'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
                 'issued' => (string) ($inv['reported_at'] ?? $inv['authored_on'] ?? $timestamp),
                 'result' => [['reference' => 'urn:uuid:' . $observationId, 'display' => $text]],
             ]);
         }
 
+        // ── Allergies ──────────────────────────────────────────────────────────
         foreach ((array) ($source['allergies'] ?? []) as $idx => $alg) {
             $text = trim((string) ($alg['text'] ?? ''));
             if ($text === '') {
@@ -606,7 +406,9 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             ]);
         }
 
-        foreach ((array) ($source['care_plans'] ?? []) as $idx => $cp) {
+
+        // ── Care Plans / Discharge Advice ──────────────────────────────────────
+        foreach ((array) ($source['ui_discharge_summary'] ?? $source['care_plans'] ?? []) as $idx => $cp) {
             $title = $this->cleanPlainText((string) ($cp['title'] ?? 'Discharge Advice'));
             $description = $this->cleanPlainText((string) ($cp['description'] ?? ''));
             if (! $this->isMeaningfulValue($description)) {
@@ -626,50 +428,22 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 'title' => $title !== '' ? $title : 'Discharge Advice',
                 'description' => $description,
                 'subject' => ['reference' => $patientRef, 'display' => (string) ($source['patient']['name'] ?? $source['patient_name'] ?? 'Patient')],
-                'created' => (string) ($cp['created_at'] ?? $timestamp),
                 'category' => [
                     [
                         'coding' => [
                             [
                                 'system' => 'http://snomed.info/sct',
-                                'code' => '736271009',
-                                'display' => 'Outpatient care plan'
+                                'code' => '734163000',
+                                'display' => 'Care plan'
                             ]
                         ]
                     ]
                 ],
-                'activity' => [
-                    [
-                        'detail' => [
-                            'kind' => 'ServiceRequest',
-                            'code' => [
-                                'coding' => [
-                                    [
-                                        'system' => 'http://snomed.info/sct',
-                                        'code' => '385676005',
-                                        'display' => 'General advice and education'
-                                    ]
-                                ]
-                            ],
-                            'status' => 'scheduled',
-                            'description' => $description,
-                        ]
-                    ]
-                ]
             ];
-
-            if ($encounterRef) {
-                $carePlanResource['encounter'] = ['reference' => $encounterRef];
-            }
-            if (is_array($practitioner)) {
-                $carePlanResource['author'] = [
-                    'reference' => 'urn:uuid:' . (string) $practitioner['id'],
-                    'display' => (string) ($practitioner['name'][0]['text'] ?? ''),
-                ];
-            }
 
             $builder->addCarePlan($carePlanResource);
         }
+
 
         $documentsList = (array) ($source['documents'] ?? []);
         if (empty($documentsList)) {
@@ -685,7 +459,6 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $docTitle = trim((string) ($document['title'] ?? 'Clinical document'));
             $snomedCode = trim((string) ($document['snomed_code'] ?? ''));
             $snomedDisplay = trim((string) ($document['snomed_display'] ?? ''));
-            $loincCode = trim((string) ($document['loinc_code'] ?? ''));
 
             $typeCoding = [];
             if (stripos($docTitle, 'Bill') !== false || stripos($docTitle, 'Invoice') !== false) {
@@ -701,10 +474,6 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     'display' => $snomedDisplay !== '' ? $snomedDisplay : 'Discharge summary',
                 ];
             }
-
-            $rawBytes = base64_decode($data);
-            $fileSize = is_string($rawBytes) ? strlen($rawBytes) : 0;
-            $sha1Hash = is_string($rawBytes) && $rawBytes !== '' ? base64_encode(sha1($rawBytes, true)) : '';
 
             $docRef = [
                 'resourceType' => 'DocumentReference',
@@ -724,46 +493,19 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     'reference' => $patientRef,
                     'display' => (string) ($source['patient']['name'] ?? $source['patient_name'] ?? 'Patient'),
                 ],
-                'date' => (string) ($document['created_at'] ?? $timestamp),
-                'author' => is_array($practitioner) ? [[
-                    'reference' => 'urn:uuid:' . (string) $practitioner['id'],
-                    'display' => (string) ($practitioner['name'][0]['text'] ?? ''),
-                ]] : null,
-                'custodian' => is_array($organization) ? [
-                    'reference' => 'urn:uuid:' . (string) $organization['id'],
-                    'display' => (string) ($organization['name'] ?? ''),
-                ] : null,
                 'description' => $docTitle,
                 'content' => [[
                     'attachment' => [
                         'contentType' => (string) ($document['content_type'] ?? 'application/pdf'),
                         'language' => 'en-IN',
                         'data' => $data,
-                        'size' => $fileSize,
                         'title' => $docTitle,
                         'creation' => (string) ($document['created_at'] ?? $timestamp),
                     ],
                 ]],
             ];
 
-            if ($sha1Hash !== '') {
-                $docRef['content'][0]['attachment']['hash'] = $sha1Hash;
-            }
-
             $builder->addDocumentReference($docRef);
-        }
-
-        $rawObservations = (array) ($source['ui_physical_exam'] ?? $source['observations'] ?? []);
-        $admissionObsIndexed = [];
-        $dischargeObsIndexed = [];
-        foreach ($rawObservations as $idx => $obs) {
-            $cat = trim((string) ($obs['category'] ?? $obs['category_text'] ?? $obs['stage'] ?? $obs['timing'] ?? ''));
-            $txt = trim((string) ($obs['text'] ?? ''));
-            if (stripos($cat, 'Admission') !== false || stripos($txt, 'Admission') !== false) {
-                $admissionObsIndexed[$idx] = $obs;
-            } elseif (stripos($cat, 'Discharge') !== false || stripos($txt, 'Discharge') !== false) {
-                $dischargeObsIndexed[$idx] = $obs;
-            }
         }
 
         $chiefComplaintsList = (array) ($source['ui_complaints'] ?? $source['chief_complaints'] ?? []);
@@ -771,15 +513,17 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         
         $diagnosesList = (array) ($source['ui_final_diagnosis'] ?? $source['diagnoses'] ?? $source['conditions'] ?? []);
         $clinicalHistoryNarrative = trim((string) ($source['ui_clinical_history'] ?? ''));
-        
-        $admissionNarrative = trim((string) ($source['ui_admission_discharge'] ?? $source['admission_discharge_narrative'] ?? ''));
 
-        $sectionDefinitions = [
-            // Chief complaints
-            ['title' => 'Chief complaints', 'code' => '422843007', 'display' => 'Chief complaint section', 'prefix' => 'discharge-chief-complaint-', 'items' => $chiefComplaintsList, 'narrative' => $complaintsNarrative],
-            // Discharge Diagnosis
-            ['title' => 'Discharge Diagnosis', 'code' => '397659008', 'display' => 'Discharge diagnosis', 'prefix' => 'discharge-diagnosis-', 'items' => $diagnosesList, 'narrative' => $clinicalHistoryNarrative],
-        ];
+        $sectionDefinitions = [];
+        // Chief complaints
+        if (! empty($chiefComplaintsList) || $complaintsNarrative !== '') {
+            $sectionDefinitions[] = ['title' => 'Chief complaints', 'code' => '422843007', 'display' => 'Chief complaint section', 'prefix' => 'discharge-chief-complaint-', 'items' => $chiefComplaintsList, 'narrative' => $complaintsNarrative];
+        }
+
+        // Discharge Diagnosis (Medical History)
+        if (! empty($diagnosesList) || $clinicalHistoryNarrative !== '') {
+            $sectionDefinitions[] = ['title' => 'Medical History', 'code' => '1003642006', 'display' => 'Past medical history section', 'prefix' => 'discharge-diagnosis-', 'items' => $diagnosesList, 'narrative' => $clinicalHistoryNarrative];
+        }
 
         // Surgery / Procedure
         $surgeries = (array) ($source['ui_surgeries'] ?? $source['procedures'] ?? []);
@@ -793,50 +537,22 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $sectionDefinitions[] = ['title' => 'Medications', 'code' => '1003606003', 'display' => 'Medication history section', 'prefix' => 'discharge-medication-', 'items' => $meds];
         }
 
-        // Physical Examinations on Admission
-        if (! empty($admissionObsIndexed)) {
-            $sectionDefinitions[] = ['title' => 'Condition on Admission Time', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items_indexed' => $admissionObsIndexed];
-        }
-
-        // Physical Examinations on Discharge
-        if (! empty($dischargeObsIndexed)) {
-            $sectionDefinitions[] = ['title' => 'Condition on Discharge Time', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items_indexed' => $dischargeObsIndexed];
-        }
-
-        // Additional Observations not captured in Admission/Discharge
-        $otherObs = array_diff_key($rawObservations, $admissionObsIndexed, $dischargeObsIndexed);
-        if (! empty($otherObs)) {
-             $sectionDefinitions[] = ['title' => 'Other Physical examination', 'code' => '425044008', 'display' => 'Physical exam section', 'prefix' => 'discharge-observation-', 'items_indexed' => $otherObs];
-        }
-
         // Investigations
         $investigations = (array) ($source['ui_investigations'] ?? $source['investigations'] ?? []);
         $invNarrative = trim((string) ($source['ui_summary_investigation'] ?? ''));
         if (! empty($investigations) || $invNarrative !== '') {
-            $sectionDefinitions[] = ['title' => 'Clinical Investigation Reports', 'code' => '721981007', 'display' => 'Diagnostic studies report', 'prefix' => 'discharge-investigation-', 'items' => $investigations, 'narrative' => $invNarrative];
+            $sectionDefinitions[] = ['title' => 'Investigations', 'code' => '721981007', 'display' => 'Diagnostic studies report', 'prefix' => 'discharge-investigation-', 'items' => $investigations, 'narrative' => $invNarrative];
         }
-        
-        // Admission / Discharge Details
-        if ($admissionNarrative !== '') {
-            $admItems = $encounterRef ? [['name' => 'Admission and Discharge Details', 'id' => 'encounter-' . $recordId]] : [];
-            $sectionDefinitions[] = ['title' => 'Admission / Discharge Information', 'code' => '422838006', 'display' => 'Admission details', 'prefix' => 'discharge-admission-', 'items' => $admItems, 'narrative' => $admissionNarrative];
-        }
-        
-        // Course / Treatment
-        $course = (array) ($source['ui_course_treatment'] ?? []);
-        if (! empty($course)) {
-            $sectionDefinitions[] = ['title' => 'Course / Treatment in the hospital', 'code' => '734163000', 'display' => 'Care plan', 'prefix' => 'discharge-course-', 'items' => $course];
-        }
-        
+
         // Care plans / Discharge advice
         $carePlans = (array) ($source['ui_discharge_summary'] ?? $source['care_plans'] ?? []);
         if (! empty($carePlans)) {
-            $sectionDefinitions[] = ['title' => 'Care plan', 'code' => '734163000', 'display' => 'Care plan', 'prefix' => 'discharge-careplan-', 'items' => $carePlans];
+            $sectionDefinitions[] = ['title' => 'Care Plan', 'code' => '734163000', 'display' => 'Care plan', 'prefix' => 'discharge-careplan-', 'items' => $carePlans];
         }
-        
+
         // Document Reference
         if (! empty($documentsList)) {
-            $sectionDefinitions[] = ['title' => 'Document reference', 'code' => '373942005', 'display' => 'Discharge summary', 'prefix' => 'discharge-document-', 'items' => $documentsList];
+            $sectionDefinitions[] = ['title' => 'Document Reference', 'code' => '373942005', 'display' => 'Discharge summary', 'prefix' => 'discharge-document-', 'items' => $documentsList];
         }
 
         // Allergies
@@ -848,7 +564,6 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         $sections = [];
         foreach ($sectionDefinitions as $definition) {
             $references = [];
-            $narrativeParts = [];
             $items = isset($definition['items_indexed']) ? $definition['items_indexed'] : (array) ($definition['items'] ?? []);
             foreach ($items as $idx => $item) {
                 $itemDisplay = $this->cleanPlainText((string) ($item['name'] ?? $item['text'] ?? $item['title'] ?? $definition['title']));
@@ -859,17 +574,9 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     'reference' => 'urn:uuid:' . $definition['prefix'] . $recordId . '-' . $idx,
                     'display' => $itemDisplay,
                 ];
-                $narrative = $this->sectionItemNarrative((array) $item);
-                if ($narrative !== '') {
-                    $narrativeParts[] = $narrative;
-                }
             }
-            $sectionNarrative = trim((string) ($definition['narrative'] ?? ''));
-            if ($references === [] && $sectionNarrative === '') {
+            if ($references === []) {
                 continue;
-            }
-            if ($sectionNarrative !== '') {
-                array_unshift($narrativeParts, $sectionNarrative);
             }
             $sec = [
                 'title' => $definition['title'],
@@ -878,18 +585,8 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     'code' => $definition['code'],
                     'display' => $definition['display'],
                 ]]],
+                'entry' => $references,
             ];
-            if ($references !== []) {
-                $sec['entry'] = $references;
-            }
-            if ($narrativeParts !== []) {
-                $sec['text'] = [
-                    'status' => 'generated',
-                    'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><ul><li>'
-                        . implode('</li><li>', array_map('htmlspecialchars', $narrativeParts))
-                        . '</li></ul></div>',
-                ];
-            }
             $sections[] = $sec;
         }
 
@@ -1659,9 +1356,9 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         }
 
         // Route detection
-        $routeCode = '260548002';
-        $routeDisplay = 'Oral route';
-        $routeText = 'Oral';
+        $routeCode = '26643006';
+        $routeDisplay = 'Oral Route';
+        $routeText = 'Oral Route';
 
         if (preg_match('/\b(INJ|IV|INTRAVENOUS|INFUSION)\b/', $raw)) {
             $routeCode = '47625008';
@@ -1683,22 +1380,17 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
 
         // Dose unit detection
         $doseUnit = 'Tablet';
-        $doseUnitCode = 'tbl';
         $doseValue = 1;
 
         if (preg_match('/\b(SACHET|POWDER)\b/', $raw)) {
             $doseUnit = 'Sachet';
-            $doseUnitCode = 'sachet';
         } elseif (preg_match('/\b(SYRUP|SUSPENSION|ML)\b/', $raw)) {
             $doseUnit = 'mL';
-            $doseUnitCode = 'mL';
             $doseValue = 5;
         } elseif (preg_match('/\b(CAPSULE|CAP)\b/', $raw)) {
             $doseUnit = 'Capsule';
-            $doseUnitCode = 'capsule';
         } elseif (preg_match('/\b(DROPS?)\b/', $raw)) {
             $doseUnit = 'drops';
-            $doseUnitCode = '[drp]';
             $doseValue = 2;
         }
 
@@ -1708,23 +1400,43 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $durationDays = (int) $dm[1];
         }
 
+        $foodSuffix = '';
+        if (preg_match('/\b(EMPTY STOMACH|BEFORE FOOD|BEFORE MEALS?|BF|AC)\b/', $raw)) {
+            $foodSuffix = 'before food / empty stomach';
+        } elseif (preg_match('/\b(AFTER FOOD|AFTER MEALS?|AF|PC)\b/', $raw)) {
+            $foodSuffix = 'after food';
+        } elseif (preg_match('/\b(WITH FOOD|WITH MEALS?)\b/', $raw)) {
+            $foodSuffix = 'with food';
+        }
+
+        $instructionText = 'Take ' . $doseValue . ' ' . $doseUnit . ' ' . $timingDisplay;
+        if ($foodSuffix !== '') {
+            $instructionText .= ' ' . $foodSuffix;
+        }
+        if ($durationDays > 0) {
+            $instructionText .= ' for ' . $durationDays . ' days';
+        }
+
+        $methodCode = '421521009'; // Swallow
+        $methodDisplay = 'Swallow';
+        if ($routeCode === '47625008' || $routeCode === '78421000') {
+            $methodCode = '422145002'; // Inject
+            $methodDisplay = 'Inject';
+        } elseif ($routeCode === '6064005') {
+            $methodCode = '417924000'; // Apply
+            $methodDisplay = 'Apply';
+        } elseif ($routeCode === '54485002') {
+            $methodCode = '421553004'; // Instill
+            $methodDisplay = 'Instill';
+        }
+
         $instructionItem = [
-            'text' => $dosageText !== '' ? $dosageText : ($doseValue . ' ' . $doseUnit . ' ' . $timingDisplay . ' for ' . $durationDays . ' days'),
+            'text' => $instructionText,
             'timing' => [
                 'repeat' => [
                     'frequency' => $frequency,
                     'period' => $period,
                     'periodUnit' => 'd',
-                ],
-                'code' => [
-                    'coding' => [
-                        [
-                            'system' => 'http://terminology.hl7.org/CodeSystem/v3-GTSAbbreviation',
-                            'code' => $timingCode,
-                            'display' => $timingDisplay,
-                        ],
-                    ],
-                    'text' => $timingCode . ' (' . $timingDisplay . ')',
                 ],
             ],
             'route' => [
@@ -1735,24 +1447,13 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                         'display' => $routeDisplay,
                     ],
                 ],
-                'text' => $routeText,
             ],
-            'doseAndRate' => [
-                [
-                    'type' => [
-                        'coding' => [
-                            [
-                                'system' => 'http://terminology.hl7.org/CodeSystem/dose-rate-type',
-                                'code' => 'ordered',
-                                'display' => 'Ordered',
-                            ],
-                        ],
-                    ],
-                    'doseQuantity' => [
-                        'value' => $doseValue,
-                        'unit' => $doseUnit,
-                        'system' => 'http://unitsofmeasure.org',
-                        'code' => $doseUnitCode,
+            'method' => [
+                'coding' => [
+                    [
+                        'system' => 'http://snomed.info/sct',
+                        'code' => $methodCode,
+                        'display' => $methodDisplay,
                     ],
                 ],
             ],
@@ -1764,14 +1465,6 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
 
         return [
             'dosageInstruction' => [$instructionItem],
-            'dispenseRequest' => [
-                'expectedSupplyDuration' => [
-                    'value' => $durationDays,
-                    'unit' => 'days',
-                    'system' => 'http://unitsofmeasure.org',
-                    'code' => 'd',
-                ],
-            ],
         ];
     }
 }

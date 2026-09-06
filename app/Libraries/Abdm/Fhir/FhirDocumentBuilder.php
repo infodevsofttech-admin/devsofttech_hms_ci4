@@ -22,6 +22,8 @@ class FhirDocumentBuilder
             'resourceType' => 'Bundle',
             'id' => $identifierValue,
             'meta' => [
+                'versionId' => '1',
+                'lastUpdated' => $timestamp,
                 'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle'],
                 'security' => [[
                     'system' => 'http://terminology.hl7.org/CodeSystem/v3-Confidentiality',

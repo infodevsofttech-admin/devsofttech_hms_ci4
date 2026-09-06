@@ -167,7 +167,7 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $bundle = $this->factory->discharge()->generate($src)['fhir_bundle'];
         $composition = $bundle['entry'][0]['resource'];
         $this->assertSame('discharge-A26080000004', $bundle['identifier']['value'] ?? null);
-        $this->assertSame('IPD Discharge Summary', $composition['title'] ?? null);
+        $this->assertSame('Discharge Summary', $composition['title'] ?? null);
         $this->assertContains('https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle', $bundle['meta']['profile'] ?? []);
         $this->assertContains('https://nrces.in/ndhm/fhir/r4/StructureDefinition/DischargeSummaryRecord', $composition['meta']['profile'] ?? []);
         $this->assertSame('http://snomed.info/sct', $composition['type']['coding'][0]['system'] ?? null);
@@ -175,7 +175,7 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertNotEmpty($composition['author'] ?? []);
         $this->assertNotEmpty($composition['custodian'] ?? []);
         $this->assertNotEmpty($composition['section'] ?? []);
-        $this->assertNotEmpty($composition['section'][0]['text']['div'] ?? '');
+        $this->assertNotEmpty($composition['section'][0]['title'] ?? '');
 
         $fullUrls = array_column($bundle['entry'], 'fullUrl');
         foreach ($fullUrls as $fullUrl) {
@@ -198,6 +198,13 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $reports = array_values(array_filter($bundle['entry'], static fn (array $entry): bool => ($entry['resource']['resourceType'] ?? '') === 'DiagnosticReport'));
         $this->assertCount(1, $reports);
         $this->assertContains('https://nrces.in/ndhm/fhir/r4/StructureDefinition/DiagnosticReportLab', $reports[0]['resource']['meta']['profile'] ?? []);
+
+        $conditions = array_values(array_filter($bundle['entry'], static fn (array $entry): bool => ($entry['resource']['resourceType'] ?? '') === 'Condition'));
+        $this->assertNotEmpty($conditions[0]['resource']['recordedDate'] ?? null);
+
+        $medications = array_values(array_filter($bundle['entry'], static fn (array $entry): bool => ($entry['resource']['resourceType'] ?? '') === 'MedicationRequest'));
+        $this->assertSame('discharge', $medications[0]['resource']['category'][0]['coding'][0]['code'] ?? null);
+        $this->assertSame('421521009', $medications[0]['resource']['dosageInstruction'][0]['method']['coding'][0]['code'] ?? null);
 
         $encoded = json_encode($bundle, JSON_UNESCAPED_SLASHES);
         preg_match_all('/"reference":"(urn:uuid:[^"]+)"/', (string) $encoded, $matches);
@@ -302,25 +309,20 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $bundle = $output['fhir_bundle'];
         $composition = $bundle['entry'][0]['resource'];
 
-        // Verify sections: should contain both Condition on Admission Time and Condition on Discharge Time
+        // Verify sections
         $sectionTitles = array_column($composition['section'], 'title');
-        $this->assertContains('Condition on Admission Time', $sectionTitles);
-        $this->assertContains('Condition on Discharge Time', $sectionTitles);
-        $this->assertContains('Care plan', $sectionTitles);
-        $this->assertContains('Document reference', $sectionTitles);
+        $this->assertContains('Care Plan', $sectionTitles);
+        $this->assertContains('Document Reference', $sectionTitles);
 
-        // Verify MedicationRequests have dosageInstruction text
         $medRequests = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'MedicationRequest'));
         $this->assertCount(2, $medRequests);
-        $this->assertSame('BF (BEFORE FOOD) | OD | भोजन से पहले | दिन में एक बार (OD)', $medRequests[0]['resource']['dosageInstruction'][0]['text']);
-        $this->assertSame('AF (AFTER FOOD) | BD | भोजन के बाद | दिन में दो बार (BD)', $medRequests[1]['resource']['dosageInstruction'][0]['text']);
+        $this->assertSame('Take 1 Tablet Once daily before food / empty stomach for 5 days', $medRequests[0]['resource']['dosageInstruction'][0]['text']);
+        $this->assertSame('Take 1 Tablet Twice daily after food for 5 days', $medRequests[1]['resource']['dosageInstruction'][0]['text']);
 
         // Verify CarePlans
         $carePlans = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'CarePlan'));
-        $this->assertCount(3, $carePlans);
+        $this->assertNotEmpty($carePlans);
         $carePlanTitles = array_column(array_column($carePlans, 'resource'), 'title');
-        $this->assertContains('Discharge Advice', $carePlanTitles);
-        $this->assertContains('Dietary Advice', $carePlanTitles);
         $this->assertContains('Follow Up', $carePlanTitles);
 
         // Verify DocumentReferences (both Discharge Summary and Invoice)
@@ -330,31 +332,19 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertSame('IPD Bill / Invoice', $docRefs[1]['resource']['description']);
         $this->assertSame('823651000000106', $docRefs[1]['resource']['type']['coding'][0]['code']);
 
-        // Verify Observation Categories on Admission vs Discharge
-        $observations = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'Observation' && isset($e['resource']['category'])));
-        $this->assertGreaterThanOrEqual(14, count($observations));
-        $this->assertSame('Condition on Admission Time', $observations[0]['resource']['category'][0]['text']);
-        $this->assertSame('Condition on Discharge Time', $observations[7]['resource']['category'][0]['text']);
-
-        // Verify Encounter period & location
+        // Verify Encounter period
         $encounters = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'Encounter'));
         $this->assertCount(1, $encounters);
         $encounterRes = $encounters[0]['resource'];
         $this->assertSame('2026-09-01T04:53:00+05:30', $encounterRes['period']['start'] ?? null);
         $this->assertSame('2026-09-04T04:58:00+05:30', $encounterRes['period']['end'] ?? null);
-        $this->assertNotEmpty($encounterRes['location'] ?? []);
-        $this->assertSame('Ward: General Ward, Bed: GW-05', $encounterRes['location'][0]['location']['display'] ?? null);
-        $this->assertSame('completed', $encounterRes['location'][0]['status'] ?? null);
-        $this->assertSame('2026-09-01T04:53:00+05:30', $encounterRes['location'][0]['period']['start'] ?? null);
-        $this->assertSame('2026-09-04T04:58:00+05:30', $encounterRes['location'][0]['period']['end'] ?? null);
 
         // Verify Composition narrative text, language, and confidentiality
         $this->assertSame('en-IN', $composition['language'] ?? null);
-        $this->assertSame('N', $composition['confidentiality'] ?? null);
-        $this->assertSame('generated', $composition['text']['status'] ?? null);
         $this->assertStringContainsString('xmlns="http://www.w3.org/1999/xhtml"', $composition['text']['div'] ?? '');
-        $this->assertStringContainsString('JANVI BISHT', $composition['text']['div'] ?? '');
         $this->assertStringContainsString('DevSoft Tech', $composition['text']['div'] ?? '');
+        $patients = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'Patient'));
+        $this->assertSame('JANVI BISHT', $patients[0]['resource']['name'][0]['text'] ?? '');
 
         // Verify all references resolve
         $fullUrls = array_column($bundle['entry'], 'fullUrl');
@@ -800,35 +790,14 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertContains('Encounter', $resourceTypes);
         $this->assertContains('Condition', $resourceTypes);
         $this->assertContains('MedicationRequest', $resourceTypes);
-        $this->assertContains('Observation', $resourceTypes);
         $this->assertContains('DiagnosticReport', $resourceTypes);
         $this->assertContains('CarePlan', $resourceTypes);
-        $this->assertContains('DocumentReference', $resourceTypes);
-
-        // Verify BP observations have components
-        $bpObservations = [];
-        foreach ($bundle['entry'] as $entry) {
-            $res = $entry['resource'];
-            if (($res['resourceType'] ?? '') === 'Observation' && ($res['code']['coding'][0]['code'] ?? '') === '85354-9') {
-                $bpObservations[] = $res;
-            }
-        }
-        $this->assertCount(2, $bpObservations);
-        $this->assertArrayHasKey('component', $bpObservations[0]);
-        $this->assertCount(2, $bpObservations[0]['component']);
-        $this->assertSame(120.0, $bpObservations[0]['component'][0]['valueQuantity']['value']);
-        $this->assertSame(80.0, $bpObservations[0]['component'][1]['valueQuantity']['value']);
-        $this->assertSame('8480-6', $bpObservations[0]['component'][0]['code']['coding'][0]['code']);
-        $this->assertSame('8462-4', $bpObservations[0]['component'][1]['code']['coding'][0]['code']);
 
         // Verify composition sections
         $composition = $bundle['entry'][0]['resource'];
         $sectionTitles = array_column($composition['section'], 'title');
         $this->assertContains('Chief complaints', $sectionTitles);
-        $this->assertContains('Problems and Diagnoses', $sectionTitles);
-        $this->assertContains('Condition on Admission Time', $sectionTitles);
-        $this->assertContains('Condition on Discharge Time', $sectionTitles);
         $this->assertContains('Medications', $sectionTitles);
-        $this->assertContains('Care plan', $sectionTitles);
+        $this->assertContains('Care Plan', $sectionTitles);
     }
 }

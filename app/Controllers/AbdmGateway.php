@@ -3041,69 +3041,6 @@ class AbdmGateway extends BaseController
                 ];
             }
 
-            $dischargeAdvice = trim((string) ($instructionRow['comp_remark'] ?? ''));
-            if ($dischargeAdvice !== '') {
-                $carePlans[] = [
-                    'title' => 'Discharge Advice',
-                    'description' => $dischargeAdvice,
-                    'created_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
-                ];
-            }
-
-            // Dietary Advice from food items
-            $foodIds = is_array($instructionMeta['food_ids'] ?? null) ? ($instructionMeta['food_ids'] ?? []) : [];
-            if (empty($foodIds) && $this->db->tableExists('ipd_discharge_drug_food_interaction')) {
-                $legacyFoodRows = $this->ipdRows('ipd_discharge_drug_food_interaction', ['food_id_list'], $ipdId);
-                if (! empty($legacyFoodRows)) {
-                    $foodIds = array_values(array_filter(array_map('trim', explode(',', (string) ($legacyFoodRows[0]['food_id_list'] ?? ''))), 'strlen'));
-                }
-            }
-            if (! empty($foodIds) && $this->db->tableExists('ipd_discharge_master_food')) {
-                $foodRows = $this->db->table('ipd_discharge_master_food')
-                    ->select('id,food_short,food_desc,food_desc_lang')
-                    ->whereIn('id', array_map('intval', $foodIds))
-                    ->get()
-                    ->getResultArray();
-                $foodMap = [];
-                foreach ($foodRows as $fr) {
-                    $foodMap[(int) $fr['id']] = $fr;
-                }
-                $foodLines = [];
-                $fIndex = 1;
-                foreach ($foodIds as $fid) {
-                    $fr = $foodMap[(int) $fid] ?? null;
-                    if (! $fr) {
-                        continue;
-                    }
-                    $heading = trim((string) ($fr['food_short'] ?? ''));
-                    $line = trim((string) ($fr['food_desc_lang'] ?? ''));
-                    if ($line === '') {
-                        $line = trim((string) ($fr['food_desc'] ?? ''));
-                    }
-                    if ($heading === '' && $line === '') {
-                        continue;
-                    }
-                    $foodLines[] = $fIndex . '. ' . ($heading !== '' ? $heading . ': ' : '') . $line;
-                    $fIndex++;
-                }
-                if (! empty($foodLines)) {
-                    $carePlans[] = [
-                        'title' => 'Dietary Advice',
-                        'description' => implode("\n", $foodLines),
-                        'created_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
-                    ];
-                }
-            }
-
-            $otherAdvice = trim((string) ($instructionMeta['other_text'] ?? ''));
-            if ($otherAdvice !== '') {
-                $carePlans[] = [
-                    'title' => 'Other Advice',
-                    'description' => $otherAdvice,
-                    'created_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
-                ];
-            }
-
             $reviewAfter = trim((string) ($instructionRow['review_after'] ?? ''));
             if ($reviewAfter !== '') {
                 $reviewDate = '';
@@ -3113,21 +3050,10 @@ class AbdmGateway extends BaseController
                         $reviewDate = ' (' . date('d-m-Y', $reviewTs) . ')';
                     }
                 }
+                $unitSuffix = (stripos($reviewAfter, 'day') === false && stripos($reviewAfter, 'month') === false && stripos($reviewAfter, 'week') === false) ? ' Days' : '';
                 $carePlans[] = [
                     'title' => 'Follow Up',
-                    'description' => 'Review After: ' . $reviewAfter . ' Days' . $reviewDate . ' / as and when required',
-                    'created_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
-                ];
-            }
-        }
-
-        $courseRows = $this->ipdRows('ipd_discharge_course_remark', ['comp_remark'], $ipdId);
-        if (! empty($courseRows)) {
-            $courseText = trim((string) ($courseRows[0]['comp_remark'] ?? ''));
-            if ($courseText !== '') {
-                $carePlans[] = [
-                    'title' => 'Course In Hospital',
-                    'description' => $courseText,
+                    'description' => 'Review After ' . $reviewAfter . $unitSuffix . $reviewDate . ' or as and when required',
                     'created_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
                 ];
             }
@@ -3186,10 +3112,10 @@ class AbdmGateway extends BaseController
             'procedures' => $procedures,
             'medications' => $medications,
             'observations' => $observations,
-            'investigations' => $investigations,
             'allergies' => $allergies,
             'care_plans' => $carePlans,
-            'documents' => $documents,
+            'documents' => [],
+            'skip_pdf' => true,
         ];
 
         $factory = new FhirGeneratorFactory();
@@ -3323,6 +3249,24 @@ class AbdmGateway extends BaseController
     {
         $directory = WRITEPATH . 'uploads' . DIRECTORY_SEPARATOR . 'abdm' . DIRECTORY_SEPARATOR . 'ipd' . DIRECTORY_SEPARATOR . $ipdId;
         $createdAt = $this->toIsoDateTimeOrNow($dischargeRaw);
+
+        // Ensure IPD Discharge Summary PDF is cached if missing
+        $summaryPath = $directory . DIRECTORY_SEPARATOR . 'discharge-summary.pdf';
+        if (! is_file($summaryPath) || filesize($summaryPath) === 0) {
+            try {
+                $dischargeCtrl = new \App\Controllers\Ipd_discharge();
+                $request = \Config\Services::request();
+                $response = \Config\Services::response();
+                $logger = \Config\Services::logger();
+                $dischargeCtrl->initController($request, $response, $logger);
+                $dischargeCtrl->generateDischargeSummaryPdfBinary($ipdId, true);
+            } catch (\Throwable $e) {
+                log_message('error', 'Auto-generating IPD Discharge Summary PDF failed for IPD {ipd}: {msg}', [
+                    'ipd' => $ipdId,
+                    'msg' => $e->getMessage(),
+                ]);
+            }
+        }
 
         // Ensure IPD Bill PDF is cached if missing
         $billPath = $directory . DIRECTORY_SEPARATOR . 'ipd-bill.pdf';
