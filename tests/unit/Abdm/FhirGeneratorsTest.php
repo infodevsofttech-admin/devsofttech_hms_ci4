@@ -800,4 +800,128 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertContains('Medications', $sectionTitles);
         $this->assertContains('Care Plan', $sectionTitles);
     }
+
+    public function testDischargeMandatoryFieldsPatientEncounterDiagnosisAndOutcome(): void
+    {
+        $src = [
+            'record_id' => 9901,
+            'bundle_identifier' => 'discharge-A26090009901',
+            'session_id' => 9901,
+            'visit_date' => '2026-09-04',
+            'completed_at' => '2026-09-04T10:00:00+05:30',
+            'discharge_status' => 'LAMA',
+            'patient' => [
+                'id' => 1234,
+                'uhid' => 'P26091001234',
+                'name' => 'ANITA SHARMA',
+                'gender' => 'female',
+                'dob' => '1985-07-20',
+                'mobile' => '9876543210',
+                'address' => '123 Main Street, Civil Lines',
+                'city' => 'Haridwar',
+                'district' => 'Haridwar',
+                'state' => 'Uttarakhand',
+                'pin' => '249401',
+                'abha_id' => '91407564383099',
+                'abha_address' => 'anitasharma@sbx',
+            ],
+            'encounter' => [
+                'id' => 'A26090009901',
+                'class_code' => 'IMP',
+                'start' => '2026-09-01T09:00:00+05:30',
+                'end' => '2026-09-04T10:00:00+05:30',
+                'discharge_disposition' => 'LAMA',
+                'ward' => 'ICU',
+                'bed' => 'ICU-02',
+            ],
+            'doctor' => ['id' => 10, 'name' => 'Dr. R K Sundriyal'],
+            'organization' => ['id' => 'IN0510000000', 'name' => 'DevSoft Hospital'],
+            'chief_complaints' => [['text' => 'High grade fever with chills']],
+            'diagnoses' => [['text' => 'Enteric Fever / Typhoid']],
+            'procedures' => [['text' => 'Intravenous cannulation and fluid hydration']],
+            'medications' => [['name' => 'INJ CEFTRIAXONE 1GM', 'dosage' => 'IV | BD | for 5 Days']],
+            'ui_course_treatment' => [
+                'Patient admitted with high grade fever. Started on IV antibiotics and fluids. Vitals stabilized on Day 2. Patient requested LAMA on Day 4.',
+            ],
+            'care_plans' => [
+                ['title' => 'Follow Up Advice', 'description' => 'Consult local physician after 3 days.'],
+            ],
+        ];
+
+        $output = $this->factory->discharge()->generate($src);
+        $bundle = $output['fhir_bundle'];
+        $composition = $bundle['entry'][0]['resource'];
+
+        // 1. Patient Telecom and Address verification
+        $patients = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'Patient'));
+        $this->assertCount(1, $patients);
+        $patient = $patients[0]['resource'];
+
+        $this->assertSame('+919876543210', $patient['telecom'][0]['value'] ?? null);
+        $this->assertSame('phone', $patient['telecom'][0]['system'] ?? null);
+        $this->assertSame('mobile', $patient['telecom'][0]['use'] ?? null);
+
+        $this->assertSame('123 Main Street, Civil Lines', $patient['address'][0]['line'][0] ?? null);
+        $this->assertSame('Haridwar', $patient['address'][0]['city'] ?? null);
+        $this->assertSame('Uttarakhand', $patient['address'][0]['state'] ?? null);
+        $this->assertSame('249401', $patient['address'][0]['postalCode'] ?? null);
+        $this->assertSame('IND', $patient['address'][0]['country'] ?? null);
+
+        // ABHA address identifier
+        $patientIdSystems = array_column($patient['identifier'], 'system');
+        $this->assertContains('https://healthid.ndhm.gov.in', $patientIdSystems);
+
+        // 2. Encounter: Start/End period, hospitalization and discharge disposition
+        $encounters = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'Encounter'));
+        $this->assertCount(1, $encounters);
+        $encounter = $encounters[0]['resource'];
+
+        $this->assertSame('2026-09-01T09:00:00+05:30', $encounter['period']['start'] ?? null);
+        $this->assertSame('2026-09-04T10:00:00+05:30', $encounter['period']['end'] ?? null);
+        $this->assertSame('aadvice', $encounter['hospitalization']['dischargeDisposition']['coding'][0]['code'] ?? null);
+        $this->assertSame('Left against medical advice', $encounter['hospitalization']['dischargeDisposition']['coding'][0]['display'] ?? null);
+
+        // 3. Encounter.diagnosis linking to Final Diagnosis Condition
+        $this->assertNotEmpty($encounter['diagnosis'] ?? []);
+        $this->assertSame('DD', $encounter['diagnosis'][0]['use']['coding'][0]['code'] ?? null);
+        $diagRef = $encounter['diagnosis'][0]['condition']['reference'] ?? '';
+        $this->assertStringStartsWith('urn:uuid:', $diagRef);
+
+        // Verify that diagRef points to the final diagnosis Condition
+        $conditionUrls = array_column(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'Condition'), 'fullUrl');
+        $this->assertContains($diagRef, $conditionUrls);
+
+        // 4. CarePlan for Course of Treatment
+        $carePlans = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'CarePlan'));
+        $carePlanTitles = array_column(array_column($carePlans, 'resource'), 'title');
+        $this->assertContains('Course of Treatment in Hospital', $carePlanTitles);
+
+        // 5. Composition narrative XHTML checks
+        $narrative = $composition['text']['div'] ?? '';
+        $this->assertStringContainsString('ANITA SHARMA', $narrative);
+        $this->assertStringContainsString('9876543210', $narrative);
+        $this->assertStringContainsString('Enteric Fever / Typhoid', $narrative);
+        $this->assertStringContainsString('Left Against Medical Advice', $narrative);
+        $this->assertStringContainsString('01-Sep-2026', $narrative);
+        $this->assertStringContainsString('04-Sep-2026', $narrative);
+
+        // Assert NO standalone placeholder "NA" or "N/A"
+        $this->assertDoesNotMatchRegularExpression('/>\s*(NA|N\/A|null)\s*</i', $narrative);
+
+        // Also test other disposition mappings
+        $srcCured = $src;
+        $srcCured['discharge_status'] = 'Cured / Improved';
+        unset($srcCured['encounter']['discharge_disposition']);
+        $outCured = $this->factory->discharge()->generate($srcCured);
+        $encCured = array_values(array_filter($outCured['fhir_bundle']['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'Encounter'))[0]['resource'];
+        $this->assertSame('home', $encCured['hospitalization']['dischargeDisposition']['coding'][0]['code']);
+
+        $srcExp = $src;
+        $srcExp['discharge_status'] = 'Expired';
+        unset($srcExp['encounter']['discharge_disposition']);
+        $outExp = $this->factory->discharge()->generate($srcExp);
+        $encExp = array_values(array_filter($outExp['fhir_bundle']['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'Encounter'))[0]['resource'];
+        $this->assertSame('exp', $encExp['hospitalization']['dischargeDisposition']['coding'][0]['code']);
+    }
 }
+

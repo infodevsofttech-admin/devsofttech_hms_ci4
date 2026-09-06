@@ -287,7 +287,7 @@ class FhirDocumentBuilder
     {
         $out = [];
         foreach ($data as $key => $value) {
-            if ($value === null || $value === '') {
+            if ($value === null || $value === '' || $this->isPlaceholderValue($value)) {
                 continue;
             }
             if (is_array($value)) {

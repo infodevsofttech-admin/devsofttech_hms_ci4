@@ -148,6 +148,31 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         }
         
         if (is_array($encounter)) {
+            $encounterDiagnoses = [];
+            foreach ($diagnosesList as $idx => $cond) {
+                $text = trim((string) ($cond['text'] ?? $cond['name'] ?? ''));
+                if ($text === '') {
+                    continue;
+                }
+                $conditionId = 'discharge-diagnosis-' . $recordId . '-' . $idx;
+                $encounterDiagnoses[] = [
+                    'condition' => [
+                        'reference' => 'urn:uuid:' . $conditionId,
+                        'display'   => $text,
+                    ],
+                    'use' => [
+                        'coding' => [[
+                            'system'  => 'http://terminology.hl7.org/CodeSystem/diagnosis-role',
+                            'code'    => 'DD',
+                            'display' => 'Discharge diagnosis',
+                        ]],
+                    ],
+                    'rank' => count($encounterDiagnoses) + 1,
+                ];
+            }
+            if ($encounterDiagnoses !== []) {
+                $encounter['diagnosis'] = $encounterDiagnoses;
+            }
             $builder->addEncounter($encounter);
         }
 
@@ -407,8 +432,30 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         }
 
 
-        // ── Care Plans / Discharge Advice ──────────────────────────────────────
-        foreach ((array) ($source['ui_discharge_summary'] ?? $source['care_plans'] ?? []) as $idx => $cp) {
+        // ── Care Plans / Discharge Advice & Hospital Course ────────────────────
+        $carePlansList = (array) ($source['ui_discharge_summary'] ?? $source['care_plans'] ?? []);
+
+        // Include hospital course / course of treatment if provided
+        $courseItems = (array) ($source['ui_course_treatment'] ?? $source['course_treatment'] ?? []);
+        $courseNarrative = trim((string) ($source['ui_course_treatment_narrative'] ?? $source['course_narrative'] ?? ''));
+        $courseParts = [];
+        foreach ($courseItems as $cItem) {
+            $cText = is_array($cItem) ? trim((string) ($cItem['text'] ?? $cItem['name'] ?? $cItem['comp_report'] ?? '')) : trim((string) $cItem);
+            if ($cText !== '' && $this->isMeaningfulValue($cText)) {
+                $courseParts[] = $cText;
+            }
+        }
+        if ($courseNarrative !== '' && $this->isMeaningfulValue($courseNarrative)) {
+            $courseParts[] = $courseNarrative;
+        }
+        if (! empty($courseParts)) {
+            $carePlansList[] = [
+                'title' => 'Course of Treatment in Hospital',
+                'description' => implode("\n", array_unique($courseParts)),
+            ];
+        }
+
+        foreach ($carePlansList as $idx => $cp) {
             $title = $this->cleanPlainText((string) ($cp['title'] ?? 'Discharge Advice'));
             $description = $this->cleanPlainText((string) ($cp['description'] ?? ''));
             if (! $this->isMeaningfulValue($description)) {
@@ -544,10 +591,9 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $sectionDefinitions[] = ['title' => 'Investigations', 'code' => '721981007', 'display' => 'Diagnostic studies report', 'prefix' => 'discharge-investigation-', 'items' => $investigations, 'narrative' => $invNarrative];
         }
 
-        // Care plans / Discharge advice
-        $carePlans = (array) ($source['ui_discharge_summary'] ?? $source['care_plans'] ?? []);
-        if (! empty($carePlans)) {
-            $sectionDefinitions[] = ['title' => 'Care Plan', 'code' => '734163000', 'display' => 'Care plan', 'prefix' => 'discharge-careplan-', 'items' => $carePlans];
+        // Care plans / Discharge advice & hospital course
+        if (! empty($carePlansList)) {
+            $sectionDefinitions[] = ['title' => 'Care Plan', 'code' => '734163000', 'display' => 'Care plan', 'prefix' => 'discharge-careplan-', 'items' => $carePlansList];
         }
 
         // Document Reference
@@ -865,13 +911,13 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
     {
         $hospitalName = trim((string) ($source['organization']['name'] ?? 'Hospital'));
         $patientName = trim((string) ($source['patient']['name'] ?? 'Patient'));
-        $patientId = trim((string) ($source['patient']['id'] ?? 'N/A'));
-        $gender = ucfirst(trim((string) ($source['patient']['gender'] ?? 'N/A')));
-        $dob = trim((string) ($source['patient']['dob'] ?? 'N/A'));
-        $abhaId = trim((string) ($source['patient']['abha_id'] ?? 'N/A'));
-        $recordId = trim((string) ($source['record_id'] ?? 'N/A'));
+        $patientId = trim((string) ($source['patient']['id'] ?? ''));
+        $gender = ucfirst(trim((string) ($source['patient']['gender'] ?? '')));
+        $dob = trim((string) ($source['patient']['dob'] ?? ''));
+        $abhaId = trim((string) ($source['patient']['abha_id'] ?? ''));
+        $recordId = trim((string) ($source['record_id'] ?? ''));
 
-        $admDate = ! empty($source['encounter']['start']) ? date('d-m-Y', strtotime((string) $source['encounter']['start'])) : 'N/A';
+        $admDate = ! empty($source['encounter']['start']) ? date('d-m-Y', strtotime((string) $source['encounter']['start'])) : '';
         $disDate = ! empty($source['encounter']['end']) ? date('d-m-Y', strtotime((string) $source['encounter']['end'])) : date('d-m-Y');
         $doctorName = trim((string) ($source['doctor_name'] ?? $source['doctor']['name'] ?? 'Attending Physician'));
 
@@ -898,7 +944,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 '{{PATIENT_NAME}}' => htmlspecialchars($patientName),
                 '{{UHID}}' => htmlspecialchars($patientId),
                 '{{IPD_CODE}}' => htmlspecialchars($recordId),
-                '{{AGE_GENDER}}' => htmlspecialchars($gender . ($dob !== 'N/A' ? ' / ' . $dob : '')),
+                '{{AGE_GENDER}}' => htmlspecialchars(trim($gender . ($dob !== '' ? ' / ' . $dob : ''))),
                 '{{ADMIT_DATE}}' => htmlspecialchars($admDate),
                 '{{DISCHARGE_DATE}}' => htmlspecialchars($disDate),
                 '{{DOCTOR_NAMES}}' => htmlspecialchars($doctorName),
@@ -1229,11 +1275,64 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         string $hospitalName,
         array $sections
     ): string {
-        $ipdNo = (string) ($source['encounter']['ipd_no'] ?? $source['record_id'] ?? '');
-        $admitDate = (string) ($source['encounter']['start'] ?? $source['admission_date'] ?? '');
-        $dischargeDate = (string) ($source['encounter']['end'] ?? $source['discharge_date'] ?? $source['completed_at'] ?? '');
-        $locDisplay = (string) ($source['encounter']['location_display'] ?? '');
-        $abhaId = (string) ($source['patient']['abha_id'] ?? '');
+        $ipdNo = trim((string) ($source['encounter']['ipd_no'] ?? $source['record_id'] ?? ''));
+        $admitRaw = trim((string) ($source['encounter']['start'] ?? $source['admission_date'] ?? ''));
+        $dischargeRaw = trim((string) ($source['encounter']['end'] ?? $source['discharge_date'] ?? $source['completed_at'] ?? ''));
+        
+        $formatDate = static function (string $raw): string {
+            if ($raw === '') {
+                return '';
+            }
+            $ts = strtotime($raw);
+            if ($ts === false) {
+                return $raw;
+            }
+            return (strlen($raw) > 10 && str_contains($raw, 'T')) ? date('d-M-Y h:i A', $ts) : date('d-M-Y', $ts);
+        };
+
+        $admitDisplay = $formatDate($admitRaw);
+        if ($admitDisplay === '') {
+            $admitDisplay = date('d-M-Y');
+        }
+        $dischargeDisplay = $formatDate($dischargeRaw);
+        if ($dischargeDisplay === '') {
+            $dischargeDisplay = date('d-M-Y');
+        }
+
+        $locDisplay = trim((string) ($source['encounter']['location_display'] ?? $source['encounter']['ward'] ?? ''));
+        $abhaId = trim((string) ($source['patient']['abha_id'] ?? ''));
+        $patientUhid = trim((string) ($source['patient']['uhid'] ?? $source['patient']['hospital_patient_id'] ?? ''));
+        $patientMobile = trim((string) ($source['patient']['mobile'] ?? $source['patient']['phone'] ?? $source['mobile'] ?? ''));
+
+        $identifierDisplay = '';
+        if ($abhaId !== '' && $this->isMeaningfulValue($abhaId)) {
+            $digits = preg_replace('/\D/', '', $abhaId);
+            $identifierDisplay = (strlen($digits) === 14)
+                ? (substr($digits, 0, 2) . '-' . substr($digits, 2, 4) . '-' . substr($digits, 6, 4) . '-' . substr($digits, 10, 4))
+                : $abhaId;
+        } elseif ($patientUhid !== '') {
+            $identifierDisplay = 'UHID: ' . $patientUhid;
+        } elseif ($patientId !== '' && $patientId !== '0') {
+            $identifierDisplay = 'ID: ' . $patientId;
+        }
+
+        // Outcome / Discharge status
+        $statusInput = $source['encounter']['discharge_disposition'] ?? $source['discharge_status'] ?? $source['discarge_patient_status'] ?? 'home';
+        $disposition = $this->resolveDischargeDisposition($statusInput);
+        $outcomeText = $disposition['text'];
+
+        // Diagnosis summary
+        $diagList = [];
+        foreach ((array) ($source['ui_final_diagnosis'] ?? $source['diagnoses'] ?? $source['conditions'] ?? []) as $d) {
+            $t = is_array($d) ? trim((string) ($d['text'] ?? $d['name'] ?? '')) : trim((string) $d);
+            if ($t !== '' && $this->isMeaningfulValue($t)) {
+                $diagList[] = $t;
+            }
+        }
+        if (empty($diagList) && ! empty($source['problem']) && $this->isMeaningfulValue((string) $source['problem'])) {
+            $diagList[] = trim((string) $source['problem']);
+        }
+        $diagnosisSummary = ! empty($diagList) ? implode(', ', array_unique($diagList)) : '';
 
         $html = '<div xmlns="http://www.w3.org/1999/xhtml" xml:lang="en-IN" lang="en-IN">';
         $html .= '<div style="border-bottom:2px solid #0284c7;padding-bottom:6px;margin-bottom:12px;">';
@@ -1242,11 +1341,22 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         $html .= '</div>';
 
         $html .= '<table style="width:100%;border-collapse:collapse;margin-bottom:14px;background:#f8fafc;font-size:10pt;">';
-        $html .= '<tr><td style="border:1px solid #cbd5e1;padding:6px;"><strong>Patient:</strong> ' . htmlspecialchars($patientName) . '</td><td style="border:1px solid #cbd5e1;padding:6px;"><strong>IPD No:</strong> ' . htmlspecialchars($ipdNo) . '</td></tr>';
-        $html .= '<tr><td style="border:1px solid #cbd5e1;padding:6px;"><strong>Gender / DOB:</strong> ' . htmlspecialchars(ucfirst($gender)) . ($dob !== '' ? (' / ' . htmlspecialchars($dob)) : '') . '</td><td style="border:1px solid #cbd5e1;padding:6px;"><strong>ABHA Number:</strong> ' . htmlspecialchars($abhaId !== '' ? $abhaId : 'N/A') . '</td></tr>';
-        $html .= '<tr><td style="border:1px solid #cbd5e1;padding:6px;"><strong>Admission Date:</strong> ' . htmlspecialchars($admitDate) . '</td><td style="border:1px solid #cbd5e1;padding:6px;"><strong>Discharge Date:</strong> ' . htmlspecialchars($dischargeDate) . '</td></tr>';
-        if ($locDisplay !== '' || $drName !== '') {
-            $html .= '<tr><td style="border:1px solid #cbd5e1;padding:6px;"><strong>Location / Bed:</strong> ' . htmlspecialchars($locDisplay !== '' ? $locDisplay : 'General Ward') . '</td><td style="border:1px solid #cbd5e1;padding:6px;"><strong>Doctor:</strong> ' . htmlspecialchars($drName) . '</td></tr>';
+        $html .= '<tr><td style="border:1px solid #cbd5e1;padding:6px;"><strong>Patient:</strong> ' . htmlspecialchars($patientName) . '</td><td style="border:1px solid #cbd5e1;padding:6px;"><strong>IPD No:</strong> ' . htmlspecialchars($ipdNo !== '' ? $ipdNo : ('IPD-' . $patientId)) . '</td></tr>';
+        
+        $genderDob = htmlspecialchars(ucfirst($gender)) . ($dob !== '' ? (' / ' . htmlspecialchars($dob)) : '');
+        $idCell = $identifierDisplay !== '' ? ('<strong>ABHA / ID:</strong> ' . htmlspecialchars($identifierDisplay)) : ('<strong>Doctor:</strong> ' . htmlspecialchars($drName));
+        $html .= '<tr><td style="border:1px solid #cbd5e1;padding:6px;"><strong>Gender / DOB:</strong> ' . $genderDob . '</td><td style="border:1px solid #cbd5e1;padding:6px;">' . $idCell . '</td></tr>';
+
+        $html .= '<tr><td style="border:1px solid #cbd5e1;padding:6px;"><strong>Admission Date:</strong> ' . htmlspecialchars($admitDisplay) . '</td><td style="border:1px solid #cbd5e1;padding:6px;"><strong>Discharge Date:</strong> ' . htmlspecialchars($dischargeDisplay) . '</td></tr>';
+        
+        if ($diagnosisSummary !== '') {
+            $html .= '<tr><td style="border:1px solid #cbd5e1;padding:6px;" colspan="2"><strong>Final Diagnosis:</strong> ' . htmlspecialchars($diagnosisSummary) . '</td></tr>';
+        }
+
+        $html .= '<tr><td style="border:1px solid #cbd5e1;padding:6px;"><strong>Outcome / Status:</strong> <span style="color:#0369a1;font-weight:bold;">' . htmlspecialchars($outcomeText) . '</span></td><td style="border:1px solid #cbd5e1;padding:6px;"><strong>Doctor:</strong> ' . htmlspecialchars($drName) . ($locDisplay !== '' ? (' | <strong>Location:</strong> ' . htmlspecialchars($locDisplay)) : '') . '</td></tr>';
+        
+        if ($patientMobile !== '') {
+            $html .= '<tr><td style="border:1px solid #cbd5e1;padding:6px;" colspan="2"><strong>Contact:</strong> ' . htmlspecialchars($patientMobile) . '</td></tr>';
         }
         $html .= '</table>';
 

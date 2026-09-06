@@ -31,9 +31,21 @@
                                 <tr>
                                     <td><?= (int) $i + 1 ?></td>
                                     <td><?= esc((string) ($row['template_name'] ?? '')) ?></td>
-                                    <td><?= (int) ($row['is_default'] ?? 0) ? '<span class="badge bg-success">Yes</span>' : '' ?></td>
+                                    <td>
+                                        <?php if ((int) ($row['is_default'] ?? 0)): ?>
+                                            <span class="badge bg-success"><i class="fa fa-check me-1"></i>Yes</span>
+                                        <?php else: ?>
+                                            <button type="button" class="btn btn-outline-success btn-sm py-0 px-2 btn_set_default" data-id="<?= (int) ($row['id'] ?? 0) ?>" title="Set as default template">Set Default</button>
+                                        <?php endif; ?>
+                                    </td>
                                     <td><?= (int) ($row['is_audit_only'] ?? 0) ? '<span class="badge bg-warning text-dark">Audit</span>' : '' ?></td>
-                                    <td><?= (int) ($row['is_abdm'] ?? 0) ? '<span class="badge bg-info text-dark">Online / ABDM</span>' : '' ?></td>
+                                    <td>
+                                        <?php if ((int) ($row['is_abdm'] ?? 0)): ?>
+                                            <span class="badge bg-info text-dark"><i class="fa fa-check me-1"></i>Online / ABDM</span>
+                                        <?php else: ?>
+                                            <button type="button" class="btn btn-outline-info btn-sm py-0 px-2 btn_set_abdm" data-id="<?= (int) ($row['id'] ?? 0) ?>" title="Set as Online / ABDM template">Set ABDM</button>
+                                        <?php endif; ?>
+                                    </td>
                                     <td>
                                         <a class="btn btn-primary btn-sm"
                                            href="javascript:load_form('<?= base_url('Ipd_discharge/print_template_builder') ?>?mode=edit&edit=<?= (int) ($row['id'] ?? 0) ?>','IPD Discharge Template Edit');">Edit</a>
@@ -146,6 +158,52 @@
                     load_form('<?= base_url('Ipd_discharge/print_template_builder') ?>?mode=list', 'IPD Discharge Templates');
                 } else {
                     showMsg(data.error_text || 'Unable to delete.', false);
+                }
+            }).catch(function () { showMsg('Request failed.', false); });
+        });
+    });
+
+    document.querySelectorAll('.btn_set_abdm').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var id = btn.getAttribute('data-id');
+            var csrf = getCsrf();
+            var fd = new FormData();
+            fd.append(csrf.name, csrf.value);
+            fd.append('id', id);
+
+            fetch('<?= base_url('Ipd_discharge/discharge_template_set_abdm_ajax') ?>', {
+                method: 'POST',
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                body: fd
+            }).then(function (r) { return r.json(); }).then(function (data) {
+                updateCsrf(data);
+                if (data.update == 1) {
+                    load_form('<?= base_url('Ipd_discharge/print_template_builder') ?>?mode=list', 'IPD Discharge Templates');
+                } else {
+                    showMsg(data.error_text || 'Unable to update Online / ABDM template.', false);
+                }
+            }).catch(function () { showMsg('Request failed.', false); });
+        });
+    });
+
+    document.querySelectorAll('.btn_set_default').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var id = btn.getAttribute('data-id');
+            var csrf = getCsrf();
+            var fd = new FormData();
+            fd.append(csrf.name, csrf.value);
+            fd.append('id', id);
+
+            fetch('<?= base_url('Ipd_discharge/discharge_template_set_default_ajax') ?>', {
+                method: 'POST',
+                headers: {'X-Requested-With': 'XMLHttpRequest'},
+                body: fd
+            }).then(function (r) { return r.json(); }).then(function (data) {
+                updateCsrf(data);
+                if (data.update == 1) {
+                    load_form('<?= base_url('Ipd_discharge/print_template_builder') ?>?mode=list', 'IPD Discharge Templates');
+                } else {
+                    showMsg(data.error_text || 'Unable to update default template.', false);
                 }
             }).catch(function () { showMsg('Request failed.', false); });
         });

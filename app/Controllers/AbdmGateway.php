@@ -3064,6 +3064,28 @@ class AbdmGateway extends BaseController
         $documents = $this->buildIpdPdfDocuments($ipdId, $dischargeRaw);
         $locationInfo = $this->resolveIpdLocation($ipdId);
 
+        $patientMobile = trim((string) ($patientRow['mphone1'] ?? $patientRow['p_mobile1'] ?? $ipdRow['P_mobile1'] ?? ''));
+        $patientAddress = trim((string) ($patientRow['p_add1'] ?? $patientRow['add1'] ?? $ipdRow['add1'] ?? ''));
+        $patientCity = trim((string) ($patientRow['p_city'] ?? $patientRow['city'] ?? $ipdRow['city'] ?? ''));
+        $patientState = trim((string) ($patientRow['p_state'] ?? $patientRow['state'] ?? $ipdRow['state'] ?? ''));
+        $patientPin = trim((string) ($patientRow['p_pin'] ?? $patientRow['pincode'] ?? ''));
+        $dischargeStatus = trim((string) ($ipdRow['discarge_patient_status'] ?? ''));
+
+        $courseRows = [];
+        foreach ($this->ipdRows('ipd_discharge_course', ['comp_report', 'comp_remark'], $ipdId) as $row) {
+            $cReport = trim((string) ($row['comp_report'] ?? ''));
+            $cRemark = trim((string) ($row['comp_remark'] ?? ''));
+            if ($cReport !== '') {
+                $courseRows[] = [
+                    'text' => $cReport . ($cRemark !== '' ? (' - ' . $cRemark) : ''),
+                    'name' => $cReport,
+                    'remark' => $cRemark,
+                ];
+            }
+        }
+        $courseRemarkRows = $this->ipdRows('ipd_discharge_course_remark', ['comp_remark'], $ipdId);
+        $courseRemark = trim((string) ($courseRemarkRows[0]['comp_remark'] ?? ''));
+
         $uniqueSuffix = $isNewRecord ? ('-v' . time()) : '';
 
         $source = [
@@ -3075,6 +3097,8 @@ class AbdmGateway extends BaseController
             'completed_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
             'department' => trim((string) ($ipdRow['dept_id'] ?? '')),
             'doctor_name' => $doctorName,
+            'discharge_status' => $dischargeStatus,
+            'problem' => trim((string) ($ipdRow['problem'] ?? '')),
             'doctor' => [
                 'id' => $doctorId > 0 ? (string) $doctorId : '',
                 'name' => $doctorName,
@@ -3091,6 +3115,13 @@ class AbdmGateway extends BaseController
                     ($g = trim((string) ($patientRow['gender'] ?? ''))) !== '' ? $g : trim((string) ($patientRow['xgender'] ?? ''))
                 ),
                 'dob' => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
+                'mobile' => $patientMobile,
+                'address' => [
+                    'line' => $patientAddress,
+                    'city' => $patientCity,
+                    'state' => $patientState,
+                    'pincode' => $patientPin,
+                ],
                 'abha_id' => $abhaDigits,
                 'abha_address' => $abhaAddress,
             ],
@@ -3100,6 +3131,7 @@ class AbdmGateway extends BaseController
                 'class_code' => 'IMP',
                 'start' => $this->toIsoDateTimeOrNow($admissionRaw),
                 'end' => $this->toIsoDateTimeOrNow($dischargeRaw),
+                'discharge_disposition' => $dischargeStatus,
                 'location_display' => (string) ($locationInfo['display'] ?? ''),
                 'ward' => (string) ($locationInfo['ward'] ?? ''),
                 'room' => (string) ($locationInfo['room'] ?? ''),
@@ -3114,8 +3146,10 @@ class AbdmGateway extends BaseController
             'observations' => $observations,
             'allergies' => $allergies,
             'care_plans' => $carePlans,
-            'documents' => [],
-            'skip_pdf' => true,
+            'ui_course_treatment' => $courseRows,
+            'ui_course_treatment_narrative' => $courseRemark,
+            'documents' => $documents,
+            'template' => $this->resolveAbdmDischargeTemplate(),
         ];
 
         $factory = new FhirGeneratorFactory();
@@ -3250,46 +3284,33 @@ class AbdmGateway extends BaseController
         $directory = WRITEPATH . 'uploads' . DIRECTORY_SEPARATOR . 'abdm' . DIRECTORY_SEPARATOR . 'ipd' . DIRECTORY_SEPARATOR . $ipdId;
         $createdAt = $this->toIsoDateTimeOrNow($dischargeRaw);
 
-        // Ensure IPD Discharge Summary PDF is cached if missing
-        $summaryPath = $directory . DIRECTORY_SEPARATOR . 'discharge-summary.pdf';
-        if (! is_file($summaryPath) || filesize($summaryPath) === 0) {
-            try {
-                $dischargeCtrl = new \App\Controllers\Ipd_discharge();
-                $request = \Config\Services::request();
-                $response = \Config\Services::response();
-                $logger = \Config\Services::logger();
-                $dischargeCtrl->initController($request, $response, $logger);
-                $dischargeCtrl->generateDischargeSummaryPdfBinary($ipdId, true);
-            } catch (\Throwable $e) {
-                log_message('error', 'Auto-generating IPD Discharge Summary PDF failed for IPD {ipd}: {msg}', [
-                    'ipd' => $ipdId,
-                    'msg' => $e->getMessage(),
-                ]);
-            }
-        }
+        // Always generate fresh IPD Discharge Summary PDF using the configured Online/ABDM template
+        $abdmTemplate = $this->resolveAbdmDischargeTemplate();
+        $abdmTemplateId = (int) ($abdmTemplate['id'] ?? 0);
 
-        // Ensure IPD Bill PDF is cached if missing
-        $billPath = $directory . DIRECTORY_SEPARATOR . 'ipd-bill.pdf';
-        if (! is_file($billPath) || filesize($billPath) === 0) {
-            try {
-                $billingCtrl = new \App\Controllers\Billing\Ipd();
-                $request = \Config\Services::request();
-                $response = \Config\Services::response();
-                $logger = \Config\Services::logger();
-                $billingCtrl->initController($request, $response, $logger);
-                $billingCtrl->generateIpdBillPdfBinary($ipdId, 1, true);
-            } catch (\Throwable $e) {
-                log_message('error', 'Auto-generating IPD Bill PDF failed for IPD {ipd}: {msg}', [
-                    'ipd' => $ipdId,
-                    'msg' => $e->getMessage(),
-                ]);
-            }
+        try {
+            $dischargeCtrl = new \App\Controllers\Ipd_discharge();
+            $request = \Config\Services::request();
+            $response = \Config\Services::response();
+            $logger = \Config\Services::logger();
+            $dischargeCtrl->initController($request, $response, $logger);
+            $dischargeCtrl->generateDischargeSummaryPdfBinary($ipdId, true, $abdmTemplateId > 0 ? $abdmTemplateId : null);
+        } catch (\Throwable $e) {
+            log_message('error', 'Auto-generating IPD Discharge Summary PDF failed for IPD {ipd}: {msg}', [
+                'ipd' => $ipdId,
+                'msg' => $e->getMessage(),
+            ]);
         }
 
         $documents = [];
         $definitions = [
-            ['file' => 'discharge-summary.pdf', 'title' => 'IPD Discharge Summary', 'loinc' => '18842-5', 'snomed' => '373942005'],
-            ['file' => 'ipd-bill.pdf', 'title' => 'IPD Bill / Invoice', 'loinc' => '75490-3', 'snomed' => '823651000000106'],
+            [
+                'file' => 'discharge-summary.pdf',
+                'title' => 'IPD Discharge Summary',
+                'loinc' => '18842-5',
+                'snomed' => '373942005',
+                'snomed_display' => 'Discharge summary',
+            ],
         ];
 
         foreach ($definitions as $definition) {
@@ -3304,6 +3325,8 @@ class AbdmGateway extends BaseController
             $documents[] = [
                 'title' => $definition['title'],
                 'loinc_code' => $definition['loinc'],
+                'snomed_code' => $definition['snomed'],
+                'snomed_display' => $definition['snomed_display'] ?? 'Discharge summary',
                 'content_type' => 'application/pdf',
                 'data' => base64_encode($binary),
                 'created_at' => $createdAt,
@@ -3312,6 +3335,17 @@ class AbdmGateway extends BaseController
         }
 
         return $documents;
+    }
+
+    private function resolveAbdmDischargeTemplate(): array
+    {
+        try {
+            $dischargeCtrl = new \App\Controllers\Ipd_discharge();
+            $dischargeCtrl->initController(\Config\Services::request(), \Config\Services::response(), \Config\Services::logger());
+            return $dischargeCtrl->resolveAbdmDischargeTemplate();
+        } catch (\Throwable) {
+            return [];
+        }
     }
 
     /**

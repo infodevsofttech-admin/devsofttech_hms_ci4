@@ -83,6 +83,71 @@ abstract class AbstractModuleFhirGenerator
             $patient['birthDate'] = $dob;
         }
 
+        $mobile = trim((string) ($source['patient']['mobile'] ?? $source['patient']['phone'] ?? $source['patient']['p_mobile1'] ?? $source['mobile'] ?? ''));
+        if ($mobile !== '' && $this->isMeaningfulValue($mobile)) {
+            $digits = preg_replace('/\D/', '', $mobile);
+            if (is_string($digits) && strlen($digits) >= 10) {
+                $phoneVal = str_starts_with($mobile, '+') ? $mobile : ('+91' . substr($digits, -10));
+                $patient['telecom'] = [
+                    [
+                        'system' => 'phone',
+                        'value' => $phoneVal,
+                        'use' => 'mobile',
+                    ],
+                ];
+            }
+        }
+
+        $addrRaw = $source['patient']['address'] ?? $source['address'] ?? null;
+        $line = '';
+        $city = '';
+        $district = '';
+        $state = '';
+        $postalCode = '';
+
+        if (is_array($addrRaw)) {
+            $line = trim((string) ($addrRaw['line'] ?? $addrRaw['text'] ?? $addrRaw['street'] ?? $addrRaw['add1'] ?? ''));
+            $city = trim((string) ($addrRaw['city'] ?? ''));
+            $district = trim((string) ($addrRaw['district'] ?? ''));
+            $state = trim((string) ($addrRaw['state'] ?? ''));
+            $postalCode = trim((string) ($addrRaw['postalCode'] ?? $addrRaw['pincode'] ?? $addrRaw['pin'] ?? ''));
+        } elseif (is_string($addrRaw) && $this->isMeaningfulValue($addrRaw)) {
+            $line = trim($addrRaw);
+        }
+
+        if ($city === '') {
+            $city = trim((string) ($source['patient']['city'] ?? $source['city'] ?? ''));
+        }
+        if ($state === '') {
+            $state = trim((string) ($source['patient']['state'] ?? $source['state'] ?? ''));
+        }
+        if ($postalCode === '') {
+            $postalCode = trim((string) ($source['patient']['postalCode'] ?? $source['patient']['pincode'] ?? $source['patient']['pin'] ?? $source['pincode'] ?? ''));
+        }
+
+        $addressItem = [];
+        if ($line !== '' && $this->isMeaningfulValue($line)) {
+            $addressItem['line'] = [$line];
+            $addressItem['text'] = $line;
+        }
+        if ($city !== '' && $this->isMeaningfulValue($city)) {
+            $addressItem['city'] = $city;
+        }
+        if ($district !== '' && $this->isMeaningfulValue($district)) {
+            $addressItem['district'] = $district;
+        }
+        if ($state !== '' && $this->isMeaningfulValue($state)) {
+            $addressItem['state'] = $state;
+        }
+        if ($postalCode !== '' && $this->isMeaningfulValue($postalCode)) {
+            $addressItem['postalCode'] = $postalCode;
+        }
+
+        if (! empty($addressItem)) {
+            $addressItem['country'] = 'IND';
+            $patient['address'] = [$addressItem];
+        }
+
         $abhaId = preg_replace('/\D/', '', (string) ($source['patient']['abha_id'] ?? ''));
         if (is_string($abhaId) && $abhaId !== '') {
             $patient['identifier'][] = [
@@ -93,6 +158,19 @@ abstract class AbstractModuleFhirGenerator
                 ]]],
                 'system' => 'https://healthid.ndhm.gov.in',
                 'value' => $abhaId,
+            ];
+        }
+
+        $abhaAddress = trim((string) ($source['patient']['abha_address'] ?? $source['abha_address'] ?? ''));
+        if ($abhaAddress !== '' && str_contains($abhaAddress, '@')) {
+            $patient['identifier'][] = [
+                'type' => ['coding' => [[
+                    'system' => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                    'code' => 'MR',
+                    'display' => 'Medical record number',
+                ]], 'text' => 'ABHA Address'],
+                'system' => 'https://healthid.ndhm.gov.in',
+                'value' => $abhaAddress,
             ];
         }
 
@@ -177,7 +255,10 @@ abstract class AbstractModuleFhirGenerator
         ];
 
         if ($encounterRef !== null) {
-            $composition['encounter'] = ['reference' => $encounterRef];
+            $composition['encounter'] = [
+                'reference' => $encounterRef,
+                'display' => 'Encounter',
+            ];
         }
 
         return $composition;
@@ -231,6 +312,9 @@ abstract class AbstractModuleFhirGenerator
 
         $patientName = trim((string) ($source['patient']['name'] ?? $source['patient_name'] ?? 'Patient'));
 
+        $statusInput = $enc['discharge_disposition'] ?? $enc['outcome'] ?? $source['discharge_status'] ?? $source['discarge_patient_status'] ?? 'home';
+        $disposition = $this->resolveDischargeDisposition($statusInput);
+
         $encounterResource = [
             'resourceType' => 'Encounter',
             'id' => 'encounter-' . $id,
@@ -239,7 +323,7 @@ abstract class AbstractModuleFhirGenerator
             ]],
             'text' => [
                 'status' => 'generated',
-                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Encounter:</b> ' . $this->escapeXhtml($classDisplay) . ' ' . $this->escapeXhtml($id) . '</p></div>',
+                'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Encounter:</b> ' . $this->escapeXhtml($classDisplay) . ' ' . $this->escapeXhtml($id) . ' - ' . $this->escapeXhtml($disposition['text']) . '</p></div>',
             ],
             'identifier' => $identifiers,
             'status' => 'finished',
@@ -260,15 +344,72 @@ abstract class AbstractModuleFhirGenerator
                 'dischargeDisposition' => [
                     'coding' => [[
                         'system' => 'http://terminology.hl7.org/CodeSystem/discharge-disposition',
-                        'code' => 'home',
-                        'display' => 'Home',
+                        'code' => $disposition['code'],
+                        'display' => $disposition['display'],
                     ]],
-                    'text' => 'Discharged to Home Care',
-                ]
+                    'text' => $disposition['text'],
+                ],
             ],
         ];
 
         return $encounterResource;
+    }
+
+    /**
+     * @param mixed $status
+     * @return array{code:string,display:string,text:string}
+     */
+    protected function resolveDischargeDisposition(mixed $status): array
+    {
+        $statusStr = strtolower(trim((string) $status));
+        if ($statusStr === '1' || str_contains($statusStr, 'improved') || str_contains($statusStr, 'recovered')) {
+            return [
+                'code' => 'home',
+                'display' => 'Home',
+                'text' => 'Improved / Recovered - Discharged to Home Care',
+            ];
+        }
+        if ($statusStr === '2' || str_contains($statusStr, 'lama') || str_contains($statusStr, 'advice')) {
+            return [
+                'code' => 'aadvice',
+                'display' => 'Left against medical advice',
+                'text' => 'Left Against Medical Advice (LAMA)',
+            ];
+        }
+        if ($statusStr === '3' || str_contains($statusStr, 'refer') || str_contains($statusStr, 'higher')) {
+            return [
+                'code' => 'other-hcf',
+                'display' => 'Other healthcare facility',
+                'text' => 'Referred to Higher Centre / Other Healthcare Facility',
+            ];
+        }
+        if ($statusStr === '4' || str_contains($statusStr, 'satisfactory')) {
+            return [
+                'code' => 'home',
+                'display' => 'Home',
+                'text' => 'Satisfactory - Discharged to Home Care',
+            ];
+        }
+        if ($statusStr === '5' || str_contains($statusStr, 'expir') || str_contains($statusStr, 'dead') || str_contains($statusStr, 'deceased')) {
+            return [
+                'code' => 'exp',
+                'display' => 'Expired',
+                'text' => 'Expired / Deceased',
+            ];
+        }
+        if ($statusStr === '7' || str_contains($statusStr, 'request')) {
+            return [
+                'code' => 'home',
+                'display' => 'Home',
+                'text' => 'Discharge on Request - Discharged to Home Care',
+            ];
+        }
+
+        return [
+            'code' => 'home',
+            'display' => 'Home',
+            'text' => 'Discharged to Home Care',
+        ];
     }
 
     /** @param array<string,mixed> $source */
