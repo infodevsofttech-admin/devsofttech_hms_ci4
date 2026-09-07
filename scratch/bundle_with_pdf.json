@@ -1,0 +1,1483 @@
+{
+    "resourceType": "Bundle",
+    "id": "discharge-A26090000009-v1788641396",
+    "meta": {
+        "versionId": "1",
+        "lastUpdated": "2026-09-06T02:08:00+05:30",
+        "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle"
+        ],
+        "security": [
+            {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-Confidentiality",
+                "code": "V",
+                "display": "very restricted"
+            }
+        ]
+    },
+    "identifier": {
+        "system": "https://hms.local/fhir/document",
+        "value": "discharge-A26090000009-v1788641396"
+    },
+    "type": "document",
+    "timestamp": "2026-09-06T02:08:00+05:30",
+    "entry": [
+        {
+            "fullUrl": "urn:uuid:fdf46837-ab78-42a7-a550-8d64a35b6508",
+            "resource": {
+                "resourceType": "Composition",
+                "id": "fdf46837-ab78-42a7-a550-8d64a35b6508",
+                "meta": {
+                    "versionId": "1",
+                    "lastUpdated": "2026-09-06T02:08:00+05:30",
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DischargeSummaryRecord"
+                    ]
+                },
+                "status": "final",
+                "type": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "373942005",
+                            "display": "Discharge summary"
+                        }
+                    ],
+                    "text": "Discharge Summary"
+                },
+                "title": "IPD Discharge Summary",
+                "date": "2026-09-06T02:08:00+05:30",
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e",
+                    "display": "Encounter"
+                },
+                "author": [
+                    {
+                        "reference": "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                        "display": "Dr. R.K.SUNDRIYAL"
+                    }
+                ],
+                "custodian": {
+                    "reference": "urn:uuid:41fddd40-0707-47b6-a22b-17a70e068116",
+                    "display": "E-Atria Hospital"
+                },
+                "section": [
+                    {
+                        "title": "Chief complaints",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "422843007",
+                                    "display": "Chief complaint section"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:ee9837f1-95a6-41fc-aa4f-f245744fc8c6",
+                                "display": "Abdominal Pain"
+                            },
+                            {
+                                "reference": "urn:uuid:e6d1cece-4973-46d4-ace5-d96047401b20",
+                                "display": "Cough"
+                            },
+                            {
+                                "reference": "urn:uuid:a712dc95-6feb-4b11-a7ea-5699b8845317",
+                                "display": "Vomiting"
+                            },
+                            {
+                                "reference": "urn:uuid:9eb5f7ed-afc9-47e4-a693-c3984efe1da2",
+                                "display": "Acute chest pain"
+                            },
+                            {
+                                "reference": "urn:uuid:3399f570-c2c6-4d1e-aee1-0ed8a0d751df",
+                                "display": "Chest Pain"
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Clinical History and Risk Profile",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "1003642006",
+                                    "display": "Past medical history section"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:8b4f1234-cad1-49ea-8822-111111111111",
+                                "display": "Coronary artery disease (CAD)"
+                            },
+                            {
+                                "reference": "urn:uuid:8b4f1234-cva1-49ea-8822-222222222222",
+                                "display": "Cerebral vascular accident (CVA)"
+                            },
+                            {
+                                "reference": "urn:uuid:8b4f1234-alco-49ea-8822-333333333333",
+                                "display": "Alcohol History"
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Discharge Diagnosis",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "397659008",
+                                    "display": "Discharge diagnosis"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:3a84e6c1-a483-4cde-a4a3-9b3ba8d5ebf7",
+                                "display": "VIRAL DISEASE"
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Procedures",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "371525003",
+                                    "display": "Clinical procedure report"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:95411403-5e4f-4c93-acee-fe7457d5acf5",
+                                "display": "Laparoscopy of rectum"
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Discharge Medications",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "721981007",
+                                    "display": "Medication list"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:a89d0861-d785-4103-aa88-9cb79c119e6d",
+                                "display": "ACILOC"
+                            },
+                            {
+                                "reference": "urn:uuid:657d375d-6fa1-4971-a112-a789d9b2904d",
+                                "display": "PANTOP DSR"
+                            }
+                        ]
+                    },
+                    {
+                        "title": "General Examination on Admission",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "425044008",
+                                    "display": "Physical exam section"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:07c74196-8d31-4ccb-a290-a84f979e5f35",
+                                "display": "Pulse"
+                            },
+                            {
+                                "reference": "urn:uuid:e9902963-cbbf-4b27-a3c6-d374f324e33e",
+                                "display": "Respiration"
+                            },
+                            {
+                                "reference": "urn:uuid:bc6a18f9-ea89-47c6-a99d-850ddfbce149",
+                                "display": "BP"
+                            },
+                            {
+                                "reference": "urn:uuid:ee80de1f-986e-46b1-a3d2-8f23a23df5c0",
+                                "display": "SPO2"
+                            },
+                            {
+                                "reference": "urn:uuid:0fb54648-cd56-4c91-a092-813469aa7c67",
+                                "display": "Temp"
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Follow-Up Instructions",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "736271009",
+                                    "display": "Follow-up plan"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:1b57be60-c849-4bd7-a090-7da51d4ab193",
+                                "display": "Dietary Advice"
+                            },
+                            {
+                                "reference": "urn:uuid:6ef6f128-d10a-4a3b-a660-5cfb966d29ff",
+                                "display": "Follow Up"
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Document Reference",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "373942005",
+                                    "display": "Discharge summary"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:1863138e-1e2b-475a-89bf-e3a9bcb73eaa",
+                                "display": "Discharge Summary"
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+            "resource": {
+                "resourceType": "Patient",
+                "id": "11cef8a6-4cd1-4733-afd0-92898eb57901",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient"
+                    ]
+                },
+                "identifier": [
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "MR",
+                                    "display": "Medical record number"
+                                }
+                            ]
+                        },
+                        "system": "https://hms.local/patient-id",
+                        "value": "11"
+                    },
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "SB",
+                                    "display": "Social Beneficiary Identifier"
+                                }
+                            ]
+                        },
+                        "system": "https://healthid.ndhm.gov.in",
+                        "value": "91510165305101"
+                    }
+                ],
+                "name": [
+                    {
+                        "use": "official",
+                        "text": "DEVENDER SINGH"
+                    }
+                ],
+                "gender": "male",
+                "birthDate": "1979-03-28"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+            "resource": {
+                "resourceType": "Practitioner",
+                "id": "0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Practitioner"
+                    ]
+                },
+                "identifier": [
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "MD",
+                                    "display": "Medical License number"
+                                }
+                            ]
+                        },
+                        "system": "https://doctor.ndhm.gov.in",
+                        "value": "HPR-4"
+                    }
+                ],
+                "name": [
+                    {
+                        "use": "official",
+                        "text": "Dr. R.K.SUNDRIYAL"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:41fddd40-0707-47b6-a22b-17a70e068116",
+            "resource": {
+                "resourceType": "Organization",
+                "id": "41fddd40-0707-47b6-a22b-17a70e068116",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization"
+                    ]
+                },
+                "identifier": [
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "PRN",
+                                    "display": "Provider number"
+                                }
+                            ]
+                        },
+                        "system": "https://facility.ndhm.gov.in",
+                        "value": "IN0510000871"
+                    }
+                ],
+                "name": "E-Atria Hospital"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e",
+            "resource": {
+                "resourceType": "Encounter",
+                "id": "4dd35d04-72c8-468f-afae-a82e1e51cd9e",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Encounter"
+                    ]
+                },
+                "status": "finished",
+                "class": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                    "code": "IMP",
+                    "display": "inpatient encounter"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "period": {
+                    "start": "2026-08-28T10:00:00+05:30",
+                    "end": "2026-09-06T02:08:00+05:30"
+                },
+                "hospitalization": {
+                    "dischargeDisposition": {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/discharge-disposition",
+                                "code": "home",
+                                "display": "Home"
+                            }
+                        ],
+                        "text": "Discharged to Home Care"
+                    }
+                },
+                "serviceProvider": {
+                    "reference": "urn:uuid:41fddd40-0707-47b6-a22b-17a70e068116",
+                    "display": "E-Atria Hospital"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:ee9837f1-95a6-41fc-aa4f-f245744fc8c6",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "ee9837f1-95a6-41fc-aa4f-f245744fc8c6",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                },
+                "clinicalStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }
+                    ]
+                },
+                "verificationStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code": "confirmed",
+                            "display": "Confirmed"
+                        }
+                    ]
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code": "encounter-diagnosis",
+                                "display": "Encounter Diagnosis"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "21522000",
+                            "display": "Abdominal pain"
+                        }
+                    ],
+                    "text": "Abdominal Pain"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "recordedDate": "2026-09-06T02:08:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:e6d1cece-4973-46d4-ace5-d96047401b20",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "e6d1cece-4973-46d4-ace5-d96047401b20",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                },
+                "clinicalStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }
+                    ]
+                },
+                "verificationStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code": "confirmed",
+                            "display": "Confirmed"
+                        }
+                    ]
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code": "encounter-diagnosis",
+                                "display": "Encounter Diagnosis"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "49727002",
+                            "display": "Cough"
+                        }
+                    ],
+                    "text": "Cough"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "recordedDate": "2026-09-06T02:08:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:a712dc95-6feb-4b11-a7ea-5699b8845317",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "a712dc95-6feb-4b11-a7ea-5699b8845317",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                },
+                "clinicalStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }
+                    ]
+                },
+                "verificationStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code": "confirmed",
+                            "display": "Confirmed"
+                        }
+                    ]
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code": "encounter-diagnosis",
+                                "display": "Encounter Diagnosis"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "422400008",
+                            "display": "Vomiting"
+                        }
+                    ],
+                    "text": "Vomiting"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "recordedDate": "2026-09-06T02:08:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:9eb5f7ed-afc9-47e4-a693-c3984efe1da2",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "9eb5f7ed-afc9-47e4-a693-c3984efe1da2",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                },
+                "clinicalStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }
+                    ]
+                },
+                "verificationStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code": "confirmed",
+                            "display": "Confirmed"
+                        }
+                    ]
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code": "encounter-diagnosis",
+                                "display": "Encounter Diagnosis"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "423341008",
+                            "display": "Acute chest pain"
+                        }
+                    ],
+                    "text": "Acute chest pain"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "recordedDate": "2026-09-06T02:08:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:3399f570-c2c6-4d1e-aee1-0ed8a0d751df",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "3399f570-c2c6-4d1e-aee1-0ed8a0d751df",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                },
+                "clinicalStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }
+                    ]
+                },
+                "verificationStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code": "confirmed",
+                            "display": "Confirmed"
+                        }
+                    ]
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code": "encounter-diagnosis",
+                                "display": "Encounter Diagnosis"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "29857009",
+                            "display": "Chest pain"
+                        }
+                    ],
+                    "text": "Chest Pain"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "recordedDate": "2026-09-06T02:08:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:8b4f1234-cad1-49ea-8822-111111111111",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "8b4f1234-cad1-49ea-8822-111111111111",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                },
+                "clinicalStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }
+                    ]
+                },
+                "verificationStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code": "confirmed",
+                            "display": "Confirmed"
+                        }
+                    ]
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code": "problem-list-item",
+                                "display": "Problem List Item"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "53741008",
+                            "display": "Coronary artery disease"
+                        }
+                    ],
+                    "text": "Coronary artery disease (CAD)"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "recordedDate": "2026-09-06T02:08:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:8b4f1234-cva1-49ea-8822-222222222222",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "8b4f1234-cva1-49ea-8822-222222222222",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                },
+                "clinicalStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }
+                    ]
+                },
+                "verificationStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code": "confirmed",
+                            "display": "Confirmed"
+                        }
+                    ]
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code": "problem-list-item",
+                                "display": "Problem List Item"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "230690007",
+                            "display": "Cerebrovascular accident"
+                        }
+                    ],
+                    "text": "Cerebral vascular accident (CVA)"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "recordedDate": "2026-09-06T02:08:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:8b4f1234-alco-49ea-8822-333333333333",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "8b4f1234-alco-49ea-8822-333333333333",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "social-history",
+                                "display": "Social History"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "160573003",
+                            "display": "Alcohol intake"
+                        }
+                    ],
+                    "text": "Lifestyle and Personal History: Alcohol"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "effectiveDateTime": "2026-08-28T10:00:00+05:30",
+                "valueString": "Alcohol"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:3a84e6c1-a483-4cde-a4a3-9b3ba8d5ebf7",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "3a84e6c1-a483-4cde-a4a3-9b3ba8d5ebf7",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                },
+                "clinicalStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }
+                    ]
+                },
+                "verificationStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code": "confirmed",
+                            "display": "Confirmed"
+                        }
+                    ]
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code": "encounter-diagnosis",
+                                "display": "Encounter Diagnosis"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "404684003",
+                            "display": "Clinical finding"
+                        }
+                    ],
+                    "text": "VIRAL DISEASE"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "recordedDate": "2026-09-06T02:08:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:95411403-5e4f-4c93-acee-fe7457d5acf5",
+            "resource": {
+                "resourceType": "Procedure",
+                "id": "95411403-5e4f-4c93-acee-fe7457d5acf5",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Procedure"
+                    ]
+                },
+                "status": "completed",
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "86174004",
+                            "display": "Laparoscopy"
+                        }
+                    ],
+                    "text": "Laparoscopy of rectum"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "performedDateTime": "2026-08-28T00:00:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:a89d0861-d785-4103-aa88-9cb79c119e6d",
+            "resource": {
+                "resourceType": "MedicationRequest",
+                "id": "a89d0861-d785-4103-aa88-9cb79c119e6d",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationRequest"
+                    ]
+                },
+                "status": "active",
+                "intent": "order",
+                "medicationCodeableConcept": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "105904009",
+                            "display": "Type of drug"
+                        }
+                    ],
+                    "text": "ACILOC"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "authoredOn": "2026-09-06T02:08:00+05:30",
+                "requester": {
+                    "reference": "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                    "display": "Dr. R.K.SUNDRIYAL"
+                },
+                "dosageInstruction": [
+                    {
+                        "text": "Take 1 tablet twice daily before meals",
+                        "timing": {
+                            "repeat": {
+                                "frequency": 2,
+                                "period": 1,
+                                "periodUnit": "d"
+                            }
+                        },
+                        "route": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "26643006",
+                                    "display": "Oral route"
+                                }
+                            ]
+                        },
+                        "doseAndRate": [
+                            {
+                                "doseQuantity": {
+                                    "value": 1,
+                                    "unit": "Tablet",
+                                    "system": "http://unitsofmeasure.org",
+                                    "code": "tbl"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:657d375d-6fa1-4971-a112-a789d9b2904d",
+            "resource": {
+                "resourceType": "MedicationRequest",
+                "id": "657d375d-6fa1-4971-a112-a789d9b2904d",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationRequest"
+                    ]
+                },
+                "status": "active",
+                "intent": "order",
+                "medicationCodeableConcept": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "105904009",
+                            "display": "Type of drug"
+                        }
+                    ],
+                    "text": "PANTOP DSR"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "authoredOn": "2026-09-06T02:08:00+05:30",
+                "requester": {
+                    "reference": "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                    "display": "Dr. R.K.SUNDRIYAL"
+                },
+                "dosageInstruction": [
+                    {
+                        "text": "Take 1 tablet once daily before meals",
+                        "timing": {
+                            "repeat": {
+                                "frequency": 1,
+                                "period": 1,
+                                "periodUnit": "d"
+                            }
+                        },
+                        "route": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "26643006",
+                                    "display": "Oral route"
+                                }
+                            ]
+                        },
+                        "doseAndRate": [
+                            {
+                                "doseQuantity": {
+                                    "value": 1,
+                                    "unit": "Tablet",
+                                    "system": "http://unitsofmeasure.org",
+                                    "code": "tbl"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:07c74196-8d31-4ccb-a290-a84f979e5f35",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "07c74196-8d31-4ccb-a290-a84f979e5f35",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "vital-signs",
+                                "display": "Vital Signs"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "8867-4",
+                            "display": "Heart rate"
+                        }
+                    ],
+                    "text": "Pulse /min"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "effectiveDateTime": "2026-08-28T10:00:00+05:30",
+                "valueQuantity": {
+                    "value": 70,
+                    "unit": "/min",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "/min"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:e9902963-cbbf-4b27-a3c6-d374f324e33e",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "e9902963-cbbf-4b27-a3c6-d374f324e33e",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "vital-signs",
+                                "display": "Vital Signs"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "9279-1",
+                            "display": "Respiratory rate"
+                        }
+                    ],
+                    "text": "Respiration /min"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "effectiveDateTime": "2026-08-28T10:00:00+05:30",
+                "valueQuantity": {
+                    "value": 20,
+                    "unit": "/min",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "/min"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:bc6a18f9-ea89-47c6-a99d-850ddfbce149",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "bc6a18f9-ea89-47c6-a99d-850ddfbce149",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "vital-signs",
+                                "display": "Vital Signs"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "85354-9",
+                            "display": "Blood pressure panel with all children optional"
+                        }
+                    ],
+                    "text": "BP mmHg"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "effectiveDateTime": "2026-08-28T10:00:00+05:30",
+                "component": [
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://loinc.org",
+                                    "code": "8480-6",
+                                    "display": "Systolic blood pressure"
+                                }
+                            ],
+                            "text": "Systolic blood pressure"
+                        },
+                        "valueQuantity": {
+                            "value": 140,
+                            "unit": "mmHg",
+                            "system": "http://unitsofmeasure.org",
+                            "code": "mm[Hg]"
+                        }
+                    },
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://loinc.org",
+                                    "code": "8462-4",
+                                    "display": "Diastolic blood pressure"
+                                }
+                            ],
+                            "text": "Diastolic blood pressure"
+                        },
+                        "valueQuantity": {
+                            "value": 90,
+                            "unit": "mmHg",
+                            "system": "http://unitsofmeasure.org",
+                            "code": "mm[Hg]"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:ee80de1f-986e-46b1-a3d2-8f23a23df5c0",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "ee80de1f-986e-46b1-a3d2-8f23a23df5c0",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "vital-signs",
+                                "display": "Vital Signs"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "59408-5",
+                            "display": "Oxygen saturation in Arterial blood by Pulse oximetry"
+                        }
+                    ],
+                    "text": "SPO2"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "effectiveDateTime": "2026-08-28T10:00:00+05:30",
+                "valueQuantity": {
+                    "value": 95,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:0fb54648-cd56-4c91-a092-813469aa7c67",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "0fb54648-cd56-4c91-a092-813469aa7c67",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "vital-signs",
+                                "display": "Vital Signs"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "8310-5",
+                            "display": "Body temperature"
+                        }
+                    ],
+                    "text": "Temp F"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "effectiveDateTime": "2026-08-28T10:00:00+05:30",
+                "valueQuantity": {
+                    "value": 96,
+                    "unit": "degF",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "[degF]"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:1b57be60-c849-4bd7-a090-7da51d4ab193",
+            "resource": {
+                "resourceType": "CarePlan",
+                "id": "1b57be60-c849-4bd7-a090-7da51d4ab193",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/CarePlan"
+                    ]
+                },
+                "status": "active",
+                "intent": "plan",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://snomed.info/sct",
+                                "code": "736271009",
+                                "display": "Outpatient care plan"
+                            }
+                        ]
+                    }
+                ],
+                "title": "Dietary Advice",
+                "description": "Fruits and Vegetables: Consume fresh fruits and vegetables daily. Avoid processed, sugary, and salty foods.",
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "author": {
+                    "reference": "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                    "display": "Dr. R.K.SUNDRIYAL"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:6ef6f128-d10a-4a3b-a660-5cfb966d29ff",
+            "resource": {
+                "resourceType": "CarePlan",
+                "id": "6ef6f128-d10a-4a3b-a660-5cfb966d29ff",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/CarePlan"
+                    ]
+                },
+                "status": "active",
+                "intent": "plan",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://snomed.info/sct",
+                                "code": "736271009",
+                                "display": "Outpatient care plan"
+                            }
+                        ]
+                    }
+                ],
+                "title": "Follow Up",
+                "description": "Review After: 1 Month (02-10-2026) / as and when required",
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "author": {
+                    "reference": "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                    "display": "Dr. R.K.SUNDRIYAL"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:1863138e-1e2b-475a-89bf-e3a9bcb73eaa",
+            "resource": {
+                "resourceType": "DocumentReference",
+                "id": "1863138e-1e2b-475a-89bf-e3a9bcb73eaa",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference"
+                    ]
+                },
+                "status": "current",
+                "docStatus": "final",
+                "type": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "373942005",
+                            "display": "Discharge Summary"
+                        }
+                    ],
+                    "text": "Discharge Summary"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "content": [
+                    {
+                        "attachment": {
+                            "contentType": "application/pdf",
+                            "language": "en-IN",
+                            "data": "JVBERi0xLjQKJeLjz9MKMyAwIG9iago8PC9UeXBlIC9QYWdlCi9QYXJlbnQgMSAwIFIKL01lZGlhQm94IFswIDAgNTk1LjI4MCA4NDEuODkwXQovVHJpbUJveCBbMC4wMDAgMC4wMDAgNTk1LjI4MCA4NDEuODkwXQovUmVzb3VyY2VzIDIgMCBSCi9Hcm91cCA8PCAvVHlwZSAvR3JvdXAgL1MgL1RyYW5zcGFyZW5jeSAvQ1MgL0RldmljZVJHQiA+PiAKL0NvbnRlbnRzIDQgMCBSPj4KZW5kb2JqCjQgMCBvYmoKPDwvRmlsdGVyIC9GbGF0ZURlY29kZSAvTGVuZ3RoIDEyODE+PgpzdHJlYW0KeJzdWU1vIzcMvftX6A9UK1GkPoCiwCa2A+xtmwA9FL1tN8WiKbDpYf9+HxXPWNYowXidzaEwPLY5TyQfqaEo2ZD5sHFWYjLfNld35t3eG0/WOWfuPpvd3cbX7/fA6OfN5t3NrTf3/85jgHvc/P6HcebTfK/qIeNzo+ergQZPuHK9xuDN470xOt5gAJMVciZlb6Nkc/fJmJ9ZaMs+caJYoifHOe5TSC6WxNHH61/M3RfoNh9ny18Pfn7bTPpisVyieTCzJDlbIPnbbETIpjgWHcZBZP4yv5l/DCIhVbNayGAgXq8pO/PrDcLwBe8PrRHiarY1oiJovN1sPkIN5XBQp4ElaNBk9AEeJaUPNHWB9tU1Hz2u9EygmeHOFGjmIoEDZ/ZCnBB4J0GEt3hBImUZ6unTVIuFRa/VYkkRFjUUuYiRDB+8GHhjQyDzE7FN4szjn+Yz1D0zGMm2RGkeDdesx7zoRm+G4ZnC4s4JS7GUEBYMYuivYREXMfsw9yTuEsOlHWbdNkp4fwzHZP8cW95763tjUM8sEll4V7+R5oALfiXOy/i/FvHgi3XI04kzmA5wpzLeX8o2CFKWZcHWBwoxuFDwPr4GM+2VUxyz2OSeS3FhvpRwSTb0dsgFH/yPz+KJUU5KK3KUhMlEew16TJfP35CyzSQ9Q95qUY7yZArlJGEGl0Qp/PicRlSOefJ6UN5ikQgpILP7uNNnq+b58keXYMh1BkGWQqYtpq9eKejv+AbJPmHNyjiGmMGUNM2vxzrkZEuWBWsXYmVd3oL1lOoQLbkj6X0MoLhPdClJdB41s61+DSGeHUwglOMdX9GuLoso0FgmixT2POhCXj3PHWWslMjvTpshzfnF2Y1sQ5aeOZaiApZgWJcmbRAEzQCuS8auLsrazCQ0Tc7moCt6zqS90aERSCS1ajyYSeDQXCZBR3S76UQP4I62SfuUBjTLZk0j1MJcP2xo7yBAXG04xUyio6IW1HswRq2it7A3CQStZ4c5iBprDaj3YIxaRW9hbxJQ7GM5iRpFDaj3YIw6i97L02CZGO3EdZ63qFk26xqhlhb7ceunwjI5k64W1XsxRq3juG46LBM0W2xQvRdj1DqO66ZEL2t0NajeizFqHcfntrprdmJsHZ+55UWLhFvywiqOLUfUqh8OvSo6mlFP9f/ckYG6zTwtfsdQFCyAg5XotawT0NFRZ57rmlub6DNMn7keT8QZg8rc07LuBa95z+d002dankm3pkXPWq50IuLxcfXkhbTN1+1S4pRqNnA36p0Sr1PBd0KeonZl9Y5mDVuDszYC3xk0LzZM6cIe1vNOmPfitIdB70ZvELwTF14Inj7Hl4RuTdM1Pa3zwi0iFjuCdrWdRA9mfsYbUP/cj1ELc/2wob1JEEChwxxEjaIG1HswRq2it7A3CZyg/p1iDqJGUQPqPRijzqP3YsiXQZgWsxY1y2ZdI9TSYj9ufdiXgZh1NajeizFqHcd1oe9lja4G1XsxRq3j+MaNBKO3SkmOhyApTrW5nv2gqKD0XKO0JNomSW5dLZzP1tcdLGONtD7EZrMqWvYSaXFrvQrv1SfIRc/zU0Cx83papTtPFL30NO5QLsNJkdQDHZ+UT1H8038CMagFirWwTsVUMXtgdoP/Clby8dgV56mcoyhX/wUxVDYx1dM15aIFHv2JNmccMzzJeiJC2+CDO56P0OCA8z8t7UxkCmVuZHN0cmVhbQplbmRvYmoKMSAwIG9iago8PC9UeXBlIC9QYWdlcwovS2lkcyBbMyAwIFIgXQovQ291bnQgMQovTWVkaWFCb3ggWzAgMCA1OTUuMjgwIDg0MS44OTBdCj4+CmVuZG9iago1IDAgb2JqCjw8L1R5cGUgL0V4dEdTdGF0ZQovQk0gL05vcm1hbAovY2EgMQovQ0EgMQo+PgplbmRvYmoKNiAwIG9iago8PC9UeXBlIC9Gb250Ci9CYXNlRm9udCAvTVBERkFBK0ZyZWVTZXJpZgovU3VidHlwZSAvVHJ1ZVR5cGUKL0ZpcnN0Q2hhciAwIC9MYXN0Q2hhciAxMjcKL1dpZHRocyA3IDAgUgovRm9udERlc2NyaXB0b3IgOCAwIFIKL1RvVW5pY29kZSA5IDAgUgo+PgplbmRvYmoKNyAwIG9iagpbNjAwIDYwMCA2MDAgNjAwIDYwMCA2MDAgNjAwIDYwMCA2MDAgNjAwIDYwMCA2MDAgNjAwIDYwMCA2MDAgNjAwIDYwMCA2MDAgNjAwIDYwMCA2MDAgNjAwIDYwMCA2MDAgNjAwIDYwMCA2MDAgNjAwIDYwMCA2MDAgNjAwIDYwMCAyNTAgMzMzIDQwMCA1MDAgNTAwIDgzMyA3NzggMjAwIDMzMyAzMzMgNTAwIDU2NCAyNTAgMzMzIDI1MCAyOTYgNTAwIDUwMCA1MDAgNTAwIDUwMCA1MDAgNTAwIDUwMCA1MDAgNTAwIDI1MCAyNTAgNTY0IDU2NCA1NjQgNDQ0IDg2NSA3MjEgNjMxIDY3MCA3MTkgNjEwIDU2NCA3MjIgNzE0IDMyNyAzODUgNzA5IDYxMSA4ODEgNzI1IDcyNCA1NzYgNzIzIDY2NyA1MjkgNjA2IDcyMSA3MDEgOTQ3IDcxNCA3MDEgNjEzIDMzMyAyOTYgMzMzIDQ2OSA1MDAgMjUwIDQzNSA1MDAgNDQ0IDQ5OSA0NDQgMzczIDQ2NyA0OTggMjc4IDM0OCA1MTMgMjU4IDc3OSA0ODkgNDkxIDUwMCA0OTkgMzQ1IDM2NyAyODMgNDkwIDQ2OCA2ODMgNDgyIDQ3MSA0MTcgNDgwIDIwMCA0ODAgNTAwIDYwMCBdCmVuZG9iago4IDAgb2JqCjw8L1R5cGUgL0ZvbnREZXNjcmlwdG9yIC9Gb250TmFtZSAvTVBERkFBK0ZyZWVTZXJpZgogL0NhcEhlaWdodCA2NjIKIC9YSGVpZ2h0IDQ1MAogL0ZvbnRCQm94IFstODc5IC01NTEgMTc2NyA5MzZdCiAvRmxhZ3MgNAogL0FzY2VudCA5MDAKIC9EZXNjZW50IC0zMDAKIC9MZWFkaW5nIDAKIC9JdGFsaWNBbmdsZSAwCiAvU3RlbVYgODcKIC9NaXNzaW5nV2lkdGggNjAwCi9Gb250RmlsZTIgMTAgMCBSPj4KZW5kb2JqCjkgMCBvYmoKPDwvTGVuZ3RoIDE4NTc+PgpzdHJlYW0KL0NJREluaXQgL1Byb2NTZXQgZmluZHJlc291cmNlIGJlZ2luCjEyIGRpY3QgYmVnaW4KYmVnaW5jbWFwCi9DSURTeXN0ZW1JbmZvCjw8L1JlZ2lzdHJ5IChBZG9iZSkKL09yZGVyaW5nIChVQ1MpCi9TdXBwbGVtZW50IDAKPj4gZGVmCi9DTWFwTmFtZSAvQWRvYmUtSWRlbnRpdHktVUNTIGRlZgovQ01hcFR5cGUgMiBkZWYKMSBiZWdpbmNvZGVzcGFjZXJhbmdlCjwwMD4gPEZGPgplbmRjb2Rlc3BhY2VyYW5nZQoxMjggYmVnaW5iZmNoYXIKPDAwPiA8MDAwMD4KPDAxPiA8MDAwMT4KPDAyPiA8MDAwMj4KPDAzPiA8MDAwMz4KPDA0PiA8MDAwND4KPDA1PiA8MDAwNT4KPDA2PiA8MDAwNj4KPDA3PiA8MDAwNz4KPDA4PiA8MDAwOD4KPDA5PiA8MDAwOT4KPDBBPiA8MDAwQT4KPDBCPiA8MDAwQj4KPDBDPiA8MDAwQz4KPDBEPiA8MDAwRD4KPDBFPiA8MDAwRT4KPDBGPiA8MDAwRj4KPDEwPiA8MDAxMD4KPDExPiA8MDAxMT4KPDEyPiA8MDAxMj4KPDEzPiA8MDAxMz4KPDE0PiA8MDAxND4KPDE1PiA8MDAxNT4KPDE2PiA8MDAxNj4KPDE3PiA8MDAxNz4KPDE4PiA8MDAxOD4KPDE5PiA8MDAxOT4KPDFBPiA8MDAxQT4KPDFCPiA8MDAxQj4KPDFDPiA8MDAxQz4KPDFEPiA8MDAxRD4KPDFFPiA8MDAxRT4KPDFGPiA8MDAxRj4KPDIwPiA8MDAyMD4KPDIxPiA8MDAyMT4KPDIyPiA8MDAyMj4KPDIzPiA8MDAyMz4KPDI0PiA8MDAyND4KPDI1PiA8MDAyNT4KPDI2PiA8MDAyNj4KPDI3PiA8MDAyNz4KPDI4PiA8MDAyOD4KPDI5PiA8MDAyOT4KPDJBPiA8MDAyQT4KPDJCPiA8MDAyQj4KPDJDPiA8MDAyQz4KPDJEPiA8MDAyRD4KPDJFPiA8MDAyRT4KPDJGPiA8MDAyRj4KPDMwPiA8MDAzMD4KPDMxPiA8MDAzMT4KPDMyPiA8MDAzMj4KPDMzPiA8MDAzMz4KPDM0PiA8MDAzND4KPDM1PiA8MDAzNT4KPDM2PiA8MDAzNj4KPDM3PiA8MDAzNz4KPDM4PiA8MDAzOD4KPDM5PiA8MDAzOT4KPDNBPiA8MDAzQT4KPDNCPiA8MDAzQj4KPDNDPiA8MDAzQz4KPDNEPiA8MDAzRD4KPDNFPiA8MDAzRT4KPDNGPiA8MDAzRj4KPDQwPiA8MDA0MD4KPDQxPiA8MDA0MT4KPDQyPiA8MDA0Mj4KPDQzPiA8MDA0Mz4KPDQ0PiA8MDA0ND4KPDQ1PiA8MDA0NT4KPDQ2PiA8MDA0Nj4KPDQ3PiA8MDA0Nz4KPDQ4PiA8MDA0OD4KPDQ5PiA8MDA0OT4KPDRBPiA8MDA0QT4KPDRCPiA8MDA0Qj4KPDRDPiA8MDA0Qz4KPDREPiA8MDA0RD4KPDRFPiA8MDA0RT4KPDRGPiA8MDA0Rj4KPDUwPiA8MDA1MD4KPDUxPiA8MDA1MT4KPDUyPiA8MDA1Mj4KPDUzPiA8MDA1Mz4KPDU0PiA8MDA1ND4KPDU1PiA8MDA1NT4KPDU2PiA8MDA1Nj4KPDU3PiA8MDA1Nz4KPDU4PiA8MDA1OD4KPDU5PiA8MDA1OT4KPDVBPiA8MDA1QT4KPDVCPiA8MDA1Qj4KPDVDPiA8MDA1Qz4KPDVEPiA8MDA1RD4KPDVFPiA8MDA1RT4KPDVGPiA8MDA1Rj4KPDYwPiA8MDA2MD4KPDYxPiA8MDA2MT4KPDYyPiA8MDA2Mj4KPDYzPiA8MDA2Mz4KPDY0PiA8MDA2ND4KPDY1PiA8MDA2NT4KPDY2PiA8MDA2Nj4KPDY3PiA8MDA2Nz4KPDY4PiA8MDA2OD4KPDY5PiA8MDA2OT4KPDZBPiA8MDA2QT4KPDZCPiA8MDA2Qj4KPDZDPiA8MDA2Qz4KPDZEPiA8MDA2RD4KPDZFPiA8MDA2RT4KPDZGPiA8MDA2Rj4KPDcwPiA8MDA3MD4KPDcxPiA8MDA3MT4KPDcyPiA8MDA3Mj4KPDczPiA8MDA3Mz4KPDc0PiA8MDA3ND4KPDc1PiA8MDA3NT4KPDc2PiA8MDA3Nj4KPDc3PiA8MDA3Nz4KPDc4PiA8MDA3OD4KPDc5PiA8MDA3OT4KPDdBPiA8MDA3QT4KPDdCPiA8MDA3Qj4KPDdDPiA8MDA3Qz4KPDdEPiA8MDA3RD4KPDdFPiA8MDA3RT4KPDdGPiA8MDA3Rj4KZW5kYmZjaGFyCmVuZGNtYXAKQ01hcE5h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NjAwIDYwMCA2MDAgNjAwIDI1MCAzMzMgNTU1IDUwMCA1MDAgMTAwMCA4MzMgMjc4IDMzMyAzMzMgNTA3IDY3NiAyNTAgMzMzIDI1MCAyNzggNTAwIDUwMCA1MDAgNTAwIDUwMCA1MDAgNTAwIDUwMCA1MDAgNTAwIDMzMyAzMzMgNjc2IDY3NiA2NzYgNTAwIDkzMCA3MjEgNjU4IDcwOCA3MzEgNjcxIDYxNyA3NzYgNzc4IDM5MCA1MDEgNzc0IDY2OCA5NDcgNzI1IDc3OCA2MzkgNzc4IDcxOSA1NjggNjQ1IDcyNSA3MDUgOTgyIDcxMyA3MDQgNjQ2IDMzMyAyNzggMzMzIDU4MSA1MDAgMzMzIDUwMCA1NDUgNDM1IDU1MiA0NDQgMzkzIDUwMCA1NTQgMjk5IDQwMCA1NTUgMjc3IDgzMiA1NTQgNTAxIDU0NSA1NDUgNDI3IDQwNiAzMzUgNTY0IDQ4MiA3MDIgNTA4IDQ4MiA0NDQgMzk0IDIyMCAzOTQgNTIwIDYwMCBdCmVuZG9iagoxMyAwIG9iago8PC9UeXBlIC9Gb250RGVzY3JpcHRvciAvRm9udE5hbWUgL01QREZBQStGcmVlU2VyaWZCb2xkCiAvQ2FwSGVpZ2h0IDY3MwogL1hIZWlnaHQgNDYxCiAvRm9udEJCb3ggWy04MTkgLTU1NSAxODM0IDkyMF0KIC9GbGFncyAyNjIxNDgKIC9Bc2NlbnQgOTAwCiAvRGVzY2VudCAtMzAwCiAvTGVhZGluZyAwCiAvSXRhbGljQW5nbGUgMAogL1N0ZW1WIDE2NQogL01pc3NpbmdXaWR0aCA2MDAKL0ZvbnRGaWxlMiAxNSAwIFI+PgplbmRvYmoKMTQgMCBvYmoKPDwvTGVuZ3RoIDE4NTc+PgpzdHJlYW0KL0NJREluaXQgL1Byb2NTZXQgZmluZHJlc291cmNlIGJlZ2luCjEyIGRpY3QgYmVnaW4KYmVnaW5jbWFwCi9DSURTeXN0ZW1JbmZvCjw8L1JlZ2lzdHJ5IChBZG9iZSkKL09yZGVyaW5nIChVQ1MpCi9TdXBwbGVtZW50IDAKPj4gZGVmCi9DTWFwTmFtZSAvQWRvYmUtSWRlbnRpdHktVUNTIGRlZgovQ01hcFR5cGUgMiBkZWYKMSBiZWdpbmNvZGVzcGFjZXJhbmdlCjwwMD4gPEZGPgplbmRjb2Rlc3BhY2VyYW5nZQoxMjggYmVnaW5iZmNoYXIKPDAwPiA8MDAwMD4KPDAxPiA8MDAwMT4KPDAyPiA8MDAwMj4KPDAzPiA8MDAwMz4KPDA0PiA8MDAwND4KPDA1PiA8MDAwNT4KPDA2PiA8MDAwNj4KPDA3PiA8MDAwNz4KPDA4PiA8MDAwOD4KPDA5PiA8MDAwOT4KPDBBPiA8MDAwQT4KPDBCPiA8MDAwQj4KPDBDPiA8MDAwQz4KPDBEPiA8MDAwRD4KPDBFPiA8MDAwRT4KPDBGPiA8MDAwRj4KPDEwPiA8MDAxMD4KPDExPiA8MDAxMT4KPDEyPiA8MDAxMj4KPDEzPiA8MDAxMz4KPDE0PiA8MDAxND4KPDE1PiA8MDAxNT4KPDE2PiA8MDAxNj4KPDE3PiA8MDAxNz4KPDE4PiA8MDAxOD4KPDE5PiA8MDAxOT4KPDFBPiA8MDAxQT4KPDFCPiA8MDAxQj4KPDFDPiA8MDAxQz4KPDFEPiA8MDAxRD4KPDFFPiA8MDAxRT4KPDFGPiA8MDAxRj4KPDIwPiA8MDAyMD4KPDIxPiA8MDAyMT4KPDIyPiA8MDAyMj4KPDIzPiA8MDAyMz4KPDI0PiA8MDAyND4KPDI1PiA8MDAyNT4KPDI2PiA8MDAyNj4KPDI3PiA8MDAyNz4KPDI4PiA8MDAyOD4KPDI5PiA8MDAyOT4KPDJBPiA8MDAyQT4KPDJCPiA8MDAyQj4KPDJDPiA8MDAyQz4KPDJEPiA8MDAyRD4KPDJFPiA8MDAyRT4KPDJGPiA8MDAyRj4KPDMwPiA8MDAzMD4KPDMxPiA8MDAzMT4KPDMyPiA8MDAzMj4KPDMzPiA8MDAzMz4KPDM0PiA8MDAzND4KPDM1PiA8MDAzNT4KPDM2PiA8MDAzNj4KPDM3PiA8MDAzNz4KPDM4PiA8MDAzOD4KPDM5PiA8MDAzOT4KPDNBPiA8MDAzQT4KPDNCPiA8MDAzQj4KPDNDPiA8MDAzQz4KPDNEPiA8MDAzRD4KPDNFPiA8MDAzRT4KPDNGPiA8MDAzRj4KPDQwPiA8MDA0MD4KPDQxPiA8MDA0MT4KPDQyPiA8MDA0Mj4KPDQzPiA8MDA0Mz4KPDQ0PiA8MDA0ND4KPDQ1PiA8MDA0NT4KPDQ2PiA8MDA0Nj4KPDQ3PiA8MDA0Nz4KPDQ4PiA8MDA0OD4KPDQ5PiA8MDA0OT4KPDRBPiA8MDA0QT4KPDRCPiA8MDA0Qj4KPDRDPiA8MDA0Qz4KPDREPiA8MDA0RD4KPDRFPiA8MDA0RT4KPDRGPiA8MDA0Rj4KPDUwPiA8MDA1MD4KPDUxPiA8MDA1MT4KPDUyPiA8MDA1Mj4KPDUzPiA8MDA1Mz4KPDU0PiA8MDA1ND4KPDU1PiA8MDA1NT4KPDU2PiA8MDA1Nj4KPDU3PiA8MDA1Nz4KPDU4PiA8MDA1OD4KPDU5PiA8MDA1OT4KPDVBPiA8MDA1QT4KPDVCPiA8MDA1Qj4KPDVDPiA8MDA1Qz4KPDVEPiA8MDA1RD4KPDVFPiA8MDA1RT4KPDVGPiA8MDA1Rj4KPDYwPiA8MDA2MD4KPDYxPiA8MDA2MT4KPDYyPiA8MDA2Mj4KPDYzPiA8MDA2Mz4KPDY0PiA8MDA2ND4KPDY1PiA8MDA2NT4KPDY2PiA8MDA2Nj4KPDY3PiA8MDA2Nz4KPDY4PiA8MDA2OD4KPDY5PiA8MDA2OT4KPDZBPiA8MDA2QT4KPDZCPiA8MDA2Qj4KPDZDPiA8MDA2Qz4KPDZEPiA8MDA2RD4KPDZFPiA8MDA2RT4KPDZGPiA8MDA2Rj4KPDcwPiA8MDA3MD4KPDcxPiA8MDA3MT4KPDcyPiA8MDA3Mj4KPDczPiA8MDA3Mz4KPDc0PiA8MDA3ND4KPDc1PiA8MDA3NT4KPDc2PiA8MDA3Nj4KPDc3PiA8MDA3Nz4KPDc4PiA8MDA3OD4KPDc5PiA8MDA3OT4KPDdBPiA8MDA3QT4KPDdCPiA8MDA3Qj4KPDdDPiA8MDA3Qz4KPDdEPiA8MDA3RD4KPDdFPiA8MDA3RT4KPDdGPiA8MDA3Rj4KZW5kYmZjaGFyCmVuZGNtYXAKQ01hcE5hbWUgY3VycmVudGRpY3QgL0NNYXAgZGVmaW5lcmVzb3VyY2UgcG9wCmVuZAplbmQKCmVuZHN0cmVhbQplbmRvYmoKMTUgMCBvYmoKPDwvTGVuZ3RoIDE2ODYwCi9GaWx0ZXIgL0ZsYXRlRGVjb2RlCi9MZW5ndGgxIDI4NjAwCj4+CnN0cmVhbQp4nOW9eXwcR50oXtVz39Nz39MzPYekGc1IMxqNDluW5FOxHd+x5DiJZVuylciWYslOnA0khBAg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L0NhdGFsb2cKL1BhZ2VzIDEgMCBSCi9MYW5nICh1dGYtOCkKL09wZW5BY3Rpb24gWzMgMCBSIC9YWVogbnVsbCBudWxsIDFdCi9QYWdlTGF5b3V0IC9PbmVDb2x1bW4KPj4KZW5kb2JqCnhyZWYKMCAxOAowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDE1NzUgMDAwMDAgbiAKMDAwMDA0MTEyMyAwMDAwMCBuIAowMDAwMDAwMDE1IDAwMDAwIG4gCjAwMDAwMDAyMjMgMDAwMDAgbiAKMDAwMDAwMTY2NCAwMDAwMCBuIAowMDAwMDAxNzI1IDAwMDAwIG4gCjAwMDAwMDE4ODQgMDAwMDAgbiAKMDAwMDAwMjQxNCAwMDAwMCBuIAowMDAwMDAyNjU5IDAwMDAwIG4gCjAwMDAwMDQ1NjYgMDAwMDAgbiAKMDAwMDAyMTMxMSAwMDAwMCBuIAowMDAwMDIxNDc4IDAwMDAwIG4gCjAwMDAwMjIwMTAgMDAwMDAgbiAKMDAwMDAyMjI2NiAwMDAwMCBuIAowMDAwMDI0MTc0IDAwMDAwIG4gCjAwMDAwNDEyNTAgMDAwMDAgbiAKMDAwMDA0MTM4MiAwMDAwMCBuIAp0cmFpbGVyCjw8Ci9TaXplIDE4Ci9Sb290IDE3IDAgUgovSW5mbyAxNiAwIFIKL0lEIFs8MmI2ODU5ZmM1NmNkNmFmNTg3MTcxMzg3ODM3YmE5Nzk+IDwyYjY4NTlmYzU2Y2Q2YWY1ODcxNzEzODc4MzdiYTk3OT5dCj4+CnN0YXJ0eHJlZgo0MTUwNgolJUVPRg==",
+                            "title": "Discharge Summary",
+                            "creation": "2026-09-06T02:08:00+05:30"
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+}

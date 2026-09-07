@@ -1,0 +1,1426 @@
+{
+    "resourceType": "Bundle",
+    "id": "discharge-A26090000009-v1788640857",
+    "meta": {
+        "versionId": "1",
+        "lastUpdated": "2026-09-06T02:08:00+05:30",
+        "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle"
+        ],
+        "security": [
+            {
+                "system": "http://terminology.hl7.org/CodeSystem/v3-Confidentiality",
+                "code": "V",
+                "display": "very restricted"
+            }
+        ]
+    },
+    "identifier": {
+        "system": "https://hms.local/fhir/document",
+        "value": "discharge-A26090000009-v1788640857"
+    },
+    "type": "document",
+    "timestamp": "2026-09-06T02:08:00+05:30",
+    "entry": [
+        {
+            "fullUrl": "urn:uuid:fdf46837-ab78-42a7-a550-8d64a35b6508",
+            "resource": {
+                "resourceType": "Composition",
+                "id": "fdf46837-ab78-42a7-a550-8d64a35b6508",
+                "meta": {
+                    "versionId": "1",
+                    "lastUpdated": "2026-09-06T02:08:00+05:30",
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DischargeSummaryRecord"
+                    ]
+                },
+                "status": "final",
+                "type": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "373942005",
+                            "display": "Discharge summary"
+                        }
+                    ],
+                    "text": "Discharge Summary"
+                },
+                "title": "IPD Discharge Summary",
+                "date": "2026-09-06T02:08:00+05:30",
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e",
+                    "display": "Encounter"
+                },
+                "author": [
+                    {
+                        "reference": "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                        "display": "Dr. R.K.SUNDRIYAL"
+                    }
+                ],
+                "custodian": {
+                    "reference": "urn:uuid:41fddd40-0707-47b6-a22b-17a70e068116",
+                    "display": "E-Atria Hospital"
+                },
+                "section": [
+                    {
+                        "title": "Chief complaints",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "422843007",
+                                    "display": "Chief complaint section"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:ee9837f1-95a6-41fc-aa4f-f245744fc8c6",
+                                "display": "Abdominal Pain"
+                            },
+                            {
+                                "reference": "urn:uuid:e6d1cece-4973-46d4-ace5-d96047401b20",
+                                "display": "Cough"
+                            },
+                            {
+                                "reference": "urn:uuid:a712dc95-6feb-4b11-a7ea-5699b8845317",
+                                "display": "Vomiting"
+                            },
+                            {
+                                "reference": "urn:uuid:9eb5f7ed-afc9-47e4-a693-c3984efe1da2",
+                                "display": "Acute chest pain"
+                            },
+                            {
+                                "reference": "urn:uuid:3399f570-c2c6-4d1e-aee1-0ed8a0d751df",
+                                "display": "Chest Pain"
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Clinical History and Risk Profile",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "1003642006",
+                                    "display": "Past medical history section"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:8b4f1234-cad1-49ea-8822-111111111111",
+                                "display": "Coronary artery disease (CAD)"
+                            },
+                            {
+                                "reference": "urn:uuid:8b4f1234-cva1-49ea-8822-222222222222",
+                                "display": "Cerebral vascular accident (CVA)"
+                            },
+                            {
+                                "reference": "urn:uuid:8b4f1234-alco-49ea-8822-333333333333",
+                                "display": "Alcohol History"
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Discharge Diagnosis",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "397659008",
+                                    "display": "Discharge diagnosis"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:3a84e6c1-a483-4cde-a4a3-9b3ba8d5ebf7",
+                                "display": "VIRAL DISEASE"
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Procedures",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "371525003",
+                                    "display": "Clinical procedure report"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:95411403-5e4f-4c93-acee-fe7457d5acf5",
+                                "display": "Laparoscopy of rectum"
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Discharge Medications",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "721981007",
+                                    "display": "Medication list"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:a89d0861-d785-4103-aa88-9cb79c119e6d",
+                                "display": "ACILOC"
+                            },
+                            {
+                                "reference": "urn:uuid:657d375d-6fa1-4971-a112-a789d9b2904d",
+                                "display": "PANTOP DSR"
+                            }
+                        ]
+                    },
+                    {
+                        "title": "General Examination on Admission",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "425044008",
+                                    "display": "Physical exam section"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:07c74196-8d31-4ccb-a290-a84f979e5f35",
+                                "display": "Pulse"
+                            },
+                            {
+                                "reference": "urn:uuid:e9902963-cbbf-4b27-a3c6-d374f324e33e",
+                                "display": "Respiration"
+                            },
+                            {
+                                "reference": "urn:uuid:bc6a18f9-ea89-47c6-a99d-850ddfbce149",
+                                "display": "BP"
+                            },
+                            {
+                                "reference": "urn:uuid:ee80de1f-986e-46b1-a3d2-8f23a23df5c0",
+                                "display": "SPO2"
+                            },
+                            {
+                                "reference": "urn:uuid:0fb54648-cd56-4c91-a092-813469aa7c67",
+                                "display": "Temp"
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Follow-Up Instructions",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "736271009",
+                                    "display": "Follow-up plan"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:1b57be60-c849-4bd7-a090-7da51d4ab193",
+                                "display": "Dietary Advice"
+                            },
+                            {
+                                "reference": "urn:uuid:6ef6f128-d10a-4a3b-a660-5cfb966d29ff",
+                                "display": "Follow Up"
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+            "resource": {
+                "resourceType": "Patient",
+                "id": "11cef8a6-4cd1-4733-afd0-92898eb57901",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient"
+                    ]
+                },
+                "identifier": [
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "MR",
+                                    "display": "Medical record number"
+                                }
+                            ]
+                        },
+                        "system": "https://hms.local/patient-id",
+                        "value": "11"
+                    },
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "SB",
+                                    "display": "Social Beneficiary Identifier"
+                                }
+                            ]
+                        },
+                        "system": "https://healthid.ndhm.gov.in",
+                        "value": "91510165305101"
+                    }
+                ],
+                "name": [
+                    {
+                        "use": "official",
+                        "text": "DEVENDER SINGH"
+                    }
+                ],
+                "gender": "male",
+                "birthDate": "1979-03-28"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+            "resource": {
+                "resourceType": "Practitioner",
+                "id": "0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Practitioner"
+                    ]
+                },
+                "identifier": [
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "MD",
+                                    "display": "Medical License number"
+                                }
+                            ]
+                        },
+                        "system": "https://doctor.ndhm.gov.in",
+                        "value": "HPR-4"
+                    }
+                ],
+                "name": [
+                    {
+                        "use": "official",
+                        "text": "Dr. R.K.SUNDRIYAL"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:41fddd40-0707-47b6-a22b-17a70e068116",
+            "resource": {
+                "resourceType": "Organization",
+                "id": "41fddd40-0707-47b6-a22b-17a70e068116",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization"
+                    ]
+                },
+                "identifier": [
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "PRN",
+                                    "display": "Provider number"
+                                }
+                            ]
+                        },
+                        "system": "https://facility.ndhm.gov.in",
+                        "value": "IN0510000871"
+                    }
+                ],
+                "name": "E-Atria Hospital"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e",
+            "resource": {
+                "resourceType": "Encounter",
+                "id": "4dd35d04-72c8-468f-afae-a82e1e51cd9e",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Encounter"
+                    ]
+                },
+                "status": "finished",
+                "class": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                    "code": "IMP",
+                    "display": "inpatient encounter"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "period": {
+                    "start": "2026-08-28T10:00:00+05:30",
+                    "end": "2026-09-06T02:08:00+05:30"
+                },
+                "hospitalization": {
+                    "dischargeDisposition": {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/discharge-disposition",
+                                "code": "home",
+                                "display": "Home"
+                            }
+                        ],
+                        "text": "Discharged to Home Care"
+                    }
+                },
+                "serviceProvider": {
+                    "reference": "urn:uuid:41fddd40-0707-47b6-a22b-17a70e068116",
+                    "display": "E-Atria Hospital"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:ee9837f1-95a6-41fc-aa4f-f245744fc8c6",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "ee9837f1-95a6-41fc-aa4f-f245744fc8c6",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                },
+                "clinicalStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }
+                    ]
+                },
+                "verificationStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code": "confirmed",
+                            "display": "Confirmed"
+                        }
+                    ]
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code": "encounter-diagnosis",
+                                "display": "Encounter Diagnosis"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "21522000",
+                            "display": "Abdominal pain"
+                        }
+                    ],
+                    "text": "Abdominal Pain"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "recordedDate": "2026-09-06T02:08:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:e6d1cece-4973-46d4-ace5-d96047401b20",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "e6d1cece-4973-46d4-ace5-d96047401b20",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                },
+                "clinicalStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }
+                    ]
+                },
+                "verificationStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code": "confirmed",
+                            "display": "Confirmed"
+                        }
+                    ]
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code": "encounter-diagnosis",
+                                "display": "Encounter Diagnosis"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "49727002",
+                            "display": "Cough"
+                        }
+                    ],
+                    "text": "Cough"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "recordedDate": "2026-09-06T02:08:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:a712dc95-6feb-4b11-a7ea-5699b8845317",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "a712dc95-6feb-4b11-a7ea-5699b8845317",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                },
+                "clinicalStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }
+                    ]
+                },
+                "verificationStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code": "confirmed",
+                            "display": "Confirmed"
+                        }
+                    ]
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code": "encounter-diagnosis",
+                                "display": "Encounter Diagnosis"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "422400008",
+                            "display": "Vomiting"
+                        }
+                    ],
+                    "text": "Vomiting"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "recordedDate": "2026-09-06T02:08:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:9eb5f7ed-afc9-47e4-a693-c3984efe1da2",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "9eb5f7ed-afc9-47e4-a693-c3984efe1da2",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                },
+                "clinicalStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }
+                    ]
+                },
+                "verificationStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code": "confirmed",
+                            "display": "Confirmed"
+                        }
+                    ]
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code": "encounter-diagnosis",
+                                "display": "Encounter Diagnosis"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "423341008",
+                            "display": "Acute chest pain"
+                        }
+                    ],
+                    "text": "Acute chest pain"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "recordedDate": "2026-09-06T02:08:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:3399f570-c2c6-4d1e-aee1-0ed8a0d751df",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "3399f570-c2c6-4d1e-aee1-0ed8a0d751df",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                },
+                "clinicalStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }
+                    ]
+                },
+                "verificationStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code": "confirmed",
+                            "display": "Confirmed"
+                        }
+                    ]
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code": "encounter-diagnosis",
+                                "display": "Encounter Diagnosis"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "29857009",
+                            "display": "Chest pain"
+                        }
+                    ],
+                    "text": "Chest Pain"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "recordedDate": "2026-09-06T02:08:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:8b4f1234-cad1-49ea-8822-111111111111",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "8b4f1234-cad1-49ea-8822-111111111111",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                },
+                "clinicalStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }
+                    ]
+                },
+                "verificationStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code": "confirmed",
+                            "display": "Confirmed"
+                        }
+                    ]
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code": "problem-list-item",
+                                "display": "Problem List Item"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "53741008",
+                            "display": "Coronary artery disease"
+                        }
+                    ],
+                    "text": "Coronary artery disease (CAD)"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "recordedDate": "2026-09-06T02:08:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:8b4f1234-cva1-49ea-8822-222222222222",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "8b4f1234-cva1-49ea-8822-222222222222",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                },
+                "clinicalStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }
+                    ]
+                },
+                "verificationStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code": "confirmed",
+                            "display": "Confirmed"
+                        }
+                    ]
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code": "problem-list-item",
+                                "display": "Problem List Item"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "230690007",
+                            "display": "Cerebrovascular accident"
+                        }
+                    ],
+                    "text": "Cerebral vascular accident (CVA)"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "recordedDate": "2026-09-06T02:08:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:8b4f1234-alco-49ea-8822-333333333333",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "8b4f1234-alco-49ea-8822-333333333333",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "social-history",
+                                "display": "Social History"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "160573003",
+                            "display": "Alcohol intake"
+                        }
+                    ],
+                    "text": "Lifestyle and Personal History: Alcohol"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "effectiveDateTime": "2026-08-28T10:00:00+05:30",
+                "valueString": "Alcohol"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:3a84e6c1-a483-4cde-a4a3-9b3ba8d5ebf7",
+            "resource": {
+                "resourceType": "Condition",
+                "id": "3a84e6c1-a483-4cde-a4a3-9b3ba8d5ebf7",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                },
+                "clinicalStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code": "active",
+                            "display": "Active"
+                        }
+                    ]
+                },
+                "verificationStatus": {
+                    "coding": [
+                        {
+                            "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code": "confirmed",
+                            "display": "Confirmed"
+                        }
+                    ]
+                },
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code": "encounter-diagnosis",
+                                "display": "Encounter Diagnosis"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "404684003",
+                            "display": "Clinical finding"
+                        }
+                    ],
+                    "text": "VIRAL DISEASE"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "recordedDate": "2026-09-06T02:08:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:95411403-5e4f-4c93-acee-fe7457d5acf5",
+            "resource": {
+                "resourceType": "Procedure",
+                "id": "95411403-5e4f-4c93-acee-fe7457d5acf5",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Procedure"
+                    ]
+                },
+                "status": "completed",
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "86174004",
+                            "display": "Laparoscopy"
+                        }
+                    ],
+                    "text": "Laparoscopy of rectum"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "performedDateTime": "2026-08-28T00:00:00+05:30"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:a89d0861-d785-4103-aa88-9cb79c119e6d",
+            "resource": {
+                "resourceType": "MedicationRequest",
+                "id": "a89d0861-d785-4103-aa88-9cb79c119e6d",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationRequest"
+                    ]
+                },
+                "status": "active",
+                "intent": "order",
+                "medicationCodeableConcept": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "105904009",
+                            "display": "Type of drug"
+                        }
+                    ],
+                    "text": "ACILOC"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "authoredOn": "2026-09-06T02:08:00+05:30",
+                "requester": {
+                    "reference": "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                    "display": "Dr. R.K.SUNDRIYAL"
+                },
+                "dosageInstruction": [
+                    {
+                        "text": "Take 1 tablet twice daily before meals",
+                        "timing": {
+                            "repeat": {
+                                "frequency": 2,
+                                "period": 1,
+                                "periodUnit": "d"
+                            }
+                        },
+                        "route": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "26643006",
+                                    "display": "Oral route"
+                                }
+                            ]
+                        },
+                        "doseAndRate": [
+                            {
+                                "doseQuantity": {
+                                    "value": 1,
+                                    "unit": "Tablet",
+                                    "system": "http://unitsofmeasure.org",
+                                    "code": "tbl"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:657d375d-6fa1-4971-a112-a789d9b2904d",
+            "resource": {
+                "resourceType": "MedicationRequest",
+                "id": "657d375d-6fa1-4971-a112-a789d9b2904d",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationRequest"
+                    ]
+                },
+                "status": "active",
+                "intent": "order",
+                "medicationCodeableConcept": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "105904009",
+                            "display": "Type of drug"
+                        }
+                    ],
+                    "text": "PANTOP DSR"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "authoredOn": "2026-09-06T02:08:00+05:30",
+                "requester": {
+                    "reference": "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                    "display": "Dr. R.K.SUNDRIYAL"
+                },
+                "dosageInstruction": [
+                    {
+                        "text": "Take 1 tablet once daily before meals",
+                        "timing": {
+                            "repeat": {
+                                "frequency": 1,
+                                "period": 1,
+                                "periodUnit": "d"
+                            }
+                        },
+                        "route": {
+                            "coding": [
+                                {
+                                    "system": "http://snomed.info/sct",
+                                    "code": "26643006",
+                                    "display": "Oral route"
+                                }
+                            ]
+                        },
+                        "doseAndRate": [
+                            {
+                                "doseQuantity": {
+                                    "value": 1,
+                                    "unit": "Tablet",
+                                    "system": "http://unitsofmeasure.org",
+                                    "code": "tbl"
+                                }
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:07c74196-8d31-4ccb-a290-a84f979e5f35",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "07c74196-8d31-4ccb-a290-a84f979e5f35",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "vital-signs",
+                                "display": "Vital Signs"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "8867-4",
+                            "display": "Heart rate"
+                        }
+                    ],
+                    "text": "Pulse /min"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "effectiveDateTime": "2026-08-28T10:00:00+05:30",
+                "valueQuantity": {
+                    "value": 70,
+                    "unit": "/min",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "/min"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:e9902963-cbbf-4b27-a3c6-d374f324e33e",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "e9902963-cbbf-4b27-a3c6-d374f324e33e",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "vital-signs",
+                                "display": "Vital Signs"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "9279-1",
+                            "display": "Respiratory rate"
+                        }
+                    ],
+                    "text": "Respiration /min"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "effectiveDateTime": "2026-08-28T10:00:00+05:30",
+                "valueQuantity": {
+                    "value": 20,
+                    "unit": "/min",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "/min"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:bc6a18f9-ea89-47c6-a99d-850ddfbce149",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "bc6a18f9-ea89-47c6-a99d-850ddfbce149",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "vital-signs",
+                                "display": "Vital Signs"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "85354-9",
+                            "display": "Blood pressure panel with all children optional"
+                        }
+                    ],
+                    "text": "BP mmHg"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "effectiveDateTime": "2026-08-28T10:00:00+05:30",
+                "component": [
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://loinc.org",
+                                    "code": "8480-6",
+                                    "display": "Systolic blood pressure"
+                                }
+                            ],
+                            "text": "Systolic blood pressure"
+                        },
+                        "valueQuantity": {
+                            "value": 140,
+                            "unit": "mmHg",
+                            "system": "http://unitsofmeasure.org",
+                            "code": "mm[Hg]"
+                        }
+                    },
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://loinc.org",
+                                    "code": "8462-4",
+                                    "display": "Diastolic blood pressure"
+                                }
+                            ],
+                            "text": "Diastolic blood pressure"
+                        },
+                        "valueQuantity": {
+                            "value": 90,
+                            "unit": "mmHg",
+                            "system": "http://unitsofmeasure.org",
+                            "code": "mm[Hg]"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:ee80de1f-986e-46b1-a3d2-8f23a23df5c0",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "ee80de1f-986e-46b1-a3d2-8f23a23df5c0",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "vital-signs",
+                                "display": "Vital Signs"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "59408-5",
+                            "display": "Oxygen saturation in Arterial blood by Pulse oximetry"
+                        }
+                    ],
+                    "text": "SPO2"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "effectiveDateTime": "2026-08-28T10:00:00+05:30",
+                "valueQuantity": {
+                    "value": 95,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:0fb54648-cd56-4c91-a092-813469aa7c67",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "0fb54648-cd56-4c91-a092-813469aa7c67",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "vital-signs",
+                                "display": "Vital Signs"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "8310-5",
+                            "display": "Body temperature"
+                        }
+                    ],
+                    "text": "Temp F"
+                },
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "effectiveDateTime": "2026-08-28T10:00:00+05:30",
+                "valueQuantity": {
+                    "value": 96,
+                    "unit": "degF",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "[degF]"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:1b57be60-c849-4bd7-a090-7da51d4ab193",
+            "resource": {
+                "resourceType": "CarePlan",
+                "id": "1b57be60-c849-4bd7-a090-7da51d4ab193",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/CarePlan"
+                    ]
+                },
+                "status": "active",
+                "intent": "plan",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://snomed.info/sct",
+                                "code": "736271009",
+                                "display": "Outpatient care plan"
+                            }
+                        ]
+                    }
+                ],
+                "title": "Dietary Advice",
+                "description": "Fruits and Vegetables: Consume fresh fruits and vegetables daily. Avoid processed, sugary, and salty foods.",
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "author": {
+                    "reference": "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                    "display": "Dr. R.K.SUNDRIYAL"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:6ef6f128-d10a-4a3b-a660-5cfb966d29ff",
+            "resource": {
+                "resourceType": "CarePlan",
+                "id": "6ef6f128-d10a-4a3b-a660-5cfb966d29ff",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/CarePlan"
+                    ]
+                },
+                "status": "active",
+                "intent": "plan",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://snomed.info/sct",
+                                "code": "736271009",
+                                "display": "Outpatient care plan"
+                            }
+                        ]
+                    }
+                ],
+                "title": "Follow Up",
+                "description": "Review After: 1 Month (02-10-2026) / as and when required",
+                "subject": {
+                    "reference": "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display": "DEVENDER SINGH"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                },
+                "author": {
+                    "reference": "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                    "display": "Dr. R.K.SUNDRIYAL"
+                }
+            }
+        }
+    ]
+}

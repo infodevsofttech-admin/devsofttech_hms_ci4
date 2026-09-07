@@ -1,0 +1,1000 @@
+<?php
+require __DIR__ . '/../vendor/autoload.php';
+
+// Blank PDF base64 (Valid minimal PDF-1.4, 400 bytes)
+$blankPdfBase64 = "JVBERi0xLjQKJeLjz9MKMSAwIG9iajw8L1R5cGUvQ2F0YWxvZy9QYWdlcyAyIDAgUj4+ZW5kb2JqCjIgMCBvYmo8PC9UeXBlL1BhZ2VzL0tpZHNbMyAwIFJdL0NvdW50IDE+PmVuZG9iagozIDAgb2JqPDwvVHlwZS9QYWdlL1BhcmVudCAyIDAgUi9NZWRpYUJveFswIDAgNTk1IDg0Ml0+PmVuZG9iagp4cmVmCjAgNAowMDAwMDAwMDAwIDY1NTM1IGYKMDAwMDAwMDAwOSAwMDAwMCBuCjAwMDAwMDAwNTYgMDAwMDAgbgowMDAwMDAwMTE1IDAwMDAwIG4KdHJhaWxlcjw8L1NpemUgNC9Sb290IDEgMCBSPj4Kc3RhcnR4cmVmCjE3MwolaUVPRg==";
+
+$bundle = [
+    "resourceType" => "Bundle",
+    "id" => "discharge-A26090000009-v1788637084",
+    "meta" => [
+        "versionId" => "1",
+        "lastUpdated" => "2026-09-06T01:08:04+05:30",
+        "profile" => [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle"
+        ],
+        "security" => [
+            [
+                "system" => "http://terminology.hl7.org/CodeSystem/v3-Confidentiality",
+                "code" => "V",
+                "display" => "very restricted"
+            ]
+        ]
+    ],
+    "identifier" => [
+        "system" => "https://hms.local/fhir/document",
+        "value" => "discharge-A26090000009-v1788637084"
+    ],
+    "type" => "document",
+    "timestamp" => "2026-09-06T01:08:04+05:30",
+    "entry" => [
+        // Entry 0: Composition
+        [
+            "fullUrl" => "urn:uuid:fdf46837-ab78-42a7-a550-8d64a35b6508",
+            "resource" => [
+                "resourceType" => "Composition",
+                "id" => "fdf46837-ab78-42a7-a550-8d64a35b6508",
+                "meta" => [
+                    "versionId" => "1",
+                    "lastUpdated" => "2026-09-06T01:08:04+05:30",
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DischargeSummaryRecord"
+                    ]
+                ],
+                "status" => "final",
+                "type" => [
+                    "coding" => [
+                        [
+                            "system" => "http://snomed.info/sct",
+                            "code" => "373942005",
+                            "display" => "Discharge summary"
+                        ]
+                    ],
+                    "text" => "Discharge Summary"
+                ],
+                "title" => "IPD Discharge Summary",
+                "date" => "2026-09-06T01:08:04+05:30",
+                "subject" => [
+                    "reference" => "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display" => "DEVENDER SINGH"
+                ],
+                "encounter" => [
+                    "reference" => "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e",
+                    "display" => "Encounter"
+                ],
+                "author" => [
+                    [
+                        "reference" => "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                        "display" => "Dr. R.K.SUNDRIYAL"
+                    ]
+                ],
+                "custodian" => [
+                    "reference" => "urn:uuid:41fddd40-0707-47b6-a22b-17a70e068116",
+                    "display" => "E-Atria Hospital"
+                ],
+                "section" => [
+                    [
+                        "title" => "Chief complaints",
+                        "code" => [
+                            "coding" => [
+                                [
+                                    "system" => "http://snomed.info/sct",
+                                    "code" => "422843007",
+                                    "display" => "Chief complaint section"
+                                ]
+                            ]
+                        ],
+                        "entry" => [
+                            ["reference" => "urn:uuid:ee9837f1-95a6-41fc-aa4f-f245744fc8c6", "display" => "Abdominal Pain"],
+                            ["reference" => "urn:uuid:e6d1cece-4973-46d4-ace5-d96047401b20", "display" => "Cough"],
+                            ["reference" => "urn:uuid:a712dc95-6feb-4b11-a7ea-5699b8845317", "display" => "Vomiting"],
+                            ["reference" => "urn:uuid:9eb5f7ed-afc9-47e4-a693-c3984efe1da2", "display" => "Acute chest pain"],
+                            ["reference" => "urn:uuid:3399f570-c2c6-4d1e-aee1-0ed8a0d751df", "display" => "Chest Pain"]
+                        ]
+                    ],
+                    [
+                        "title" => "Discharge Diagnosis",
+                        "code" => [
+                            "coding" => [
+                                [
+                                    "system" => "http://snomed.info/sct",
+                                    "code" => "397659008",
+                                    "display" => "Discharge diagnosis"
+                                ]
+                            ]
+                        ],
+                        "entry" => [
+                            ["reference" => "urn:uuid:3a84e6c1-a483-4cde-a4a3-9b3ba8d5ebf7", "display" => "VIRAL DISEASE"]
+                        ]
+                    ],
+                    [
+                        "title" => "Procedures",
+                        "code" => [
+                            "coding" => [
+                                [
+                                    "system" => "http://snomed.info/sct",
+                                    "code" => "371525003",
+                                    "display" => "Clinical procedure report"
+                                ]
+                            ]
+                        ],
+                        "entry" => [
+                            ["reference" => "urn:uuid:95411403-5e4f-4c93-acee-fe7457d5acf5", "display" => "Laparoscopy of rectum"]
+                        ]
+                    ],
+                    [
+                        "title" => "Discharge Medications",
+                        "code" => [
+                            "coding" => [
+                                [
+                                    "system" => "http://snomed.info/sct",
+                                    "code" => "721981007",
+                                    "display" => "Medication list"
+                                ]
+                            ]
+                        ],
+                        "entry" => [
+                            ["reference" => "urn:uuid:a89d0861-d785-4103-aa88-9cb79c119e6d", "display" => "ACILOC"],
+                            ["reference" => "urn:uuid:657d375d-6fa1-4971-a112-a789d9b2904d", "display" => "PANTOP DSR"]
+                        ]
+                    ],
+                    [
+                        "title" => "Follow-Up Instructions",
+                        "code" => [
+                            "coding" => [
+                                [
+                                    "system" => "http://snomed.info/sct",
+                                    "code" => "736271009",
+                                    "display" => "Follow-up plan"
+                                ]
+                            ]
+                        ],
+                        "entry" => [
+                            ["reference" => "urn:uuid:1b57be60-c849-4bd7-a090-7da51d4ab193", "display" => "Dietary Advice"],
+                            ["reference" => "urn:uuid:6ef6f128-d10a-4a3b-a660-5cfb966d29ff", "display" => "Follow Up"]
+                        ]
+                    ],
+                    [
+                        "title" => "Document reference",
+                        "code" => [
+                            "coding" => [
+                                [
+                                    "system" => "http://snomed.info/sct",
+                                    "code" => "373942005",
+                                    "display" => "Discharge summary"
+                                ]
+                            ]
+                        ],
+                        "entry" => [
+                            ["reference" => "urn:uuid:77c657dd-25fa-4ae0-af23-b46918820bb9", "display" => "IPD Discharge Summary"]
+                        ]
+                    ]
+                ]
+            ]
+        ],
+        // Entry 1: Patient
+        [
+            "fullUrl" => "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+            "resource" => [
+                "resourceType" => "Patient",
+                "id" => "11cef8a6-4cd1-4733-afd0-92898eb57901",
+                "meta" => [
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient"
+                    ]
+                ],
+                "identifier" => [
+                    [
+                        "type" => [
+                            "coding" => [
+                                [
+                                    "system" => "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code" => "MR",
+                                    "display" => "Medical record number"
+                                ]
+                            ]
+                        ],
+                        "system" => "https://hms.local/patient-id",
+                        "value" => "11"
+                    ],
+                    [
+                        "type" => [
+                            "coding" => [
+                                [
+                                    "system" => "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code" => "SB",
+                                    "display" => "Social Beneficiary Identifier"
+                                ]
+                            ]
+                        ],
+                        "system" => "https://healthid.ndhm.gov.in",
+                        "value" => "91510165305101"
+                    ]
+                ],
+                "name" => [
+                    [
+                        "use" => "official",
+                        "text" => "DEVENDER SINGH"
+                    ]
+                ],
+                "gender" => "male",
+                "birthDate" => "1979-03-28"
+            ]
+        ],
+        // Entry 2: Practitioner
+        [
+            "fullUrl" => "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+            "resource" => [
+                "resourceType" => "Practitioner",
+                "id" => "0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                "meta" => [
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Practitioner"
+                    ]
+                ],
+                "identifier" => [
+                    [
+                        "type" => [
+                            "coding" => [
+                                [
+                                    "system" => "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code" => "MD",
+                                    "display" => "Medical License number"
+                                ]
+                            ]
+                        ],
+                        "system" => "https://doctor.ndhm.gov.in",
+                        "value" => "HPR-4"
+                    ]
+                ],
+                "name" => [
+                    [
+                        "use" => "official",
+                        "text" => "Dr. R.K.SUNDRIYAL"
+                    ]
+                ]
+            ]
+        ],
+        // Entry 3: Organization
+        [
+            "fullUrl" => "urn:uuid:41fddd40-0707-47b6-a22b-17a70e068116",
+            "resource" => [
+                "resourceType" => "Organization",
+                "id" => "41fddd40-0707-47b6-a22b-17a70e068116",
+                "meta" => [
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization"
+                    ]
+                ],
+                "identifier" => [
+                    [
+                        "type" => [
+                            "coding" => [
+                                [
+                                    "system" => "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code" => "PRN",
+                                    "display" => "Provider number"
+                                ]
+                            ]
+                        ],
+                        "system" => "https://facility.ndhm.gov.in",
+                        "value" => "IN0510000871"
+                    ]
+                ],
+                "name" => "E-Atria Hospital"
+            ]
+        ],
+        // Entry 4: Encounter
+        [
+            "fullUrl" => "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e",
+            "resource" => [
+                "resourceType" => "Encounter",
+                "id" => "4dd35d04-72c8-468f-afae-a82e1e51cd9e",
+                "meta" => [
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Encounter"
+                    ]
+                ],
+                "status" => "finished",
+                "class" => [
+                    "system" => "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                    "code" => "IMP",
+                    "display" => "inpatient encounter"
+                ],
+                "subject" => [
+                    "reference" => "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display" => "DEVENDER SINGH"
+                ],
+                "period" => [
+                    "start" => "2026-08-28T10:00:00+05:30",
+                    "end" => "2026-09-06T01:08:04+05:30"
+                ],
+                "hospitalization" => [
+                    "dischargeDisposition" => [
+                        "coding" => [
+                            [
+                                "system" => "http://terminology.hl7.org/CodeSystem/discharge-disposition",
+                                "code" => "home",
+                                "display" => "Home"
+                            ]
+                        ],
+                        "text" => "Discharged to Home Care"
+                    ]
+                ],
+                "serviceProvider" => [
+                    "reference" => "urn:uuid:41fddd40-0707-47b6-a22b-17a70e068116",
+                    "display" => "E-Atria Hospital"
+                ]
+            ]
+        ],
+        // Entry 5: Condition - Abdominal Pain
+        [
+            "fullUrl" => "urn:uuid:ee9837f1-95a6-41fc-aa4f-f245744fc8c6",
+            "resource" => [
+                "resourceType" => "Condition",
+                "id" => "ee9837f1-95a6-41fc-aa4f-f245744fc8c6",
+                "meta" => [
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                ],
+                "clinicalStatus" => [
+                    "coding" => [
+                        [
+                            "system" => "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code" => "active",
+                            "display" => "Active"
+                        ]
+                    ]
+                ],
+                "verificationStatus" => [
+                    "coding" => [
+                        [
+                            "system" => "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code" => "confirmed",
+                            "display" => "Confirmed"
+                        ]
+                    ]
+                ],
+                "category" => [
+                    [
+                        "coding" => [
+                            [
+                                "system" => "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code" => "encounter-diagnosis",
+                                "display" => "Encounter Diagnosis"
+                            ]
+                        ]
+                    ]
+                ],
+                "code" => [
+                    "coding" => [
+                        [
+                            "system" => "http://snomed.info/sct",
+                            "code" => "21522000",
+                            "display" => "Abdominal pain"
+                        ]
+                    ],
+                    "text" => "Abdominal Pain"
+                ],
+                "subject" => [
+                    "reference" => "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display" => "DEVENDER SINGH"
+                ],
+                "encounter" => [
+                    "reference" => "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                ],
+                "recordedDate" => "2026-09-06T01:08:04+05:30"
+            ]
+        ],
+        // Entry 6: Condition - Cough
+        [
+            "fullUrl" => "urn:uuid:e6d1cece-4973-46d4-ace5-d96047401b20",
+            "resource" => [
+                "resourceType" => "Condition",
+                "id" => "e6d1cece-4973-46d4-ace5-d96047401b20",
+                "meta" => [
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                ],
+                "clinicalStatus" => [
+                    "coding" => [
+                        [
+                            "system" => "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code" => "active",
+                            "display" => "Active"
+                        ]
+                    ]
+                ],
+                "verificationStatus" => [
+                    "coding" => [
+                        [
+                            "system" => "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code" => "confirmed",
+                            "display" => "Confirmed"
+                        ]
+                    ]
+                ],
+                "category" => [
+                    [
+                        "coding" => [
+                            [
+                                "system" => "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code" => "encounter-diagnosis",
+                                "display" => "Encounter Diagnosis"
+                            ]
+                        ]
+                    ]
+                ],
+                "code" => [
+                    "coding" => [
+                        [
+                            "system" => "http://snomed.info/sct",
+                            "code" => "49727002",
+                            "display" => "Cough"
+                        ]
+                    ],
+                    "text" => "Cough"
+                ],
+                "subject" => [
+                    "reference" => "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display" => "DEVENDER SINGH"
+                ],
+                "encounter" => [
+                    "reference" => "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                ],
+                "recordedDate" => "2026-09-06T01:08:04+05:30"
+            ]
+        ],
+        // Entry 7: Condition - Vomiting
+        [
+            "fullUrl" => "urn:uuid:a712dc95-6feb-4b11-a7ea-5699b8845317",
+            "resource" => [
+                "resourceType" => "Condition",
+                "id" => "a712dc95-6feb-4b11-a7ea-5699b8845317",
+                "meta" => [
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                ],
+                "clinicalStatus" => [
+                    "coding" => [
+                        [
+                            "system" => "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code" => "active",
+                            "display" => "Active"
+                        ]
+                    ]
+                ],
+                "verificationStatus" => [
+                    "coding" => [
+                        [
+                            "system" => "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code" => "confirmed",
+                            "display" => "Confirmed"
+                        ]
+                    ]
+                ],
+                "category" => [
+                    [
+                        "coding" => [
+                            [
+                                "system" => "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code" => "encounter-diagnosis",
+                                "display" => "Encounter Diagnosis"
+                            ]
+                        ]
+                    ]
+                ],
+                "code" => [
+                    "coding" => [
+                        [
+                            "system" => "http://snomed.info/sct",
+                            "code" => "422400008",
+                            "display" => "Vomiting"
+                        ]
+                    ],
+                    "text" => "Vomiting"
+                ],
+                "subject" => [
+                    "reference" => "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display" => "DEVENDER SINGH"
+                ],
+                "encounter" => [
+                    "reference" => "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                ],
+                "recordedDate" => "2026-09-06T01:08:04+05:30"
+            ]
+        ],
+        // Entry 8: Condition - Acute chest pain
+        [
+            "fullUrl" => "urn:uuid:9eb5f7ed-afc9-47e4-a693-c3984efe1da2",
+            "resource" => [
+                "resourceType" => "Condition",
+                "id" => "9eb5f7ed-afc9-47e4-a693-c3984efe1da2",
+                "meta" => [
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                ],
+                "clinicalStatus" => [
+                    "coding" => [
+                        [
+                            "system" => "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code" => "active",
+                            "display" => "Active"
+                        ]
+                    ]
+                ],
+                "verificationStatus" => [
+                    "coding" => [
+                        [
+                            "system" => "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code" => "confirmed",
+                            "display" => "Confirmed"
+                        ]
+                    ]
+                ],
+                "category" => [
+                    [
+                        "coding" => [
+                            [
+                                "system" => "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code" => "encounter-diagnosis",
+                                "display" => "Encounter Diagnosis"
+                            ]
+                        ]
+                    ]
+                ],
+                "code" => [
+                    "coding" => [
+                        [
+                            "system" => "http://snomed.info/sct",
+                            "code" => "29857009",
+                            "display" => "Chest pain"
+                        ]
+                    ],
+                    "text" => "Acute chest pain"
+                ],
+                "subject" => [
+                    "reference" => "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display" => "DEVENDER SINGH"
+                ],
+                "encounter" => [
+                    "reference" => "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                ],
+                "recordedDate" => "2026-09-06T01:08:04+05:30"
+            ]
+        ],
+        // Entry 9: Condition - Chest Pain
+        [
+            "fullUrl" => "urn:uuid:3399f570-c2c6-4d1e-aee1-0ed8a0d751df",
+            "resource" => [
+                "resourceType" => "Condition",
+                "id" => "3399f570-c2c6-4d1e-aee1-0ed8a0d751df",
+                "meta" => [
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                ],
+                "clinicalStatus" => [
+                    "coding" => [
+                        [
+                            "system" => "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code" => "active",
+                            "display" => "Active"
+                        ]
+                    ]
+                ],
+                "verificationStatus" => [
+                    "coding" => [
+                        [
+                            "system" => "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code" => "confirmed",
+                            "display" => "Confirmed"
+                        ]
+                    ]
+                ],
+                "category" => [
+                    [
+                        "coding" => [
+                            [
+                                "system" => "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code" => "encounter-diagnosis",
+                                "display" => "Encounter Diagnosis"
+                            ]
+                        ]
+                    ]
+                ],
+                "code" => [
+                    "coding" => [
+                        [
+                            "system" => "http://snomed.info/sct",
+                            "code" => "29857009",
+                            "display" => "Chest pain"
+                        ]
+                    ],
+                    "text" => "Chest Pain"
+                ],
+                "subject" => [
+                    "reference" => "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display" => "DEVENDER SINGH"
+                ],
+                "encounter" => [
+                    "reference" => "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                ],
+                "recordedDate" => "2026-09-06T01:08:04+05:30"
+            ]
+        ],
+        // Entry 10: Condition - Discharge Diagnosis
+        [
+            "fullUrl" => "urn:uuid:3a84e6c1-a483-4cde-a4a3-9b3ba8d5ebf7",
+            "resource" => [
+                "resourceType" => "Condition",
+                "id" => "3a84e6c1-a483-4cde-a4a3-9b3ba8d5ebf7",
+                "meta" => [
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+                    ]
+                ],
+                "clinicalStatus" => [
+                    "coding" => [
+                        [
+                            "system" => "http://terminology.hl7.org/CodeSystem/condition-clinical",
+                            "code" => "active",
+                            "display" => "Active"
+                        ]
+                    ]
+                ],
+                "verificationStatus" => [
+                    "coding" => [
+                        [
+                            "system" => "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+                            "code" => "confirmed",
+                            "display" => "Confirmed"
+                        ]
+                    ]
+                ],
+                "category" => [
+                    [
+                        "coding" => [
+                            [
+                                "system" => "http://terminology.hl7.org/CodeSystem/condition-category",
+                                "code" => "encounter-diagnosis",
+                                "display" => "Encounter Diagnosis"
+                            ]
+                        ]
+                    ]
+                ],
+                "code" => [
+                    "coding" => [
+                        [
+                            "system" => "http://snomed.info/sct",
+                            "code" => "404684003",
+                            "display" => "Clinical finding"
+                        ]
+                    ],
+                    "text" => "VIRAL DISEASE"
+                ],
+                "subject" => [
+                    "reference" => "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display" => "DEVENDER SINGH"
+                ],
+                "encounter" => [
+                    "reference" => "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                ],
+                "recordedDate" => "2026-09-06T01:08:04+05:30"
+            ]
+        ],
+        // Entry 11: Procedure
+        [
+            "fullUrl" => "urn:uuid:95411403-5e4f-4c93-acee-fe7457d5acf5",
+            "resource" => [
+                "resourceType" => "Procedure",
+                "id" => "95411403-5e4f-4c93-acee-fe7457d5acf5",
+                "meta" => [
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Procedure"
+                    ]
+                ],
+                "status" => "completed",
+                "code" => [
+                    "coding" => [
+                        [
+                            "system" => "http://snomed.info/sct",
+                            "code" => "86174004",
+                            "display" => "Laparoscopy"
+                        ]
+                    ],
+                    "text" => "Laparoscopy of rectum"
+                ],
+                "subject" => [
+                    "reference" => "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display" => "DEVENDER SINGH"
+                ],
+                "encounter" => [
+                    "reference" => "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                ],
+                "performedDateTime" => "2026-08-28T00:00:00+05:30"
+            ]
+        ],
+        // Entry 12: MedicationRequest 1
+        [
+            "fullUrl" => "urn:uuid:a89d0861-d785-4103-aa88-9cb79c119e6d",
+            "resource" => [
+                "resourceType" => "MedicationRequest",
+                "id" => "a89d0861-d785-4103-aa88-9cb79c119e6d",
+                "meta" => [
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationRequest"
+                    ]
+                ],
+                "status" => "active",
+                "intent" => "order",
+                "medicationCodeableConcept" => [
+                    "coding" => [
+                        [
+                            "system" => "http://snomed.info/sct",
+                            "code" => "105904009",
+                            "display" => "Type of drug"
+                        ]
+                    ],
+                    "text" => "ACILOC"
+                ],
+                "subject" => [
+                    "reference" => "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display" => "DEVENDER SINGH"
+                ],
+                "encounter" => [
+                    "reference" => "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                ],
+                "authoredOn" => "2026-09-06T01:08:04+05:30",
+                "requester" => [
+                    "reference" => "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                    "display" => "Dr. R.K.SUNDRIYAL"
+                ],
+                "dosageInstruction" => [
+                    [
+                        "text" => "EMPTY STOMACH | BD | (BD)",
+                        "timing" => [
+                            "repeat" => [
+                                "frequency" => 2,
+                                "period" => 1,
+                                "periodUnit" => "d"
+                            ]
+                        ],
+                        "route" => [
+                            "coding" => [
+                                [
+                                    "system" => "http://snomed.info/sct",
+                                    "code" => "26643006",
+                                    "display" => "Oral route"
+                                ]
+                            ]
+                        ],
+                        "doseAndRate" => [
+                            [
+                                "doseQuantity" => [
+                                    "value" => 1,
+                                    "unit" => "Tablet",
+                                    "system" => "http://unitsofmeasure.org",
+                                    "code" => "tbl"
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ],
+        // Entry 13: MedicationRequest 2
+        [
+            "fullUrl" => "urn:uuid:657d375d-6fa1-4971-a112-a789d9b2904d",
+            "resource" => [
+                "resourceType" => "MedicationRequest",
+                "id" => "657d375d-6fa1-4971-a112-a789d9b2904d",
+                "meta" => [
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationRequest"
+                    ]
+                ],
+                "status" => "active",
+                "intent" => "order",
+                "medicationCodeableConcept" => [
+                    "coding" => [
+                        [
+                            "system" => "http://snomed.info/sct",
+                            "code" => "105904009",
+                            "display" => "Type of drug"
+                        ]
+                    ],
+                    "text" => "PANTOP DSR"
+                ],
+                "subject" => [
+                    "reference" => "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display" => "DEVENDER SINGH"
+                ],
+                "encounter" => [
+                    "reference" => "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                ],
+                "authoredOn" => "2026-09-06T01:08:04+05:30",
+                "requester" => [
+                    "reference" => "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                    "display" => "Dr. R.K.SUNDRIYAL"
+                ],
+                "dosageInstruction" => [
+                    [
+                        "text" => "EMPTY STOMACH | OD | (OD)",
+                        "timing" => [
+                            "repeat" => [
+                                "frequency" => 1,
+                                "period" => 1,
+                                "periodUnit" => "d"
+                            ]
+                        ],
+                        "route" => [
+                            "coding" => [
+                                [
+                                    "system" => "http://snomed.info/sct",
+                                    "code" => "26643006",
+                                    "display" => "Oral route"
+                                ]
+                            ]
+                        ],
+                        "doseAndRate" => [
+                            [
+                                "doseQuantity" => [
+                                    "value" => 1,
+                                    "unit" => "Tablet",
+                                    "system" => "http://unitsofmeasure.org",
+                                    "code" => "tbl"
+                                ]
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ],
+        // Entry 14: CarePlan - Dietary Advice
+        [
+            "fullUrl" => "urn:uuid:1b57be60-c849-4bd7-a090-7da51d4ab193",
+            "resource" => [
+                "resourceType" => "CarePlan",
+                "id" => "1b57be60-c849-4bd7-a090-7da51d4ab193",
+                "meta" => [
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/CarePlan"
+                    ]
+                ],
+                "status" => "active",
+                "intent" => "plan",
+                "title" => "Dietary Advice",
+                "description" => "Fruits and Vegetables: Consume fresh fruits and vegetables daily. Avoid processed, sugary, and salty foods.",
+                "subject" => [
+                    "reference" => "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display" => "DEVENDER SINGH"
+                ],
+                "encounter" => [
+                    "reference" => "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                ],
+                "author" => [
+                    "reference" => "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                    "display" => "Dr. R.K.SUNDRIYAL"
+                ],
+                "category" => [
+                    [
+                        "coding" => [
+                            [
+                                "system" => "http://snomed.info/sct",
+                                "code" => "736271009",
+                                "display" => "Outpatient care plan"
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ],
+        // Entry 15: CarePlan - Follow Up
+        [
+            "fullUrl" => "urn:uuid:6ef6f128-d10a-4a3b-a660-5cfb966d29ff",
+            "resource" => [
+                "resourceType" => "CarePlan",
+                "id" => "6ef6f128-d10a-4a3b-a660-5cfb966d29ff",
+                "meta" => [
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/CarePlan"
+                    ]
+                ],
+                "status" => "active",
+                "intent" => "plan",
+                "title" => "Follow Up",
+                "description" => "Review After: 1 Month (02-10-2026) / as and when required",
+                "subject" => [
+                    "reference" => "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display" => "DEVENDER SINGH"
+                ],
+                "encounter" => [
+                    "reference" => "urn:uuid:4dd35d04-72c8-468f-afae-a82e1e51cd9e"
+                ],
+                "author" => [
+                    "reference" => "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                    "display" => "Dr. R.K.SUNDRIYAL"
+                ],
+                "category" => [
+                    [
+                        "coding" => [
+                            [
+                                "system" => "http://snomed.info/sct",
+                                "code" => "736271009",
+                                "display" => "Outpatient care plan"
+                            ]
+                        ]
+                    ]
+                ]
+            ]
+        ],
+        // Entry 16: DocumentReference (Blank PDF)
+        [
+            "fullUrl" => "urn:uuid:77c657dd-25fa-4ae0-af23-b46918820bb9",
+            "resource" => [
+                "resourceType" => "DocumentReference",
+                "id" => "77c657dd-25fa-4ae0-af23-b46918820bb9",
+                "meta" => [
+                    "profile" => [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference"
+                    ]
+                ],
+                "status" => "current",
+                "docStatus" => "final",
+                "type" => [
+                    "coding" => [
+                        [
+                            "system" => "http://snomed.info/sct",
+                            "code" => "373942005",
+                            "display" => "Discharge summary"
+                        ]
+                    ],
+                    "text" => "IPD Discharge Summary"
+                ],
+                "subject" => [
+                    "reference" => "urn:uuid:11cef8a6-4cd1-4733-afd0-92898eb57901",
+                    "display" => "DEVENDER SINGH"
+                ],
+                "date" => "2026-09-06T01:08:04+05:30",
+                "author" => [
+                    [
+                        "reference" => "urn:uuid:0c561894-fc78-4bb9-ab25-a2aa05c739e6",
+                        "display" => "Dr. R.K.SUNDRIYAL"
+                    ]
+                ],
+                "custodian" => [
+                    "reference" => "urn:uuid:41fddd40-0707-47b6-a22b-17a70e068116",
+                    "display" => "E-Atria Hospital"
+                ],
+                "description" => "IPD Discharge Summary",
+                "content" => [
+                    [
+                        "attachment" => [
+                            "contentType" => "application/pdf",
+                            "language" => "en-IN",
+                            "data" => $blankPdfBase64,
+                            "title" => "IPD Discharge Summary",
+                            "creation" => "2026-09-06T01:08:04+05:30"
+                        ]
+                    ]
+                ]
+            ]
+        ]
+    ]
+];
+
+$validator = new \App\Libraries\Abdm\Fhir\Support\FhirBundleValidator();
+$result = $validator->validate($bundle);
+echo "Validation passed: " . ($result->valid ? "YES" : "NO") . "\n";
+echo "Score: " . $result->score . "%\n";
+if (!empty($result->errors)) {
+    print_r($result->errors);
+}
+
+file_put_contents('d:/Workplace/HMS_CI4_OLD/scratch/validated_step_by_step_bundle.json', json_encode($bundle, JSON_PRETTY_PRINT | JSON_UNESCAPED_SLASHES));
+echo "Saved scratch/validated_step_by_step_bundle.json (" . strlen(json_encode($bundle)) . " bytes)\n";

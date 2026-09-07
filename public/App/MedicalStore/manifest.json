@@ -1,0 +1,17 @@
+{
+  "short_name": "Medical Store",
+  "name": "HMS Medical Store & Multi-Building Pharmacy POS",
+  "icons": [
+    {
+      "src": "/assets/img/logo.png",
+      "type": "image/png",
+      "sizes": "512x512",
+      "purpose": "any maskable"
+    }
+  ],
+  "start_url": "/app/medical-store",
+  "background_color": "#0f172a",
+  "theme_color": "#0891b2",
+  "display": "standalone",
+  "orientation": "any"
+}

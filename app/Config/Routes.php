@@ -1413,6 +1413,14 @@ $routes->group('setting', static function($routes) {
     $routes->post('admin/opd-queue-tv/save', 'Setting\\OpdQueueSetting::save');
     $routes->post('admin/opd-queue-tv/upload-banner', 'Setting\\OpdQueueSetting::uploadBanner');
     $routes->post('admin/opd-queue-tv/delete-banner', 'Setting\\OpdQueueSetting::deleteBanner');
+    $routes->get('admin/medical-store', 'Setting\\MedicalStoreAdmin::index');
+    $routes->post('admin/medical-store/save', 'Setting\\MedicalStoreAdmin::save');
+    $routes->post('admin/medical-store/delete', 'Setting\\MedicalStoreAdmin::delete');
+    $routes->post('admin/medical-store/generate-otp', 'Setting\\MedicalStoreAdmin::generateOtp');
+    $routes->post('admin/medical-store/regenerate-key', 'Setting\\MedicalStoreAdmin::regenerateSecurityKey');
+    $routes->post('admin/medical-store/revoke-device', 'Setting\\MedicalStoreAdmin::revokeDevice');
+    $routes->post('admin/medical-store/import-marg', 'Setting\\MedicalStoreAdmin::importMarg');
+
     $routes->get('admin/bed-management', 'Setting\\BedManagement::index', ['filter' => $settingsBedFilter]);
     $routes->get('admin/departments', 'Setting\\BedManagement::departments', ['filter' => $settingsBedFilter]);
     $routes->post('admin/departments/save', 'Setting\\BedManagement::saveDepartment', ['filter' => $settingsBedFilter]);
@@ -1641,5 +1649,45 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1'], static funct
     $routes->get('doctor/ipd/list/(:num)', 'DoctorApi::ipdList/$1');
     $routes->get('doctor/ipd/workspace/(:num)', 'DoctorApi::patientWorkspace/$1');
     $routes->post('doctor/ipd/treatment/save/(:num)', 'DoctorApi::saveTreatmentNote/$1');
+
+    // Medical Store PWA APIs
+    $routes->get('medical-store/stores', 'MedicalStoreApi::stores');
+    $routes->post('medical-store/stores/save', 'MedicalStoreApi::saveStore');
+    $routes->get('medical-store/patient/search', 'MedicalStoreApi::searchPatient');
+    $routes->get('medical-store/patient/prescription/(:segment)/(:num)', 'MedicalStoreApi::getPrescription/$1/$2');
+    $routes->get('medical-store/items/search', 'MedicalStoreApi::searchItems');
+    $routes->post('medical-store/stock/opening', 'MedicalStoreApi::saveOpeningStock');
+    $routes->get('medical-store/stock/list', 'MedicalStoreApi::stockList');
+    $routes->get('medical-store/stock/alerts', 'MedicalStoreApi::stockAlerts');
+    $routes->post('medical-store/sales/save', 'MedicalStoreApi::saveSale');
+    $routes->get('medical-store/sales/invoice/(:num)', 'MedicalStoreApi::getInvoice/$1');
+    $routes->get('medical-store/sales/recent', 'MedicalStoreApi::recentSales');
+    $routes->get('medical-store/suppliers', 'MedicalStoreApi::suppliers');
+    $routes->post('medical-store/suppliers/save', 'MedicalStoreApi::saveSupplier');
+    $routes->post('medical-store/purchase/save', 'MedicalStoreApi::savePurchase');
+    $routes->post('medical-store/purchase/payment', 'MedicalStoreApi::saveSupplierPayment');
+    $routes->post('medical-store/transfer/request', 'MedicalStoreApi::requestTransfer');
+    $routes->post('medical-store/transfer/dispatch', 'MedicalStoreApi::dispatchTransfer');
+    $routes->post('medical-store/transfer/receive', 'MedicalStoreApi::receiveTransfer');
+    $routes->get('medical-store/accounting/supplier-ledger/(:num)', 'MedicalStoreApi::getSupplierLedger/$1');
+    $routes->get('medical-store/accounting/patient-ledger/(:segment)', 'MedicalStoreApi::getPatientLedger/$1');
+    $routes->get('medical-store/accounting/daybook', 'MedicalStoreApi::getDaybook');
+    $routes->get('medical-store/accounting/gst-report', 'MedicalStoreApi::getGstReport');
+    $routes->get('medical-store/accounting/bank-reconciliation', 'MedicalStoreApi::getBankReconciliation');
+    $routes->post('medical-store/accounting/reconcile-bank', 'MedicalStoreApi::reconcileBank');
+    $routes->get('medical-store/compliance/schedule-h1-register', 'MedicalStoreApi::getScheduleH1Register');
+    $routes->post('medical-store/device/verify', 'MedicalStoreApi::verifyDevice');
+    $routes->post('medical-store/device/check', 'MedicalStoreApi::checkDeviceStatus');
+    $routes->post('medical-store/stock/import-marg', 'MedicalStoreApi::importMarg');
+    $routes->get('medical-store/abdm/bundle/(:num)', 'MedicalStoreApi::getAbdmBundle/$1');
+    $routes->post('medical-store/abdm/link-abha', 'MedicalStoreApi::linkAbha');
 });
+
+// Dedicated Direct Store Links (e.g. /MedicalStore/storeA, /MedicalStore/storeB)
+$routes->get('MedicalStore', 'Api\v1\MedicalStoreApi::pwaIndex');
+$routes->get('MedicalStore/(:any)', 'Api\v1\MedicalStoreApi::pwaIndex/$1');
+$routes->get('app/medical-store', 'Api\v1\MedicalStoreApi::pwaIndex');
+$routes->get('app/medical-store/(:any)', 'Api\v1\MedicalStoreApi::pwaIndex/$1');
+
+
 

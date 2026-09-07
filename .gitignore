@@ -144,3 +144,17 @@ public/uploads/*
 !public/assets/
 !public/assets/img/
 !public/assets/img/**
+
+# Android build & local properties
+android_opd_queue_tv/.gradle/
+android_opd_queue_tv/*/build/
+android_opd_queue_tv/build/
+android_opd_queue_tv/local.properties
+
+# Temporary and extraction directories
+docx_extracted/
+writable/debug/*
+writable/github_update_cache.json
+E-AtriaHMS.docx
+E-AtriaHMS.zip
+

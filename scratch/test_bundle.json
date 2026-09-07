@@ -1,0 +1,288 @@
+{
+    "resourceType": "Bundle",
+    "identifier": {
+        "system": "https:\/\/hms.local\/fhir\/document",
+        "value": "discharge-IPD12345-1788552990"
+    },
+    "type": "document",
+    "timestamp": "2026-09-05T01:46:30+05:30",
+    "meta": {
+        "profile": [
+            "https:\/\/nrces.in\/ndhm\/fhir\/r4\/StructureDefinition\/DocumentBundle"
+        ]
+    },
+    "entry": [
+        {
+            "fullUrl": "urn:uuid:65c3fa04-b7e6-4f9b-a672-afe923eb3416",
+            "resource": {
+                "resourceType": "Composition",
+                "id": "composition-IPD12345",
+                "status": "final",
+                "type": {
+                    "coding": [
+                        {
+                            "system": "http:\/\/snomed.info\/sct",
+                            "code": "373942005",
+                            "display": "Discharge summary"
+                        }
+                    ],
+                    "text": "Discharge Summary"
+                },
+                "title": "IPD Discharge Summary",
+                "date": "2026-09-05T01:46:30+05:30",
+                "subject": {
+                    "reference": "urn:uuid:102171e3-58f4-46f2-a712-d7b7703eeab0",
+                    "display": "John Doe"
+                },
+                "author": [
+                    {
+                        "reference": "urn:uuid:73276e47-b179-457e-ab9d-6fab12200958",
+                        "display": "Dr. Attending Medical Officer"
+                    }
+                ],
+                "custodian": {
+                    "reference": "urn:uuid:41fddd40-0707-47b6-a22b-17a70e068116",
+                    "display": "E-Atria Hospital"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:f39815d6-6cbe-45e9-a6c7-8ce860d4cafc"
+                },
+                "meta": {
+                    "profile": [
+                        "https:\/\/nrces.in\/ndhm\/fhir\/r4\/StructureDefinition\/DischargeSummaryRecord"
+                    ]
+                },
+                "language": "en-IN",
+                "confidentiality": "N",
+                "text": {
+                    "status": "generated",
+                    "div": "<div xmlns=\"http:\/\/www.w3.org\/1999\/xhtml\"><p>Discharge Summary Narrative<\/p><\/div>"
+                },
+                "section": [
+                    {
+                        "title": "Admission \/ Discharge Information",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http:\/\/snomed.info\/sct",
+                                    "code": "422838006",
+                                    "display": "Admission details"
+                                }
+                            ]
+                        },
+                        "text": {
+                            "status": "generated",
+                            "div": "<div xmlns=\"http:\/\/www.w3.org\/1999\/xhtml\"><ul><li>Admission Date: 2026-08-20T10:00:00+05:30\nDischarge Date: 2026-08-25T10:00:00+05:30<\/li><\/ul><\/div>"
+                        }
+                    },
+                    {
+                        "title": "Discharge Summary",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http:\/\/snomed.info\/sct",
+                                    "code": "373942005",
+                                    "display": "Discharge summary"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:c1ad6728-d2e3-4f29-a958-7d5be08bf66a",
+                                "display": "Test Doc"
+                            }
+                        ],
+                        "text": {
+                            "status": "generated",
+                            "div": "<div xmlns=\"http:\/\/www.w3.org\/1999\/xhtml\"><ul><li>Test Doc<\/li><\/ul><\/div>"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:102171e3-58f4-46f2-a712-d7b7703eeab0",
+            "resource": {
+                "resourceType": "Patient",
+                "id": "patient-PAT123",
+                "meta": {
+                    "profile": [
+                        "https:\/\/nrces.in\/ndhm\/fhir\/r4\/StructureDefinition\/Patient"
+                    ]
+                },
+                "text": {
+                    "status": "generated",
+                    "div": "<div xmlns=\"http:\/\/www.w3.org\/1999\/xhtml\"><p><b>Patient:<\/b> John Doe (Male)<\/p><\/div>"
+                },
+                "identifier": [
+                    {
+                        "system": "https:\/\/hms.local\/patient-id",
+                        "value": "PAT123"
+                    }
+                ],
+                "name": [
+                    {
+                        "text": "John Doe"
+                    }
+                ],
+                "gender": "male",
+                "birthDate": "1980-01-01"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:f39815d6-6cbe-45e9-a6c7-8ce860d4cafc",
+            "resource": {
+                "resourceType": "Encounter",
+                "id": "encounter-IPD12345",
+                "meta": {
+                    "profile": [
+                        "https:\/\/nrces.in\/ndhm\/fhir\/r4\/StructureDefinition\/Encounter"
+                    ]
+                },
+                "text": {
+                    "status": "generated",
+                    "div": "<div xmlns=\"http:\/\/www.w3.org\/1999\/xhtml\"><p><b>Encounter:<\/b> inpatient encounter IPD12345<\/p><\/div>"
+                },
+                "status": "finished",
+                "class": {
+                    "system": "http:\/\/terminology.hl7.org\/CodeSystem\/v3-ActCode",
+                    "code": "IMP",
+                    "display": "inpatient encounter"
+                },
+                "subject": {
+                    "reference": "urn:uuid:102171e3-58f4-46f2-a712-d7b7703eeab0",
+                    "display": "John Doe"
+                },
+                "period": {
+                    "start": "2026-08-20T10:00:00+05:30",
+                    "end": "2026-08-25T10:00:00+05:30"
+                },
+                "identifier": [
+                    {
+                        "system": "https:\/\/hms.local\/encounter-id",
+                        "value": "IPD12345"
+                    }
+                ],
+                "hospitalization": {
+                    "dischargeDisposition": {
+                        "coding": [
+                            {
+                                "system": "http:\/\/terminology.hl7.org\/CodeSystem\/discharge-disposition",
+                                "code": "home",
+                                "display": "Home"
+                            }
+                        ],
+                        "text": "Discharged to Home Care"
+                    }
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:73276e47-b179-457e-ab9d-6fab12200958",
+            "resource": {
+                "resourceType": "Practitioner",
+                "id": "practitioner-1",
+                "meta": {
+                    "profile": [
+                        "https:\/\/nrces.in\/ndhm\/fhir\/r4\/StructureDefinition\/Practitioner"
+                    ]
+                },
+                "text": {
+                    "status": "generated",
+                    "div": "<div xmlns=\"http:\/\/www.w3.org\/1999\/xhtml\"><p><b>Practitioner:<\/b> Dr. Attending Medical Officer<\/p><\/div>"
+                },
+                "identifier": [
+                    {
+                        "system": "https:\/\/doctor.ndhm.gov.in",
+                        "value": "HPR-1"
+                    }
+                ],
+                "name": [
+                    {
+                        "text": "Dr. Attending Medical Officer"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:41fddd40-0707-47b6-a22b-17a70e068116",
+            "resource": {
+                "resourceType": "Organization",
+                "id": "organization-IN0510000871",
+                "meta": {
+                    "profile": [
+                        "https:\/\/nrces.in\/ndhm\/fhir\/r4\/StructureDefinition\/Organization"
+                    ]
+                },
+                "text": {
+                    "status": "generated",
+                    "div": "<div xmlns=\"http:\/\/www.w3.org\/1999\/xhtml\"><p><b>Organization:<\/b> E-Atria Hospital<\/p><\/div>"
+                },
+                "name": "E-Atria Hospital",
+                "identifier": [
+                    {
+                        "system": "https:\/\/facility.ndhm.gov.in",
+                        "value": "IN0510000871"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:c1ad6728-d2e3-4f29-a958-7d5be08bf66a",
+            "resource": {
+                "resourceType": "DocumentReference",
+                "id": "discharge-document-IPD12345-0",
+                "meta": {
+                    "profile": [
+                        "https:\/\/nrces.in\/ndhm\/fhir\/r4\/StructureDefinition\/DocumentReference"
+                    ]
+                },
+                "text": {
+                    "status": "generated",
+                    "div": "<div xmlns=\"http:\/\/www.w3.org\/1999\/xhtml\"><p><b>Attached Document:<\/b> Test Doc<\/p><\/div>"
+                },
+                "status": "current",
+                "docStatus": "final",
+                "type": {
+                    "coding": [
+                        {
+                            "system": "http:\/\/snomed.info\/sct",
+                            "code": "373942005",
+                            "display": "Discharge summary"
+                        }
+                    ],
+                    "text": "Test Doc"
+                },
+                "subject": {
+                    "reference": "urn:uuid:102171e3-58f4-46f2-a712-d7b7703eeab0",
+                    "display": "John Doe"
+                },
+                "date": "2026-09-05T01:46:30+05:30",
+                "author": [
+                    {
+                        "reference": "urn:uuid:73276e47-b179-457e-ab9d-6fab12200958",
+                        "display": "Dr. Attending Medical Officer"
+                    }
+                ],
+                "custodian": {
+                    "reference": "urn:uuid:41fddd40-0707-47b6-a22b-17a70e068116",
+                    "display": "E-Atria Hospital"
+                },
+                "description": "Test Doc",
+                "content": [
+                    {
+                        "attachment": {
+                            "contentType": "application\/pdf",
+                            "language": "en-IN",
+                            "data": "ZmFrZSBwZGYgZGF0YQ==",
+                            "size": 13,
+                            "title": "Test Doc",
+                            "creation": "2026-09-05T01:46:30+05:30",
+                            "hash": "JZyAVt5rZqBpnm8d91ugnPnYt6U="
+                        }
+                    }
+                ]
+            }
+        }
+    ]
+}

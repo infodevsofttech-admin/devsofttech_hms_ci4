@@ -1,0 +1,782 @@
+{
+    "resourceType": "Bundle",
+    "id": "wellness-33710-1788698474",
+    "meta": {
+        "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/WellnessBundle"
+        ]
+    },
+    "identifier": {
+        "system": "https://hms.local/fhir/document",
+        "value": "wellness-33710-1788698474"
+    },
+    "type": "document",
+    "timestamp": "2026-09-06T18:11:14+05:30",
+    "entry": [
+        {
+            "fullUrl": "urn:uuid:72c92d82-9c58-463f-a579-60b1d8f89b27",
+            "resource": {
+                "resourceType": "Composition",
+                "id": "72c92d82-9c58-463f-a579-60b1d8f89b27",
+                "status": "final",
+                "type": {
+                    "coding": [
+                        {
+                            "system": "http://snomed.info/sct",
+                            "code": "419891008",
+                            "display": "Wellness Record"
+                        }
+                    ],
+                    "text": "Wellness Record"
+                },
+                "title": "Wellness Record",
+                "date": "2026-09-06T18:11:14+05:30",
+                "subject": {
+                    "reference": "urn:uuid:ef6c2a1a-3eca-40fb-a6a1-d5c30b0e147d",
+                    "display": "DEVENDER SINGH 0"
+                },
+                "author": [
+                    {
+                        "reference": "urn:uuid:73276e47-b179-457e-ab9d-6fab12200958",
+                        "display": "Dr. Sanjay Kumar"
+                    }
+                ],
+                "custodian": {
+                    "reference": "urn:uuid:fb0bf0fe-3d2a-4f17-ae61-1c8ff7260948"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:44973c21-cf33-493f-aa7c-fe5d1f6d5e3f",
+                    "display": "Encounter"
+                },
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/WellnessRecord"
+                    ]
+                },
+                "section": [
+                    {
+                        "title": "Vital Signs",
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://loinc.org",
+                                    "code": "8716-3",
+                                    "display": "Vital signs"
+                                }
+                            ]
+                        },
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:7f6087bb-7e42-4e6c-ad7c-7208256eb369"
+                            },
+                            {
+                                "reference": "urn:uuid:6dd1c0eb-8760-4c96-acb8-40c6048a08ef"
+                            },
+                            {
+                                "reference": "urn:uuid:4af209c3-dec3-4a03-ae2f-7450ac4247a9"
+                            },
+                            {
+                                "reference": "urn:uuid:4af148e8-1e2b-4baa-a916-2d3b47ac5ad9"
+                            },
+                            {
+                                "reference": "urn:uuid:2f13be4f-c21a-4549-aa10-d911b9716149"
+                            }
+                        ]
+                    },
+                    {
+                        "title": "General Assessment",
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:8cc8bc40-fe4e-4b68-a74b-c867ddd2c409"
+                            },
+                            {
+                                "reference": "urn:uuid:81cbc20b-d25d-4ec2-a4f7-1348df9f1cc8"
+                            },
+                            {
+                                "reference": "urn:uuid:4a09b6c1-eae8-47af-a660-1d6ef5cb0311"
+                            }
+                        ]
+                    },
+                    {
+                        "title": "Lifestyle",
+                        "entry": [
+                            {
+                                "reference": "urn:uuid:62ba7bea-ef44-4fb4-a8d6-1468f29c7ad6"
+                            },
+                            {
+                                "reference": "urn:uuid:aac4d5e1-c4d2-45b5-a16b-5d398dd8c63f"
+                            }
+                        ]
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:ef6c2a1a-3eca-40fb-a6a1-d5c30b0e147d",
+            "resource": {
+                "resourceType": "Patient",
+                "id": "ef6c2a1a-3eca-40fb-a6a1-d5c30b0e147d",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient"
+                    ]
+                },
+                "text": {
+                    "status": "generated",
+                    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p><b>Patient:</b> DEVENDER SINGH 0 (Male)</p></div>"
+                },
+                "identifier": [
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "MR",
+                                    "display": "Medical record number"
+                                }
+                            ]
+                        },
+                        "system": "https://hms.local/patient-id",
+                        "value": "15350"
+                    },
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "SB",
+                                    "display": "Social Beneficiary Identifier"
+                                }
+                            ]
+                        },
+                        "system": "https://healthid.ndhm.gov.in",
+                        "value": "91510165305101"
+                    },
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "MR",
+                                    "display": "Medical record number"
+                                }
+                            ],
+                            "text": "ABHA Address"
+                        },
+                        "system": "https://healthid.ndhm.gov.in",
+                        "value": "singhdevender0328@sbx"
+                    },
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "MR",
+                                    "display": "Medical record number"
+                                }
+                            ],
+                            "text": "UHID"
+                        },
+                        "system": "https://hms.local/uhid",
+                        "value": "15350"
+                    }
+                ],
+                "name": [
+                    {
+                        "use": "official",
+                        "text": "DEVENDER SINGH 0"
+                    }
+                ],
+                "gender": "male",
+                "birthDate": "1979-03-28",
+                "telecom": [
+                    {
+                        "system": "phone",
+                        "value": "+919720958717",
+                        "use": "mobile"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:44973c21-cf33-493f-aa7c-fe5d1f6d5e3f",
+            "resource": {
+                "resourceType": "Encounter",
+                "id": "44973c21-cf33-493f-aa7c-fe5d1f6d5e3f",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Encounter"
+                    ]
+                },
+                "text": {
+                    "status": "generated",
+                    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p><b>Encounter:</b> ambulatory 33710</p></div>"
+                },
+                "identifier": [
+                    {
+                        "system": "https://hms.local/encounter-id",
+                        "value": "33710"
+                    }
+                ],
+                "status": "finished",
+                "class": {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+                    "code": "AMB",
+                    "display": "ambulatory"
+                },
+                "subject": {
+                    "reference": "urn:uuid:ef6c2a1a-3eca-40fb-a6a1-d5c30b0e147d",
+                    "display": "DEVENDER SINGH 0"
+                },
+                "period": {
+                    "start": "2026-09-06T12:41:14+00:00",
+                    "end": "2026-09-06T12:41:14+00:00"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:73276e47-b179-457e-ab9d-6fab12200958",
+            "resource": {
+                "resourceType": "Practitioner",
+                "id": "73276e47-b179-457e-ab9d-6fab12200958",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Practitioner"
+                    ]
+                },
+                "text": {
+                    "status": "generated",
+                    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p><b>Practitioner:</b> Dr. Sanjay Kumar</p></div>"
+                },
+                "identifier": [
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "MD",
+                                    "display": "Medical License number"
+                                }
+                            ]
+                        },
+                        "system": "https://doctor.ndhm.gov.in",
+                        "value": "HPR-1"
+                    }
+                ],
+                "name": [
+                    {
+                        "use": "official",
+                        "text": "Dr. Sanjay Kumar"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:fb0bf0fe-3d2a-4f17-ae61-1c8ff7260948",
+            "resource": {
+                "resourceType": "Organization",
+                "id": "fb0bf0fe-3d2a-4f17-ae61-1c8ff7260948",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization"
+                    ]
+                },
+                "text": {
+                    "status": "generated",
+                    "div": "<div xmlns=\"http://www.w3.org/1999/xhtml\"><p><b>Organization:</b> DevSoft Tech</p></div>"
+                },
+                "name": "DevSoft Tech",
+                "identifier": [
+                    {
+                        "type": {
+                            "coding": [
+                                {
+                                    "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                                    "code": "PRN",
+                                    "display": "Provider number"
+                                }
+                            ]
+                        },
+                        "system": "https://facility.ndhm.gov.in",
+                        "value": "IN0510000828"
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:7f6087bb-7e42-4e6c-ad7c-7208256eb369",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "7f6087bb-7e42-4e6c-ad7c-7208256eb369",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationVitalSigns"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "vital-signs",
+                                "display": "Vital Signs"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "85354-9",
+                            "display": "Blood pressure panel"
+                        }
+                    ],
+                    "text": "Blood Pressure"
+                },
+                "subject": {
+                    "reference": "urn:uuid:ef6c2a1a-3eca-40fb-a6a1-d5c30b0e147d"
+                },
+                "effectiveDateTime": "2026-09-06T18:11:14+05:30",
+                "encounter": {
+                    "reference": "urn:uuid:44973c21-cf33-493f-aa7c-fe5d1f6d5e3f"
+                },
+                "component": [
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://loinc.org",
+                                    "code": "8480-6",
+                                    "display": "Systolic blood pressure"
+                                }
+                            ]
+                        },
+                        "valueQuantity": {
+                            "value": 120,
+                            "unit": "mmHg",
+                            "system": "http://unitsofmeasure.org",
+                            "code": "mm[Hg]"
+                        }
+                    },
+                    {
+                        "code": {
+                            "coding": [
+                                {
+                                    "system": "http://loinc.org",
+                                    "code": "8462-4",
+                                    "display": "Diastolic blood pressure"
+                                }
+                            ]
+                        },
+                        "valueQuantity": {
+                            "value": 80,
+                            "unit": "mmHg",
+                            "system": "http://unitsofmeasure.org",
+                            "code": "mm[Hg]"
+                        }
+                    }
+                ]
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:6dd1c0eb-8760-4c96-acb8-40c6048a08ef",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "6dd1c0eb-8760-4c96-acb8-40c6048a08ef",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationVitalSigns"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "vital-signs",
+                                "display": "Vital Signs"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "8867-4",
+                            "display": "Heart rate"
+                        }
+                    ],
+                    "text": "Heart rate"
+                },
+                "subject": {
+                    "reference": "urn:uuid:ef6c2a1a-3eca-40fb-a6a1-d5c30b0e147d"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:44973c21-cf33-493f-aa7c-fe5d1f6d5e3f"
+                },
+                "effectiveDateTime": "2026-09-06T18:11:14+05:30",
+                "valueQuantity": {
+                    "value": 30,
+                    "unit": "/min",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "/min"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:4af209c3-dec3-4a03-ae2f-7450ac4247a9",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "4af209c3-dec3-4a03-ae2f-7450ac4247a9",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationVitalSigns"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "vital-signs",
+                                "display": "Vital Signs"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "8310-5",
+                            "display": "Body temperature"
+                        }
+                    ],
+                    "text": "Body temperature"
+                },
+                "subject": {
+                    "reference": "urn:uuid:ef6c2a1a-3eca-40fb-a6a1-d5c30b0e147d"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:44973c21-cf33-493f-aa7c-fe5d1f6d5e3f"
+                },
+                "effectiveDateTime": "2026-09-06T18:11:14+05:30",
+                "valueQuantity": {
+                    "value": 36.666666666666664,
+                    "unit": "Cel",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "Cel"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:4af148e8-1e2b-4baa-a916-2d3b47ac5ad9",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "4af148e8-1e2b-4baa-a916-2d3b47ac5ad9",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationVitalSigns"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "vital-signs",
+                                "display": "Vital Signs"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "9279-1",
+                            "display": "Respiratory rate"
+                        }
+                    ],
+                    "text": "Respiratory rate"
+                },
+                "subject": {
+                    "reference": "urn:uuid:ef6c2a1a-3eca-40fb-a6a1-d5c30b0e147d"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:44973c21-cf33-493f-aa7c-fe5d1f6d5e3f"
+                },
+                "effectiveDateTime": "2026-09-06T18:11:14+05:30",
+                "valueQuantity": {
+                    "value": 20,
+                    "unit": "/min",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "/min"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:2f13be4f-c21a-4549-aa10-d911b9716149",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "2f13be4f-c21a-4549-aa10-d911b9716149",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationVitalSigns"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "vital-signs",
+                                "display": "Vital Signs"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "59408-5",
+                            "display": "Oxygen saturation in Arterial blood by Pulse oximetry"
+                        }
+                    ],
+                    "text": "Oxygen saturation in Arterial blood by Pulse oximetry"
+                },
+                "subject": {
+                    "reference": "urn:uuid:ef6c2a1a-3eca-40fb-a6a1-d5c30b0e147d"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:44973c21-cf33-493f-aa7c-fe5d1f6d5e3f"
+                },
+                "effectiveDateTime": "2026-09-06T18:11:14+05:30",
+                "valueQuantity": {
+                    "value": 95,
+                    "unit": "%",
+                    "system": "http://unitsofmeasure.org",
+                    "code": "%"
+                }
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:8cc8bc40-fe4e-4b68-a74b-c867ddd2c409",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "8cc8bc40-fe4e-4b68-a74b-c867ddd2c409",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "exam",
+                                "display": "Exam"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "29545-1",
+                            "display": "Physical findings"
+                        }
+                    ],
+                    "text": "Physical Examination"
+                },
+                "subject": {
+                    "reference": "urn:uuid:ef6c2a1a-3eca-40fb-a6a1-d5c30b0e147d"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:44973c21-cf33-493f-aa7c-fe5d1f6d5e3f"
+                },
+                "effectiveDateTime": "2026-09-06T18:11:14+05:30",
+                "valueString": "Complaints: Abdominal muscle pain, Acute Q fever\\nComplaint Duration (Days): 1 days\\nComplaint Severity: mild"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:81cbc20b-d25d-4ec2-a4f7-1348df9f1cc8",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "81cbc20b-d25d-4ec2-a4f7-1348df9f1cc8",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "exam",
+                                "display": "Exam"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "29545-1",
+                            "display": "Physical findings"
+                        }
+                    ],
+                    "text": "Physical Examination"
+                },
+                "subject": {
+                    "reference": "urn:uuid:ef6c2a1a-3eca-40fb-a6a1-d5c30b0e147d"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:44973c21-cf33-493f-aa7c-fe5d1f6d5e3f"
+                },
+                "effectiveDateTime": "2026-09-06T18:11:14+05:30",
+                "valueString": "Diagnosis: viral infection"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:4a09b6c1-eae8-47af-a660-1d6ef5cb0311",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "4a09b6c1-eae8-47af-a660-1d6ef5cb0311",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "exam",
+                                "display": "Exam"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "29545-1",
+                            "display": "Physical findings"
+                        }
+                    ],
+                    "text": "Physical Examination"
+                },
+                "subject": {
+                    "reference": "urn:uuid:ef6c2a1a-3eca-40fb-a6a1-d5c30b0e147d"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:44973c21-cf33-493f-aa7c-fe5d1f6d5e3f"
+                },
+                "effectiveDateTime": "2026-09-06T18:11:14+05:30",
+                "valueString": "Investigation: Pathology : CBC, LFT, KFT\\nX-Ray : X-Ray Chest (PA View)"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:62ba7bea-ef44-4fb4-a8d6-1468f29c7ad6",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "62ba7bea-ef44-4fb4-a8d6-1468f29c7ad6",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "social-history",
+                                "display": "Social History"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "8670-2",
+                            "display": "History of Social history"
+                        }
+                    ],
+                    "text": "Lifestyle & General Wellness Advice"
+                },
+                "subject": {
+                    "reference": "urn:uuid:ef6c2a1a-3eca-40fb-a6a1-d5c30b0e147d"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:44973c21-cf33-493f-aa7c-fe5d1f6d5e3f"
+                },
+                "effectiveDateTime": "2026-09-06T18:11:14+05:30",
+                "valueString": "Smoking status: Yes"
+            }
+        },
+        {
+            "fullUrl": "urn:uuid:aac4d5e1-c4d2-45b5-a16b-5d398dd8c63f",
+            "resource": {
+                "resourceType": "Observation",
+                "id": "aac4d5e1-c4d2-45b5-a16b-5d398dd8c63f",
+                "meta": {
+                    "profile": [
+                        "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation"
+                    ]
+                },
+                "status": "final",
+                "category": [
+                    {
+                        "coding": [
+                            {
+                                "system": "http://terminology.hl7.org/CodeSystem/observation-category",
+                                "code": "social-history",
+                                "display": "Social History"
+                            }
+                        ]
+                    }
+                ],
+                "code": {
+                    "coding": [
+                        {
+                            "system": "http://loinc.org",
+                            "code": "8670-2",
+                            "display": "History of Social history"
+                        }
+                    ],
+                    "text": "Lifestyle & General Wellness Advice"
+                },
+                "subject": {
+                    "reference": "urn:uuid:ef6c2a1a-3eca-40fb-a6a1-d5c30b0e147d"
+                },
+                "encounter": {
+                    "reference": "urn:uuid:44973c21-cf33-493f-aa7c-fe5d1f6d5e3f"
+                },
+                "effectiveDateTime": "2026-09-06T18:11:14+05:30",
+                "valueString": "Alcohol use: Yes"
+            }
+        }
+    ]
+}

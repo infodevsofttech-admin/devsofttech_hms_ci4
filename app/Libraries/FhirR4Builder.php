@@ -3797,4 +3797,233 @@ class FhirR4Builder
             'asNeeded' => false,
         ];
     }
+
+    /**
+     * Build ABDM FHIR R4 MedicationDispense Document Bundle
+     *
+     * @param array<string, mixed> $patient
+     * @param array<string, mixed> $store
+     * @param array<string, mixed> $sale
+     * @param array<int, array<string, mixed>> $items
+     * @return array<string, mixed>
+     */
+    public function buildPharmacyDispenseBundle(array $patient, array $store, array $sale, array $items): array
+    {
+        $issuedAt = $this->isoTimestamp();
+        $bundleUuid = $this->generateUuid();
+        $compositionUuid = $this->generateUuid();
+        $patientUuid = $this->generateUuid();
+        $practitionerUuid = $this->generateUuid();
+        $organizationUuid = $this->generateUuid();
+
+        $patientRef = 'urn:uuid:' . $patientUuid;
+        $practitionerRef = 'urn:uuid:' . $practitionerUuid;
+        $organizationRef = 'urn:uuid:' . $organizationUuid;
+
+        $resourceEntries = [];
+
+        // 1. Practitioner (Pharmacist or Prescribing Doctor)
+        $practName = trim((string)(($sale['doctor_name'] ?? '') ?: (($store['registered_pharmacist_name'] ?? '') ?: 'Pharmacist')));
+        $practRegNo = trim((string)(($sale['doctor_reg_no'] ?? '') ?: (($store['pharmacist_reg_no'] ?? '') ?: '')));
+        $practHprId = trim((string)($store['pharmacist_hpr_id'] ?? ''));
+
+        $practIdentifiers = [];
+        if ($practHprId !== '') {
+            $practIdentifiers[] = [
+                'type' => ['coding' => [['system' => 'http://terminology.hl7.org/CodeSystem/v2-0203', 'code' => 'PRN', 'display' => 'Provider number']]],
+                'system' => 'https://hpr.abdm.gov.in',
+                'value' => $practHprId
+            ];
+        }
+        if ($practRegNo !== '') {
+            $practIdentifiers[] = [
+                'type' => ['coding' => [['system' => 'http://terminology.hl7.org/CodeSystem/v2-0203', 'code' => 'MD', 'display' => 'Medical License number']]],
+                'system' => 'https://doctor.ndhm.gov.in',
+                'value' => $practRegNo
+            ];
+        }
+
+        $resourceEntries[] = [
+            'fullUrl' => $practitionerRef,
+            'resource' => [
+                'resourceType' => 'Practitioner',
+                'id' => $practitionerUuid,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Practitioner']],
+                'identifier' => $practIdentifiers,
+                'name' => [['text' => $practName]]
+            ]
+        ];
+
+        // 2. Organization (Hospital Pharmacy / Store)
+        $hfrId = trim((string)(($store['abdm_hfr_id'] ?? '') ?: (($store['store_code'] ?? '') ?: 'IN0710001234')));
+        $resourceEntries[] = [
+            'fullUrl' => $organizationRef,
+            'resource' => [
+                'resourceType' => 'Organization',
+                'id' => $organizationUuid,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization']],
+                'identifier' => [[
+                    'type' => ['coding' => [['system' => 'http://terminology.hl7.org/CodeSystem/v2-0203', 'code' => 'PRN', 'display' => 'Provider number']]],
+                    'system' => 'https://facility.ndhm.gov.in',
+                    'value' => $hfrId
+                ]],
+                'name' => (string)(($store['store_name'] ?? '') ?: 'Hospital Medical Store'),
+                'telecom' => [
+                    ['system' => 'phone', 'value' => (string)(($store['contact_phone'] ?? '') ?: '+91 9999999999')],
+                    ['system' => 'email', 'value' => (string)(($store['contact_email'] ?? '') ?: 'pharmacy@hospital.in')]
+                ],
+                'address' => [[
+                    'line' => [(string)(($store['address'] ?? '') ?: 'Hospital Building')],
+                    'city' => (string)(($store['state_name'] ?? '') ?: 'Delhi'),
+                    'state' => (string)(($store['state_name'] ?? '') ?: 'Delhi'),
+                    'postalCode' => '110001',
+                    'country' => 'IN'
+                ]]
+            ]
+        ];
+
+        // 3. Patient
+        $patientResource = $this->buildPatientResource($patient);
+        $patientResource['id'] = $patientUuid;
+        // Inject ABHA identifiers if provided in sale or patient
+        $abhaNumber = trim((string)(($sale['abha_id'] ?? '') ?: ($patient['abha_id'] ?? '')));
+        $abhaAddress = trim((string)(($sale['abha_address'] ?? '') ?: ($patient['abha_address'] ?? '')));
+
+        if (!isset($patientResource['identifier'])) {
+            $patientResource['identifier'] = [];
+        }
+        if ($abhaNumber !== '') {
+            $patientResource['identifier'][] = [
+                'type' => ['coding' => [['system' => 'https://nrces.in/ndhm/fhir/r4/CodeSystem/ndhm-identifier-type-code', 'code' => 'ABHA', 'display' => 'Ayushman Bharat Health Account']]],
+                'system' => 'https://healthid.ndhm.gov.in',
+                'value' => $abhaNumber
+            ];
+        }
+        if ($abhaAddress !== '') {
+            $patientResource['identifier'][] = [
+                'type' => ['coding' => [['system' => 'https://nrces.in/ndhm/fhir/r4/CodeSystem/ndhm-identifier-type-code', 'code' => 'ABHA-ADDRESS', 'display' => 'ABHA Address']]],
+                'system' => 'https://abdm.gov.in',
+                'value' => $abhaAddress
+            ];
+        }
+        $resourceEntries[] = ['fullUrl' => $patientRef, 'resource' => $patientResource];
+
+        // 4. MedicationDispense Resources
+        $medicationRefs = [];
+        foreach ($items as $idx => $it) {
+            $medUuid = $this->generateUuid();
+            $medRef = 'urn:uuid:' . $medUuid;
+            $medicationRefs[] = ['reference' => $medRef];
+
+            $snomedCode = trim((string)($it['snomed_ct_code'] ?? ''));
+            $snomedDisplay = trim((string)($it['snomed_display'] ?? ($it['item_name'] ?? 'Medicine')));
+
+            $coding = [];
+            if ($snomedCode !== '') {
+                $coding[] = [
+                    'system' => 'http://snomed.info/sct',
+                    'code' => $snomedCode,
+                    'display' => $snomedDisplay
+                ];
+            }
+
+            $medResource = [
+                'resourceType' => 'MedicationDispense',
+                'id' => $medUuid,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationDispense']],
+                'status' => 'completed',
+                'medicationCodeableConcept' => [
+                    'coding' => $coding,
+                    'text' => (string)($it['item_name'] ?? 'Medicine')
+                ],
+                'subject' => ['reference' => $patientRef, 'display' => (string)(($sale['patient_name'] ?? '') ?: 'Patient')],
+                'performer' => [[
+                    'actor' => ['reference' => $practitionerRef, 'display' => $practName]
+                ]],
+                'location' => ['reference' => $organizationRef, 'display' => (string)(($store['store_name'] ?? '') ?: 'Pharmacy')],
+                'quantity' => [
+                    'value' => (int)($it['qty'] ?? 1),
+                    'unit' => (string)($it['unit_pack'] ?? 'Units'),
+                    'system' => 'http://unitsofmeasure.org',
+                    'code' => '1'
+                ],
+                'daysSupply' => [
+                    'value' => 5,
+                    'unit' => 'days',
+                    'system' => 'http://unitsofmeasure.org',
+                    'code' => 'd'
+                ],
+                'whenPrepared' => $issuedAt,
+                'whenHandedOver' => $issuedAt,
+                'dosageInstruction' => [[
+                    'text' => 'As directed by physician'
+                ]]
+            ];
+
+            $resourceEntries[] = ['fullUrl' => $medRef, 'resource' => $medResource];
+        }
+
+        // 5. Composition (Record Head)
+        $compositionResource = [
+            'resourceType' => 'Composition',
+            'id' => $compositionUuid,
+            'meta' => [
+                'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationDispenseDocument'],
+                'versionId' => '1',
+                'lastUpdated' => $issuedAt
+            ],
+            'language' => 'en-IN',
+            'identifier' => [
+                'system' => 'https://ndhm.in/phr',
+                'value' => (string)(($sale['abdm_care_context_ref'] ?? '') ?: ('PHARM-' . (($sale['invoice_no'] ?? '') ?: $compositionUuid)))
+            ],
+            'status' => 'final',
+            'type' => [
+                'coding' => [[
+                    'system' => 'http://loinc.org',
+                    'code' => '60590-7',
+                    'display' => 'Medication dispensed.extended Document'
+                ]],
+                'text' => 'Pharmacy Medication Dispense Record'
+            ],
+            'subject' => ['reference' => $patientRef, 'display' => (string)(($sale['patient_name'] ?? '') ?: 'Patient')],
+            'date' => $issuedAt,
+            'author' => [['reference' => $practitionerRef, 'display' => $practName]],
+            'title' => 'Pharmacy Medication Dispensation Receipt',
+            'custodian' => ['reference' => $organizationRef, 'display' => (string)(($store['store_name'] ?? '') ?: 'Hospital Pharmacy')],
+            'section' => [[
+                'title' => 'Medications Dispensed',
+                'code' => [
+                    'coding' => [[
+                        'system' => 'http://loinc.org',
+                        'code' => '10160-0',
+                        'display' => 'History of Medication use'
+                    ]]
+                ],
+                'entry' => $medicationRefs
+            ]]
+        ];
+
+        array_unshift($resourceEntries, [
+            'fullUrl' => 'urn:uuid:' . $compositionUuid,
+            'resource' => $compositionResource
+        ]);
+
+        return [
+            'resourceType' => 'Bundle',
+            'id' => $bundleUuid,
+            'meta' => [
+                'versionId' => '1',
+                'lastUpdated' => $issuedAt,
+                'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle']
+            ],
+            'identifier' => [
+                'system' => 'https://ndhm.in/phr',
+                'value' => $bundleUuid
+            ],
+            'type' => 'document',
+            'timestamp' => $issuedAt,
+            'entry' => $resourceEntries
+        ];
+    }
 }

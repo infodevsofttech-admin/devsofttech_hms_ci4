@@ -1,0 +1,995 @@
+<?php
+
+// Let's load the 3 JSONs from the prompt and save them in scratch/
+$f1_str = <<<'JSON'
+{
+  "resourceType": "Bundle",
+  "id": "discharge-summary-example-01",
+  "identifier": {
+    "system": "https://nirmitee.io/bundle-ids",
+    "value": "f7e8d9c0-b1a2-3456-7890-abcdef012345"
+  },
+  "type": "document",
+  "timestamp": "2026-03-14T16:00:00+05:30",
+  "meta": {
+    "versionId": "1",
+    "lastUpdated": "2026-03-14T16:00:00+05:30",
+    "profile": [
+      "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle"
+    ],
+    "security": [
+      {
+        "system": "http://terminology.hl7.org/CodeSystem/v3-Confidentiality",
+        "code": "V",
+        "display": "very restricted"
+      }
+    ]
+  },
+  "entry": [
+    {
+      "fullUrl": "urn:uuid:composition-ds-01",
+      "resource": {
+        "resourceType": "Composition",
+        "id": "composition-ds-01",
+        "meta": {
+          "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/DischargeSummaryRecord"
+          ]
+        },
+        "status": "final",
+        "type": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "373942005",
+              "display": "Discharge summary"
+            }
+          ]
+        },
+        "subject": {
+          "reference": "urn:uuid:patient-ds-01"
+        },
+        "date": "2026-03-14T16:00:00+05:30",
+        "author": [
+          {
+            "reference": "urn:uuid:practitioner-ds-01"
+          }
+        ],
+        "title": "Discharge Summary",
+        "custodian": {
+          "reference": "urn:uuid:organization-ds-01"
+        },
+        "encounter": {
+          "reference": "urn:uuid:encounter-ds-01"
+        },
+        "section": [
+          {
+            "title": "Chief Complaint",
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "422843007",
+                  "display": "Chief complaint section"
+                }
+              ]
+            },
+            "entry": [
+              {
+                "reference": "urn:uuid:condition-ds-chief-01"
+              }
+            ]
+          },
+          {
+            "title": "Admission Diagnosis",
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "148006",
+                  "display": "Preliminary diagnosis"
+                }
+              ]
+            },
+            "entry": [
+              {
+                "reference": "urn:uuid:condition-ds-admission-01"
+              }
+            ]
+          },
+          {
+            "title": "Discharge Diagnosis",
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "397659008",
+                  "display": "Discharge diagnosis"
+                }
+              ]
+            },
+            "entry": [
+              {
+                "reference": "urn:uuid:condition-ds-discharge-01"
+              }
+            ]
+          },
+          {
+            "title": "Procedures",
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "371525003",
+                  "display": "Clinical procedure report"
+                }
+              ]
+            },
+            "entry": [
+              {
+                "reference": "urn:uuid:procedure-ds-01"
+              }
+            ]
+          },
+          {
+            "title": "Discharge Medications",
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "721981007",
+                  "display": "Medication list"
+                }
+              ]
+            },
+            "entry": [
+              {
+                "reference": "urn:uuid:medication-request-ds-01"
+              },
+              {
+                "reference": "urn:uuid:medication-request-ds-02"
+              },
+              {
+                "reference": "urn:uuid:medication-request-ds-03"
+              }
+            ]
+          },
+          {
+            "title": "Follow-Up Instructions",
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "736271009",
+                  "display": "Follow-up plan"
+                }
+              ]
+            },
+            "entry": [
+              {
+                "reference": "urn:uuid:care-plan-ds-01"
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:patient-ds-01",
+      "resource": {
+        "resourceType": "Patient",
+        "id": "patient-ds-01",
+        "meta": {
+          "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient"
+          ]
+        },
+        "identifier": [
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "code": "MR",
+                  "display": "Medical record number"
+                }
+              ]
+            },
+            "system": "https://fortishospital.example.in/patient-ids",
+            "value": "FH-2026-045678"
+          },
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "code": "SB",
+                  "display": "Social Beneficiary Identifier"
+                }
+              ]
+            },
+            "system": "https://healthid.ndhm.gov.in",
+            "value": "56-7890-1234-5678"
+          }
+        ],
+        "name": [
+          {
+            "use": "official",
+            "text": "Sunita Devi Gupta",
+            "family": "Gupta",
+            "given": [
+              "Sunita",
+              "Devi"
+            ]
+          }
+        ],
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "+91-9345678901",
+            "use": "mobile"
+          }
+        ],
+        "gender": "female",
+        "birthDate": "1965-09-20",
+        "address": [
+          {
+            "use": "home",
+            "text": "78 Sector 15, Gurgaon, Haryana 122001",
+            "city": "Gurgaon",
+            "district": "Gurgaon",
+            "state": "Haryana",
+            "postalCode": "122001",
+            "country": "IN"
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:practitioner-ds-01",
+      "resource": {
+        "resourceType": "Practitioner",
+        "id": "practitioner-ds-01",
+        "meta": {
+          "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Practitioner"
+          ]
+        },
+        "identifier": [
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "code": "MD",
+                  "display": "Medical License number"
+                }
+              ]
+            },
+            "system": "https://doctor.ndhm.gov.in",
+            "value": "HR-11223"
+          }
+        ],
+        "name": [
+          {
+            "use": "official",
+            "text": "Dr. Vikram Singh Chauhan",
+            "prefix": [
+              "Dr."
+            ],
+            "family": "Chauhan",
+            "given": [
+              "Vikram",
+              "Singh"
+            ]
+          }
+        ],
+        "qualification": [
+          {
+            "code": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "17561000",
+                  "display": "Cardiologist"
+                }
+              ]
+            },
+            "issuer": {
+              "display": "Haryana Medical Council"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:organization-ds-01",
+      "resource": {
+        "resourceType": "Organization",
+        "id": "organization-ds-01",
+        "meta": {
+          "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization"
+          ]
+        },
+        "identifier": [
+          {
+            "type": {
+              "coding": [
+                {
+                  "system": "http://terminology.hl7.org/CodeSystem/v2-0203",
+                  "code": "PRN",
+                  "display": "Provider number"
+                }
+              ]
+            },
+            "system": "https://facility.ndhm.gov.in",
+            "value": "IN0610005432"
+          }
+        ],
+        "name": "Fortis Memorial Research Institute",
+        "telecom": [
+          {
+            "system": "phone",
+            "value": "+91-124-4962222",
+            "use": "work"
+          }
+        ],
+        "address": [
+          {
+            "use": "work",
+            "text": "Sector 44, Opposite HUDA City Centre, Gurgaon, Haryana 122002",
+            "city": "Gurgaon",
+            "state": "Haryana",
+            "postalCode": "122002",
+            "country": "IN"
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:encounter-ds-01",
+      "resource": {
+        "resourceType": "Encounter",
+        "id": "encounter-ds-01",
+        "status": "finished",
+        "class": {
+          "system": "http://terminology.hl7.org/CodeSystem/v3-ActCode",
+          "code": "IMP",
+          "display": "inpatient encounter"
+        },
+        "type": [
+          {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "32485007",
+                "display": "Hospital admission"
+              }
+            ]
+          }
+        ],
+        "subject": {
+          "reference": "urn:uuid:patient-ds-01"
+        },
+        "participant": [
+          {
+            "type": [
+              {
+                "coding": [
+                  {
+                    "system": "http://terminology.hl7.org/CodeSystem/v3-ParticipationType",
+                    "code": "ATND",
+                    "display": "attender"
+                  }
+                ]
+              }
+            ],
+            "individual": {
+              "reference": "urn:uuid:practitioner-ds-01"
+            }
+          }
+        ],
+        "period": {
+          "start": "2026-03-10T09:00:00+05:30",
+          "end": "2026-03-14T14:00:00+05:30"
+        },
+        "hospitalization": {
+          "admitSource": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/admit-source",
+                "code": "emd",
+                "display": "From accident/emergency department"
+              }
+            ]
+          },
+          "dischargeDisposition": {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/discharge-disposition",
+                "code": "home",
+                "display": "Home"
+              }
+            ]
+          }
+        },
+        "serviceProvider": {
+          "reference": "urn:uuid:organization-ds-01"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:condition-ds-chief-01",
+      "resource": {
+        "resourceType": "Condition",
+        "id": "condition-ds-chief-01",
+        "meta": {
+          "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+          ]
+        },
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active",
+              "display": "Active"
+            }
+          ]
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+              "code": "confirmed",
+              "display": "Confirmed"
+            }
+          ]
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                "code": "encounter-diagnosis",
+                "display": "Encounter Diagnosis"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "29857009",
+              "display": "Chest pain"
+            }
+          ],
+          "text": "Severe retrosternal chest pain radiating to left arm with sweating"
+        },
+        "subject": {
+          "reference": "urn:uuid:patient-ds-01"
+        },
+        "encounter": {
+          "reference": "urn:uuid:encounter-ds-01"
+        },
+        "onsetDateTime": "2026-03-10T07:30:00+05:30",
+        "recordedDate": "2026-03-10T09:00:00+05:30"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:condition-ds-admission-01",
+      "resource": {
+        "resourceType": "Condition",
+        "id": "condition-ds-admission-01",
+        "meta": {
+          "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+          ]
+        },
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "active",
+              "display": "Active"
+            }
+          ]
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+              "code": "confirmed",
+              "display": "Confirmed"
+            }
+          ]
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                "code": "encounter-diagnosis",
+                "display": "Encounter Diagnosis"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "22298006",
+              "display": "Myocardial infarction"
+            },
+            {
+              "system": "http://hl7.org/fhir/sid/icd-10",
+              "code": "I21.0",
+              "display": "Acute transmural myocardial infarction of anterior wall"
+            }
+          ],
+          "text": "Acute anterior wall STEMI"
+        },
+        "subject": {
+          "reference": "urn:uuid:patient-ds-01"
+        },
+        "encounter": {
+          "reference": "urn:uuid:encounter-ds-01"
+        },
+        "onsetDateTime": "2026-03-10T07:30:00+05:30",
+        "recordedDate": "2026-03-10T10:00:00+05:30"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:condition-ds-discharge-01",
+      "resource": {
+        "resourceType": "Condition",
+        "id": "condition-ds-discharge-01",
+        "meta": {
+          "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Condition"
+          ]
+        },
+        "clinicalStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-clinical",
+              "code": "resolved",
+              "display": "Resolved"
+            }
+          ]
+        },
+        "verificationStatus": {
+          "coding": [
+            {
+              "system": "http://terminology.hl7.org/CodeSystem/condition-ver-status",
+              "code": "confirmed",
+              "display": "Confirmed"
+            }
+          ]
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://terminology.hl7.org/CodeSystem/condition-category",
+                "code": "encounter-diagnosis",
+                "display": "Encounter Diagnosis"
+              }
+            ]
+          }
+        ],
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "22298006",
+              "display": "Myocardial infarction"
+            },
+            {
+              "system": "http://hl7.org/fhir/sid/icd-10",
+              "code": "I21.0",
+              "display": "Acute transmural myocardial infarction of anterior wall"
+            }
+          ],
+          "text": "Acute anterior wall STEMI — post PCI with stent to LAD, stable for discharge"
+        },
+        "subject": {
+          "reference": "urn:uuid:patient-ds-01"
+        },
+        "encounter": {
+          "reference": "urn:uuid:encounter-ds-01"
+        },
+        "onsetDateTime": "2026-03-10T07:30:00+05:30",
+        "abatementDateTime": "2026-03-14T10:00:00+05:30",
+        "recordedDate": "2026-03-14T14:00:00+05:30"
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:procedure-ds-01",
+      "resource": {
+        "resourceType": "Procedure",
+        "id": "procedure-ds-01",
+        "meta": {
+          "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/Procedure"
+          ]
+        },
+        "status": "completed",
+        "code": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "415070008",
+              "display": "Percutaneous coronary intervention"
+            }
+          ],
+          "text": "Primary PCI with drug-eluting stent deployment to LAD artery"
+        },
+        "subject": {
+          "reference": "urn:uuid:patient-ds-01"
+        },
+        "encounter": {
+          "reference": "urn:uuid:encounter-ds-01"
+        },
+        "performedPeriod": {
+          "start": "2026-03-10T11:00:00+05:30",
+          "end": "2026-03-10T12:30:00+05:30"
+        },
+        "performer": [
+          {
+            "actor": {
+              "reference": "urn:uuid:practitioner-ds-01"
+            }
+          }
+        ],
+        "bodySite": [
+          {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "68787002",
+                "display": "Left anterior descending coronary artery"
+              }
+            ]
+          }
+        ],
+        "outcome": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "385669000",
+              "display": "Successful"
+            }
+          ],
+          "text": "Successful stent deployment with TIMI 3 flow restored"
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:medication-request-ds-01",
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "id": "medication-request-ds-01",
+        "meta": {
+          "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationRequest"
+          ]
+        },
+        "status": "active",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "372756006",
+              "display": "Clopidogrel"
+            }
+          ],
+          "text": "Clopidogrel 75mg"
+        },
+        "subject": {
+          "reference": "urn:uuid:patient-ds-01"
+        },
+        "encounter": {
+          "reference": "urn:uuid:encounter-ds-01"
+        },
+        "authoredOn": "2026-03-14T14:00:00+05:30",
+        "requester": {
+          "reference": "urn:uuid:practitioner-ds-01"
+        },
+        "dosageInstruction": [
+          {
+            "text": "Take 1 tablet once daily after lunch",
+            "timing": {
+              "repeat": {
+                "frequency": 1,
+                "period": 1,
+                "periodUnit": "d"
+              }
+            },
+            "route": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "26643006",
+                  "display": "Oral route"
+                }
+              ]
+            },
+            "doseAndRate": [
+              {
+                "doseQuantity": {
+                  "value": 75,
+                  "unit": "mg",
+                  "system": "http://unitsofmeasure.org",
+                  "code": "mg"
+                }
+              }
+            ]
+          }
+        ],
+        "dispenseRequest": {
+          "validityPeriod": {
+            "start": "2026-03-14",
+            "end": "2027-03-14"
+          },
+          "expectedSupplyDuration": {
+            "value": 365,
+            "unit": "days",
+            "system": "http://unitsofmeasure.org",
+            "code": "d"
+          }
+        },
+        "note": [
+          {
+            "text": "Dual antiplatelet therapy — do NOT discontinue without consulting cardiologist"
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:medication-request-ds-02",
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "id": "medication-request-ds-02",
+        "meta": {
+          "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationRequest"
+          ]
+        },
+        "status": "active",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "387458008",
+              "display": "Aspirin"
+            }
+          ],
+          "text": "Aspirin 75mg (Ecosprin)"
+        },
+        "subject": {
+          "reference": "urn:uuid:patient-ds-01"
+        },
+        "encounter": {
+          "reference": "urn:uuid:encounter-ds-01"
+        },
+        "authoredOn": "2026-03-14T14:00:00+05:30",
+        "requester": {
+          "reference": "urn:uuid:practitioner-ds-01"
+        },
+        "dosageInstruction": [
+          {
+            "text": "Take 1 tablet once daily after dinner",
+            "timing": {
+              "repeat": {
+                "frequency": 1,
+                "period": 1,
+                "periodUnit": "d"
+              }
+            },
+            "route": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "26643006",
+                  "display": "Oral route"
+                }
+              ]
+            },
+            "doseAndRate": [
+              {
+                "doseQuantity": {
+                  "value": 75,
+                  "unit": "mg",
+                  "system": "http://unitsofmeasure.org",
+                  "code": "mg"
+                }
+              }
+            ]
+          }
+        ],
+        "dispenseRequest": {
+          "validityPeriod": {
+            "start": "2026-03-14",
+            "end": "2027-03-14"
+          }
+        }
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:medication-request-ds-03",
+      "resource": {
+        "resourceType": "MedicationRequest",
+        "id": "medication-request-ds-03",
+        "meta": {
+          "profile": [
+            "https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationRequest"
+          ]
+        },
+        "status": "active",
+        "intent": "order",
+        "medicationCodeableConcept": {
+          "coding": [
+            {
+              "system": "http://snomed.info/sct",
+              "code": "376988009",
+              "display": "Atorvastatin"
+            }
+          ],
+          "text": "Atorvastatin 40mg"
+        },
+        "subject": {
+          "reference": "urn:uuid:patient-ds-01"
+        },
+        "encounter": {
+          "reference": "urn:uuid:encounter-ds-01"
+        },
+        "authoredOn": "2026-03-14T14:00:00+05:30",
+        "requester": {
+          "reference": "urn:uuid:practitioner-ds-01"
+        },
+        "dosageInstruction": [
+          {
+            "text": "Take 1 tablet at bedtime",
+            "timing": {
+              "repeat": {
+                "frequency": 1,
+                "period": 1,
+                "periodUnit": "d",
+                "when": [
+                  "HS"
+                ]
+              }
+            },
+            "route": {
+              "coding": [
+                {
+                  "system": "http://snomed.info/sct",
+                  "code": "26643006",
+                  "display": "Oral route"
+                }
+              ]
+            },
+            "doseAndRate": [
+              {
+                "doseQuantity": {
+                  "value": 40,
+                  "unit": "mg",
+                  "system": "http://unitsofmeasure.org",
+                  "code": "mg"
+                }
+              }
+            ]
+          }
+        ]
+      }
+    },
+    {
+      "fullUrl": "urn:uuid:care-plan-ds-01",
+      "resource": {
+        "resourceType": "CarePlan",
+        "id": "care-plan-ds-01",
+        "status": "active",
+        "intent": "plan",
+        "title": "Post-PCI Cardiac Rehabilitation and Follow-Up Plan",
+        "description": "Post-STEMI discharge plan including cardiac rehabilitation, medication compliance, and lifestyle modifications",
+        "subject": {
+          "reference": "urn:uuid:patient-ds-01"
+        },
+        "encounter": {
+          "reference": "urn:uuid:encounter-ds-01"
+        },
+        "period": {
+          "start": "2026-03-14",
+          "end": "2026-09-14"
+        },
+        "author": {
+          "reference": "urn:uuid:practitioner-ds-01"
+        },
+        "category": [
+          {
+            "coding": [
+              {
+                "system": "http://snomed.info/sct",
+                "code": "736271009",
+                "display": "Outpatient care plan"
+              }
+            ]
+          }
+        ],
+        "activity": [
+          {
+            "detail": {
+              "kind": "Appointment",
+              "code": {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "390906007",
+                    "display": "Follow-up encounter"
+                  }
+                ]
+              },
+              "status": "scheduled",
+              "scheduledPeriod": {
+                "start": "2026-03-21",
+                "end": "2026-03-21"
+              },
+              "description": "First follow-up visit — 1 week post discharge. Wound check, ECG, vitals."
+            }
+          },
+          {
+            "detail": {
+              "kind": "Appointment",
+              "code": {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "390906007",
+                    "display": "Follow-up encounter"
+                  }
+                ]
+              },
+              "status": "scheduled",
+              "scheduledPeriod": {
+                "start": "2026-04-14",
+                "end": "2026-04-14"
+              },
+              "description": "Second follow-up — 1 month post discharge. 2D Echo, lipid profile, CBC."
+            }
+          },
+          {
+            "detail": {
+              "kind": "ServiceRequest",
+              "code": {
+                "coding": [
+                  {
+                    "system": "http://snomed.info/sct",
+                    "code": "229065009",
+                    "display": "Exercise therapy"
+                  }
+                ]
+              },
+              "status": "scheduled",
+              "description": "Cardiac rehabilitation program: Start supervised walking 10-15 min daily. Gradually increase to 30-45 min over 6 weeks. Avoid heavy lifting (>5 kg) for 4 weeks."
+            }
+          }
+        ],
+        "note": [
+          {
+            "text": "Dietary advice: Low salt (<5g/day), low fat diet. Avoid smoking and alcohol. Take all medications regularly. Report immediately if chest pain, breathlessness, or palpitations recur. Keep follow-up appointments without fail."
+          }
+        ]
+      }
+    }
+  ]
+}
+JSON;
+
+file_put_contents('d:/Workplace/HMS_CI4_OLD/scratch/fhir_1.json', $f1_str);
+echo "Saved fhir_1.json\n";

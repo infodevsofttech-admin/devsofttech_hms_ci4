@@ -71,6 +71,13 @@
                 </a>
             </div>
             <div class="col-6 col-md-2 col-lg-2">
+                <a class="admin-tile" href="javascript:openAdminSubPage('<?= base_url('setting/admin/medical-store') ?>','Medical Stores & POS Setup');">
+                    <i class="bi bi-capsule" style="color:#0891b2"></i>
+                    <span>Medical Stores &amp; Counters</span>
+                </a>
+            </div>
+
+            <div class="col-6 col-md-2 col-lg-2">
                 <a class="admin-tile" href="javascript:openAdminSubPage('<?= base_url('setting/admin/user-management') ?>','User Management');">
                     <i class="bi bi-people"></i>
                     <span>User Management</span>
