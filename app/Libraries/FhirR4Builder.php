@@ -96,25 +96,7 @@ class FhirR4Builder
 
         // ── Organization ─────────────────────────────────────────────────────
         if ($hasOrganization) {
-            $orgResource = [
-                'resourceType' => 'Organization',
-                'id'           => $organizationUuid,
-                'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization']],
-                'name'         => trim((string) ($organization['name'] ?? '')),
-            ];
-            $hfrId = trim((string) ($organization['hfr_id'] ?? ''));
-            if ($hfrId !== '') {
-                $orgResource['identifier'] = [[
-                    'type'   => ['coding' => [[
-                        'system'  => 'http://terminology.hl7.org/CodeSystem/v2-0203',
-                        'code'    => 'PRN',
-                        'display' => 'Provider number',
-                    ]]],
-                    'system' => 'https://facility.ndhm.gov.in',
-                    'value'  => $hfrId,
-                ]];
-            }
-            $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $organizationUuid, 'resource' => $orgResource];
+            $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $organizationUuid, 'resource' => $this->buildOrganizationResource($organization, $organizationUuid)];
         }
 
         // ── Patient ───────────────────────────────────────────────────────────
@@ -279,6 +261,24 @@ class FhirR4Builder
                 continue;
             }
 
+            $num = (float) $value;
+            $loinc = (string) ($observation['loinc'] ?? '');
+            $display = (string) ($observation['display'] ?? '');
+            $unit = (string) ($observation['unit'] ?? '');
+            if ($loinc === '8310-5' || strcasecmp($display, 'Body temperature') === 0 || in_array($unit, ['Cel', 'degF', '[degF]'], true)) {
+                $num = round($num, 1);
+            } elseif ($loinc === '39156-5' || strcasecmp($display, 'Body mass index') === 0) {
+                $num = round($num, 1);
+            } elseif ($loinc === '29463-7' || strcasecmp($display, 'Body weight') === 0) {
+                $num = round($num, 2);
+            } elseif ($loinc === '8302-2' || strcasecmp($display, 'Body height') === 0) {
+                $num = round($num, 1);
+            } elseif (in_array($loinc, ['8867-4', '59408-5', '8480-6', '8462-4', '9279-1'], true)) {
+                $num = (float) round($num);
+            } else {
+                $num = round($num, 2);
+            }
+
             $obsUuid           = $this->generateUuid();
             $observationRefs[] = ['reference' => 'urn:uuid:' . $obsUuid, 'display' => 'Observation'];
             $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $obsUuid, 'resource' => [
@@ -293,17 +293,17 @@ class FhirR4Builder
                 'code'              => [
                     'coding' => [[
                         'system'  => 'http://loinc.org',
-                        'code'    => (string) ($observation['loinc'] ?? ''),
-                        'display' => (string) ($observation['display'] ?? ''),
+                        'code'    => $loinc,
+                        'display' => $display,
                     ]],
-                    'text' => (string) ($observation['display'] ?? ''),
+                    'text' => $display,
                 ],
                 'subject'           => ['reference' => $patientRef, 'display' => 'Patient'],
                 'encounter'         => ['reference' => $encounterRef],
                 'effectiveDateTime' => $issuedAt,
                 'valueQuantity'     => [
-                    'value'  => (float) $value,
-                    'unit'   => (string) ($observation['unit'] ?? ''),
+                    'value'  => $num,
+                    'unit'   => $unit,
                     'system' => 'http://unitsofmeasure.org',
                     'code'   => (string) ($observation['ucum'] ?? ''),
                 ],
@@ -823,21 +823,7 @@ class FhirR4Builder
 
         // ── Organization ──────────────────────────────────────────────────────
         if ($hasOrganization) {
-            $orgRes = [
-                'resourceType' => 'Organization',
-                'id'           => $organizationUuid,
-                'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization']],
-                'name'         => trim((string) ($organization['name'] ?? '')),
-            ];
-            $hfrId = trim((string) ($organization['hfr_id'] ?? ''));
-            if ($hfrId !== '') {
-                $orgRes['identifier'] = [[
-                    'type'   => ['coding' => [['system' => 'http://terminology.hl7.org/CodeSystem/v2-0203', 'code' => 'PRN', 'display' => 'Provider number']]],
-                    'system' => 'https://facility.ndhm.gov.in',
-                    'value'  => $hfrId,
-                ]];
-            }
-            $resourceEntries[] = ['fullUrl' => $organizationRef, 'resource' => $orgRes];
+            $resourceEntries[] = ['fullUrl' => $organizationRef, 'resource' => $this->buildOrganizationResource($organization, $organizationUuid)];
         }
 
         // ── Patient ───────────────────────────────────────────────────────────
@@ -1248,21 +1234,7 @@ class FhirR4Builder
 
         // ── Organization ──────────────────────────────────────────────────────
         if ($hasOrganization) {
-            $orgRes = [
-                'resourceType' => 'Organization',
-                'id'           => $organizationUuid,
-                'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization']],
-                'name'         => trim((string) ($organization['name'] ?? '')),
-            ];
-            $hfrId = trim((string) ($organization['hfr_id'] ?? ''));
-            if ($hfrId !== '') {
-                $orgRes['identifier'] = [[
-                    'type'   => ['coding' => [['system' => 'http://terminology.hl7.org/CodeSystem/v2-0203', 'code' => 'PRN', 'display' => 'Provider number']]],
-                    'system' => 'https://facility.ndhm.gov.in',
-                    'value'  => $hfrId,
-                ]];
-            }
-            $resourceEntries[] = ['fullUrl' => $organizationRef, 'resource' => $orgRes];
+            $resourceEntries[] = ['fullUrl' => $organizationRef, 'resource' => $this->buildOrganizationResource($organization, $organizationUuid)];
         }
 
         // ── Patient ───────────────────────────────────────────────────────────
@@ -1651,261 +1623,28 @@ class FhirR4Builder
 
         $practitioner = is_array($context['practitioner'] ?? null) ? (array) $context['practitioner'] : [];
         $organization = is_array($context['organization'] ?? null) ? (array) $context['organization'] : [];
-        $encounter = is_array($context['encounter'] ?? null) ? (array) $context['encounter'] : [];
+        $recommendations = is_array($context['recommendations'] ?? null) ? (array) $context['recommendations'] : [];
+        if ($recommendations === [] && isset($context['recommendation']) && is_array($context['recommendation'])) {
+            $recommendations = [$context['recommendation']];
+        }
 
         $hasPractitioner = trim((string) ($practitioner['id'] ?? '')) !== '' || trim((string) ($practitioner['name'] ?? '')) !== '';
         $hasOrganization = trim((string) ($organization['id'] ?? $organization['hfr_id'] ?? '')) !== '' || trim((string) ($organization['name'] ?? '')) !== '';
-        $hasEncounter = trim((string) ($encounter['id'] ?? '')) !== '';
 
         $practitionerUuid = $hasPractitioner ? $this->generateUuid() : '';
         $organizationUuid = $hasOrganization ? $this->generateUuid() : '';
-        $encounterUuid = $hasEncounter ? $this->generateUuid() : '';
         $practitionerRef = $hasPractitioner ? ('urn:uuid:' . $practitionerUuid) : '';
         $organizationRef = $hasOrganization ? ('urn:uuid:' . $organizationUuid) : '';
-        $encounterRef = $hasEncounter ? ('urn:uuid:' . $encounterUuid) : '';
 
-        $resourceEntries = [];
+        $patientDisplayName = trim((string) ($patient['name'] ?? ''));
+        if ($patientDisplayName === '') {
+            $patientDisplayName = 'Patient';
+        }
 
         $patientResource = $this->buildPatientResource($patient);
         $patientResource['id'] = $patientUuid;
         $patientResource['meta'] = ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient']];
-        $resourceEntries[] = ['fullUrl' => $patientRef, 'resource' => $patientResource];
-
-        if ($hasPractitioner) {
-            $practitionerResource = [
-                'resourceType' => 'Practitioner',
-                'id' => $practitionerUuid,
-                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Practitioner']],
-                'name' => [['text' => trim((string) ($practitioner['name'] ?? ''))]],
-            ];
-            $registrationNumber = trim((string) ($practitioner['registration_number'] ?? ''));
-            if ($registrationNumber !== '') {
-                $practitionerResource['identifier'] = [[
-                    'type' => ['coding' => [[
-                        'system' => 'http://terminology.hl7.org/CodeSystem/v2-0203',
-                        'code' => 'MD',
-                        'display' => 'Medical License number',
-                    ]]],
-                    'system' => 'https://doctor.ndhm.gov.in',
-                    'value' => $registrationNumber,
-                ]];
-            }
-            $resourceEntries[] = ['fullUrl' => $practitionerRef, 'resource' => $practitionerResource];
-        }
-
-        if ($hasOrganization) {
-            $hfrId = trim((string) ($organization['hfr_id'] ?? $organization['id'] ?? ''));
-            $organizationResource = [
-                'resourceType' => 'Organization',
-                'id' => $organizationUuid,
-                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization']],
-                'name' => trim((string) ($organization['name'] ?? '')),
-            ];
-            if ($hfrId !== '') {
-                $organizationResource['identifier'] = [[
-                    'type' => ['coding' => [[
-                        'system' => 'http://terminology.hl7.org/CodeSystem/v2-0203',
-                        'code' => 'PRN',
-                        'display' => 'Provider number',
-                    ]]],
-                    'system' => 'https://facility.ndhm.gov.in',
-                    'value' => $hfrId,
-                ]];
-            }
-            $resourceEntries[] = ['fullUrl' => $organizationRef, 'resource' => $organizationResource];
-        }
-
-        if ($hasEncounter) {
-            $encounterResource = [
-                'resourceType' => 'Encounter',
-                'id' => $encounterUuid,
-                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Encounter']],
-                'identifier' => [['system' => 'https://ndhm.in', 'value' => (string) ($encounter['id'] ?? $encounterUuid)]],
-                'status' => (string) ($encounter['status'] ?? 'finished'),
-                'class' => [
-                    'system' => 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
-                    'code' => (string) ($encounter['class_code'] ?? 'AMB'),
-                    'display' => (string) ($encounter['class_display'] ?? 'Ambulatory'),
-                ],
-                'subject' => ['reference' => $patientRef, 'display' => 'Patient'],
-            ];
-            $periodStart = $this->normalizeIsoDateTime((string) ($encounter['period_start'] ?? ''), '');
-            if ($periodStart !== '') {
-                $encounterResource['period'] = ['start' => $periodStart];
-            }
-            if ($practitionerRef !== '') {
-                $encounterResource['participant'] = [['individual' => ['reference' => $practitionerRef]]];
-            }
-            if ($organizationRef !== '') {
-                $encounterResource['serviceProvider'] = ['reference' => $organizationRef];
-            }
-            $resourceEntries[] = ['fullUrl' => $encounterRef, 'resource' => $encounterResource];
-        }
-
-        $immunizationRefs = [];
-        foreach ($immunizations as $immunization) {
-            $vaccineName = trim((string) ($immunization['vaccine_name'] ?? $immunization['vaccine_display'] ?? ''));
-            if ($vaccineName === '') {
-                continue;
-            }
-
-            $immunizationUuid = $this->generateUuid();
-            $immunizationRef = 'urn:uuid:' . $immunizationUuid;
-            $status = $this->normalizeImmunizationStatus((string) ($immunization['status'] ?? 'completed'));
-            $occurrence = $this->normalizeIsoDateTime(
-                (string) ($immunization['given_date'] ?? $immunization['occurrenceDateTime'] ?? $immunization['due_date'] ?? ''),
-                $issuedAt
-            );
-            [$vaccineCodeSystem, $vaccineCode] = $this->normalizeVaccineCoding(
-                (string) ($immunization['vaccine_code_system'] ?? ''),
-                (string) ($immunization['vaccine_code'] ?? '')
-            );
-
-            $resource = [
-                'resourceType' => 'Immunization',
-                'id' => $immunizationUuid,
-                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Immunization']],
-                'identifier' => [[
-                    'system' => 'https://ndhm.in/immunization',
-                    'value' => (string) ($immunization['id'] ?? $immunizationUuid),
-                ]],
-                'status' => $status,
-                'vaccineCode' => $this->buildSimpleCodeableConcept(
-                    $vaccineCodeSystem,
-                    $vaccineCode,
-                    $vaccineName,
-                    $vaccineName
-                ),
-                'patient' => ['reference' => $patientRef, 'display' => 'Patient'],
-                'occurrenceDateTime' => $occurrence,
-                'recorded' => $issuedAt,
-                'primarySource' => true,
-            ];
-
-            if ($encounterRef !== '') {
-                $resource['encounter'] = ['reference' => $encounterRef];
-            }
-            if ($organizationRef !== '') {
-                $resource['location'] = ['reference' => $organizationRef, 'display' => trim((string) ($organization['name'] ?? ''))];
-            }
-            $manufacturer = trim((string) ($immunization['manufacturer'] ?? ''));
-            if ($manufacturer !== '') {
-                $resource['manufacturer'] = ['display' => $manufacturer];
-            }
-            $lotNumber = trim((string) ($immunization['lot_number'] ?? ''));
-            if ($lotNumber !== '') {
-                $resource['lotNumber'] = $lotNumber;
-            }
-            $expiryDate = trim((string) ($immunization['expiry_date'] ?? $immunization['expirationDate'] ?? ''));
-            if ($expiryDate !== '' && strtotime($expiryDate) !== false) {
-                $resource['expirationDate'] = date('Y-m-d', strtotime($expiryDate));
-            }
-            $site = $this->buildSimpleCodeableConcept('http://snomed.info/sct', (string) ($immunization['site_code'] ?? ''), (string) ($immunization['site_name'] ?? ''), (string) ($immunization['site_name'] ?? ''));
-            if (! empty($site['text']) || ! empty($site['coding'])) {
-                $resource['site'] = $site;
-            }
-            $route = $this->buildSimpleCodeableConcept('http://snomed.info/sct', (string) ($immunization['route_code'] ?? ''), (string) ($immunization['route_name'] ?? ''), (string) ($immunization['route_name'] ?? ''));
-            if (! empty($route['text']) || ! empty($route['coding'])) {
-                $resource['route'] = $route;
-            }
-            if ($practitionerRef !== '') {
-                $resource['performer'] = [[
-                    'function' => ['text' => 'Administering provider'],
-                    'actor' => ['reference' => $practitionerRef, 'display' => trim((string) ($practitioner['name'] ?? ''))],
-                ]];
-            } elseif ($organizationRef !== '') {
-                $resource['performer'] = [[
-                    'function' => ['text' => 'Administering organization'],
-                    'actor' => ['reference' => $organizationRef, 'display' => trim((string) ($organization['name'] ?? ''))],
-                ]];
-            }
-
-            $protocol = [];
-            $series = trim((string) ($immunization['series_name'] ?? ''));
-            if ($series !== '') {
-                $protocol['series'] = $series;
-            }
-            $dose = $this->buildDoseNumberElement((string) ($immunization['dose_number'] ?? ''));
-            if (! empty($dose)) {
-                $protocol += $dose;
-            }
-            $seriesDoses = $this->buildDoseNumberElement((string) ($immunization['series_doses'] ?? ''), 'seriesDoses');
-            if (! empty($seriesDoses)) {
-                $protocol += $seriesDoses;
-            }
-            $targetDisease = $this->buildSimpleCodeableConcept('http://snomed.info/sct', (string) ($immunization['target_disease_code'] ?? ''), (string) ($immunization['target_disease_name'] ?? ''), (string) ($immunization['target_disease_name'] ?? ''));
-            if (! empty($targetDisease['text']) || ! empty($targetDisease['coding'])) {
-                $protocol['targetDisease'] = [$targetDisease];
-            }
-            if ($organizationRef !== '') {
-                $protocol['authority'] = ['reference' => $organizationRef];
-            }
-            if (! empty($protocol)) {
-                $resource['protocolApplied'] = [$protocol];
-            }
-
-            $note = trim((string) ($immunization['notes'] ?? ''));
-            if ($note !== '') {
-                $resource['note'] = [['text' => $note]];
-            }
-
-            $immunizationRefs[] = ['reference' => $immunizationRef, 'display' => $vaccineName];
-            $immunizationRefs[array_key_last($immunizationRefs)]['type'] = 'Immunization';
-            $resourceEntries[] = ['fullUrl' => $immunizationRef, 'resource' => $resource];
-        }
-
-        $composition = [
-            'resourceType' => 'Composition',
-            'id' => $compositionUuid,
-            'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/ImmunizationRecord']],
-            'language' => 'en-IN',
-            'text' => [
-                'status' => 'generated',
-                'div' => '<div xmlns="http://www.w3.org/1999/xhtml">Immunization Record</div>',
-            ],
-            'identifier' => [
-                'system' => 'https://ndhm.in/phr',
-                'value' => $compositionUuid,
-            ],
-            'status' => 'final',
-            'type' => [
-                'coding' => [[
-                    'system' => 'http://snomed.info/sct',
-                    'code' => '41000179103',
-                    'display' => 'Immunization record',
-                ]],
-                'text' => 'Immunization record',
-            ],
-            'subject' => ['reference' => $patientRef, 'display' => 'Patient'],
-            'date' => $issuedAt,
-            'title' => 'Immunization Record',
-            'section' => [[
-                'title' => 'Immunization record',
-                'code' => ['coding' => [[
-                    'system' => 'http://snomed.info/sct',
-                    'code' => '41000179103',
-                    'display' => 'Immunization record',
-                ]]],
-                'entry' => $immunizationRefs,
-            ]],
-        ];
-        if ($practitionerRef !== '') {
-            $composition['author'] = [[
-                'reference' => $practitionerRef,
-                'display' => trim((string) ($practitioner['name'] ?? '')),
-            ]];
-        } elseif ($organizationRef !== '') {
-            $composition['author'] = [[
-                'reference' => $organizationRef,
-                'display' => trim((string) ($organization['name'] ?? '')),
-            ]];
-        }
-        if ($organizationRef !== '') {
-            $composition['custodian'] = [
-                'reference' => $organizationRef,
-                'display' => trim((string) ($organization['name'] ?? '')),
-            ];
-        }
+        $patientEntry = ['fullUrl' => $patientRef, 'resource' => $patientResource];
 
         $careContextReference = trim((string) ($context['care_context_reference'] ?? ''));
         if ($careContextReference === '') {
@@ -1926,7 +1665,429 @@ class FhirR4Builder
                 $careContextReference = 'IMM-PAT-' . trim((string) ($patient['id'] ?? 'unknown'));
             }
         }
+
+        $encounterUuid = $this->generateUuid();
+        $encounterRef = 'urn:uuid:' . $encounterUuid;
+        $encounterContext = is_array($context['encounter'] ?? null) ? (array) $context['encounter'] : [];
+        $encounterId = trim((string) ($encounterContext['id'] ?? ''));
+        if ($encounterId === '') {
+            $encounterId = $careContextReference !== '' ? $careContextReference : ('IMM-' . $encounterUuid);
+        }
+        $encounterStatus = trim((string) ($encounterContext['status'] ?? 'finished'));
+        $classCode = strtoupper(trim((string) ($encounterContext['class_code'] ?? 'AMB')));
+        $classDisplay = trim((string) ($encounterContext['class_display'] ?? ($classCode === 'IMP' ? 'inpatient encounter' : 'ambulatory')));
+
+        $encounterStartRaw = trim((string) ($encounterContext['period_start'] ?? ''));
+        if ($encounterStartRaw === '') {
+            foreach ($immunizations as $imm) {
+                $d = trim((string) ($imm['given_date'] ?? $imm['occurrenceDateTime'] ?? ''));
+                if ($d !== '') {
+                    $encounterStartRaw = $d;
+                    break;
+                }
+            }
+        }
+        $encounterStart = $this->normalizeIsoDateTime($encounterStartRaw, $issuedAt);
+        $encounterEndRaw = trim((string) ($encounterContext['period_end'] ?? ''));
+        $encounterEnd = $encounterEndRaw !== '' ? $this->normalizeIsoDateTime($encounterEndRaw, $issuedAt) : '';
+
+        $encounterPeriod = ['start' => $encounterStart];
+        if ($encounterEnd !== '') {
+            $encounterPeriod['end'] = $encounterEnd;
+        }
+
+        $encounterResource = [
+            'resourceType' => 'Encounter',
+            'id'           => $encounterUuid,
+            'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Encounter']],
+            'identifier'   => [[
+                'system' => 'https://ndhm.in',
+                'value'  => $encounterId,
+            ]],
+            'status'       => $encounterStatus,
+            'class'        => [
+                'system'  => 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+                'code'    => $classCode,
+                'display' => $classDisplay,
+            ],
+            'subject'      => ['reference' => $patientRef, 'display' => $patientDisplayName],
+            'period'       => $encounterPeriod,
+        ];
+
+        $practitionerName = '';
+        $practitionerEntry = null;
+        if ($hasPractitioner) {
+            $practitionerName = trim((string) ($practitioner['name'] ?? ''));
+            if ($practitionerName !== '' && stripos($practitionerName, 'Dr') === false) {
+                $practitionerName = 'Dr. ' . $practitionerName;
+            }
+            $practitionerResource = [
+                'resourceType' => 'Practitioner',
+                'id' => $practitionerUuid,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Practitioner']],
+                'name' => [['text' => $practitionerName]],
+            ];
+            $registrationNumber = trim((string) ($practitioner['registration_number'] ?? ''));
+            $hprId = trim((string) ($practitioner['hpr_id'] ?? ''));
+            $practitionerResource['identifier'] = [];
+            if ($registrationNumber !== '') {
+                $practitionerResource['identifier'][] = [
+                    'type' => ['coding' => [[
+                        'system' => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                        'code' => 'MD',
+                        'display' => 'Medical License number',
+                    ]]],
+                    'system' => 'https://doctor.ndhm.gov.in',
+                    'value' => $registrationNumber,
+                ];
+            }
+            if ($hprId !== '') {
+                $practitionerResource['identifier'][] = [
+                    'type' => ['coding' => [[
+                        'system' => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                        'code' => 'HPR',
+                        'display' => 'Healthcare Professional Registry ID',
+                    ]]],
+                    'system' => 'https://hpr.ndhm.gov.in',
+                    'value' => $hprId,
+                ];
+            }
+            if ($practitionerResource['identifier'] === []) {
+                $practitionerResource['identifier'][] = [
+                    'type' => ['coding' => [[
+                        'system' => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                        'code' => 'MD',
+                        'display' => 'Medical License number',
+                    ]]],
+                    'system' => 'https://doctor.ndhm.gov.in',
+                    'value' => (string) ($practitioner['id'] ?? 'DOC-1'),
+                ];
+            }
+            $practitionerEntry = ['fullUrl' => $practitionerRef, 'resource' => $practitionerResource];
+        }
+
+        if ($practitionerRef !== '') {
+            $encounterResource['participant'] = [[
+                'individual' => [
+                    'reference' => $practitionerRef,
+                    'display'   => $practitionerName ?: 'Doctor',
+                ],
+            ]];
+        }
+        if ($organizationRef !== '') {
+            $encounterResource['serviceProvider'] = [
+                'reference' => $organizationRef,
+                'display'   => trim((string) ($organization['name'] ?? '')),
+            ];
+        }
+        $encounterEntry = ['fullUrl' => $encounterRef, 'resource' => $encounterResource];
+
+        $organizationEntry = null;
+        if ($hasOrganization) {
+            $organizationEntry = ['fullUrl' => $organizationRef, 'resource' => $this->buildOrganizationResource($organization, $organizationUuid)];
+        }
+
+        $immunizationRefs = [];
+        $immunizationEntries = [];
+        $firstImmunizationRef = '';
+        foreach ($immunizations as $immunization) {
+            $vaccineName = trim((string) ($immunization['vaccine_name'] ?? $immunization['vaccine_display'] ?? ''));
+            if ($vaccineName === '') {
+                continue;
+            }
+
+            $immunizationUuid = $this->generateUuid();
+            $immunizationRef = 'urn:uuid:' . $immunizationUuid;
+            if ($firstImmunizationRef === '') {
+                $firstImmunizationRef = $immunizationRef;
+            }
+            $status = $this->normalizeImmunizationStatus((string) ($immunization['status'] ?? 'completed'));
+            $occurrence = $this->normalizeIsoDateTime(
+                (string) ($immunization['given_date'] ?? $immunization['occurrenceDateTime'] ?? $immunization['due_date'] ?? ''),
+                $issuedAt
+            );
+            $vaccineCoding = $this->resolveVaccineStandardCoding(
+                (string) ($immunization['vaccine_code_system'] ?? ''),
+                (string) ($immunization['vaccine_code'] ?? ''),
+                $vaccineName
+            );
+
+            $resource = [
+                'resourceType' => 'Immunization',
+                'id' => $immunizationUuid,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Immunization']],
+                'identifier' => [[
+                    'system' => 'https://ndhm.in/immunization',
+                    'value' => (string) ($immunization['id'] ?? $immunizationUuid),
+                ]],
+                'status' => $status,
+                'vaccineCode' => $vaccineCoding,
+                'patient' => ['reference' => $patientRef, 'display' => $patientDisplayName],
+                'encounter' => ['reference' => $encounterRef],
+                'occurrenceDateTime' => $occurrence,
+                'recorded' => $issuedAt,
+                'primarySource' => true,
+            ];
+
+            $manufacturer = trim((string) ($immunization['manufacturer'] ?? ''));
+            if ($manufacturer !== '') {
+                $resource['manufacturer'] = ['display' => $manufacturer];
+            }
+            $lotNumber = trim((string) ($immunization['lot_number'] ?? ''));
+            if ($lotNumber !== '') {
+                $resource['lotNumber'] = $lotNumber;
+            }
+            $expiryDate = trim((string) ($immunization['expiry_date'] ?? $immunization['expirationDate'] ?? ''));
+            if ($expiryDate !== '' && strtotime($expiryDate) !== false) {
+                $resource['expirationDate'] = date('Y-m-d', strtotime($expiryDate));
+            }
+
+            $site = $this->resolveSiteCoding((string) ($immunization['site_code'] ?? ''), (string) ($immunization['site_name'] ?? ''));
+            if (! empty($site)) {
+                $resource['site'] = $site;
+            }
+
+            $route = $this->resolveRouteCoding((string) ($immunization['route_code'] ?? ''), (string) ($immunization['route_name'] ?? ''));
+            if (! empty($route)) {
+                $resource['route'] = $route;
+            }
+
+            if ($practitionerRef !== '') {
+                $resource['performer'] = [[
+                    'function' => [
+                        'coding' => [[
+                            'system' => 'http://terminology.hl7.org/CodeSystem/v2-0443',
+                            'code' => 'AP',
+                            'display' => 'Administering Provider',
+                        ]],
+                        'text' => 'Administering provider',
+                    ],
+                    'actor' => ['reference' => $practitionerRef, 'display' => $practitionerName ?? trim((string) ($practitioner['name'] ?? 'Doctor'))],
+                ]];
+            } elseif ($organizationRef !== '') {
+                $resource['performer'] = [[
+                    'function' => [
+                        'text' => 'Administering organization',
+                    ],
+                    'actor' => ['reference' => $organizationRef, 'display' => trim((string) ($organization['name'] ?? ''))],
+                ]];
+            }
+
+            $protocol = [];
+            $series = trim((string) ($immunization['series_name'] ?? ''));
+            if ($series === '') {
+                $series = $vaccineName;
+            }
+            $protocol['series'] = $series;
+
+            $dose = $this->buildDoseNumberElement((string) ($immunization['dose_number'] ?? '1'));
+            if (! empty($dose)) {
+                $protocol += $dose;
+            }
+            $seriesDoses = $this->buildDoseNumberElement((string) ($immunization['series_doses'] ?? ''), 'seriesDoses');
+            if (! empty($seriesDoses)) {
+                $protocol += $seriesDoses;
+            }
+
+            $targetDisease = $this->resolveTargetDiseaseCoding(
+                (string) ($immunization['target_disease_code'] ?? ''),
+                (string) ($immunization['target_disease_name'] ?? ''),
+                $vaccineName
+            );
+            if (! empty($targetDisease)) {
+                $protocol['targetDisease'] = [$targetDisease];
+            }
+            if ($organizationRef !== '') {
+                $protocol['authority'] = ['reference' => $organizationRef];
+            }
+            $resource['protocolApplied'] = [$protocol];
+
+            $note = trim((string) ($immunization['notes'] ?? ''));
+            if ($note !== '') {
+                $resource['note'] = [['text' => $note]];
+            }
+
+            $immunizationRefs[] = ['reference' => $immunizationRef, 'type' => 'Immunization'];
+            $immunizationEntries[] = ['fullUrl' => $immunizationRef, 'resource' => $resource];
+        }
+
+        // --- Build ImmunizationRecommendation resource (ABDM Section 3, slice max: 1) ---
+        $recommendationRefs = [];
+        $recommendationEntries = [];
+        $recItems = [];
+        foreach ($recommendations as $rec) {
+            $recVaccineName = trim((string) ($rec['vaccine_name'] ?? $rec['vaccine_display'] ?? ''));
+            if ($recVaccineName === '') {
+                continue;
+            }
+
+            $recCoding = $this->resolveVaccineStandardCoding(
+                (string) ($rec['vaccine_code_system'] ?? ''),
+                (string) ($rec['vaccine_code'] ?? ''),
+                $recVaccineName
+            );
+
+            $dueDate = trim((string) ($rec['due_date'] ?? ''));
+            if ($dueDate !== '') {
+                $dueDate = $this->normalizeIsoDateTime($dueDate, '');
+            }
+
+            $recDoseNum = (int) ($rec['dose_number'] ?? 0);
+            $recSeriesDoses = (int) ($rec['series_doses'] ?? 0);
+            $recSeries = trim((string) ($rec['series_name'] ?? $recVaccineName));
+
+            $recItem = [
+                'vaccineCode' => [$recCoding],
+                'forecastStatus' => [
+                    'coding' => [[
+                        'system' => 'http://terminology.hl7.org/CodeSystem/immunization-recommendation-status',
+                        'code' => 'due',
+                        'display' => 'Due',
+                    ]],
+                ],
+            ];
+            if ($dueDate !== '') {
+                $recItem['dateCriterion'] = [[
+                    'code' => [
+                        'coding' => [[
+                            'system' => 'http://loinc.org',
+                            'code' => '30980-7',
+                            'display' => 'Date vaccine due',
+                        ]],
+                    ],
+                    'value' => $dueDate,
+                ]];
+            }
+            if ($recDoseNum > 0) {
+                $recItem['doseNumberPositiveInt'] = $recDoseNum;
+                $recItem['description'] = 'Dose ' . $recDoseNum . ' in ' . $recSeries;
+            }
+            if ($recSeriesDoses > 0) {
+                $recItem['seriesDosesPositiveInt'] = $recSeriesDoses;
+            }
+            if ($recSeries !== '') {
+                $recItem['series'] = $recSeries;
+            }
+            if ($firstImmunizationRef !== '') {
+                $recItem['supportingImmunization'] = [[
+                    'reference' => $firstImmunizationRef,
+                    'display' => 'Immunization',
+                ]];
+            }
+
+            $recItems[] = $recItem;
+        }
+
+        if ($recItems !== []) {
+            $recUuid = $this->generateUuid();
+            $recRef = 'urn:uuid:' . $recUuid;
+            $recResource = [
+                'resourceType' => 'ImmunizationRecommendation',
+                'id' => $recUuid,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/ImmunizationRecommendation']],
+                'patient' => ['reference' => $patientRef, 'display' => 'Patient'],
+                'date' => $issuedAt,
+                'recommendation' => $recItems,
+            ];
+            if ($organizationRef !== '') {
+                $recResource['authority'] = ['reference' => $organizationRef];
+            }
+
+            $recommendationRefs[] = [
+                'reference' => $recRef,
+                'type' => 'ImmunizationRecommendation',
+            ];
+            $recommendationEntries[] = ['fullUrl' => $recRef, 'resource' => $recResource];
+        }
+
+        $allSectionEntries = array_merge($immunizationRefs, $recommendationRefs);
+
+        $patientDisplayName = trim((string) ($patient['name'] ?? ''));
+        if ($patientDisplayName === '') {
+            $patientDisplayName = 'Patient';
+        }
+
+        $composition = [
+            'resourceType' => 'Composition',
+            'id' => $compositionUuid,
+            'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/ImmunizationRecord']],
+            'language' => 'en-IN',
+            'text' => [
+                'status' => 'generated',
+                'div' => '<div xmlns="http://www.w3.org/1999/xhtml">Immunization record</div>',
+            ],
+            'identifier' => [
+                'system' => 'https://ndhm.in/phr',
+                'value' => $compositionUuid,
+            ],
+            'status' => 'final',
+            'type' => [
+                'coding' => [[
+                    'system' => 'http://snomed.info/sct',
+                    'code' => '41000179103',
+                    'display' => 'Immunization record',
+                ]],
+                'text' => 'Immunization record',
+            ],
+            'subject' => ['reference' => $patientRef, 'display' => $patientDisplayName],
+            'encounter' => ['reference' => $encounterRef, 'display' => 'Encounter'],
+            'date' => $issuedAt,
+            'title' => 'Immunization record',
+            'section' => [[
+                'title' => 'Immunization record',
+                'code' => ['coding' => [[
+                    'system' => 'http://snomed.info/sct',
+                    'code' => '41000179103',
+                    'display' => 'Immunization record',
+                ]]],
+                'entry' => $allSectionEntries,
+            ]],
+        ];
+        if ($practitionerRef !== '') {
+            $composition['author'] = [[
+                'reference' => $practitionerRef,
+                'display' => $practitionerName ?? trim((string) ($practitioner['name'] ?? 'Doctor')),
+            ]];
+        } elseif ($organizationRef !== '') {
+            $composition['author'] = [[
+                'reference' => $organizationRef,
+                'display' => trim((string) ($organization['name'] ?? '')),
+            ]];
+        }
+        if ($organizationRef !== '') {
+            $composition['custodian'] = [
+                'reference' => $organizationRef,
+                'display' => trim((string) ($organization['name'] ?? '')),
+            ];
+        }
+
         $hfrId = trim((string) ($organization['hfr_id'] ?? $organization['id'] ?? ''));
+
+        // Order entries in canonical NRCES order:
+        // 1. Composition
+        // 2. Practitioner (if present)
+        // 3. Organization (if present)
+        // 4. Patient
+        // 5. Encounter
+        // 6. Immunization(s)
+        // 7. ImmunizationRecommendation(s)
+        $bundleEntries = [
+            ['fullUrl' => 'urn:uuid:' . $compositionUuid, 'resource' => $composition],
+        ];
+        if ($practitionerEntry !== null) {
+            $bundleEntries[] = $practitionerEntry;
+        }
+        if ($organizationEntry !== null) {
+            $bundleEntries[] = $organizationEntry;
+        }
+        $bundleEntries[] = $patientEntry;
+        $bundleEntries[] = $encounterEntry;
+        foreach ($immunizationEntries as $entry) {
+            $bundleEntries[] = $entry;
+        }
+        foreach ($recommendationEntries as $entry) {
+            $bundleEntries[] = $entry;
+        }
 
         return $this->sanitizeBundle([
             'resourceType' => 'Bundle',
@@ -1945,7 +2106,7 @@ class FhirR4Builder
             ],
             'type' => 'document',
             'timestamp' => $issuedAt,
-            'entry' => array_merge([['fullUrl' => 'urn:uuid:' . $compositionUuid, 'resource' => $composition]], $resourceEntries),
+            'entry' => $bundleEntries,
         ]);
     }
 
@@ -1974,17 +2135,283 @@ class FhirR4Builder
             'UIP-HEPB' => '45',
             'UIP-ROTA' => '122',
             'UIP-FIPV' => '10',
+            'UIP-PENTA' => '198',
+            'UIP-PENTAVALENT' => '198',
             'UIP-PCV' => '152',
             'UIP-MR' => '04',
             'UIP-JE' => '39',
             'UIP-DPT' => '01',
             'UIP-TD' => '09',
+            'UIP-TT' => '09',
         ];
         if (! isset($cvxCodes[$code])) {
             return [$system, $code];
         }
 
         return ['http://hl7.org/fhir/sid/cvx', $cvxCodes[$code]];
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function resolveVaccineStandardCoding(string $system, string $code, string $name): array
+    {
+        $concept = [];
+        $name = trim($name);
+        if ($name !== '') {
+            $concept['text'] = $name;
+        }
+
+        [$normSystem, $normCode] = $this->normalizeVaccineCoding($system, $code);
+
+        if ($normSystem !== '' && $normCode !== '' && $normSystem !== 'https://hms.local/immunization/uip') {
+            $display = $name;
+            if ($normSystem === 'http://hl7.org/fhir/sid/cvx') {
+                $display = match ($normCode) {
+                    '19' => 'BCG',
+                    '02' => 'OPV',
+                    '45' => 'Hep B',
+                    '122' => 'rotavirus, unspecified',
+                    '10' => 'IPV',
+                    '198' => 'Pentavalent',
+                    '152' => 'Pneumococcal Conjugate',
+                    '04' => 'M/R',
+                    '39' => 'Japanese Encephalitis',
+                    '01' => 'DTP',
+                    '09' => 'Td',
+                    default => $name,
+                };
+            }
+            $concept['coding'] = [[
+                'system' => $normSystem,
+                'code' => $normCode,
+                'display' => $display,
+            ]];
+            return $concept;
+        }
+
+        $lookupKey = strtoupper(trim($code !== '' ? $code : $name));
+        $knownCodes = [
+            'BCG' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '19', 'display' => 'BCG'],
+            'OPV' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '02', 'display' => 'OPV'],
+            'HEPATITIS B' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '45', 'display' => 'Hep B'],
+            'HEP B' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '45', 'display' => 'Hep B'],
+            'HEPB' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '45', 'display' => 'Hep B'],
+            'ROTAVIRUS' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '122', 'display' => 'rotavirus, unspecified'],
+            'ROTA' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '122', 'display' => 'rotavirus, unspecified'],
+            'FRACTIONAL IPV' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '10', 'display' => 'IPV'],
+            'FIPV' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '10', 'display' => 'IPV'],
+            'IPV' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '10', 'display' => 'IPV'],
+            'PENTAVALENT' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '198', 'display' => 'Pentavalent'],
+            'PENTA' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '198', 'display' => 'Pentavalent'],
+            'PCV' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '152', 'display' => 'Pneumococcal Conjugate'],
+            'MR' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '04', 'display' => 'M/R'],
+            'MEASLES' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '05', 'display' => 'measles'],
+            'JE' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '39', 'display' => 'Japanese Encephalitis'],
+            'DPT' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '01', 'display' => 'DTP'],
+            'TD' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '09', 'display' => 'Td'],
+            'TT' => ['system' => 'http://hl7.org/fhir/sid/cvx', 'code' => '09', 'display' => 'tetanus toxoid'],
+            'COVID' => ['system' => 'http://snomed.info/sct', 'code' => '1119305005', 'display' => 'COVID-19 vaccine'],
+        ];
+
+        foreach ($knownCodes as $prefix => $target) {
+            if (str_contains($lookupKey, $prefix)) {
+                $concept['coding'] = [$target];
+                return $concept;
+            }
+        }
+
+        if ($normSystem !== '' && $normCode !== '') {
+            $concept['coding'] = [[
+                'system' => $normSystem,
+                'code' => $normCode,
+                'display' => $name,
+            ]];
+            return $concept;
+        }
+
+        if (empty($concept['coding']) && $name !== '') {
+            $concept['coding'] = [[
+                'system' => 'http://snomed.info/sct',
+                'code' => '774203006',
+                'display' => $name,
+            ]];
+        }
+
+        return $concept;
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function resolveSiteCoding(string $code, string $name): array
+    {
+        $code = trim($code);
+        $name = trim($name);
+        if ($code === '' && $name === '') {
+            return [];
+        }
+
+        $search = strtolower($code . ' ' . $name);
+        $snomedCode = '';
+        $display = '';
+
+        if (str_contains($search, 'right upper arm') || str_contains($search, 'right arm') || str_contains($search, 'right deltoid')) {
+            $snomedCode = '368209003';
+            $display = 'Right upper arm structure';
+        } elseif (str_contains($search, 'left upper arm') || str_contains($search, 'left arm') || str_contains($search, 'left deltoid')) {
+            $snomedCode = '368208006';
+            $display = 'Left upper arm structure';
+        } elseif (str_contains($search, 'left thigh') || str_contains($search, 'anterolateral aspect of left thigh')) {
+            $snomedCode = '61396006';
+            $display = 'Left thigh structure';
+        } elseif (str_contains($search, 'right thigh') || str_contains($search, 'anterolateral aspect of right thigh')) {
+            $snomedCode = '11207009';
+            $display = 'Right thigh structure';
+        } elseif (str_contains($search, 'mouth') || str_contains($search, 'oral')) {
+            $snomedCode = '123851003';
+            $display = 'Mouth region structure';
+        } elseif ($code !== '' && preg_match('/^\d+$/', $code) === 1) {
+            $snomedCode = $code;
+            $display = $name !== '' ? $name : 'Anatomical site';
+        }
+
+        $res = [];
+        if ($name !== '') {
+            $res['text'] = $name;
+        }
+        if ($snomedCode !== '') {
+            $res['coding'] = [[
+                'system' => 'http://snomed.info/sct',
+                'code' => $snomedCode,
+                'display' => $display,
+            ]];
+            if (empty($res['text'])) {
+                $res['text'] = $display;
+            }
+        }
+
+        return $res;
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function resolveRouteCoding(string $code, string $name): array
+    {
+        $code = trim($code);
+        $name = trim($name);
+        if ($code === '' && $name === '') {
+            return [];
+        }
+
+        $search = strtolower($code . ' ' . $name);
+        $snomedCode = '';
+        $display = '';
+
+        if (str_contains($search, 'intradermal') || preg_match('/\b(id)\b/i', $search) === 1) {
+            $snomedCode = '372464004';
+            $display = 'Intradermal use';
+        } elseif (str_contains($search, 'intramuscular') || preg_match('/\b(im)\b/i', $search) === 1) {
+            $snomedCode = '78421000';
+            $display = 'Intramuscular route';
+        } elseif (str_contains($search, 'subcutaneous') || preg_match('/\b(sc|subq)\b/i', $search) === 1) {
+            $snomedCode = '34206005';
+            $display = 'Subcutaneous route';
+        } elseif (str_contains($search, 'oral') || preg_match('/\b(po)\b/i', $search) === 1) {
+            $snomedCode = '260548002';
+            $display = 'Oral route';
+        } elseif (str_contains($search, 'intranasal') || str_contains($search, 'nasal')) {
+            $snomedCode = '46713006';
+            $display = 'Nasal route';
+        } elseif ($code !== '' && preg_match('/^\d+$/', $code) === 1) {
+            $snomedCode = $code;
+            $display = $name !== '' ? $name : 'Route';
+        }
+
+        $res = [];
+        if ($name !== '') {
+            $res['text'] = $name;
+        }
+        if ($snomedCode !== '') {
+            $res['coding'] = [[
+                'system' => 'http://snomed.info/sct',
+                'code' => $snomedCode,
+                'display' => $display,
+            ]];
+            if (empty($res['text'])) {
+                $res['text'] = $display;
+            }
+        }
+
+        return $res;
+    }
+
+    /**
+     * @return array<string,mixed>
+     */
+    private function resolveTargetDiseaseCoding(string $code, string $name, string $vaccineName): array
+    {
+        $code = trim($code);
+        $name = trim($name);
+        $vaccineName = trim($vaccineName);
+
+        $search = strtolower($code . ' ' . $name . ' ' . $vaccineName);
+        $snomedCode = '';
+        $display = '';
+
+        if ($code !== '' && preg_match('/^\d+$/', $code) === 1) {
+            $snomedCode = $code;
+            $display = $name !== '' ? $name : 'Target Disease';
+        } elseif (str_contains($search, 'polio') || str_contains($search, 'fipv') || str_contains($search, 'ipv') || str_contains($search, 'opv')) {
+            $snomedCode = '398102009';
+            $display = 'Poliomyelitis';
+        } elseif (str_contains($search, 'tuberculosis') || str_contains($search, 'bcg')) {
+            $snomedCode = '56717001';
+            $display = 'Tuberculosis';
+        } elseif (str_contains($search, 'hepb') || str_contains($search, 'hepatitis b')) {
+            $snomedCode = '66071002';
+            $display = 'Type B viral hepatitis';
+        } elseif (str_contains($search, 'rotavirus') || str_contains($search, 'rota')) {
+            $snomedCode = '186358004';
+            $display = 'Rotavirus infection';
+        } elseif (str_contains($search, 'diphtheria')) {
+            $snomedCode = '397430003';
+            $display = 'Diphtheria';
+        } elseif (str_contains($search, 'tetanus') || str_contains($search, 'tt') || str_contains($search, 'td')) {
+            $snomedCode = '76902006';
+            $display = 'Tetanus';
+        } elseif (str_contains($search, 'pertussis') || str_contains($search, 'whooping')) {
+            $snomedCode = '27836007';
+            $display = 'Pertussis';
+        } elseif (str_contains($search, 'measles')) {
+            $snomedCode = '14189004';
+            $display = 'Measles';
+        } elseif (str_contains($search, 'rubella')) {
+            $snomedCode = '36653000';
+            $display = 'Rubella';
+        } elseif (str_contains($search, 'japanese encephalitis') || str_contains($search, 'je')) {
+            $snomedCode = '52947006';
+            $display = 'Japanese encephalitis';
+        } elseif (str_contains($search, 'pneumococcal') || str_contains($search, 'pcv')) {
+            $snomedCode = '16814004';
+            $display = 'Pneumococcal infectious disease';
+        }
+
+        $res = [];
+        $text = $name !== '' ? $name : $display;
+        if ($text !== '') {
+            $res['text'] = $text;
+        }
+        if ($snomedCode !== '') {
+            $res['coding'] = [[
+                'system' => 'http://snomed.info/sct',
+                'code' => $snomedCode,
+                'display' => $display !== '' ? $display : $text,
+            ]];
+        }
+
+        return $res;
     }
 
     /**
@@ -2053,7 +2480,14 @@ class FhirR4Builder
     private function sanitizeFhirValue($value)
     {
         if (is_string($value)) {
-            return in_array(strtoupper(trim($value)), ['NA', 'N/A', 'NULL', 'NOT AVAILABLE'], true) ? null : $value;
+            $trimmed = trim($value);
+            if (in_array(strtoupper($trimmed), ['NA', 'N/A', 'NULL', 'NOT AVAILABLE'], true)) {
+                return null;
+            }
+            if (preg_match('/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}(:\d{2})?$/', $trimmed) === 1) {
+                return $this->normalizeIsoDateTime($trimmed);
+            }
+            return $value;
         }
         if (! is_array($value)) {
             return $value;
@@ -2108,6 +2542,130 @@ class FhirR4Builder
         } catch (\Throwable $e) {
             return trim($fallback);
         }
+    }
+
+    /**
+     * Build NRCES-compliant Organization resource with MustSupport telecom and address.
+     *
+     * @param array<string, mixed> $organization
+     * @return array<string, mixed>
+     */
+    private function buildOrganizationResource(array $organization, string $organizationUuid): array
+    {
+        $hfrId = trim((string) ($organization['hfr_id'] ?? $organization['id'] ?? ''));
+        $name = trim((string) ($organization['name'] ?? ''));
+
+        $resource = [
+            'resourceType' => 'Organization',
+            'id' => $organizationUuid,
+            'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Organization']],
+            'name' => $name,
+        ];
+
+        if ($hfrId !== '') {
+            $resource['identifier'] = [[
+                'type' => ['coding' => [[
+                    'system' => 'http://terminology.hl7.org/CodeSystem/v2-0203',
+                    'code' => 'PRN',
+                    'display' => 'Provider number',
+                ]]],
+                'system' => 'https://facility.ndhm.gov.in',
+                'value' => $hfrId,
+            ]];
+        }
+
+        $telecom = [];
+        if (isset($organization['telecom']) && is_array($organization['telecom'])) {
+            $telecom = $organization['telecom'];
+        } else {
+            $phone = trim((string) ($organization['phone'] ?? $organization['phone_no'] ?? ''));
+            if ($phone !== '') {
+                $telecom[] = [
+                    'system' => 'phone',
+                    'value' => $phone,
+                    'use' => 'work',
+                ];
+            }
+            $email = trim((string) ($organization['email'] ?? ''));
+            if ($email !== '') {
+                $telecom[] = [
+                    'system' => 'email',
+                    'value' => $email,
+                    'use' => 'work',
+                ];
+            }
+        }
+        if (! empty($telecom)) {
+            $resource['telecom'] = $telecom;
+        }
+
+        if (isset($organization['address']) && is_array($organization['address'])) {
+            $resource['address'] = $organization['address'];
+        } else {
+            $addr = $this->buildOrganizationAddress($organization);
+            if (! empty($addr)) {
+                $resource['address'] = [$addr];
+            }
+        }
+
+        return $resource;
+    }
+
+    /**
+     * Construct structured Organization address from database hospital_setting.
+     *
+     * @param array<string, mixed> $organization
+     * @return array<string, mixed>
+     */
+    private function buildOrganizationAddress(array $organization): array
+    {
+        $addressText = trim((string) ($organization['address'] ?? ''));
+        $line1 = trim((string) ($organization['address_1'] ?? $organization['line1'] ?? ''));
+        $line2 = trim((string) ($organization['address_2'] ?? $organization['line2'] ?? ''));
+        $city = trim((string) ($organization['city'] ?? ''));
+        $state = trim((string) ($organization['state'] ?? ''));
+        $pincode = trim((string) ($organization['pincode'] ?? $organization['postalCode'] ?? $organization['pin'] ?? ''));
+
+        if ($addressText !== '' && ($city === '' || $state === '' || $pincode === '')) {
+            if ($pincode === '' && preg_match('/\b(\d{6})\b/', $addressText, $pm)) {
+                $pincode = $pm[1];
+            }
+            if ($state === '' && preg_match('/\b(Uttarakhand|Uttar Pradesh|Delhi|Haryana|Punjab|Maharashtra|Karnataka|Tamil Nadu|Gujarat|Rajasthan|Bihar|West Bengal|Madhya Pradesh|Kerala|Odisha|Telangana|Andhra Pradesh|Assam|Jharkhand)\b/i', $addressText, $sm)) {
+                $state = $sm[1];
+            }
+            if ($city === '' && preg_match('/(?:,\s*|\b)([A-Z][a-zA-Z\s]+?)(?:\s*-\s*\d{6}|\s*,\s*(?:Uttarakhand|Uttar Pradesh|Delhi|Haryana|Punjab|India))/i', $addressText, $cm)) {
+                $city = trim($cm[1]);
+            }
+        }
+
+        $lines = [];
+        if ($line1 !== '') {
+            $lines[] = $line1;
+        }
+        if ($line2 !== '' && ($line1 === '' || ($city === '' && $state === ''))) {
+            $lines[] = $line2;
+        }
+
+        if (empty($lines) && $addressText === '' && $city === '' && $state === '' && $pincode === '') {
+            return [];
+        }
+
+        $address = [
+            'line' => ! empty($lines) ? $lines : [$addressText !== '' ? $addressText : 'Hospital Facility'],
+        ];
+        if ($city !== '') {
+            $address['city'] = $city;
+        }
+        if ($state !== '') {
+            $address['state'] = $state;
+        }
+        if ($pincode !== '') {
+            $address['postalCode'] = $pincode;
+        }
+        $address['country'] = 'IND';
+        $address['text'] = $addressText !== '' ? $addressText : implode(', ', array_filter([implode(', ', $lines), $city, $state, $pincode, 'IND']));
+
+        return $address;
     }
 
     /**
@@ -2980,8 +3538,22 @@ class FhirR4Builder
             }
 
             if ($valueType === 'quantity' && is_numeric($value)) {
+                $num = (float) $value;
+                if ($loincCode === '8310-5' || strcasecmp($display, 'Body temperature') === 0 || in_array($unit, ['Cel', 'degF', '[degF]'], true)) {
+                    $num = round($num, 1);
+                } elseif ($loincCode === '39156-5' || strcasecmp($display, 'Body mass index') === 0) {
+                    $num = round($num, 1);
+                } elseif ($loincCode === '29463-7' || strcasecmp($display, 'Body weight') === 0) {
+                    $num = round($num, 2);
+                } elseif ($loincCode === '8302-2' || strcasecmp($display, 'Body height') === 0) {
+                    $num = round($num, 1);
+                } elseif (in_array($loincCode, ['8867-4', '59408-5', '8480-6', '8462-4', '9279-1'], true)) {
+                    $num = (float) round($num);
+                } else {
+                    $num = round($num, 2);
+                }
                 $obsResource['valueQuantity'] = [
-                    'value'  => (float) $value,
+                    'value'  => $num,
                     'unit'   => $unit,
                     'system' => 'http://unitsofmeasure.org',
                     'code'   => $ucumCode,

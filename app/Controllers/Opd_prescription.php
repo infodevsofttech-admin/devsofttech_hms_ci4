@@ -12073,6 +12073,18 @@ class Opd_prescription extends BaseController
                 continue;
             }
 
+            if ($field === 'temp') {
+                $value = $value > 45 ? round(($value - 32) * 5 / 9, 1) : round($value, 1);
+            } elseif ($field === 'weight') {
+                $value = round($value, 2);
+            } elseif ($field === 'height') {
+                $value = round($value, 1);
+            } elseif (in_array($field, ['pulse', 'bp', 'diastolic', 'rr_min', 'spo2'], true)) {
+                $value = (float) round($value);
+            } else {
+                $value = round($value, 2);
+            }
+
             $observations[] = [
                 'loinc' => (string) ($meta['loinc'] ?? ''),
                 'display' => (string) ($meta['display'] ?? ''),
@@ -12157,6 +12169,11 @@ class Opd_prescription extends BaseController
                 'id' => trim((string) ($hospitalProfile['hfr_id'] ?? '')) !== '' ? preg_replace('/[^A-Za-z0-9\-]/', '-', (string) ($hospitalProfile['hfr_id'] ?? '')) : 'facility-unknown',
                 'name' => (string) ($hospitalProfile['name'] ?? ''),
                 'hfr_id' => (string) ($hospitalProfile['hfr_id'] ?? ''),
+                'address' => (string) ($hospitalProfile['address'] ?? ''),
+                'address_1' => (string) ($hospitalProfile['address_1'] ?? ''),
+                'address_2' => (string) ($hospitalProfile['address_2'] ?? ''),
+                'phone' => (string) ($hospitalProfile['phone'] ?? ''),
+                'email' => (string) ($hospitalProfile['email'] ?? ''),
             ],
         ];
     }
@@ -12203,6 +12220,8 @@ class Opd_prescription extends BaseController
                 (string) ($map['H_address_1'] ?? ''),
                 (string) ($map['H_address_2'] ?? ''),
             ], static fn (string $value): bool => trim($value) !== ''))),
+            'address_1'           => (string) ($map['H_address_1'] ?? ''),
+            'address_2'           => (string) ($map['H_address_2'] ?? ''),
             'phone'               => (string) ($map['H_phone_No'] ?? ''),
             'email'               => (string) ($map['H_Email'] ?? ''),
             'logo'                => (string) ($map['H_logo'] ?? ''),

@@ -2233,6 +2233,7 @@ class AbdmGateway extends BaseController
         $patientId = (int) ($this->request->getGet('patient_id') ?? $this->request->getPost('patient_id') ?? 0);
         $recordId = (int) ($this->request->getGet('record_id') ?? $this->request->getPost('record_id') ?? 0);
         $abhaId = trim((string) ($this->request->getGet('abha_id') ?? $this->request->getPost('abha_id') ?? ''));
+        $forceNewRecord = (int) ($this->request->getGet('force_new_record') ?? $this->request->getGet('force_rebuild') ?? $this->request->getPost('force_new_record') ?? 0) === 1;
 
         if ($patientId <= 0) {
             return $this->response->setStatusCode(400)->setJSON([
@@ -2241,7 +2242,7 @@ class AbdmGateway extends BaseController
             ]);
         }
 
-        $payload = $this->buildImmunizationGatewayPayload($patientId, $recordId, $abhaId);
+        $payload = $this->buildImmunizationGatewayPayload($patientId, $recordId, $abhaId, $forceNewRecord);
         if ($payload === null) {
             return $this->response->setStatusCode(404)->setJSON([
                 'status' => 'error',
@@ -2270,6 +2271,7 @@ class AbdmGateway extends BaseController
         $abhaId = trim((string) $this->request->getPost('abha_id'));
         $abhaAddressPost = trim((string) $this->request->getPost('abha_address'));
         $consentHandle = trim((string) $this->request->getPost('consent_handle'));
+        $forceNewRecord = (int) ($this->request->getPost('force_new_record') ?? 0) === 1;
 
         if ($patientId <= 0) {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'patient_id is required']);
@@ -2285,16 +2287,37 @@ class AbdmGateway extends BaseController
             ]);
         }
 
-        $payload = $this->buildImmunizationGatewayPayload($patientId, $recordId, $abhaId);
+        $payload = $this->buildImmunizationGatewayPayload($patientId, $recordId, $abhaId, $forceNewRecord);
         if ($payload === null) {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'Unable to prepare ImmunizationRecord FHIR payload']);
         }
 
         $bundle = (array) ($payload['bundle'] ?? []);
+
+        // Override bundle with user edits if provided
+        $overrideJson = trim((string) $this->request->getPost('fhir_override_json'));
+        if ($overrideJson !== '') {
+            $parsedOverride = json_decode($overrideJson, true);
+            if (is_array($parsedOverride)) {
+                if (($parsedOverride['resourceType'] ?? '') === 'Bundle') {
+                    $bundle = $parsedOverride;
+                    $payload['bundle'] = $bundle;
+                } elseif (isset($parsedOverride['bundle']) && is_array($parsedOverride['bundle']) && ($parsedOverride['bundle']['resourceType'] ?? '') === 'Bundle') {
+                    $bundle = $parsedOverride['bundle'];
+                    $payload['bundle'] = $bundle;
+                } else {
+                    return $this->response->setJSON(['ok' => 0, 'error_text' => 'Invalid JSON provided in the override editor.']);
+                }
+            } else {
+                return $this->response->setJSON(['ok' => 0, 'error_text' => 'Invalid JSON provided in the override editor.']);
+            }
+        }
+
         $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
         $ccRef = (string) ($payload['care_context_reference'] ?? ('IMM-' . ($recordId > 0 ? $recordId : ('PAT-' . $patientId))));
         $visitDate = (string) ($payload['visit_date'] ?? date('Y-m-d'));
         $patientName = (string) ($payload['patient_name'] ?? ('PATIENT-' . $patientId));
+        $doctorName = (string) ($payload['doctor_name'] ?? '');
 
         $consent = $abhaId !== '' ? $this->getActiveConsentRecord($patientId, $abhaId, $consentHandle) : null;
         $effectiveConsent = (string) ($consent['consent_handle'] ?? $consentHandle);
@@ -2308,7 +2331,7 @@ class AbdmGateway extends BaseController
             'fhir_bundle' => $bundleJson,
             'care_context_reference' => $ccRef,
             'consent_handle' => $effectiveConsent,
-            'reuse_existing' => true,
+            'reuse_existing' => ! $forceNewRecord,
         ]);
         if ($healthRecordId <= 0) {
             return $this->response->setStatusCode(500)->setJSON([
@@ -2333,6 +2356,7 @@ class AbdmGateway extends BaseController
                 'hi_type' => 'ImmunizationRecord',
                 'record_type' => 'ImmunizationRecord',
                 'visit_date' => $visitDate,
+                'doctor_name' => $doctorName,
                 'care_context_reference' => $ccRef,
                 'care_context_display' => 'Immunization Record - ' . $visitDate,
                 'notes' => 'Immunization Record - ' . $visitDate,
@@ -3107,6 +3131,12 @@ class AbdmGateway extends BaseController
             'organization' => [
                 'id' => $hfrId,
                 'name' => trim((string) ($hospital['name'] ?? '')),
+                'hfr_id' => $hfrId,
+                'address' => (string) ($hospital['address'] ?? ''),
+                'address_1' => (string) ($hospital['address_1'] ?? ''),
+                'address_2' => (string) ($hospital['address_2'] ?? ''),
+                'phone' => (string) ($hospital['phone'] ?? ''),
+                'email' => (string) ($hospital['email'] ?? ''),
             ],
             'patient' => [
                 'id' => (string) $patientId,
@@ -3351,7 +3381,7 @@ class AbdmGateway extends BaseController
     /**
      * @return array<string,mixed>|null
      */
-    private function buildImmunizationGatewayPayload(int $patientId, int $recordId = 0, string $preferredAbhaId = ''): ?array
+    private function buildImmunizationGatewayPayload(int $patientId, int $recordId = 0, string $preferredAbhaId = '', bool $forceNewRecord = false): ?array
     {
         if ($patientId <= 0 || ! $this->db->tableExists('patient_master') || ! $this->db->tableExists('immunization_records')) {
             return null;
@@ -3408,10 +3438,44 @@ class AbdmGateway extends BaseController
                 break;
             }
         }
-        if ($performerId > 0 && $this->db->tableExists('doctor_master')) {
-            $doctorRow = $this->db->table('doctor_master')->where('id', $performerId)->get(1)->getRowArray() ?? [];
+        if ($performerId <= 0 && $this->db->tableExists('immunization_records')) {
+            $otherRec = $this->db->table('immunization_records')
+                ->where('patient_id', $patientId)
+                ->where('performer_id >', 0)
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+            if (! empty($otherRec['performer_id'])) {
+                $performerId = (int) $otherRec['performer_id'];
+            }
+        }
+        if ($performerId <= 0) {
+            foreach (['doc_id', 'r_doc_id', 'doctor_id'] as $fld) {
+                if (! empty($patientRow[$fld])) {
+                    $performerId = (int) $patientRow[$fld];
+                    break;
+                }
+            }
+        }
+
+        if ($this->db->tableExists('doctor_master')) {
+            $doctorRow = [];
+            if ($performerId > 0) {
+                $doctorRow = $this->db->table('doctor_master')->where('id', $performerId)->get(1)->getRowArray() ?? [];
+            }
+            if (empty($doctorRow)) {
+                $doctorRow = $this->db->table('doctor_master')
+                    ->orderBy('id', 'ASC')
+                    ->get(1)
+                    ->getRowArray() ?? [];
+            }
             if (! empty($doctorRow)) {
-                $doctorName = trim(trim((string) ($doctorRow['p_fname'] ?? '')) . ' ' . trim((string) ($doctorRow['p_lname'] ?? '')));
+                $docFirstName = trim((string) ($doctorRow['p_fname'] ?? ''));
+                $docLastName = trim((string) ($doctorRow['p_lname'] ?? ''));
+                $doctorName = trim($docFirstName . ' ' . $docLastName);
+                if ($doctorName === '') {
+                    $doctorName = trim((string) ($doctorRow['name'] ?? $doctorRow['doc_name'] ?? 'Consulting Physician'));
+                }
                 $doctorRegNo = '';
                 foreach (['doctor_reg_no', 'registration_no', 'reg_no'] as $field) {
                     $candidate = trim((string) ($doctorRow[$field] ?? ''));
@@ -3420,7 +3484,60 @@ class AbdmGateway extends BaseController
                         break;
                     }
                 }
-                $practitioner = ['id' => (string) $performerId, 'name' => $doctorName, 'registration_number' => $doctorRegNo];
+                $practitioner = [
+                    'id' => (string) ($doctorRow['id'] ?? 'DOC-1'),
+                    'name' => $doctorName,
+                    'registration_number' => $doctorRegNo,
+                ];
+            }
+        }
+        if ($practitioner === null) {
+            $practitioner = [
+                'id' => 'DOC-1',
+                'name' => 'Dr. Consulting Physician',
+                'registration_number' => '',
+            ];
+        }
+
+        // Query upcoming / due vaccine recommendations for ABDM ImmunizationRecommendation section
+        $recommendations = [];
+        if ($this->db->tableExists('immunization_records')) {
+            $dueRecordsBuilder = $this->db->table('immunization_records r')
+                ->select("r.*, s.series_name, s.series_doses, s.age_label,
+                    COALESCE(NULLIF(r.vaccine_code, ''), v.vaccine_code) AS vaccine_code,
+                    COALESCE(NULLIF(r.vaccine_code_system, ''), v.vaccine_code_system) AS vaccine_code_system,
+                    COALESCE(NULLIF(r.vaccine_name, ''), NULLIF(v.vaccine_display, ''), v.vaccine_name) AS vaccine_name,
+                    COALESCE(NULLIF(r.route_code, ''), v.route_code) AS route_code,
+                    COALESCE(NULLIF(r.route_name, ''), v.route_name) AS route_name,
+                    COALESCE(NULLIF(r.site_code, ''), v.site_code) AS site_code,
+                    COALESCE(NULLIF(r.site_name, ''), v.site_name) AS site_name,
+                    v.target_disease_code, v.target_disease_name", false)
+                ->join('immunization_schedule_master s', 's.id = r.schedule_id', 'left')
+                ->join('immunization_vaccine_master v', 'v.id = r.vaccine_master_id', 'left')
+                ->where('r.patient_id', $patientId)
+                ->whereIn('r.status', ['due', 'scheduled', 'planned'])
+                ->orderBy('r.due_date', 'ASC')
+                ->orderBy('r.id', 'ASC');
+
+            if ($recordId > 0 && ! empty($records[0]['vaccine_name'])) {
+                $currVaccineName = $records[0]['vaccine_name'];
+                $currMasterId = (int) ($records[0]['vaccine_master_id'] ?? 0);
+                $sameSeriesDue = clone $dueRecordsBuilder;
+                if ($currMasterId > 0) {
+                    $sameSeriesDue->where('r.vaccine_master_id', $currMasterId);
+                } else {
+                    $sameSeriesDue->where('r.vaccine_name', $currVaccineName);
+                }
+                $dueRecs = $sameSeriesDue->get()->getResultArray();
+                if (! empty($dueRecs)) {
+                    $recommendations = array_slice($dueRecs, 0, 3);
+                }
+            }
+            if (empty($recommendations)) {
+                $dueRecs = $dueRecordsBuilder->get()->getResultArray();
+                if (! empty($dueRecs)) {
+                    $recommendations = array_slice($dueRecs, 0, 3);
+                }
             }
         }
 
@@ -3432,15 +3549,20 @@ class AbdmGateway extends BaseController
             }
         }
         $visitDate = $latestDate !== '' ? date('Y-m-d', strtotime($latestDate)) : date('Y-m-d');
-        $ccRef = self::resolveImmunizationCareContextReference($records, $recordId, $patientId);
-        if ($recordId > 0 && trim((string) ($records[0]['abdm_care_context_reference'] ?? '')) === '') {
-            $this->db->table('immunization_records')
-                ->where('id', $recordId)
-                ->groupStart()
-                    ->where('abdm_care_context_reference', null)
-                    ->orWhere('abdm_care_context_reference', '')
-                ->groupEnd()
-                ->update(['abdm_care_context_reference' => $ccRef]);
+
+        if ($forceNewRecord) {
+            $ccRef = ($recordId > 0 ? ('IMM-' . $recordId) : ('IMM-PAT-' . $patientId)) . '-R' . time();
+        } else {
+            $ccRef = self::resolveImmunizationCareContextReference($records, $recordId, $patientId);
+            if ($recordId > 0 && trim((string) ($records[0]['abdm_care_context_reference'] ?? '')) === '') {
+                $this->db->table('immunization_records')
+                    ->where('id', $recordId)
+                    ->groupStart()
+                        ->where('abdm_care_context_reference', null)
+                        ->orWhere('abdm_care_context_reference', '')
+                    ->groupEnd()
+                    ->update(['abdm_care_context_reference' => $ccRef]);
+            }
         }
 
         $birthDate = '';
@@ -3464,8 +3586,23 @@ class AbdmGateway extends BaseController
         $fhir = new FhirR4Builder();
         $bundle = $fhir->buildImmunizationRecordBundle($patient, $records, [
             'practitioner' => $practitioner,
-            'organization' => ['name' => (string) ($hospital['name'] ?? ''), 'hfr_id' => (string) ($hospital['hfr_id'] ?? '')],
-            'encounter' => ['id' => $recordId > 0 ? ('IMM-' . $recordId) : ('IMM-' . $patientId), 'status' => 'finished', 'period_start' => $latestDate],
+            'organization' => [
+                'name' => (string) ($hospital['name'] ?? ''),
+                'hfr_id' => (string) ($hospital['hfr_id'] ?? ''),
+                'address' => (string) ($hospital['address'] ?? ''),
+                'address_1' => (string) ($hospital['address_1'] ?? ''),
+                'address_2' => (string) ($hospital['address_2'] ?? ''),
+                'phone' => (string) ($hospital['phone'] ?? ''),
+                'email' => (string) ($hospital['email'] ?? ''),
+            ],
+            'encounter' => [
+                'id' => $recordId > 0 ? ('IMM-' . $recordId) : ('IMM-' . $patientId),
+                'status' => 'finished',
+                'class_code' => 'AMB',
+                'class_display' => 'ambulatory',
+                'period_start' => $latestDate !== '' ? (str_contains($latestDate, 'T') ? $latestDate : date('Y-m-d\TH:i:sP', strtotime($latestDate))) : date(DATE_ATOM),
+            ],
+            'recommendations' => $recommendations,
             'care_context_reference' => $ccRef,
         ]);
 
@@ -3474,9 +3611,11 @@ class AbdmGateway extends BaseController
             'care_context_reference' => $ccRef,
             'care_context_display' => 'Immunization Record - ' . $visitDate,
             'patient_name' => $patient['name'],
+            'doctor_name' => (string) ($practitioner['name'] ?? ''),
             'year_of_birth' => $this->resolvePatientBirthYear($patientRow, str_contains($rawAbha, '@') ? $rawAbha : '', str_contains($rawAbha, '@') ? '' : $rawAbha),
             'visit_date' => $visitDate,
             'records' => $records,
+            'recommendations' => $recommendations,
         ];
     }
 
@@ -6223,7 +6362,7 @@ class AbdmGateway extends BaseController
     /**
      * Query hospital_setting for FHIR-required hospital profile fields.
      *
-    * @return array{name:string,hfr_id:string,address:string,phone:string,email:string,logo:string}
+     * @return array{name:string,hfr_id:string,address:string,address_1:string,address_2:string,phone:string,email:string,logo:string}
      */
     private function getHospitalProfileForFhir(): array
     {
@@ -6257,6 +6396,8 @@ class AbdmGateway extends BaseController
             'name' => $name,
             'hfr_id' => $hfrId,
             'address' => $address,
+            'address_1' => trim((string) ($map['H_address_1'] ?? '')),
+            'address_2' => trim((string) ($map['H_address_2'] ?? '')),
             'phone' => $phone,
             'email' => $email,
             'logo' => $logo,
@@ -7418,8 +7559,8 @@ class AbdmGateway extends BaseController
         $add('8302-2', 'Body height', $row['height'] ?? null, 'cm', 'cm');
         $add('29463-7', 'Body weight', $row['weight'] ?? null, 'kg', 'kg');
         $temp = $row['temp'] ?? null;
-        if ($temp !== null && is_numeric($temp) && (float) $temp > 45) {
-            $temp = (((float) $temp - 32) * 5) / 9;
+        if ($temp !== null && is_numeric($temp)) {
+            $temp = (float) $temp > 45 ? round((((float) $temp - 32) * 5) / 9, 1) : round((float) $temp, 1);
         }
         $add('8310-5', 'Body temperature', $temp, 'Cel', 'Cel');
         $add('9279-1', 'Respiratory rate', $row['rr_min'] ?? null, '/min', '/min');

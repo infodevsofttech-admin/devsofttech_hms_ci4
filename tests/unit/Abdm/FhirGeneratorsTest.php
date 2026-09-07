@@ -525,7 +525,7 @@ final class FhirGeneratorsTest extends CIUnitTestCase
                 'id' => 'IMM-17',
                 'status' => 'finished',
                 'class_code' => 'AMB',
-                'period_start' => '2026-08-15',
+                'period_start' => '2026-08-15 19:33:00',
             ],
         ]);
 
@@ -543,6 +543,8 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $composition = $resources['Composition'];
         $immunization = $resources['Immunization'];
         $this->assertContains('https://nrces.in/ndhm/fhir/r4/StructureDefinition/ImmunizationRecord', $composition['meta']['profile'] ?? []);
+        $this->assertSame('Immunization record', $composition['title'] ?? null);
+        $this->assertSame('Test Patient', $composition['subject']['display'] ?? null);
         $this->assertSame('41000179103', $composition['type']['coding'][0]['code'] ?? null);
         $this->assertSame('Dr Test', $composition['author'][0]['display'] ?? null);
         $this->assertSame('Test Hospital', $composition['custodian']['display'] ?? null);
@@ -552,11 +554,25 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertSame('19', $immunization['vaccineCode']['coding'][0]['code'] ?? null);
         $this->assertSame('2026-08-15T00:00:00+05:30', $immunization['occurrenceDateTime'] ?? null);
         $this->assertNotEmpty($immunization['performer'][0]['actor']['reference'] ?? '');
-        $this->assertNotEmpty($immunization['encounter']['reference'] ?? '');
-        $this->assertSame('Test Hospital', $immunization['location']['display'] ?? null);
+        $this->assertNotEmpty($composition['encounter']['reference'] ?? '');
+        $this->assertSame('Encounter', $composition['encounter']['display'] ?? null);
+        $this->assertSame($composition['encounter']['reference'], $immunization['encounter']['reference'] ?? null);
+        $this->assertArrayNotHasKey('location', $immunization);
+
+        $encounter = $resources['Encounter'];
+        $this->assertContains('https://nrces.in/ndhm/fhir/r4/StructureDefinition/Encounter', $encounter['meta']['profile'] ?? []);
+        $this->assertSame('AMB', $encounter['class']['code'] ?? null);
+        $this->assertSame('ambulatory', $encounter['class']['display'] ?? null);
+        $this->assertSame('finished', $encounter['status'] ?? null);
+        $this->assertSame('2026-08-15T19:33:00+05:30', $encounter['period']['start'] ?? null);
+
         $this->assertSame('Infant Immunization Schedule', $immunization['protocolApplied'][0]['series'] ?? null);
         $this->assertSame(1, $immunization['protocolApplied'][0]['doseNumberPositiveInt'] ?? null);
         $this->assertSame('56717001', $immunization['protocolApplied'][0]['targetDisease'][0]['coding'][0]['code'] ?? null);
+
+        // Canonical NRCES entry order: Composition, Practitioner, Organization, Patient, Encounter, Immunization
+        $actualTypes = array_map(fn($e) => $e['resource']['resourceType'], $bundle['entry']);
+        $this->assertSame(['Composition', 'Practitioner', 'Organization', 'Patient', 'Encounter', 'Immunization'], $actualTypes);
 
         $encoded = json_encode($bundle, JSON_UNESCAPED_SLASHES);
         preg_match_all('/"reference":"(urn:uuid:[^"]+)"/', (string) $encoded, $matches);
@@ -584,6 +600,170 @@ final class FhirGeneratorsTest extends CIUnitTestCase
 
         $this->assertSame('IMM-17', $first['identifier']['value'] ?? null);
         $this->assertSame($first['identifier']['value'] ?? null, $retry['identifier']['value'] ?? null);
+    }
+
+    public function testImmunizationRecordBundleIncludesPractitionerAuthorAndRecommendation(): void
+    {
+        $builder = new FhirR4Builder();
+        $patient = [
+            'id' => '11',
+            'name' => 'DEVENDER SINGH',
+            'gender' => 'male',
+            'birthDate' => '1979-03-28',
+            'abhaAddress' => 'devender@sbx',
+        ];
+
+        $immunizations = [[
+            'id' => '10',
+            'vaccine_name' => 'Fractional IPV',
+            'vaccine_code' => 'UIP-FIPV',
+            'vaccine_code_system' => 'https://hms.local/immunization/uip',
+            'status' => 'completed',
+            'given_date' => '2026-08-15T19:33:00+05:30',
+            'manufacturer' => 'Cipla',
+            'lot_number' => '0002145',
+            'expiry_date' => '2026-08-29',
+            'dose_number' => '1',
+            'series_doses' => '2',
+            'series_name' => 'Fractional IPV',
+            'site_name' => 'Right Upper Arm',
+            'route_name' => 'Intradermal',
+            'notes' => 'Fractional dose 0.1 ml intradermal',
+        ]];
+
+        $context = [
+            'care_context_reference' => 'IMM-10-R12345',
+            'practitioner' => [
+                'id' => '4',
+                'name' => 'Dr. R.K. Sundriyal',
+                'registration_number' => 'MCI-12345',
+            ],
+            'organization' => [
+                'name' => 'E-Atria Hospital',
+                'hfr_id' => 'IN0510000871',
+                'address' => 'Avas Vikas, Kashipur -244713, Uttarakhand',
+                'address_1' => 'Avas Vikas',
+                'address_2' => 'Kashipur -244713, Uttarakhand',
+                'phone' => '90125 12505',
+            ],
+            'encounter' => [
+                'id' => 'IMM-10',
+                'status' => 'finished',
+                'period_start' => '2026-08-15T19:33:00+05:30',
+            ],
+            'recommendations' => [
+                [
+                    'vaccine_name' => 'Fractional IPV',
+                    'vaccine_code' => 'UIP-FIPV',
+                    'vaccine_code_system' => 'https://hms.local/immunization/uip',
+                    'dose_number' => 2,
+                    'series_doses' => 2,
+                    'due_date' => '1979-07-04',
+                ],
+                [
+                    'vaccine_name' => 'Pentavalent',
+                    'vaccine_code' => 'UIP-PENTA',
+                    'vaccine_code_system' => 'https://hms.local/immunization/uip',
+                    'dose_number' => 1,
+                    'series_doses' => 3,
+                    'due_date' => '1979-05-09',
+                ],
+            ],
+        ];
+
+        $bundle = $builder->buildImmunizationRecordBundle($patient, $immunizations, $context);
+
+        $this->assertSame('Bundle', $bundle['resourceType'] ?? null);
+        $this->assertSame('document', $bundle['type'] ?? null);
+
+        $resourcesByType = [];
+        $fullUrls = array_column($bundle['entry'], 'fullUrl');
+        foreach ($bundle['entry'] as $entry) {
+            $r = $entry['resource'] ?? [];
+            $resourcesByType[(string) ($r['resourceType'] ?? '')][] = $r;
+        }
+
+        // Must include Composition, Practitioner, Organization, Patient, Encounter, Immunization, ImmunizationRecommendation
+        $this->assertArrayHasKey('Composition', $resourcesByType);
+        $this->assertArrayHasKey('Practitioner', $resourcesByType);
+        $this->assertArrayHasKey('Organization', $resourcesByType);
+        $this->assertArrayHasKey('Patient', $resourcesByType);
+        $this->assertArrayHasKey('Encounter', $resourcesByType);
+        $this->assertArrayHasKey('Immunization', $resourcesByType);
+        $this->assertArrayHasKey('ImmunizationRecommendation', $resourcesByType);
+
+        // Canonical NRCES entry order: Composition, Practitioner, Organization, Patient, Encounter, Immunization, ImmunizationRecommendation
+        $actualTypes = array_map(fn($e) => $e['resource']['resourceType'], $bundle['entry']);
+        $this->assertSame(['Composition', 'Practitioner', 'Organization', 'Patient', 'Encounter', 'Immunization', 'ImmunizationRecommendation'], $actualTypes);
+
+        $composition = $resourcesByType['Composition'][0];
+        $practitioner = $resourcesByType['Practitioner'][0];
+        $encounter = $resourcesByType['Encounter'][0];
+        $immunization = $resourcesByType['Immunization'][0];
+        $recommendation = $resourcesByType['ImmunizationRecommendation'][0];
+
+        $this->assertSame('Immunization record', $composition['title'] ?? null);
+        $this->assertSame('DEVENDER SINGH', $composition['subject']['display'] ?? null);
+        $this->assertNotEmpty($composition['encounter']['reference'] ?? '');
+        $this->assertSame('Encounter', $composition['encounter']['display'] ?? null);
+        $this->assertSame($composition['encounter']['reference'], $immunization['encounter']['reference'] ?? null);
+        $this->assertArrayNotHasKey('location', $immunization);
+
+        // Encounter has ambulatory class (eliminates NA below hospital name in PHR app)
+        $this->assertSame('AMB', $encounter['class']['code'] ?? null);
+        $this->assertSame('ambulatory', $encounter['class']['display'] ?? null);
+        $this->assertSame('finished', $encounter['status'] ?? null);
+
+        // Author MUST be Practitioner (eliminates NA in PHR app)
+        $this->assertSame('Dr. R.K. Sundriyal', $practitioner['name'][0]['text'] ?? null);
+        $this->assertSame('Dr. R.K. Sundriyal', $composition['author'][0]['display'] ?? null);
+        $this->assertStringStartsWith('urn:uuid:', $composition['author'][0]['reference'] ?? '');
+
+        // Custodian is Organization
+        $this->assertSame('E-Atria Hospital', $composition['custodian']['display'] ?? null);
+
+        // Organization resource has MustSupport address and telecom (eliminates NA below hospital name in PHR app)
+        $organization = $resourcesByType['Organization'][0];
+        $this->assertSame('E-Atria Hospital', $organization['name'] ?? null);
+        $this->assertNotEmpty($organization['address'] ?? []);
+        $this->assertSame('Avas Vikas, Kashipur -244713, Uttarakhand', $organization['address'][0]['text'] ?? null);
+        $this->assertSame(['Avas Vikas'], $organization['address'][0]['line'] ?? []);
+        $this->assertSame('Kashipur', $organization['address'][0]['city'] ?? null);
+        $this->assertSame('Uttarakhand', $organization['address'][0]['state'] ?? null);
+        $this->assertSame('244713', $organization['address'][0]['postalCode'] ?? null);
+        $this->assertSame('90125 12505', $organization['telecom'][0]['value'] ?? null);
+
+        // Section entries contains both Immunization and ImmunizationRecommendation
+        $this->assertCount(2, $composition['section'][0]['entry'] ?? []);
+        $this->assertSame('Immunization', $composition['section'][0]['entry'][0]['type'] ?? null);
+        $this->assertSame('ImmunizationRecommendation', $composition['section'][0]['entry'][1]['type'] ?? null);
+
+        // Immunization resource has site, route, target disease
+        $this->assertSame('368209003', $immunization['site']['coding'][0]['code'] ?? null);
+        $this->assertSame('372464004', $immunization['route']['coding'][0]['code'] ?? null);
+        $this->assertSame('398102009', $immunization['protocolApplied'][0]['targetDisease'][0]['coding'][0]['code'] ?? null);
+        $this->assertSame('10', $immunization['vaccineCode']['coding'][0]['code'] ?? null);
+
+        // Performer references Practitioner
+        $this->assertSame('Dr. R.K. Sundriyal', $immunization['performer'][0]['actor']['display'] ?? null);
+
+        // ImmunizationRecommendation forecast status and dose
+        $this->assertCount(2, $recommendation['recommendation']);
+        $this->assertSame('due', $recommendation['recommendation'][0]['forecastStatus']['coding'][0]['code'] ?? null);
+        $this->assertSame(2, $recommendation['recommendation'][0]['doseNumberPositiveInt'] ?? null);
+        $this->assertNotEmpty($recommendation['recommendation'][0]['supportingImmunization'][0]['reference'] ?? '');
+
+        // Second recommendation item is Pentavalent with CVX 198
+        $this->assertSame('198', $recommendation['recommendation'][1]['vaccineCode'][0]['coding'][0]['code'] ?? null);
+        $this->assertSame('Pentavalent', $recommendation['recommendation'][1]['vaccineCode'][0]['coding'][0]['display'] ?? null);
+        $this->assertSame(1, $recommendation['recommendation'][1]['doseNumberPositiveInt'] ?? null);
+
+        // Verify all references resolve
+        $encoded = json_encode($bundle, JSON_UNESCAPED_SLASHES);
+        preg_match_all('/"reference":"(urn:uuid:[^"]+)"/', (string) $encoded, $matches);
+        foreach ($matches[1] as $ref) {
+            $this->assertContains($ref, $fullUrls, 'Unresolved reference: ' . $ref);
+        }
     }
 
     public function testLegacyNumericGenderMapsToFhirGender(): void
@@ -694,7 +874,7 @@ final class FhirGeneratorsTest extends CIUnitTestCase
                 ['loinc_code' => '8480-6', 'display' => 'Systolic blood pressure', 'value' => 120, 'unit' => 'mmHg', 'ucum_code' => 'mm[Hg]'],
                 ['loinc_code' => '8462-4', 'display' => 'Diastolic blood pressure', 'value' => 80, 'unit' => 'mmHg', 'ucum_code' => 'mm[Hg]'],
                 ['loinc_code' => '8867-4', 'display' => 'Heart rate', 'value' => 72, 'unit' => '/min', 'ucum_code' => '/min'],
-                ['loinc_code' => '8310-5', 'display' => 'Body temperature', 'value' => 36.8, 'unit' => 'Cel', 'ucum_code' => 'Cel'],
+                ['loinc_code' => '8310-5', 'display' => 'Body temperature', 'value' => 36.666666666666664, 'unit' => 'Cel', 'ucum_code' => 'Cel'],
                 ['loinc_code' => '59408-5', 'display' => 'Oxygen saturation', 'value' => 98, 'unit' => '%', 'ucum_code' => '%'],
             ],
             'physical_examination' => [
@@ -742,6 +922,13 @@ final class FhirGeneratorsTest extends CIUnitTestCase
 
         $this->assertGreaterThanOrEqual(1, count($composition['section']));
         $this->assertNotEmpty($composition['section'][0]['entry']);
+
+        $tempObsEntries = array_values(array_filter($bundle['entry'], static function ($e) {
+            $r = $e['resource'] ?? [];
+            return ($r['resourceType'] ?? '') === 'Observation' && (($r['code']['coding'][0]['code'] ?? '') === '8310-5');
+        }));
+        $this->assertNotEmpty($tempObsEntries);
+        $this->assertSame(36.7, $tempObsEntries[0]['resource']['valueQuantity']['value']);
     }
 
 
@@ -936,4 +1123,5 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertSame('exp', $encExp['hospitalization']['dischargeDisposition']['coding'][0]['code']);
     }
 }
+
 

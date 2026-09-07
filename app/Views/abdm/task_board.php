@@ -2437,6 +2437,12 @@
                     if (val === undefined || val === null || !meaningfulText(val)) {
                         return;
                     }
+                    if (typeof val === 'number') {
+                        val = (loinc.code === '8310-5' || loinc.code === '8302-2' || loinc.code === '39156-5') ? Number(val.toFixed(1)) : Number(val.toFixed(2));
+                    } else if (!isNaN(parseFloat(val)) && isFinite(val) && String(val).indexOf('.') !== -1) {
+                        var parsed = parseFloat(val);
+                        val = (loinc.code === '8310-5' || loinc.code === '8302-2' || loinc.code === '39156-5') ? Number(parsed.toFixed(1)) : Number(parsed.toFixed(2));
+                    }
                     html += '<div class="border rounded px-2 py-1 text-center" style="min-width:80px;">';
                     html += '<div class="small text-muted" style="font-size:.7rem;">' + hesc(label) + '</div>';
                     html += '<div class="fw-bold">' + hesc(val) + '</div>';
@@ -3168,15 +3174,36 @@
                     return;
                 }
 
+                var currentJson = (fhirModalJson ? fhirModalJson.value : '').trim();
+                if (currentJson) {
+                    try {
+                        JSON.parse(currentJson);
+                    } catch (e) {
+                        alert('Cannot submit: JSON contains syntax errors:\n' + e.message);
+                        return;
+                    }
+                }
+
+                var origHtmlImm = btn.innerHTML;
+                btn.disabled = true;
+                btn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Submitting...';
+
                 post('<?= base_url('AbdmGateway/share_immunization_bundle') ?>', {
                     task_id: parseInt(_fhirSubmitTaskRow.getAttribute('data-task-id') || '0', 10) || 0,
                     patient_id: immunizationPatientId,
                     record_id: immunizationId,
-                    abha_id: _fhirSubmitAbha,
+                    abha_id: effectiveAbha,
+                    fhir_override_json: currentJson,
+                    force_new_record: document.getElementById('chkForceNewRecord') && document.getElementById('chkForceNewRecord').checked ? 1 : 0,
                     push_to_gateway: 1
                 }, function (res) {
+                    btn.disabled = false;
+                    btn.innerHTML = origHtmlImm;
+
                     if (!res || parseInt(res.ok || '0', 10) !== 1) {
-                        alert('ABDM Bridge push failed:\n' + ((res && (res.error_text || res.error || res.message)) || 'Unknown error'));
+                        var err = (res && (res.error_text || res.error || res.message)) || 'Unknown error';
+                        setStatus(err, true);
+                        alert('ABDM Bridge push failed:\n' + err);
                         return;
                     }
                     var badge = _fhirSubmitTaskRow.querySelector('.status-pill');
@@ -3185,6 +3212,7 @@
                         badge.className = 'badge bg-info status-pill';
                     }
                     setStatus('Submitted to ABDM Bridge. Queue ID: ' + (res.queue_id || '-') + '; care context: ' + (res.care_context_reference || '-'));
+                    alert('Submitted to ABDM Bridge. Care Context: ' + (res.care_context_reference || '-'));
                     fhirPreviewModal.hide();
                 });
                 return;

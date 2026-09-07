@@ -737,8 +737,8 @@ class DoctorDocument extends BaseController
         $addVital('39156-5', 'Body Mass Index', $rxRow['bmi'] ?? null, 'kg/m2', 'kg/m2');
 
         $tempVal = $rxRow['temp'] ?? null;
-        if ($tempVal !== null && is_numeric($tempVal) && (float) $tempVal > 45) {
-            $tempVal = (((float) $tempVal - 32) * 5) / 9;
+        if ($tempVal !== null && is_numeric($tempVal)) {
+            $tempVal = (float) $tempVal > 45 ? round((((float) $tempVal - 32) * 5) / 9, 1) : round((float) $tempVal, 1);
         }
         $addVital('8310-5', 'Body temperature', $tempVal, 'Cel', 'Cel');
         $addVital('9279-1', 'Respiratory rate', $rxRow['rr_min'] ?? null, '/min', '/min');

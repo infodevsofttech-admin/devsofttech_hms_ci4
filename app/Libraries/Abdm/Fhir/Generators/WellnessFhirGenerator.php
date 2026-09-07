@@ -179,6 +179,22 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
 
             $obsId = 'vital-' . $recordId . '-' . $idx;
             $vitalObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+            $numericVal = is_numeric($val) ? (float) $val : null;
+            if ($numericVal !== null) {
+                if ($loincCode === '8310-5' || strcasecmp($display, 'Body temperature') === 0 || in_array($unit, ['Cel', 'degF', '[degF]'], true)) {
+                    $numericVal = round($numericVal, 1);
+                } elseif ($loincCode === '39156-5' || strcasecmp($display, 'Body Mass Index') === 0) {
+                    $numericVal = round($numericVal, 1);
+                } elseif ($loincCode === '29463-7' || strcasecmp($display, 'Body weight') === 0) {
+                    $numericVal = round($numericVal, 2);
+                } elseif ($loincCode === '8302-2' || strcasecmp($display, 'Body height') === 0) {
+                    $numericVal = round($numericVal, 1);
+                } elseif (in_array($loincCode, ['8867-4', '59408-5', '9279-1'], true)) {
+                    $numericVal = (float) round($numericVal);
+                } else {
+                    $numericVal = round($numericVal, 2);
+                }
+            }
 
             $builder->addObservation([
                 'resourceType' => 'Observation',
@@ -204,7 +220,7 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
                 'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
                 'effectiveDateTime' => $timestamp,
                 'valueQuantity' => [
-                    'value' => is_numeric($val) ? (float) $val : (string) $val,
+                    'value' => $numericVal !== null ? $numericVal : (string) $val,
                     'unit' => $unit,
                     'system' => 'http://unitsofmeasure.org',
                     'code' => (string) ($ucum['code'] ?? $ucumCode ?: $unit),
