@@ -747,6 +747,153 @@ function PosCounter({ store, notify }) {
     const [printFormat, setPrintFormat] = useState('thermal'); // 'thermal', 'a5', 'a4'
     const [isProcessing, setIsProcessing] = useState(false);
 
+    // B2C Sales Return & Same-Invoice Exchange State
+    const [returnCart, setReturnCart] = useState([]);
+    const [showReturnModal, setShowReturnModal] = useState(false);
+    const [returnSearchQuery, setReturnSearchQuery] = useState('');
+    const [returnSearchResults, setReturnSearchResults] = useState([]);
+    const [isSearchingReturn, setIsSearchingReturn] = useState(false);
+    const [selectedReturnInvoice, setSelectedReturnInvoice] = useState(null);
+    const [returnDraftItems, setReturnDraftItems] = useState({});
+    const [refundMode, setRefundMode] = useState('Cash'); // 'Cash', 'UPI'
+    const [refundRefNo, setRefundRefNo] = useState('');
+    const returnSearchInputRef = useRef(null);
+
+    const openReturnModal = () => {
+        setShowReturnModal(true);
+        setTimeout(() => {
+            if (returnSearchInputRef.current) {
+                returnSearchInputRef.current.focus();
+                returnSearchInputRef.current.select();
+            }
+        }, 120);
+    };
+
+    const searchReturnInvoices = async (query = returnSearchQuery) => {
+        if (!query || query.trim().length < 2) {
+            notify('Please enter at least 2 characters to search bills.', 'error');
+            return;
+        }
+        setIsSearchingReturn(true);
+        setSelectedReturnInvoice(null);
+        try {
+            const res = await fetch(API_BASE + `returns/lookup-invoice?store_id=${store.store_id}&q=${encodeURIComponent(query.trim())}`);
+            const data = await res.json();
+            if (data.status) {
+                setReturnSearchResults(data.results || []);
+                if (data.results && data.results.length === 1) {
+                    selectReturnInvoice(data.results[0]);
+                } else if (!data.results || data.results.length === 0) {
+                    notify('No invoices found matching "' + query.trim() + '"', 'error');
+                }
+            } else {
+                notify(data.message || 'Error looking up invoices', 'error');
+            }
+        } catch (e) {
+            notify('Invoice search error: ' + e.message, 'error');
+        } finally {
+            setIsSearchingReturn(false);
+        }
+    };
+
+    const selectReturnInvoice = (resObj) => {
+        setSelectedReturnInvoice(resObj);
+        const drafts = {};
+        if (resObj && resObj.items) {
+            resObj.items.forEach(it => {
+                if (it.remaining_units > 0) {
+                    drafts[it.sale_item_id] = {
+                        return_qty: 0,
+                        return_unit: (it.units_per_pack > 1 && it.remaining_strips > 0) ? 'Strip' : 'Tab',
+                        condition: 'GOOD',
+                        reason: 'EXCESS_UNUSED'
+                    };
+                }
+            });
+        }
+        setReturnDraftItems(drafts);
+    };
+
+    const updateReturnDraft = (saleItemId, field, val) => {
+        setReturnDraftItems(prev => ({
+            ...prev,
+            [saleItemId]: {
+                ...prev[saleItemId],
+                [field]: val
+            }
+        }));
+    };
+
+    const addSelectedReturnsToBill = () => {
+        if (!selectedReturnInvoice) return;
+        const newReturns = [];
+        let hasAnyQty = false;
+
+        selectedReturnInvoice.items.forEach(it => {
+            const draft = returnDraftItems[it.sale_item_id];
+            if (draft && Number(draft.return_qty) > 0) {
+                hasAnyQty = true;
+                const qty = Number(draft.return_qty);
+                const upp = Number(it.units_per_pack) || 1;
+                const totalUnits = draft.return_unit === 'Strip' ? (qty * upp) : qty;
+
+                if (totalUnits > it.remaining_units) {
+                    notify(`Cannot return more than available (${it.remaining_units} tabs) for ${it.item_name}!`, 'error');
+                    return;
+                }
+
+                const lineTotal = Number((totalUnits * it.effective_unit_price).toFixed(2));
+                const itemData = {
+                    ref_sale_item_id: it.sale_item_id,
+                    ref_sale_id: selectedReturnInvoice.sale.sale_id,
+                    ref_invoice_no: selectedReturnInvoice.sale.invoice_no,
+                    item_id: it.item_id,
+                    item_name: it.item_name,
+                    generic_name: it.generic_name,
+                    batch_id: it.batch_id,
+                    batch_no: it.batch_no,
+                    expiry_date: it.expiry_date,
+                    units_per_pack: upp,
+                    return_qty: qty,
+                    return_unit: draft.return_unit,
+                    return_total_units: totalUnits,
+                    unit_price: it.effective_unit_price,
+                    unit_mrp: it.unit_mrp,
+                    gst_rate: it.gst_rate,
+                    condition: draft.condition || 'GOOD',
+                    reason: draft.reason || 'EXCESS_UNUSED',
+                    line_total: lineTotal
+                };
+
+                const existingIdx = returnCart.findIndex(rc => rc.ref_sale_item_id === it.sale_item_id);
+                if (existingIdx >= 0) {
+                    returnCart[existingIdx] = itemData;
+                } else {
+                    newReturns.push(itemData);
+                }
+            }
+        });
+
+        if (!hasAnyQty) {
+            notify('Please enter quantity > 0 for at least one item to return.', 'error');
+            return;
+        }
+
+        setReturnCart([...returnCart, ...newReturns]);
+
+        // If patient context is currently blank, copy patient from original invoice
+        if (!selectedPatient && selectedReturnInvoice.sale) {
+            const s = selectedReturnInvoice.sale;
+            if (s.patient_name || s.uhid) {
+                setPatientQuery(s.patient_name + (s.uhid ? ` (${s.uhid})` : ''));
+                if (s.doctor_name) setDoctorName(s.doctor_name);
+            }
+        }
+
+        setShowReturnModal(false);
+        notify('Added return medicines to current invoice! Adjustments reflected in totals.', 'success');
+    };
+
     // Keyboard Navigation & Focus Refs
     const medicineSearchRef = useRef(null);
     const patientSearchRef = useRef(null);
@@ -1187,7 +1334,7 @@ function PosCounter({ store, notify }) {
         setCart(cart.filter((_, i) => i !== idx));
     };
 
-    // Calculate totals with whole bill discount
+    // Calculate totals with whole bill discount and return items
     const grossTotal = cart.reduce((acc, it) => acc + getItemLineInfo(it).lineGross, 0);
     const itemDiscountTotal = cart.reduce((acc, it) => acc + getItemDiscount(it), 0);
     const balanceAfterItemDisc = Math.max(0, grossTotal - itemDiscountTotal);
@@ -1204,9 +1351,24 @@ function PosCounter({ store, notify }) {
     }
 
     const discountTotal = itemDiscountTotal + wholeDiscountAmt;
-    const netBeforeRound = Math.max(0, grossTotal - discountTotal);
-    const netPayable = Math.round(netBeforeRound);
-    const roundOff = (netPayable - netBeforeRound).toFixed(2);
+    const netSalesBeforeReturn = Math.max(0, grossTotal - discountTotal);
+
+    const returnTotal = returnCart.reduce((acc, it) => acc + (Number(it.line_total) || 0), 0);
+    const netDifference = netSalesBeforeReturn - returnTotal;
+
+    let netPayable = 0;
+    let refundPayable = 0;
+    let roundOff = '0.00';
+
+    if (netDifference >= 0) {
+        netPayable = Math.round(netDifference);
+        roundOff = (netPayable - netDifference).toFixed(2);
+        refundPayable = 0;
+    } else {
+        refundPayable = Math.round(Math.abs(netDifference));
+        roundOff = (refundPayable - Math.abs(netDifference)).toFixed(2);
+        netPayable = 0;
+    }
 
     const splitCashNum = Number(splitCash) || 0;
     const splitUpiNum = Number(splitUpi) || 0;
@@ -1214,10 +1376,10 @@ function PosCounter({ store, notify }) {
     const totalSplitAllocated = splitCashNum + splitUpiNum + splitCardNum;
     const splitRemaining = Number((netPayable - totalSplitAllocated).toFixed(2));
 
-    // Save and print sale
+    // Save and print sale or return/exchange bill
     const processSale = async () => {
-        if (cart.length === 0) {
-            notify('Cart is empty!', 'error');
+        if (cart.length === 0 && returnCart.length === 0) {
+            notify('Cart has no items to bill or return!', 'error');
             return;
         }
 
@@ -1231,21 +1393,25 @@ function PosCounter({ store, notify }) {
         let finalCard = 0;
         let finalCredit = 0;
 
-        if (paymentMode === 'Cash') {
-            finalCash = netPayable;
-        } else if (paymentMode === 'UPI') {
-            finalUpi = netPayable;
-        } else if (paymentMode === 'Card') {
-            finalCard = netPayable;
-        } else if (paymentMode === 'IPD_Credit') {
-            finalCredit = netPayable;
-        } else if (paymentMode === 'Mixed') {
-            finalCash = splitCashNum;
-            finalUpi = splitUpiNum;
-            finalCard = splitCardNum;
-            if (Math.abs(splitRemaining) > 0.01) {
-                notify(`Split payment total (₹${totalSplitAllocated.toFixed(2)}) does not match Net Payable (₹${netPayable})! Difference: ₹${splitRemaining.toFixed(2)}`, 'error');
-                return;
+        if (refundPayable > 0) {
+            // Patient receives a refund; no positive payment collected
+        } else {
+            if (paymentMode === 'Cash') {
+                finalCash = netPayable;
+            } else if (paymentMode === 'UPI') {
+                finalUpi = netPayable;
+            } else if (paymentMode === 'Card') {
+                finalCard = netPayable;
+            } else if (paymentMode === 'IPD_Credit') {
+                finalCredit = netPayable;
+            } else if (paymentMode === 'Mixed') {
+                finalCash = splitCashNum;
+                finalUpi = splitUpiNum;
+                finalCard = splitCardNum;
+                if (Math.abs(splitRemaining) > 0.01) {
+                    notify(`Split payment total (₹${totalSplitAllocated.toFixed(2)}) does not match Net Payable (₹${netPayable})! Difference: ₹${splitRemaining.toFixed(2)}`, 'error');
+                    return;
+                }
             }
         }
 
@@ -1266,11 +1432,14 @@ function PosCounter({ store, notify }) {
             gender: selectedPatient ? selectedPatient.gender : '',
             doctor_name: doctorName || (selectedPatient?.active_opd?.doctor_name || selectedPatient?.active_ipd?.doctor_name || 'Dr. Consultant'),
             doctor_reg_no: doctorRegNo,
-            payment_mode: paymentMode,
+            payment_mode: refundPayable > 0 ? (refundMode === 'Cash' ? 'Cash' : 'UPI') : paymentMode,
             cash_paid: finalCash,
             upi_paid: finalUpi,
             card_paid: finalCard,
             credit_amount: finalCredit,
+            refund_amount: refundPayable,
+            refund_mode: refundPayable > 0 ? refundMode : '',
+            refund_ref_no: refundPayable > 0 ? refundRefNo : '',
             payment_reference: paymentRef || upiRefNo || cardRefNo,
             bank_name: bankName,
             upi_ref_no: upiRefNo,
@@ -1298,7 +1467,22 @@ function PosCounter({ store, notify }) {
                     discount_pct: discPct,
                     discount_amount: lineDisc
                 };
-            })
+            }),
+            return_items: returnCart.map(rc => ({
+                ref_sale_item_id: rc.ref_sale_item_id,
+                ref_sale_id: rc.ref_sale_id,
+                ref_invoice_no: rc.ref_invoice_no,
+                item_id: rc.item_id,
+                batch_id: rc.batch_id,
+                return_qty: rc.return_qty,
+                return_unit: rc.return_unit,
+                units_per_pack: rc.units_per_pack,
+                return_total_units: rc.return_total_units,
+                unit_price: rc.unit_price,
+                return_amount: rc.line_total,
+                condition: rc.condition || 'GOOD',
+                reason: rc.reason || 'EXCESS_UNUSED'
+            }))
         };
 
         try {
@@ -1309,9 +1493,13 @@ function PosCounter({ store, notify }) {
             });
             const data = await res.json();
             if (data.status) {
-                notify(`Invoice ${data.invoice_no} generated successfully! Amount: ₹${data.net_amount}`, 'success');
+                const msg = data.refund_amount > 0 
+                    ? `Return Bill ${data.invoice_no} processed! Refund: ₹${data.refund_amount} (${data.refund_mode})` 
+                    : `Invoice ${data.invoice_no} generated successfully! Net Amount: ₹${data.net_amount}`;
+                notify(msg, 'success');
                 fetchInvoiceDetails(data.sale_id);
                 setCart([]);
+                setReturnCart([]);
                 setWholeDiscountVal(0);
                 setSplitCash('');
                 setSplitUpi('');
@@ -1320,9 +1508,10 @@ function PosCounter({ store, notify }) {
                 setBankName('');
                 setCardRefNo('');
                 setPaymentRef('');
+                setRefundRefNo('');
                 resetPatient();
             } else {
-                notify(data.message || 'Failed to complete sale.', 'error');
+                notify(data.message || 'Failed to complete transaction.', 'error');
             }
         } catch (e) {
             notify('Sale error: ' + e.message, 'error');
@@ -1346,11 +1535,12 @@ function PosCounter({ store, notify }) {
     // Global Keyboard Shortcuts (Marg ERP / Desktop Pharmacy Standard)
     useEffect(() => {
         const handleGlobalKeyDown = (e) => {
-            // Dismiss ABDM Modal on Escape
-            if (showFhirModal) {
+            // Dismiss Modals on Escape
+            if (showFhirModal || showReturnModal) {
                 if (e.key === 'Escape') {
                     e.preventDefault();
                     setShowFhirModal(false);
+                    setShowReturnModal(false);
                 }
                 return;
             }
@@ -1369,6 +1559,13 @@ function PosCounter({ store, notify }) {
                     patientSearchRef.current.focus();
                     patientSearchRef.current.select();
                 }
+                return;
+            }
+
+            // F6 or Alt+R: Jump to Sales Return & Same-Invoice Exchange Desk
+            if (e.key === 'F6' || (e.altKey && (e.key === 'r' || e.key === 'R'))) {
+                e.preventDefault();
+                openReturnModal();
                 return;
             }
 
@@ -1396,7 +1593,7 @@ function PosCounter({ store, notify }) {
             // F9 or Ctrl+Enter or Alt+S: Complete Sale & Print Bill
             if (e.key === 'F9' || (e.ctrlKey && e.key === 'Enter') || (e.altKey && (e.key === 's' || e.key === 'S'))) {
                 e.preventDefault();
-                if (!isProcessing && cart.length > 0) {
+                if (!isProcessing && (cart.length > 0 || returnCart.length > 0)) {
                     processSale();
                 }
                 return;
@@ -1405,7 +1602,7 @@ function PosCounter({ store, notify }) {
 
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-    }, [showFhirModal, paymentMode, selectedPatient, isProcessing, cart, splitRemaining, splitCashNum, splitUpiNum, splitCardNum]);
+    }, [showFhirModal, showReturnModal, paymentMode, selectedPatient, isProcessing, cart, returnCart, splitRemaining, splitCashNum, splitUpiNum, splitCardNum, refundPayable, refundMode]);
 
     return (
         <div className="row g-3">
@@ -1602,6 +1799,16 @@ function PosCounter({ store, notify }) {
                             <kbd style={{ background: '#0f172a', color: '#a855f7', fontWeight: 800, padding: '1px 5px', borderRadius: '3px', fontSize: '0.68rem' }}>F8</kbd>
                             <span className="fw-bold" style={{ color: '#0f172a' }}>Payment</span>
                         </span>
+                        <button 
+                            type="button" 
+                            className="btn btn-xs py-0.5 px-2 bg-white rounded border border-danger shadow-xs d-inline-flex align-items-center gap-1"
+                            onClick={openReturnModal}
+                            style={{ fontSize: '0.72rem' }}
+                            title="Accept patient returns or exchange on current bill (Alt+R / F6)"
+                        >
+                            <kbd style={{ background: '#e11d48', color: '#ffffff', fontWeight: 800, padding: '1px 5px', borderRadius: '3px', fontSize: '0.68rem' }}>Alt+R / F6</kbd>
+                            <span className="fw-bold text-danger">Return / Exch</span>
+                        </button>
                         <span className="d-inline-flex align-items-center gap-1 px-2.5 py-0.5 rounded text-white shadow-sm" style={{ background: '#059669', fontSize: '0.72rem', border: '1px solid #047857' }}>
                             <kbd style={{ background: '#ffffff', color: '#065f46', fontWeight: 800, padding: '1px 5px', borderRadius: '3px', fontSize: '0.68rem' }}>F9 / Ctrl+↵</kbd>
                             <span className="fw-bold">Bill &amp; Print</span>
@@ -1700,13 +1907,31 @@ function PosCounter({ store, notify }) {
 
                 {/* Billing Cart Table */}
                 <div className="counter-card p-0 overflow-hidden">
-                    <div className="p-3 pb-2 d-flex justify-content-between align-items-center border-bottom">
-                        <h6 className="mb-0 fw-bold"><i className="bi bi-cart-check-fill text-success me-1"></i> Dispensing Cart ({cart.length} items)</h6>
-                        {cart.length > 0 && (
-                            <button className="btn btn-sm btn-link text-danger text-decoration-none p-0" onClick={() => setCart([])}>
-                                Clear Cart
+                    <div className="p-3 pb-2 d-flex flex-wrap justify-content-between align-items-center gap-2 border-bottom">
+                        <div className="d-flex align-items-center gap-2">
+                            <h6 className="mb-0 fw-bold"><i className="bi bi-cart-check-fill text-success me-1"></i> Dispensing Cart ({cart.length} new)</h6>
+                            {returnCart.length > 0 && (
+                                <span className="badge bg-danger-subtle text-danger border border-danger">
+                                    <i className="bi bi-arrow-return-left me-1"></i>{returnCart.length} return/exchange
+                                </span>
+                            )}
+                        </div>
+                        <div className="d-flex gap-2 align-items-center">
+                            <button 
+                                type="button" 
+                                className="btn btn-sm btn-outline-danger py-0.5 px-2.5 fw-semibold d-inline-flex align-items-center gap-1"
+                                onClick={openReturnModal}
+                                style={{ fontSize: '0.75rem' }}
+                                title="Add patient return or item exchange (Alt+R / F6)"
+                            >
+                                <i className="bi bi-arrow-return-left"></i> Add Return / Exch
                             </button>
-                        )}
+                            {(cart.length > 0 || returnCart.length > 0) && (
+                                <button className="btn btn-sm btn-link text-muted text-decoration-none p-0" onClick={() => { setCart([]); setReturnCart([]); }}>
+                                    Clear All
+                                </button>
+                            )}
+                        </div>
                     </div>
 
                     <div className="table-responsive" style={{ maxHeight: 380 }}>
@@ -1725,11 +1950,11 @@ function PosCounter({ store, notify }) {
                                 </tr>
                             </thead>
                             <tbody>
-                                {cart.length === 0 ? (
+                                {cart.length === 0 && returnCart.length === 0 ? (
                                     <tr>
                                         <td colSpan="9" className="text-center py-4 text-muted">
                                             <i className="bi bi-basket3 fs-3 d-block mb-1"></i>
-                                            Scan barcode or search medicine to add items to bill.
+                                            Scan barcode or search medicine to add items, or click <strong className="text-danger">Add Return / Exch</strong> (Alt+R / F6).
                                         </td>
                                     </tr>
                                 ) : (
@@ -1740,7 +1965,7 @@ function PosCounter({ store, notify }) {
                                         const lineNet = Math.max(0, lineGross - lineDisc).toFixed(2);
                                         const upp = info.upp;
                                         return (
-                                            <tr key={idx}>
+                                            <tr key={`sale-${idx}`}>
                                                 <td>{idx + 1}</td>
                                                 <td>
                                                     <div className="fw-bold">{it.item_name}</div>
@@ -1908,7 +2133,7 @@ function PosCounter({ store, notify }) {
                                                         ) : it.sell_unit === 'Combo' ? (
                                                             <span>₹{it.unit_mrp} <small className="text-muted">/str</small></span>
                                                         ) : (
-                                                            <span>₹{it.unit_mrp} {upp > 1 ? <small className="text-muted">/str</small> : ''}</span>
+                                                            <span>₹{it.unit_mrp} {upp > 1 ? <small className="text-muted">/strip</small> : ''}</span>
                                                         )}
                                                     </div>
                                                     {upp > 1 && (
@@ -1962,7 +2187,64 @@ function PosCounter({ store, notify }) {
                                                 </td>
                                             </tr>
                                         );
-                                    })
+                                    }).concat(
+                                        returnCart.map((rc, rIdx) => (
+                                            <tr key={`ret-${rIdx}`} style={{ backgroundColor: 'rgba(244, 63, 94, 0.05)' }}>
+                                                <td>
+                                                    <span className="badge bg-danger text-white">RET</span>
+                                                </td>
+                                                <td>
+                                                    <div className="fw-bold text-danger">
+                                                        <i className="bi bi-arrow-return-left me-1"></i>
+                                                        {rc.item_name}
+                                                    </div>
+                                                    <small className="text-muted">
+                                                        Bill: <code>{rc.ref_invoice_no}</code> • {rc.reason ? rc.reason.replace(/_/g, ' ') : 'Return'}
+                                                    </small>
+                                                </td>
+                                                <td>
+                                                    <span className="badge bg-light text-dark border">{rc.batch_no}</span>
+                                                    <div className="text-muted" style={{ fontSize: '0.7rem' }}>Exp: {rc.expiry_date ? rc.expiry_date.substring(0,7) : ''}</div>
+                                                </td>
+                                                <td>
+                                                    <span className="badge bg-danger-subtle text-danger border border-danger fw-bold">
+                                                        - {rc.return_qty} {rc.return_unit}
+                                                    </span>
+                                                    <div className="text-muted mt-0.5" style={{ fontSize: '0.64rem' }}>
+                                                        ({rc.return_total_units} Tabs • {rc.condition === 'GOOD' ? 'Restocking' : 'Discard'})
+                                                    </div>
+                                                </td>
+                                                <td>
+                                                    <div className="fw-semibold text-danger">
+                                                        ₹{rc.unit_price} <small className="text-muted">/tab</small>
+                                                    </div>
+                                                    {rc.units_per_pack > 1 && (
+                                                        <small className="text-muted d-block" style={{ fontSize: '0.68rem' }}>
+                                                            MRP: ₹{rc.unit_mrp}
+                                                        </small>
+                                                    )}
+                                                </td>
+                                                <td>
+                                                    <span className="badge bg-secondary-subtle text-secondary" style={{ fontSize: '0.7rem' }}>
+                                                        {rc.condition === 'GOOD' ? 'Restock' : 'Scrap'}
+                                                    </span>
+                                                </td>
+                                                <td>{rc.gst_rate || 12}%</td>
+                                                <td className="text-end fw-bold text-danger">
+                                                    -₹{Number(rc.line_total).toFixed(2)}
+                                                </td>
+                                                <td>
+                                                    <button 
+                                                        className="btn btn-sm btn-outline-danger py-0 px-1" 
+                                                        onClick={() => setReturnCart(returnCart.filter((_, i) => i !== rIdx))}
+                                                        title="Remove from returns"
+                                                    >
+                                                        <i className="bi bi-trash"></i>
+                                                    </button>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )
                                 )}
                             </tbody>
                         </table>
@@ -2101,24 +2383,76 @@ function PosCounter({ store, notify }) {
                         </div>
                     )}
 
-                    <div className="d-flex justify-content-between mb-2 text-slate-300" style={{ color: '#cbd5e1' }}>
-                        <span>Total Discounts:</span>
-                        <span className="text-danger fw-bold">-₹{discountTotal.toFixed(2)}</span>
-                    </div>
+                    {discountTotal > 0 && (
+                        <div className="d-flex justify-content-between mb-2 text-slate-300" style={{ color: '#cbd5e1' }}>
+                            <span>Total Discounts:</span>
+                            <span className="text-danger fw-bold">-₹{discountTotal.toFixed(2)}</span>
+                        </div>
+                    )}
+
+                    {returnTotal > 0 && (
+                        <div className="d-flex justify-content-between mb-2 text-danger fw-bold py-1 px-2 rounded" style={{ background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.3)' }}>
+                            <span><i className="bi bi-arrow-return-left me-1"></i> Less Return Credit:</span>
+                            <span>-₹{returnTotal.toFixed(2)}</span>
+                        </div>
+                    )}
+
                     <div className="d-flex justify-content-between mb-2 text-slate-300" style={{ color: '#cbd5e1' }}>
                         <span>Round Off:</span>
                         <span>₹{roundOff}</span>
                     </div>
                     <hr style={{ borderColor: 'rgba(255,255,255,0.15)' }} />
 
-                    <div className="d-flex justify-content-between align-items-center mb-4">
-                        <span className="fs-5 fw-bold text-white">Net Payable:</span>
-                        <span className="fs-3 fw-bolder text-warning">₹{netPayable.toLocaleString('en-IN')}</span>
-                    </div>
+                    {refundPayable > 0 ? (
+                        <div className="p-3 rounded-3 mb-3 border border-warning" style={{ background: 'rgba(245, 158, 11, 0.15)' }}>
+                            <div className="d-flex justify-content-between align-items-center">
+                                <span className="fs-6 fw-bold text-white"><i className="bi bi-wallet2 text-warning me-1"></i> REFUND TO PATIENT:</span>
+                                <span className="fs-3 fw-bolder text-warning">₹{refundPayable.toLocaleString('en-IN')}</span>
+                            </div>
+                            <small className="text-white-50 d-block mt-1" style={{ fontSize: '0.72rem' }}>
+                                Return credit exceeds new items. Refund this net difference from counter cash drawer or UPI.
+                            </small>
+                            <div className="mt-2.5">
+                                <label className="form-label text-white small fw-bold mb-1">Refund Outflow Method</label>
+                                <div className="btn-group btn-group-sm w-100 mb-2">
+                                    <button 
+                                        type="button" 
+                                        className={`btn ${refundMode === 'Cash' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}
+                                        onClick={() => setRefundMode('Cash')}
+                                    >
+                                        <i className="bi bi-cash-stack me-1"></i> Cash Refund
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        className={`btn ${refundMode === 'UPI' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}
+                                        onClick={() => setRefundMode('UPI')}
+                                    >
+                                        <i className="bi bi-qr-code me-1"></i> UPI / Bank Refund
+                                    </button>
+                                </div>
+                                {refundMode === 'UPI' && (
+                                    <input 
+                                        type="text" 
+                                        className="form-control form-control-sm bg-dark text-white border-warning" 
+                                        placeholder="Patient UPI VPA or Bank Reference #" 
+                                        value={refundRefNo} 
+                                        onChange={(e) => setRefundRefNo(e.target.value)} 
+                                    />
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="d-flex justify-content-between align-items-center mb-4">
+                            <span className="fs-5 fw-bold text-white">Net Payable:</span>
+                            <span className="fs-3 fw-bolder text-warning">₹{netPayable.toLocaleString('en-IN')}</span>
+                        </div>
+                    )}
 
-                    {/* Payment Mode Selection */}
-                    <div className="d-flex justify-content-between align-items-center mb-2">
-                        <label className="form-label text-white fw-bold mb-0">Payment Method</label>
+                    {/* Payment Mode Selection (Only when patient owes money) */}
+                    {refundPayable <= 0 && (
+                        <div>
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                                <label className="form-label text-white fw-bold mb-0">Payment Method</label>
                         {paymentMode === 'Mixed' && (
                             <span className="badge bg-warning text-dark"><i className="bi bi-pie-chart me-1"></i> Partial / Split Mode</span>
                         )}
@@ -2395,6 +2729,8 @@ function PosCounter({ store, notify }) {
                             </div>
                         </div>
                     )}
+                        </div>
+                    )}
 
                     {/* Print Format Selector */}
                     <div className="mb-3">
@@ -2425,14 +2761,18 @@ function PosCounter({ store, notify }) {
                     </div>
 
                     <button 
-                        className="btn btn-success-custom w-100 py-2.5 fs-6"
+                        className={`btn ${refundPayable > 0 ? 'btn-warning text-dark fw-bold' : 'btn-success-custom'} w-100 py-2.5 fs-6`}
                         onClick={processSale}
-                        disabled={isProcessing || cart.length === 0 || (paymentMode === 'Mixed' && Math.abs(splitRemaining) > 0.01)}
+                        disabled={isProcessing || (cart.length === 0 && returnCart.length === 0) || (refundPayable === 0 && paymentMode === 'Mixed' && Math.abs(splitRemaining) > 0.01)}
                     >
                         {isProcessing ? (
-                            <span><i className="bi bi-hourglass-split me-2"></i> Generating Bill...</span>
-                        ) : (paymentMode === 'Mixed' && Math.abs(splitRemaining) > 0.01) ? (
+                            <span><i className="bi bi-hourglass-split me-2"></i> Generating Bill &amp; Credit Note...</span>
+                        ) : (refundPayable === 0 && paymentMode === 'Mixed' && Math.abs(splitRemaining) > 0.01) ? (
                             <span><i className="bi bi-exclamation-triangle me-2"></i> Allocate Balance (₹{splitRemaining > 0 ? splitRemaining.toFixed(2) + ' left' : Math.abs(splitRemaining).toFixed(2) + ' over'})</span>
+                        ) : refundPayable > 0 ? (
+                            <span><i className="bi bi-arrow-return-left me-2"></i> Process Return &amp; Refund ₹{refundPayable}</span>
+                        ) : returnCart.length > 0 ? (
+                            <span><i className="bi bi-arrow-left-right me-2"></i> Complete Exchange Bill &amp; Print ({printFormat.toUpperCase()})</span>
                         ) : (
                             <span><i className="bi bi-printer me-2"></i> Complete Sale &amp; Print ({printFormat.toUpperCase()})</span>
                         )}
@@ -2502,27 +2842,62 @@ function PosCounter({ store, notify }) {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {lastInvoice.items.map((it, i) => (
-                                                <tr key={i}>
-                                                    <td>
-                                                        {it.item_name}
-                                                        {it.sell_unit === 'Tablet' && (
-                                                            <div style={{ fontSize: '8px', color: '#666' }}>@ ₹{it.unit_price}/tab</div>
-                                                        )}
+                                            {lastInvoice.items.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={4} style={{ textAlign: 'center', color: '#666', padding: '6px 0' }}>
+                                                        - Return / Refund Only (No New Meds) -
                                                     </td>
-                                                    <td style={{ textAlign: 'center' }}>{it.batch_no}</td>
-                                                    <td style={{ textAlign: 'center' }}>
-                                                        {it.sell_unit === 'Tablet' 
-                                                            ? `${it.total_units} Tab` 
-                                                            : it.sell_unit === 'Combo' 
-                                                                ? `${it.qty} Str + ${it.loose_qty} Tab` 
-                                                                : (Number(it.units_per_pack) > 1 ? `${it.qty} Strip` : `${it.qty} ${it.unit_pack || 'Unit'}`)}
-                                                    </td>
-                                                    <td style={{ textAlign: 'right' }}>₹{it.total_amount}</td>
                                                 </tr>
-                                            ))}
+                                            ) : (
+                                                lastInvoice.items.map((it, i) => (
+                                                    <tr key={i}>
+                                                        <td>
+                                                            {it.item_name}
+                                                            {it.sell_unit === 'Tablet' && (
+                                                                <div style={{ fontSize: '8px', color: '#666' }}>@ ₹{it.unit_price}/tab</div>
+                                                            )}
+                                                        </td>
+                                                        <td style={{ textAlign: 'center' }}>{it.batch_no}</td>
+                                                        <td style={{ textAlign: 'center' }}>
+                                                            {it.sell_unit === 'Tablet' 
+                                                                ? `${it.total_units} Tab` 
+                                                                : it.sell_unit === 'Combo' 
+                                                                    ? `${it.qty} Str + ${it.loose_qty} Tab` 
+                                                                    : (Number(it.units_per_pack) > 1 ? `${it.qty} Strip` : `${it.qty} ${it.unit_pack || 'Unit'}`)}
+                                                        </td>
+                                                        <td style={{ textAlign: 'right' }}>₹{it.total_amount}</td>
+                                                    </tr>
+                                                ))
+                                            )}
                                         </tbody>
                                     </table>
+                                    {lastInvoice.return_items && lastInvoice.return_items.length > 0 && (
+                                        <>
+                                            <div style={{ fontSize: '9px', fontWeight: 'bold', margin: '4px 0 2px', borderTop: '1px dashed #000', paddingTop: 2 }}>
+                                                -- RETURNED / EXCHANGED --
+                                                {lastInvoice.credit_note && <span style={{ float: 'right' }}>CN: {lastInvoice.credit_note.credit_note_no}</span>}
+                                            </div>
+                                            <table style={{ width: '100%', fontSize: '9px' }}>
+                                                <tbody>
+                                                    {lastInvoice.return_items.map((it, i) => (
+                                                        <tr key={`ret-${i}`}>
+                                                            <td>
+                                                                <span style={{ textDecoration: 'line-through' }}>{it.item_name}</span>
+                                                                <div style={{ fontSize: '8px', color: '#666' }}>
+                                                                    {it.ref_invoice_no ? `Ref: ${it.ref_invoice_no}` : ''} ({it.return_condition})
+                                                                </div>
+                                                            </td>
+                                                            <td style={{ textAlign: 'center' }}>{it.batch_no}</td>
+                                                            <td style={{ textAlign: 'center' }}>
+                                                                -{it.sell_unit === 'Tablet' ? `${it.total_units} Tab` : `${it.qty} ${it.unit_pack || 'Unit'}`}
+                                                            </td>
+                                                            <td style={{ textAlign: 'right', color: '#b91c1c' }}>-₹{Math.abs(Number(it.total_amount)).toFixed(2)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </>
+                                    )}
                                     <hr style={{ margin: '4px 0' }} />
                                     <div className="d-flex justify-content-between" style={{ fontSize: '10px' }}>
                                         <span>Gross Total:</span>
@@ -2534,10 +2909,22 @@ function PosCounter({ store, notify }) {
                                             <span>-₹{lastInvoice.sale.discount_amount}</span>
                                         </div>
                                     )}
+                                    {Number(lastInvoice.sale.return_amount) > 0 && (
+                                        <div className="d-flex justify-content-between text-danger fw-bold" style={{ fontSize: '10px' }}>
+                                            <span>Less Return Credit:</span>
+                                            <span>-₹{lastInvoice.sale.return_amount}</span>
+                                        </div>
+                                    )}
                                     <div className="d-flex justify-content-between fw-bold" style={{ fontSize: '12px' }}>
-                                        <span>NET AMOUNT:</span>
+                                        <span>NET PAYABLE:</span>
                                         <span>₹{lastInvoice.sale.net_amount}</span>
                                     </div>
+                                    {Number(lastInvoice.sale.refund_amount) > 0 && (
+                                        <div className="d-flex justify-content-between fw-bold text-danger border-top border-bottom py-1 my-1" style={{ fontSize: '11px' }}>
+                                            <span>REFUND PAID TO PATIENT:</span>
+                                            <span>₹{lastInvoice.sale.refund_amount} ({lastInvoice.sale.refund_mode})</span>
+                                        </div>
+                                    )}
                                     <div style={{ fontSize: '9px', marginTop: 4 }}>
                                         <div><strong>Settlement:</strong> {lastInvoice.sale.payment_mode}</div>
                                         {Number(lastInvoice.sale.cash_paid) > 0 && <div>• Cash Paid: ₹{lastInvoice.sale.cash_paid}</div>}
@@ -2548,6 +2935,9 @@ function PosCounter({ store, notify }) {
                                             <div>• Card Paid: ₹{lastInvoice.sale.card_paid} {lastInvoice.sale.card_ref_no ? `[Ref: ${lastInvoice.sale.card_ref_no}]` : ''}</div>
                                         )}
                                         {Number(lastInvoice.sale.credit_amount) > 0 && <div>• IPD Credit: ₹{lastInvoice.sale.credit_amount}</div>}
+                                        {Number(lastInvoice.sale.refund_amount) > 0 && (
+                                            <div className="text-danger fw-bold">• Refund Issued: ₹{lastInvoice.sale.refund_amount} via {lastInvoice.sale.refund_mode} {lastInvoice.sale.refund_ref_no ? `[Ref: ${lastInvoice.sale.refund_ref_no}]` : ''}</div>
+                                        )}
                                         {lastInvoice.sale.is_bank_reconciled == 1 && <div className="text-success fw-bold">✓ Bank Statement Audited</div>}
                                     </div>
                                     <div style={{ fontSize: '9px', marginTop: 4, textAlign: 'center' }}>
@@ -2606,43 +2996,92 @@ function PosCounter({ store, notify }) {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {lastInvoice.items.map((it, i) => (
-                                                <tr key={i}>
-                                                    <td>{i + 1}</td>
-                                                    <td className="fw-bold">
-                                                        {it.item_name}
-                                                        {it.snomed_ct_code && <div className="text-muted" style={{ fontSize: '8px' }}>SNOMED: {it.snomed_ct_code}</div>}
-                                                        {Number(it.units_per_pack) > 1 && (
-                                                            <div className="text-muted fw-normal" style={{ fontSize: '8px' }}>Pack: 1 Strip = {it.units_per_pack} Tabs</div>
-                                                        )}
+                                            {lastInvoice.items.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={8} className="text-center text-muted py-2">
+                                                        No medicines dispensed on this bill (Return / Refund Only)
                                                     </td>
-                                                    <td>{it.hsn_code}</td>
-                                                    <td>{it.batch_no}</td>
-                                                    <td>{it.expiry_date.substring(0,7)}</td>
-                                                    <td>
-                                                        <span className="fw-bold">
-                                                            {it.sell_unit === 'Tablet' 
-                                                                ? `${it.total_units} Tab` 
-                                                                : it.sell_unit === 'Combo' 
-                                                                    ? `${it.qty} Str + ${it.loose_qty} Tab` 
-                                                                    : (Number(it.units_per_pack) > 1 ? `${it.qty} Strip` : `${it.qty} ${it.unit_pack || 'Unit'}`)}
-                                                        </span>
-                                                        {Number(it.units_per_pack) > 1 && it.sell_unit !== 'Tablet' && (
-                                                            <div className="text-muted" style={{ fontSize: '8px' }}>({it.total_units} Tabs)</div>
-                                                        )}
-                                                    </td>
-                                                    <td>
-                                                        {it.sell_unit === 'Tablet' ? (
-                                                            <span>₹{it.unit_price} <small className="text-muted">/tab</small></span>
-                                                        ) : (
-                                                            <span>₹{it.unit_mrp} {Number(it.units_per_pack) > 1 ? <small className="text-muted">/strip</small> : ''}</span>
-                                                        )}
-                                                    </td>
-                                                    <td className="text-end fw-bold">₹{it.total_amount}</td>
                                                 </tr>
-                                            ))}
+                                            ) : (
+                                                lastInvoice.items.map((it, i) => (
+                                                    <tr key={i}>
+                                                        <td>{i + 1}</td>
+                                                        <td className="fw-bold">
+                                                            {it.item_name}
+                                                            {it.snomed_ct_code && <div className="text-muted" style={{ fontSize: '8px' }}>SNOMED: {it.snomed_ct_code}</div>}
+                                                            {Number(it.units_per_pack) > 1 && (
+                                                                <div className="text-muted fw-normal" style={{ fontSize: '8px' }}>Pack: 1 Strip = {it.units_per_pack} Tabs</div>
+                                                            )}
+                                                        </td>
+                                                        <td>{it.hsn_code}</td>
+                                                        <td>{it.batch_no}</td>
+                                                        <td>{it.expiry_date.substring(0,7)}</td>
+                                                        <td>
+                                                            <span className="fw-bold">
+                                                                {it.sell_unit === 'Tablet' 
+                                                                    ? `${it.total_units} Tab` 
+                                                                    : it.sell_unit === 'Combo' 
+                                                                        ? `${it.qty} Str + ${it.loose_qty} Tab` 
+                                                                        : (Number(it.units_per_pack) > 1 ? `${it.qty} Strip` : `${it.qty} ${it.unit_pack || 'Unit'}`)}
+                                                            </span>
+                                                            {Number(it.units_per_pack) > 1 && it.sell_unit !== 'Tablet' && (
+                                                                <div className="text-muted" style={{ fontSize: '8px' }}>({it.total_units} Tabs)</div>
+                                                            )}
+                                                        </td>
+                                                        <td>
+                                                            {it.sell_unit === 'Tablet' ? (
+                                                                <span>₹{it.unit_price} <small className="text-muted">/tab</small></span>
+                                                            ) : (
+                                                                <span>₹{it.unit_mrp} {Number(it.units_per_pack) > 1 ? <small className="text-muted">/strip</small> : ''}</span>
+                                                            )}
+                                                        </td>
+                                                        <td className="text-end fw-bold">₹{it.total_amount}</td>
+                                                    </tr>
+                                                ))
+                                            )}
                                         </tbody>
                                     </table>
+
+                                    {lastInvoice.return_items && lastInvoice.return_items.length > 0 && (
+                                        <div className="mb-2">
+                                            <div className="d-flex justify-content-between align-items-center bg-danger-subtle px-2 py-1 rounded-top border border-bottom-0 border-danger-subtle text-danger" style={{ fontSize: '10px' }}>
+                                                <span className="fw-bold"><i className="bi bi-arrow-return-left me-1"></i> RETURNED / EXCHANGED MEDICINES</span>
+                                                {lastInvoice.credit_note && (
+                                                    <span className="badge bg-danger">Credit Note: {lastInvoice.credit_note.credit_note_no}</span>
+                                                )}
+                                            </div>
+                                            <table className="table table-bordered table-sm mb-0 text-danger border-danger-subtle" style={{ fontSize: '9px' }}>
+                                                <thead className="table-danger">
+                                                    <tr>
+                                                        <th>#</th>
+                                                        <th>Medicine Name</th>
+                                                        <th>Batch</th>
+                                                        <th>Original Bill</th>
+                                                        <th>Condition</th>
+                                                        <th>Returned Qty</th>
+                                                        <th>Credit Rate (₹)</th>
+                                                        <th className="text-end">Credit Total (₹)</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {lastInvoice.return_items.map((it, i) => (
+                                                        <tr key={`a5-ret-${i}`}>
+                                                            <td>{i + 1}</td>
+                                                            <td className="fw-bold text-decoration-line-through">{it.item_name}</td>
+                                                            <td>{it.batch_no}</td>
+                                                            <td><code>{it.ref_invoice_no || 'N/A'}</code></td>
+                                                            <td><span className="badge bg-secondary">{it.return_condition}</span></td>
+                                                            <td className="fw-bold">
+                                                                -{it.sell_unit === 'Tablet' ? `${it.total_units} Tab` : `${it.qty} ${it.unit_pack || 'Unit'}`}
+                                                            </td>
+                                                            <td>₹{it.unit_price}</td>
+                                                            <td className="text-end fw-bold">-₹{Math.abs(Number(it.total_amount)).toFixed(2)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
 
                                     <div className="d-flex justify-content-between align-items-center border-top pt-2">
                                         <div style={{ fontSize: '9px' }}>
@@ -2655,8 +3094,18 @@ function PosCounter({ store, notify }) {
                                                 {Number(lastInvoice.sale.discount_amount) > 0 && (
                                                     <span className="text-danger ms-2">Disc: -₹{lastInvoice.sale.discount_amount}</span>
                                                 )}
+                                                {Number(lastInvoice.sale.return_amount) > 0 && (
+                                                    <span className="text-danger fw-bold ms-2">Return Credit: -₹{lastInvoice.sale.return_amount}</span>
+                                                )}
                                             </div>
-                                            <span className="fs-6 fw-bold text-primary">TOTAL: ₹{lastInvoice.sale.net_amount}</span>
+                                            <span className="fs-6 fw-bold text-primary">
+                                                {Number(lastInvoice.sale.refund_amount) > 0 ? `NET REFUND: ₹${lastInvoice.sale.refund_amount}` : `TOTAL: ₹${lastInvoice.sale.net_amount}`}
+                                            </span>
+                                            {Number(lastInvoice.sale.refund_amount) > 0 && (
+                                                <div className="text-danger fw-bold small">
+                                                    Refund Paid via {lastInvoice.sale.refund_mode} {lastInvoice.sale.refund_ref_no ? `[Ref: ${lastInvoice.sale.refund_ref_no}]` : ''}
+                                                </div>
+                                            )}
                                             <div style={{ fontSize: '9px' }} className="text-muted mt-0.5">
                                                 <span>Settlement: <strong>{lastInvoice.sale.payment_mode}</strong></span>
                                                 {Number(lastInvoice.sale.cash_paid) > 0 && <span className="ms-1.5">Cash: ₹{lastInvoice.sale.cash_paid}</span>}
@@ -2729,54 +3178,121 @@ function PosCounter({ store, notify }) {
                                             </tr>
                                         </thead>
                                         <tbody>
-                                            {lastInvoice.items.map((it, i) => (
-                                                <tr key={i}>
-                                                    <td>{i + 1}</td>
-                                                    <td className="fw-bold">
-                                                        {it.item_name}
-                                                        {it.snomed_ct_code && (
-                                                            <div className="text-muted fw-normal" style={{ fontSize: '9px' }}>
-                                                                SNOMED-CT: <code>{it.snomed_ct_code}</code> ({it.snomed_display || ''})
-                                                            </div>
-                                                        )}
-                                                        {Number(it.units_per_pack) > 1 && (
-                                                            <div className="text-muted fw-normal" style={{ fontSize: '9px' }}>
-                                                                Packing: 1 Strip of {it.units_per_pack} Tablets
-                                                            </div>
-                                                        )}
+                                            {lastInvoice.items.length === 0 ? (
+                                                <tr>
+                                                    <td colSpan={11} className="text-center text-muted py-3">
+                                                        No medicines dispensed on this bill (Pure Sales Return &amp; Customer Refund)
                                                     </td>
-                                                    <td>{it.hsn_code}</td>
-                                                    <td>{it.batch_no}</td>
-                                                    <td>{it.expiry_date}</td>
-                                                    <td>
-                                                        <span className="fw-bold">
-                                                            {it.sell_unit === 'Tablet' 
-                                                                ? `${it.total_units} Tab` 
-                                                                : it.sell_unit === 'Combo' 
-                                                                    ? `${it.qty} Str + ${it.loose_qty} Tab` 
-                                                                    : (Number(it.units_per_pack) > 1 ? `${it.qty} Strip` : `${it.qty} ${it.unit_pack || 'Unit'}`)}
-                                                        </span>
-                                                        {Number(it.units_per_pack) > 1 && it.sell_unit !== 'Tablet' && (
-                                                            <div className="text-muted" style={{ fontSize: '9px' }}>
-                                                                ({it.total_units} Tablets)
-                                                            </div>
-                                                        )}
-                                                    </td>
-                                                    <td>
-                                                        {it.sell_unit === 'Tablet' ? (
-                                                            <span>₹{it.unit_price} <small className="text-muted">/tab</small></span>
-                                                        ) : (
-                                                            <span>₹{it.unit_mrp} {Number(it.units_per_pack) > 1 ? <small className="text-muted">/strip</small> : ''}</span>
-                                                        )}
-                                                    </td>
-                                                    <td>₹{it.taxable_value}</td>
-                                                    <td>₹{it.cgst_amount}</td>
-                                                    <td>₹{it.sgst_amount}</td>
-                                                    <td className="text-end fw-bold">₹{it.total_amount}</td>
                                                 </tr>
-                                            ))}
+                                            ) : (
+                                                lastInvoice.items.map((it, i) => (
+                                                    <tr key={i}>
+                                                        <td>{i + 1}</td>
+                                                        <td className="fw-bold">
+                                                            {it.item_name}
+                                                            {it.snomed_ct_code && (
+                                                                <div className="text-muted fw-normal" style={{ fontSize: '9px' }}>
+                                                                    SNOMED-CT: <code>{it.snomed_ct_code}</code> ({it.snomed_display || ''})
+                                                                </div>
+                                                            )}
+                                                            {Number(it.units_per_pack) > 1 && (
+                                                                <div className="text-muted fw-normal" style={{ fontSize: '9px' }}>
+                                                                    Packing: 1 Strip of {it.units_per_pack} Tablets
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td>{it.hsn_code}</td>
+                                                        <td>{it.batch_no}</td>
+                                                        <td>{it.expiry_date}</td>
+                                                        <td>
+                                                            <span className="fw-bold">
+                                                                {it.sell_unit === 'Tablet' 
+                                                                    ? `${it.total_units} Tab` 
+                                                                    : it.sell_unit === 'Combo' 
+                                                                        ? `${it.qty} Str + ${it.loose_qty} Tab` 
+                                                                        : (Number(it.units_per_pack) > 1 ? `${it.qty} Strip` : `${it.qty} ${it.unit_pack || 'Unit'}`)}
+                                                            </span>
+                                                            {Number(it.units_per_pack) > 1 && it.sell_unit !== 'Tablet' && (
+                                                                <div className="text-muted" style={{ fontSize: '9px' }}>
+                                                                    ({it.total_units} Tablets)
+                                                                </div>
+                                                            )}
+                                                        </td>
+                                                        <td>
+                                                            {it.sell_unit === 'Tablet' ? (
+                                                                <span>₹{it.unit_price} <small className="text-muted">/tab</small></span>
+                                                            ) : (
+                                                                <span>₹{it.unit_mrp} {Number(it.units_per_pack) > 1 ? <small className="text-muted">/strip</small> : ''}</span>
+                                                            )}
+                                                        </td>
+                                                        <td>₹{it.taxable_value}</td>
+                                                        <td>₹{it.cgst_amount}</td>
+                                                        <td>₹{it.sgst_amount}</td>
+                                                        <td className="text-end fw-bold">₹{it.total_amount}</td>
+                                                    </tr>
+                                                ))
+                                            )}
                                         </tbody>
                                     </table>
+
+                                    {/* Credit Note / Returned Medicines Table */}
+                                    {lastInvoice.return_items && lastInvoice.return_items.length > 0 && (
+                                        <div className="mb-3">
+                                            <div className="d-flex justify-content-between align-items-center bg-danger-subtle p-2 rounded-top border border-bottom-0 border-danger text-danger">
+                                                <span className="fw-bold">
+                                                    <i className="bi bi-arrow-return-left me-1"></i> GST CREDIT NOTE / RETURNED &amp; EXCHANGED MEDICINES
+                                                </span>
+                                                {lastInvoice.credit_note && (
+                                                    <span className="badge bg-danger fs-7">
+                                                        Credit Note No: {lastInvoice.credit_note.credit_note_no} ({lastInvoice.credit_note.return_date})
+                                                    </span>
+                                                )}
+                                            </div>
+                                            <table className="table table-bordered mb-0 text-danger border-danger">
+                                                <thead className="table-danger">
+                                                    <tr>
+                                                        <th style={{ width: 40 }}>#</th>
+                                                        <th>Returned Medicine &amp; Formulation</th>
+                                                        <th>HSN</th>
+                                                        <th>Batch No</th>
+                                                        <th>Original Invoice</th>
+                                                        <th>Condition / Reason</th>
+                                                        <th style={{ width: 105 }}>Qty Returned</th>
+                                                        <th>Credit Rate (₹)</th>
+                                                        <th>Taxable (₹)</th>
+                                                        <th>CGST (₹)</th>
+                                                        <th>SGST (₹)</th>
+                                                        <th className="text-end">Credit Total (₹)</th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {lastInvoice.return_items.map((it, i) => (
+                                                        <tr key={`a4-ret-${i}`}>
+                                                            <td>{i + 1}</td>
+                                                            <td className="fw-bold text-decoration-line-through">{it.item_name}</td>
+                                                            <td>{it.hsn_code}</td>
+                                                            <td>{it.batch_no}</td>
+                                                            <td><code>{it.ref_invoice_no || 'N/A'}</code></td>
+                                                            <td>
+                                                                <span className="badge bg-secondary me-1">{it.return_condition}</span>
+                                                                <small className="text-muted">{it.return_reason}</small>
+                                                            </td>
+                                                            <td>
+                                                                <span className="fw-bold">
+                                                                    -{it.sell_unit === 'Tablet' ? `${it.total_units} Tab` : `${it.qty} ${it.unit_pack || 'Unit'}`}
+                                                                </span>
+                                                            </td>
+                                                            <td>₹{it.unit_price}</td>
+                                                            <td>-₹{Math.abs(Number(it.taxable_value)).toFixed(2)}</td>
+                                                            <td>-₹{Math.abs(Number(it.cgst_amount)).toFixed(2)}</td>
+                                                            <td>-₹{Math.abs(Number(it.sgst_amount)).toFixed(2)}</td>
+                                                            <td className="text-end fw-bold">-₹{Math.abs(Number(it.total_amount)).toFixed(2)}</td>
+                                                        </tr>
+                                                    ))}
+                                                </tbody>
+                                            </table>
+                                        </div>
+                                    )}
 
                                     {/* HSN Summary Table */}
                                     {lastInvoice.hsn_summary && lastInvoice.hsn_summary.length > 0 && (
@@ -2838,6 +3354,13 @@ function PosCounter({ store, notify }) {
                                                         <span><strong>Hospital Credit:</strong> ₹{lastInvoice.sale.credit_amount}</span>
                                                     )}
                                                 </div>
+                                                {Number(lastInvoice.sale.refund_amount) > 0 && (
+                                                    <div className="mb-1">
+                                                        <span className="badge bg-danger-subtle text-danger border border-danger">
+                                                            <i className="bi bi-cash-stack me-1"></i> Refund Issued: ₹{lastInvoice.sale.refund_amount} via {lastInvoice.sale.refund_mode} {lastInvoice.sale.refund_ref_no ? `[Ref: ${lastInvoice.sale.refund_ref_no}]` : ''}
+                                                        </span>
+                                                    </div>
+                                                )}
                                                 <div>
                                                     {lastInvoice.sale.is_bank_reconciled == 1 ? (
                                                         <span className="badge bg-success-subtle text-success border border-success"><i className="bi bi-patch-check-fill me-1"></i> Bank Statement Reconciled &amp; Audited</span>
@@ -2858,6 +3381,12 @@ function PosCounter({ store, notify }) {
                                                     <span>-₹{lastInvoice.sale.discount_amount}</span>
                                                 </div>
                                             )}
+                                            {Number(lastInvoice.sale.return_amount) > 0 && (
+                                                <div className="d-flex justify-content-between mb-1 text-danger fw-bold">
+                                                    <span>Less Return / Exchange Credit:</span>
+                                                    <span>-₹{lastInvoice.sale.return_amount}</span>
+                                                </div>
+                                            )}
                                             <div className="d-flex justify-content-between mb-1">
                                                 <span>Taxable Amount:</span>
                                                 <span>₹{lastInvoice.sale.taxable_amount}</span>
@@ -2875,9 +3404,15 @@ function PosCounter({ store, notify }) {
                                                 <span>₹{lastInvoice.sale.round_off}</span>
                                             </div>
                                             <div className="d-flex justify-content-between fs-5 fw-bolder border-top pt-2 text-primary">
-                                                <span>GRAND TOTAL:</span>
+                                                <span>GRAND TOTAL / NET PAYABLE:</span>
                                                 <span>₹{lastInvoice.sale.net_amount}</span>
                                             </div>
+                                            {Number(lastInvoice.sale.refund_amount) > 0 && (
+                                                <div className="d-flex justify-content-between fs-6 fw-bold text-danger border-top border-bottom py-1 mt-2">
+                                                    <span>REFUND PAID TO CUSTOMER:</span>
+                                                    <span>₹{lastInvoice.sale.refund_amount} ({lastInvoice.sale.refund_mode}{lastInvoice.sale.refund_ref_no ? ` - ${lastInvoice.sale.refund_ref_no}` : ''})</span>
+                                                </div>
+                                            )}
                                         </div>
                                     </div>
                                 </div>
@@ -2954,6 +3489,350 @@ function PosCounter({ store, notify }) {
                                         Includes SNOMED-CT clinical codes, HFR Facility ID, and Practitioner HPR ID.
                                     </small>
                                     <button type="button" className="btn btn-sm btn-secondary" onClick={() => setShowFhirModal(false)}>Close</button>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                )}
+
+                {/* Sales Return & Same-Invoice Exchange Modal (B2C Marg ERP Standard) */}
+                {showReturnModal && (
+                    <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(15, 23, 42, 0.75)' }} tabIndex="-1">
+                        <div className="modal-dialog modal-xl modal-dialog-scrollable">
+                            <div className="modal-content border-0 shadow-lg">
+                                <div className="modal-header bg-dark text-white py-2 px-3">
+                                    <div className="d-flex align-items-center gap-2">
+                                        <i className="bi bi-arrow-left-right text-warning fs-5"></i>
+                                        <div>
+                                            <h6 className="modal-title mb-0 fw-bold">Sales Return &amp; Same-Invoice Exchange Desk</h6>
+                                            <small className="text-secondary" style={{ fontSize: '0.75rem' }}>
+                                                B2C Retail Returns • Stock Replenishment • GST Credit Note • Marg ERP Standard (F6 / Alt+R)
+                                            </small>
+                                        </div>
+                                    </div>
+                                    <button type="button" className="btn-close btn-close-white" onClick={() => setShowReturnModal(false)}></button>
+                                </div>
+                                <div className="modal-body p-3 bg-light">
+                                    {/* Search Bar for Past Invoices */}
+                                    <div className="card shadow-sm border-0 mb-3">
+                                        <div className="card-body p-3">
+                                            <label className="form-label small fw-bold text-muted mb-1">
+                                                Lookup Original Tax Invoice / Patient UHID / Phone:
+                                            </label>
+                                            <div className="input-group">
+                                                <span className="input-group-text bg-white"><i className="bi bi-search"></i></span>
+                                                <input
+                                                    type="text"
+                                                    ref={returnSearchInputRef}
+                                                    className="form-control"
+                                                    placeholder="Enter Invoice No (e.g. MAIN/26-27/08176), UHID, Patient Name, or Mobile..."
+                                                    value={returnSearchQuery}
+                                                    onChange={(e) => setReturnSearchQuery(e.target.value)}
+                                                    onKeyDown={(e) => {
+                                                        if (e.key === 'Enter') {
+                                                            e.preventDefault();
+                                                            searchReturnInvoices();
+                                                        }
+                                                    }}
+                                                />
+                                                <button
+                                                    className="btn btn-primary px-3"
+                                                    type="button"
+                                                    disabled={isSearchingReturn}
+                                                    onClick={() => searchReturnInvoices()}
+                                                >
+                                                    {isSearchingReturn ? (
+                                                        <>
+                                                            <span className="spinner-border spinner-border-sm me-1"></span>
+                                                            Searching...
+                                                        </>
+                                                    ) : (
+                                                        <>
+                                                            <i className="bi bi-arrow-repeat me-1"></i> Search Bill
+                                                        </>
+                                                    )}
+                                                </button>
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Search Results List (if multiple bills match) */}
+                                    {!selectedReturnInvoice && returnSearchResults.length > 1 && (
+                                        <div className="card shadow-sm border-0 mb-3">
+                                            <div className="card-header bg-white py-2 fw-bold text-dark small">
+                                                Matching Invoices ({returnSearchResults.length} found) - Select an invoice to process returns:
+                                            </div>
+                                            <div className="table-responsive" style={{ maxHeight: '220px' }}>
+                                                <table className="table table-hover table-sm align-middle mb-0" style={{ fontSize: '0.85rem' }}>
+                                                    <thead className="table-light">
+                                                        <tr>
+                                                            <th>Bill No</th>
+                                                            <th>Date</th>
+                                                            <th>Patient</th>
+                                                            <th>Doctor</th>
+                                                            <th>Original Net</th>
+                                                            <th>Returnable Items</th>
+                                                            <th>Action</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {returnSearchResults.map((resObj) => {
+                                                            const returnableCount = (resObj.items || []).filter(it => it.remaining_units > 0).length;
+                                                            return (
+                                                                <tr key={resObj.sale.sale_id}>
+                                                                    <td className="fw-bold text-primary">{resObj.sale.invoice_no}</td>
+                                                                    <td className="text-muted">{resObj.sale.sale_date}</td>
+                                                                    <td>
+                                                                        <strong>{resObj.sale.patient_name}</strong>
+                                                                        {resObj.sale.uhid && <span className="text-muted ms-1">({resObj.sale.uhid})</span>}
+                                                                    </td>
+                                                                    <td>{resObj.sale.doctor_name || 'N/A'}</td>
+                                                                    <td className="fw-bold">₹{resObj.sale.net_amount}</td>
+                                                                    <td>
+                                                                        <span className={`badge ${returnableCount > 0 ? 'bg-success-subtle text-success' : 'bg-secondary'}`}>
+                                                                            {returnableCount} items eligible
+                                                                        </span>
+                                                                    </td>
+                                                                    <td>
+                                                                        <button
+                                                                            type="button"
+                                                                            className="btn btn-sm btn-outline-primary py-0 px-2"
+                                                                            onClick={() => selectReturnInvoice(resObj)}
+                                                                        >
+                                                                            Select Bill <i className="bi bi-chevron-right ms-1"></i>
+                                                                        </button>
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {/* Selected Invoice Header Details */}
+                                    {selectedReturnInvoice && (
+                                        <div className="card shadow-sm border-0 mb-3">
+                                            <div className="card-header bg-white py-2 d-flex justify-content-between align-items-center">
+                                                <div className="d-flex align-items-center gap-2">
+                                                    <span className="badge bg-primary fs-7">{selectedReturnInvoice.sale.invoice_no}</span>
+                                                    <span className="text-muted small">Date: {selectedReturnInvoice.sale.sale_date}</span>
+                                                    {selectedReturnInvoice.sale.uhid && (
+                                                        <span className="badge bg-light text-dark border">UHID: {selectedReturnInvoice.sale.uhid}</span>
+                                                    )}
+                                                </div>
+                                                {returnSearchResults.length > 1 && (
+                                                    <button
+                                                        type="button"
+                                                        className="btn btn-sm btn-outline-secondary py-0"
+                                                        onClick={() => setSelectedReturnInvoice(null)}
+                                                    >
+                                                        <i className="bi bi-arrow-left me-1"></i> Change Bill
+                                                    </button>
+                                                )}
+                                            </div>
+                                            <div className="card-body p-2 bg-light-subtle">
+                                                <div className="row g-2 small">
+                                                    <div className="col-md-3"><strong>Patient:</strong> {selectedReturnInvoice.sale.patient_name}</div>
+                                                    <div className="col-md-3"><strong>Phone:</strong> {selectedReturnInvoice.sale.patient_mobile || 'N/A'}</div>
+                                                    <div className="col-md-3"><strong>Doctor:</strong> {selectedReturnInvoice.sale.doctor_name || 'N/A'}</div>
+                                                    <div className="col-md-3"><strong>Original Net Paid:</strong> ₹{selectedReturnInvoice.sale.net_amount}</div>
+                                                </div>
+                                            </div>
+
+                                            {/* Returnable Items Grid */}
+                                            <div className="table-responsive">
+                                                <table className="table table-bordered table-sm align-middle mb-0" style={{ fontSize: '0.85rem' }}>
+                                                    <thead className="table-light">
+                                                        <tr>
+                                                            <th>#</th>
+                                                            <th>Medicine Name</th>
+                                                            <th>Batch / Exp</th>
+                                                            <th>Sold / Returned</th>
+                                                            <th>Eligible Units</th>
+                                                            <th style={{ width: 150 }}>Return Qty &amp; Unit</th>
+                                                            <th style={{ width: 140 }}>Condition</th>
+                                                            <th style={{ width: 150 }}>Reason</th>
+                                                            <th>Credit Rate</th>
+                                                            <th className="text-end" style={{ width: 110 }}>Line Credit</th>
+                                                        </tr>
+                                                    </thead>
+                                                    <tbody>
+                                                        {selectedReturnInvoice.items.map((it, idx) => {
+                                                            const draft = returnDraftItems[it.sale_item_id] || {
+                                                                return_qty: 0,
+                                                                return_unit: (it.units_per_pack > 1 && it.remaining_strips > 0) ? 'Strip' : 'Tab',
+                                                                condition: 'GOOD',
+                                                                reason: 'EXCESS_UNUSED'
+                                                            };
+                                                            const isEligible = it.remaining_units > 0;
+                                                            const qty = Number(draft.return_qty) || 0;
+                                                            const upp = Number(it.units_per_pack) || 1;
+                                                            const totalReturnUnits = draft.return_unit === 'Strip' ? (qty * upp) : qty;
+                                                            const lineCredit = Number((totalReturnUnits * it.effective_unit_price).toFixed(2));
+                                                            const isOverLimit = totalReturnUnits > it.remaining_units;
+
+                                                            return (
+                                                                <tr key={it.sale_item_id} className={!isEligible ? 'opacity-50 table-light' : (qty > 0 ? 'table-warning' : '')}>
+                                                                    <td>{idx + 1}</td>
+                                                                    <td>
+                                                                        <strong className="text-dark">{it.item_name}</strong>
+                                                                        {it.generic_name && <div className="text-muted" style={{ fontSize: '0.75rem' }}>{it.generic_name}</div>}
+                                                                        {upp > 1 && <div className="text-muted" style={{ fontSize: '0.72rem' }}>1 Strip = {upp} Tabs</div>}
+                                                                    </td>
+                                                                    <td>
+                                                                        <span className="badge bg-secondary-subtle text-dark border">{it.batch_no}</span>
+                                                                        <div className="text-muted" style={{ fontSize: '0.72rem' }}>Exp: {it.expiry_date ? it.expiry_date.substring(0, 7) : 'N/A'}</div>
+                                                                    </td>
+                                                                    <td>
+                                                                        <div>Sold: {it.total_units} tab</div>
+                                                                        {Number(it.already_returned_units) > 0 && (
+                                                                            <div className="text-danger" style={{ fontSize: '0.75rem' }}>
+                                                                                Returned: {it.already_returned_units} tab
+                                                                            </div>
+                                                                        )}
+                                                                    </td>
+                                                                    <td>
+                                                                        {isEligible ? (
+                                                                            <span className="badge bg-success-subtle text-success border border-success">
+                                                                                {it.remaining_units} Tabs {upp > 1 ? `(${it.remaining_strips} Str + ${it.remaining_loose} Tab)` : ''}
+                                                                            </span>
+                                                                        ) : (
+                                                                            <span className="badge bg-secondary">Fully Returned</span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td>
+                                                                        {isEligible ? (
+                                                                            <div className="input-group input-group-sm">
+                                                                                <input
+                                                                                    type="number"
+                                                                                    min="0"
+                                                                                    max={draft.return_unit === 'Strip' ? it.remaining_strips : it.remaining_units}
+                                                                                    className={`form-control ${isOverLimit ? 'is-invalid' : ''}`}
+                                                                                    value={draft.return_qty}
+                                                                                    onChange={(e) => updateReturnDraft(it.sale_item_id, 'return_qty', e.target.value)}
+                                                                                />
+                                                                                {upp > 1 && (
+                                                                                    <select
+                                                                                        className="form-select"
+                                                                                        style={{ maxWidth: 80 }}
+                                                                                        value={draft.return_unit}
+                                                                                        onChange={(e) => updateReturnDraft(it.sale_item_id, 'return_unit', e.target.value)}
+                                                                                    >
+                                                                                        <option value="Tab">Tab</option>
+                                                                                        <option value="Strip">Strip</option>
+                                                                                    </select>
+                                                                                )}
+                                                                            </div>
+                                                                        ) : (
+                                                                            <span className="text-muted small">-</span>
+                                                                        )}
+                                                                        {isOverLimit && (
+                                                                            <small className="text-danger d-block">Max {it.remaining_units} tabs</small>
+                                                                        )}
+                                                                    </td>
+                                                                    <td>
+                                                                        {isEligible && qty > 0 ? (
+                                                                            <select
+                                                                                className="form-select form-select-sm"
+                                                                                value={draft.condition}
+                                                                                onChange={(e) => updateReturnDraft(it.sale_item_id, 'condition', e.target.value)}
+                                                                            >
+                                                                                <option value="GOOD">Good (Restock)</option>
+                                                                                <option value="DAMAGED">Damaged / Broken</option>
+                                                                                <option value="EXPIRED">Expired / Defective</option>
+                                                                            </select>
+                                                                        ) : (
+                                                                            <span className="text-muted small">-</span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td>
+                                                                        {isEligible && qty > 0 ? (
+                                                                            <select
+                                                                                className="form-select form-select-sm"
+                                                                                value={draft.reason}
+                                                                                onChange={(e) => updateReturnDraft(it.sale_item_id, 'reason', e.target.value)}
+                                                                            >
+                                                                                <option value="EXCESS_UNUSED">Excess / Unused</option>
+                                                                                <option value="DOCTOR_CHANGED_RX">Doctor Changed Rx</option>
+                                                                                <option value="PATIENT_DISCHARGED">Patient Discharged</option>
+                                                                                <option value="WRONG_MEDICINE">Wrong Dispense</option>
+                                                                            </select>
+                                                                        ) : (
+                                                                            <span className="text-muted small">-</span>
+                                                                        )}
+                                                                    </td>
+                                                                    <td>
+                                                                        ₹{it.effective_unit_price} <small className="text-muted">/tab</small>
+                                                                        {upp > 1 && <div className="text-muted" style={{ fontSize: '0.72rem' }}>₹{(it.effective_unit_price * upp).toFixed(2)}/str</div>}
+                                                                    </td>
+                                                                    <td className="text-end fw-bold">
+                                                                        {qty > 0 ? (
+                                                                            <span className="text-danger">-₹{lineCredit.toFixed(2)}</span>
+                                                                        ) : (
+                                                                            <span className="text-muted">₹0.00</span>
+                                                                        )}
+                                                                    </td>
+                                                                </tr>
+                                                            );
+                                                        })}
+                                                    </tbody>
+                                                </table>
+                                            </div>
+                                        </div>
+                                    )}
+
+                                    {!selectedReturnInvoice && returnSearchResults.length === 0 && (
+                                        <div className="text-center py-5 text-muted bg-white rounded border">
+                                            <i className="bi bi-receipt-cutoff fs-1 text-secondary mb-2 d-block"></i>
+                                            <div className="fw-bold">No Invoice Selected</div>
+                                            <div className="small">Search by Bill Number, Patient UHID, Name, or Mobile to load returnable items.</div>
+                                        </div>
+                                    )}
+                                </div>
+                                <div className="modal-footer py-2 px-3 bg-white d-flex justify-content-between align-items-center">
+                                    <div>
+                                        {selectedReturnInvoice && (
+                                            <div className="d-flex align-items-center gap-3">
+                                                {(() => {
+                                                    let totalCredit = 0;
+                                                    let totalItemsCount = 0;
+                                                    selectedReturnInvoice.items.forEach(it => {
+                                                        const draft = returnDraftItems[it.sale_item_id];
+                                                        if (draft && Number(draft.return_qty) > 0) {
+                                                            const qty = Number(draft.return_qty);
+                                                            const upp = Number(it.units_per_pack) || 1;
+                                                            const tu = draft.return_unit === 'Strip' ? (qty * upp) : qty;
+                                                            totalCredit += (tu * it.effective_unit_price);
+                                                            totalItemsCount++;
+                                                        }
+                                                    });
+                                                    return (
+                                                        <div>
+                                                            <span className="text-muted small me-2">Selected Items: <strong>{totalItemsCount}</strong></span>
+                                                            <span className="text-danger fw-bold fs-6">
+                                                                Total Return Credit: -₹{totalCredit.toFixed(2)}
+                                                            </span>
+                                                        </div>
+                                                    );
+                                                })()}
+                                            </div>
+                                        )}
+                                    </div>
+                                    <div className="d-flex gap-2">
+                                        <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowReturnModal(false)}>
+                                            Cancel
+                                        </button>
+                                        <button
+                                            type="button"
+                                            className="btn btn-danger btn-sm px-3 fw-bold"
+                                            disabled={!selectedReturnInvoice}
+                                            onClick={addSelectedReturnsToBill}
+                                        >
+                                            <i className="bi bi-cart-plus me-1"></i> Add to Current Bill (Exchange / Net-Off)
+                                        </button>
+                                    </div>
                                 </div>
                             </div>
                         </div>

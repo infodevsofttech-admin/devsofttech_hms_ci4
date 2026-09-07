@@ -1681,6 +1681,9 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1'], static funct
     $routes->post('medical-store/stock/import-marg', 'MedicalStoreApi::importMarg');
     $routes->get('medical-store/abdm/bundle/(:num)', 'MedicalStoreApi::getAbdmBundle/$1');
     $routes->post('medical-store/abdm/link-abha', 'MedicalStoreApi::linkAbha');
+    $routes->get('medical-store/returns/lookup-invoice', 'MedicalStoreApi::lookupInvoiceForReturn');
+    $routes->get('medical-store/returns/recent', 'MedicalStoreApi::recentReturns');
+    $routes->get('medical-store/returns/credit-note/(:num)', 'MedicalStoreApi::getCreditNoteInvoice/$1');
 });
 
 // Dedicated Direct Store Links (e.g. /MedicalStore/storeA, /MedicalStore/storeB)

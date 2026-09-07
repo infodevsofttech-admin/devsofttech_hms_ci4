@@ -596,9 +596,10 @@ class MedicalStoreApi extends BaseController
         $json = $this->request->getJSON(true) ?: $this->request->getPost();
         $storeId = (int)($json['store_id'] ?? 1);
         $items = $json['items'] ?? [];
+        $returnItems = $json['return_items'] ?? [];
 
-        if (empty($items)) {
-            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Cart is empty.']);
+        if (empty($items) && empty($returnItems)) {
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Cart is empty. Please add medicines to sell or return.']);
         }
 
         // Fetch Store Config
@@ -626,6 +627,7 @@ class MedicalStoreApi extends BaseController
         $today = date('Y-m-d');
         $preItems = [];
 
+        // 1. Process New Sale Items
         foreach ($items as $item) {
             $itemId = (int)$item['item_id'];
             $batchId = (int)$item['batch_id'];
@@ -848,17 +850,240 @@ class MedicalStoreApi extends BaseController
                 ->where('batch_id', $pi['batchId'])
                 ->set('current_qty', 'current_qty - ' . $pi['totalUnits'], false)
                 ->update();
+
+            // Record Stock Audit for Sale
+            $this->db->table('mst_stock_audit')->insert([
+                'store_id'      => $storeId,
+                'item_id'       => $pi['itemId'],
+                'batch_id'      => $pi['batchId'],
+                'audit_type'    => 'SALE',
+                'system_qty'    => (int)$batch['current_qty'],
+                'physical_qty'  => max(0, (int)$batch['current_qty'] - $pi['totalUnits']),
+                'variation_qty' => -$pi['totalUnits'],
+                'rate'          => $pi['effectiveUnitPrice'],
+                'total_value'   => $lineNet,
+                'remarks'       => "Dispensed on Bill $invoiceNo",
+                'conducted_by'  => (int)($json['user_id'] ?? 1),
+                'created_at'    => date('Y-m-d H:i:s')
+            ]);
         }
 
-        $netBeforeRound = $grossAmount - $totalDiscount;
+        // 2. Process Return / Exchange Items
+        $grossReturnAmount = 0;
+        $returnTaxableTotal = 0;
+        $returnCgstTotal = 0;
+        $returnSgstTotal = 0;
+        $returnIgstTotal = 0;
+        $validatedReturnItems = [];
+
+        foreach ($returnItems as $rItem) {
+            $rItemId = (int)($rItem['item_id'] ?? 0);
+            $rBatchId = (int)($rItem['batch_id'] ?? 0);
+            $rSellUnit = trim((string)($rItem['sell_unit'] ?? 'Tablet'));
+            $rCondition = trim((string)($rItem['return_condition'] ?? 'RESTOCKED'));
+            $rReason = trim((string)($rItem['return_reason'] ?? 'Customer Return / Exchange'));
+            $refSaleId = !empty($rItem['ref_sale_id']) ? (int)$rItem['ref_sale_id'] : null;
+            $refInvoiceNo = trim((string)($rItem['ref_invoice_no'] ?? ''));
+
+            // Fetch batch & item details
+            $rBatch = $this->db->table('mst_batches b')
+                ->select('b.*, i.item_name, i.generic_name, i.drug_schedule, i.hsn_code, i.unit_pack, i.units_per_pack')
+                ->join('mst_items i', 'i.item_id = b.item_id')
+                ->where('b.batch_id', $rBatchId)
+                ->get()
+                ->getRowArray();
+
+            if (!$rBatch && !empty($rItem['batch_no'])) {
+                $rBatch = $this->db->table('mst_batches b')
+                    ->select('b.*, i.item_name, i.generic_name, i.drug_schedule, i.hsn_code, i.unit_pack, i.units_per_pack')
+                    ->join('mst_items i', 'i.item_id = b.item_id')
+                    ->where('b.item_id', $rItemId)
+                    ->where('b.batch_no', trim($rItem['batch_no']))
+                    ->get()
+                    ->getRowArray();
+            }
+
+            if (!$rBatch) {
+                $this->db->transRollback();
+                return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => "Return batch details not found for item #$rItemId."]);
+            }
+
+            $rUnitsPerPack = (int)($rBatch['units_per_pack'] ?? 1);
+            if ($rUnitsPerPack <= 0) $rUnitsPerPack = 1;
+
+            if ($rUnitsPerPack <= 1 || in_array($rSellUnit, ['Unit', 'Tablet', 'Loose'])) {
+                $returnTotalUnits = max(1, (int)($rItem['qty'] ?? $rItem['loose_qty'] ?? 1));
+                $dispQty = $returnTotalUnits;
+                $rSellUnit = ($rUnitsPerPack > 1) ? 'Tablet' : ($rBatch['unit_pack'] ?: 'Unit');
+            } else { // 'Strip'
+                $sq = max(1, (int)($rItem['qty'] ?? 1));
+                $returnTotalUnits = $sq * $rUnitsPerPack;
+                $dispQty = $sq;
+                $rSellUnit = 'Strip';
+            }
+
+            // Determine refund rate
+            $unitMrp = (float)$rBatch['mrp'];
+            $perUnitMrp = $rUnitsPerPack > 0 ? ($unitMrp / $rUnitsPerPack) : $unitMrp;
+
+            if (isset($rItem['unit_price']) && (float)$rItem['unit_price'] > 0) {
+                $effectiveRefundUnitRate = (float)$rItem['unit_price'];
+            } elseif ($refSaleId) {
+                $origSi = $this->db->table('mst_sales_items')
+                    ->where('sale_id', $refSaleId)
+                    ->where('item_id', $rItemId)
+                    ->where('batch_id', (int)$rBatch['batch_id'])
+                    ->get()->getRowArray();
+                if ($origSi && (int)$origSi['total_units'] > 0) {
+                    $effectiveRefundUnitRate = round((float)$origSi['total_amount'] / (int)$origSi['total_units'], 2);
+                } else {
+                    $effectiveRefundUnitRate = round($perUnitMrp, 2);
+                }
+            } else {
+                $effectiveRefundUnitRate = round($perUnitMrp, 2);
+            }
+
+            $lineReturnGross = round($returnTotalUnits * $effectiveRefundUnitRate, 2);
+            $grossReturnAmount += $lineReturnGross;
+
+            // Back-Calculated GST on return line
+            $rGstRate = (float)$rBatch['gst_rate'];
+            if ($rGstRate > 0) {
+                $rTaxable = round($lineReturnGross / (1 + ($rGstRate / 100)), 2);
+                $rGstAmt = round($lineReturnGross - $rTaxable, 2);
+            } else {
+                $rTaxable = $lineReturnGross;
+                $rGstAmt = 0;
+            }
+
+            if ($isInterState) {
+                $rCgst = 0;
+                $rSgst = 0;
+                $rIgst = $rGstAmt;
+            } else {
+                $rCgst = round($rGstAmt / 2, 2);
+                $rSgst = round($rGstAmt - $rCgst, 2);
+                $rIgst = 0;
+            }
+
+            $returnTaxableTotal += $rTaxable;
+            $returnCgstTotal += $rCgst;
+            $returnSgstTotal += $rSgst;
+            $returnIgstTotal += $rIgst;
+
+            $validatedReturnItems[] = [
+                'item_id'          => $rItemId,
+                'item_name'        => $rBatch['item_name'],
+                'batch_id'         => (int)$rBatch['batch_id'],
+                'batch_no'         => $rBatch['batch_no'],
+                'expiry_date'      => $rBatch['expiry_date'],
+                'qty'              => $dispQty,
+                'sell_unit'        => $rSellUnit,
+                'units_per_pack'   => $rUnitsPerPack,
+                'total_units'      => $returnTotalUnits,
+                'unit_price'       => $effectiveRefundUnitRate,
+                'unit_mrp'         => $unitMrp,
+                'return_condition' => $rCondition,
+                'return_reason'    => $rReason,
+                'ref_sale_id'      => $refSaleId,
+                'ref_invoice_no'   => $refInvoiceNo,
+                'hsn_code'         => $rBatch['hsn_code'] ?: '3004',
+                'gst_rate'         => $rGstRate,
+                'taxable_value'    => $rTaxable,
+                'cgst_amount'      => $rCgst,
+                'sgst_amount'      => $rSgst,
+                'igst_amount'      => $rIgst,
+                'total_amount'     => -$lineReturnGross,
+                'line_refund_val'  => $lineReturnGross
+            ];
+
+            // Replenish stock if RESTOCKED
+            if ($rCondition === 'RESTOCKED') {
+                $stkRow = $this->db->table('mst_stock')
+                    ->where('store_id', $storeId)
+                    ->where('batch_id', (int)$rBatch['batch_id'])
+                    ->get()
+                    ->getRowArray();
+
+                if ($stkRow) {
+                    $this->db->table('mst_stock')
+                        ->where('stock_id', $stkRow['stock_id'])
+                        ->set('current_qty', 'current_qty + ' . $returnTotalUnits, false)
+                        ->update();
+                } else {
+                    $this->db->table('mst_stock')->insert([
+                        'store_id'        => $storeId,
+                        'item_id'         => $rItemId,
+                        'batch_id'        => (int)$rBatch['batch_id'],
+                        'current_qty'     => $returnTotalUnits,
+                        'reserved_qty'    => 0,
+                        'last_updated_at' => date('Y-m-d H:i:s')
+                    ]);
+                }
+
+                $this->db->table('mst_stock_audit')->insert([
+                    'store_id'      => $storeId,
+                    'item_id'       => $rItemId,
+                    'batch_id'      => (int)$rBatch['batch_id'],
+                    'audit_type'    => 'SALES_RETURN',
+                    'system_qty'    => $stkRow ? (int)$stkRow['current_qty'] : 0,
+                    'physical_qty'  => ($stkRow ? (int)$stkRow['current_qty'] : 0) + $returnTotalUnits,
+                    'variation_qty' => $returnTotalUnits,
+                    'rate'          => $effectiveRefundUnitRate,
+                    'total_value'   => $lineReturnGross,
+                    'remarks'       => "Customer Return/Exchange Restock (Bill $invoiceNo, Ref: $refInvoiceNo)",
+                    'conducted_by'  => (int)($json['user_id'] ?? 1),
+                    'created_at'    => date('Y-m-d H:i:s')
+                ]);
+            } else {
+                $this->db->table('mst_stock_audit')->insert([
+                    'store_id'      => $storeId,
+                    'item_id'       => $rItemId,
+                    'batch_id'      => (int)$rBatch['batch_id'],
+                    'audit_type'    => 'RETURN_DAMAGED_DISCARD',
+                    'system_qty'    => 0,
+                    'physical_qty'  => 0,
+                    'variation_qty' => 0,
+                    'rate'          => $effectiveRefundUnitRate,
+                    'total_value'   => $lineReturnGross,
+                    'remarks'       => "Customer returned damaged/discarded medicine (Bill $invoiceNo)",
+                    'conducted_by'  => (int)($json['user_id'] ?? 1),
+                    'created_at'    => date('Y-m-d H:i:s')
+                ]);
+            }
+        }
+
+        // 3. Net Calculation
+        $netSalesBeforeRound = $grossAmount - $totalDiscount;
+        $netBeforeRound = $netSalesBeforeRound - $grossReturnAmount;
         $netRounded = round($netBeforeRound);
         $roundOff = round($netRounded - $netBeforeRound, 2);
 
-        $paymentMode = trim($json['payment_mode'] ?? 'Cash'); // Cash, UPI, Card, Mixed, IPD_Credit
-        $cashPaid = (float)($json['cash_paid'] ?? ($paymentMode === 'Cash' ? $netRounded : 0));
-        $upiPaid = (float)($json['upi_paid'] ?? ($paymentMode === 'UPI' ? $netRounded : 0));
-        $cardPaid = (float)($json['card_paid'] ?? ($paymentMode === 'Card' ? $netRounded : 0));
-        $creditAmount = (float)($json['credit_amount'] ?? ($paymentMode === 'IPD_Credit' ? $netRounded : 0));
+        $isExchangeBill = (!empty($validatedReturnItems) ? 1 : 0);
+        $refundAmount = 0.00;
+        $refundMode = null;
+        $refundRefNo = null;
+
+        if ($netRounded >= 0) {
+            $finalNetPayable = $netRounded;
+            $paymentMode = trim($json['payment_mode'] ?? 'Cash'); // Cash, UPI, Card, Mixed, IPD_Credit
+            $cashPaid = (float)($json['cash_paid'] ?? ($paymentMode === 'Cash' ? $finalNetPayable : 0));
+            $upiPaid = (float)($json['upi_paid'] ?? ($paymentMode === 'UPI' ? $finalNetPayable : 0));
+            $cardPaid = (float)($json['card_paid'] ?? ($paymentMode === 'Card' ? $finalNetPayable : 0));
+            $creditAmount = (float)($json['credit_amount'] ?? ($paymentMode === 'IPD_Credit' ? $finalNetPayable : 0));
+        } else {
+            // Net is negative: Pharmacy refunds difference to patient
+            $finalNetPayable = 0.00;
+            $refundAmount = abs($netRounded);
+            $refundMode = trim($json['refund_mode'] ?? ($json['payment_mode'] ?? 'Cash'));
+            $refundRefNo = trim($json['refund_ref_no'] ?? ($json['upi_ref_no'] ?? ''));
+            $paymentMode = 'REFUND_' . strtoupper($refundMode);
+            $cashPaid = 0;
+            $upiPaid = 0;
+            $cardPaid = 0;
+            $creditAmount = 0;
+        }
+
         $bankName = trim($json['bank_name'] ?? '');
         $upiRefNo = trim($json['upi_ref_no'] ?? '');
         $cardRefNo = trim($json['card_ref_no'] ?? '');
@@ -868,7 +1093,6 @@ class MedicalStoreApi extends BaseController
         $abhaId = trim((string)($json['abha_id'] ?? ''));
         $abhaAddress = trim((string)($json['abha_address'] ?? ''));
 
-        // If not in payload but patient_id exists, look up patient_master
         if (($abhaId === '' || $abhaAddress === '') && $patientId > 0) {
             $pRow = $this->db->table('patient_master')
                 ->select('abha_id, abha_address')
@@ -881,39 +1105,42 @@ class MedicalStoreApi extends BaseController
             }
         }
 
-        // Generate unique ABDM Care Context Reference (e.g. PHARM-STMAIN-INV262700001)
+        // Generate unique ABDM Care Context Reference
         $cleanPrefix = preg_replace('/[^A-Za-z0-9]/', '', $store['store_code'] ?: 'STORE');
         $cleanInv = preg_replace('/[^A-Za-z0-9]/', '', $invoiceNo);
         $careContextRef = "PHARM-{$cleanPrefix}-{$cleanInv}";
         $careContextDisplay = "Pharmacy Dispensation - {$invoiceNo}";
 
-        // Build official ABDM FHIR R4 MedicationDispense Document Bundle
-        $fhirBuilder = new \App\Libraries\FhirR4Builder();
-        $patientData = [
-            'id'           => $patientId ?: 0,
-            'uhid'         => $json['uhid'] ?? '',
-            'p_code'       => $json['uhid'] ?? '',
-            'name'         => trim($json['patient_name'] ?? 'Patient'),
-            'p_fname'      => trim($json['patient_name'] ?? 'Patient'),
-            'phone'        => trim($json['patient_mobile'] ?? ''),
-            'mphone1'      => trim($json['patient_mobile'] ?? ''),
-            'gender'       => trim($json['gender'] ?? 'Male'),
-            'age'          => trim($json['age'] ?? '30'),
-            'abha_id'      => $abhaId,
-            'abha_address' => $abhaAddress
-        ];
+        // Build official ABDM FHIR R4 MedicationDispense Document Bundle (only for sale items if any)
+        $fhirBundleJson = null;
+        if (!empty($validatedItems)) {
+            $fhirBuilder = new \App\Libraries\FhirR4Builder();
+            $patientData = [
+                'id'           => $patientId ?: 0,
+                'uhid'         => $json['uhid'] ?? '',
+                'p_code'       => $json['uhid'] ?? '',
+                'name'         => trim($json['patient_name'] ?? 'Patient'),
+                'p_fname'      => trim($json['patient_name'] ?? 'Patient'),
+                'phone'        => trim($json['patient_mobile'] ?? ''),
+                'mphone1'      => trim($json['patient_mobile'] ?? ''),
+                'gender'       => trim($json['gender'] ?? 'Male'),
+                'age'          => trim($json['age'] ?? '30'),
+                'abha_id'      => $abhaId,
+                'abha_address' => $abhaAddress
+            ];
 
-        $fhirBundle = $fhirBuilder->buildPharmacyDispenseBundle($patientData, $store, [
-            'doctor_name'            => trim($json['doctor_name'] ?? ''),
-            'doctor_reg_no'          => trim($json['doctor_reg_no'] ?? ''),
-            'patient_name'           => trim($json['patient_name'] ?? 'Patient'),
-            'abha_id'                => $abhaId,
-            'abha_address'           => $abhaAddress,
-            'abdm_care_context_ref'  => $careContextRef,
-            'invoice_no'             => $invoiceNo
-        ], $validatedItems);
+            $fhirBundle = $fhirBuilder->buildPharmacyDispenseBundle($patientData, $store, [
+                'doctor_name'            => trim($json['doctor_name'] ?? ''),
+                'doctor_reg_no'          => trim($json['doctor_reg_no'] ?? ''),
+                'patient_name'           => trim($json['patient_name'] ?? 'Patient'),
+                'abha_id'                => $abhaId,
+                'abha_address'           => $abhaAddress,
+                'abdm_care_context_ref'  => $careContextRef,
+                'invoice_no'             => $invoiceNo
+            ], $validatedItems);
 
-        $fhirBundleJson = json_encode($fhirBundle, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+            $fhirBundleJson = json_encode($fhirBundle, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+        }
 
         // Create Sale Record
         $saleData = [
@@ -936,15 +1163,20 @@ class MedicalStoreApi extends BaseController
             'ward_name'                  => trim($json['ward_name'] ?? ''),
             'bed_no'                     => trim($json['bed_no'] ?? ''),
             'gross_amount'               => $grossAmount,
+            'return_amount'              => $grossReturnAmount,
+            'is_exchange_bill'           => $isExchangeBill,
             'discount_amount'            => $totalDiscount,
             'bill_discount_type'         => $wholeDiscType,
             'bill_discount_val'          => $wholeDiscVal,
-            'taxable_amount'             => $taxableTotal,
-            'cgst_amount'                => $cgstTotal,
-            'sgst_amount'                => $sgstTotal,
-            'igst_amount'                => $igstTotal,
+            'taxable_amount'             => max(0, $taxableTotal - $returnTaxableTotal),
+            'cgst_amount'                => max(0, $cgstTotal - $returnCgstTotal),
+            'sgst_amount'                => max(0, $sgstTotal - $returnSgstTotal),
+            'igst_amount'                => max(0, $igstTotal - $returnIgstTotal),
             'round_off'                  => $roundOff,
-            'net_amount'                 => $netRounded,
+            'net_amount'                 => $finalNetPayable,
+            'refund_amount'              => $refundAmount,
+            'refund_mode'                => $refundMode,
+            'refund_ref_no'              => $refundRefNo,
             'payment_mode'               => $paymentMode,
             'cash_paid'                  => $cashPaid,
             'upi_paid'                   => $upiPaid,
@@ -966,7 +1198,7 @@ class MedicalStoreApi extends BaseController
             'created_by'                 => (int)($json['user_id'] ?? 1)
         ];
 
-        // If IPD Credit, optionally link into ipd_invoice_item so hospital discharge handles it
+        // If IPD Credit, link into ipd_invoice_item so hospital discharge handles it
         if ($paymentMode === 'IPD_Credit' && !empty($json['ipd_id'])) {
             $ipdId = (int)$json['ipd_id'];
             if ($this->db->tableExists('ipd_invoice_item')) {
@@ -975,8 +1207,8 @@ class MedicalStoreApi extends BaseController
                     'item_name'     => "Pharmacy Medicines ({$invoiceNo})",
                     'item_desc'     => "Medicines dispensed from {$store['store_name']}",
                     'item_qty'      => 1,
-                    'item_price'    => $netRounded,
-                    'item_amount'   => $netRounded,
+                    'item_price'    => $finalNetPayable,
+                    'item_amount'   => $finalNetPayable,
                     'insert_date'   => date('Y-m-d H:i:s'),
                 ]);
                 $saleData['ipd_charge_id'] = $this->db->insertID();
@@ -986,8 +1218,8 @@ class MedicalStoreApi extends BaseController
         $this->db->table('mst_sales')->insert($saleData);
         $saleId = $this->db->insertID();
 
-        // Queue in hospital central ABDM Gateway Sync Outbox if table exists
-        if ((!empty($abhaAddress) || !empty($patientId)) && $this->db->tableExists('abdm_sync_record')) {
+        // Queue in central ABDM Gateway Sync Outbox if applicable
+        if ($fhirBundleJson && (!empty($abhaAddress) || !empty($patientId)) && $this->db->tableExists('abdm_sync_record')) {
             $this->db->table('abdm_sync_record')->insert([
                 'local_record_id'        => 'mst_sale_' . $saleId,
                 'local_patient_id'       => $patientId ?: 0,
@@ -1010,6 +1242,7 @@ class MedicalStoreApi extends BaseController
             $this->db->table('mst_sales_items')->insert([
                 'sale_id'         => $saleId,
                 'item_id'         => $vItem['item_id'],
+                'item_type'       => 'SALE',
                 'batch_id'        => $vItem['batch_id'],
                 'batch_no'        => $vItem['batch_no'],
                 'expiry_date'     => $vItem['expiry_date'],
@@ -1035,28 +1268,129 @@ class MedicalStoreApi extends BaseController
             ]);
         }
 
-        // Post Double-Entry Journal / Ledgers
-        $salesHead = $this->db->table('mst_account_heads')->where('head_code', '3001')->get()->getRowArray();
-        $cgstHead  = $this->db->table('mst_account_heads')->where('head_code', '2002')->get()->getRowArray();
-        $sgstHead  = $this->db->table('mst_account_heads')->where('head_code', '2003')->get()->getRowArray();
-        $igstHead  = $this->db->table('mst_account_heads')->where('head_code', '2004')->get()->getRowArray();
-        $discHead  = $this->db->table('mst_account_heads')->where('head_code', '4002')->get()->getRowArray();
+        // Insert Return Items
+        foreach ($validatedReturnItems as $vri) {
+            $this->db->table('mst_sales_items')->insert([
+                'sale_id'          => $saleId,
+                'item_id'          => $vri['item_id'],
+                'item_type'        => 'RETURN',
+                'return_condition' => $vri['return_condition'],
+                'ref_sale_id'      => $vri['ref_sale_id'],
+                'ref_invoice_no'   => $vri['ref_invoice_no'],
+                'return_reason'    => $vri['return_reason'],
+                'is_restocked'     => ($vri['return_condition'] === 'RESTOCKED' ? 1 : 0),
+                'batch_id'         => $vri['batch_id'],
+                'batch_no'         => $vri['batch_no'],
+                'expiry_date'      => $vri['expiry_date'],
+                'qty'              => $vri['qty'],
+                'sell_unit'        => $vri['sell_unit'],
+                'units_per_pack'   => $vri['units_per_pack'],
+                'total_units'      => $vri['total_units'],
+                'unit_price'       => $vri['unit_price'],
+                'loose_qty'        => ($vri['sell_unit'] === 'Tablet' ? $vri['total_units'] : 0),
+                'pack_qty'         => round($vri['total_units'] / $vri['units_per_pack'], 2),
+                'unit_mrp'         => $vri['unit_mrp'],
+                'discount_pct'     => 0,
+                'discount_amount'  => 0,
+                'hsn_code'         => $vri['hsn_code'],
+                'gst_rate'         => $vri['gst_rate'],
+                'taxable_value'    => -$vri['taxable_value'],
+                'cgst_amount'      => -$vri['cgst_amount'],
+                'sgst_amount'      => -$vri['sgst_amount'],
+                'igst_amount'      => -$vri['igst_amount'],
+                'total_amount'     => -$vri['line_refund_val']
+            ]);
+        }
 
-        // 1. Debit Cash/Bank/Patient
-        if ($cashPaid > 0) {
-            $cashHead = $this->db->table('mst_account_heads')->where('head_code', '1001')->get()->getRowArray();
+        // Standalone / Formal Credit Note Record if returns exist
+        $creditNoteNo = null;
+        if ($isExchangeBill) {
+            $cnPrefix = $store['credit_note_prefix'] ?: 'CRN/';
+            $cnSeq = (int)($store['next_credit_note_no'] ?? 1);
+            $creditNoteNo = $cnPrefix . str_pad((string)$cnSeq, 5, '0', STR_PAD_LEFT);
+            $this->db->table('mst_stores')->where('store_id', $storeId)->update(['next_credit_note_no' => $cnSeq + 1]);
+
+            $firstRefInvoice = $validatedReturnItems[0]['ref_invoice_no'] ?? $invoiceNo;
+            $firstRefSaleId = $validatedReturnItems[0]['ref_sale_id'] ?? null;
+
+            $this->db->table('mst_sale_returns')->insert([
+                'store_id'                 => $storeId,
+                'credit_note_no'           => $creditNoteNo,
+                'return_date'              => date('Y-m-d H:i:s'),
+                'original_sale_id'         => $firstRefSaleId,
+                'original_invoice_no'      => $firstRefInvoice ?: 'EXCHANGE',
+                'new_sale_id'              => $saleId,
+                'patient_id'               => $patientId,
+                'uhid'                     => $json['uhid'] ?? null,
+                'patient_name'             => trim($json['patient_name'] ?? 'Customer'),
+                'patient_mobile'           => trim($json['patient_mobile'] ?? ''),
+                'return_reason'            => $validatedReturnItems[0]['return_reason'] ?? 'Exchange Adjustment on ' . $invoiceNo,
+                'gross_refund_amount'      => $grossReturnAmount,
+                'discount_reversed_amount' => 0.00,
+                'taxable_refund_amount'    => $returnTaxableTotal,
+                'cgst_refund_amount'       => $returnCgstTotal,
+                'sgst_refund_amount'       => $returnSgstTotal,
+                'igst_refund_amount'       => $returnIgstTotal,
+                'round_off'                => 0.00,
+                'net_refund_amount'        => $grossReturnAmount,
+                'refund_mode'              => $refundAmount > 0 ? ($refundMode ?: 'Cash') : 'EXCHANGE_BILL_ADJUSTMENT',
+                'refund_ref_no'            => $refundRefNo ?: $invoiceNo,
+                'restock_condition'        => $validatedReturnItems[0]['return_condition'] ?? 'RESTOCKED',
+                'remarks'                  => "Adjusted against invoice $invoiceNo",
+                'created_by'               => (int)($json['user_id'] ?? 1),
+                'created_at'               => date('Y-m-d H:i:s')
+            ]);
+            $returnRecordId = $this->db->insertID();
+
+            foreach ($validatedReturnItems as $vri) {
+                $this->db->table('mst_sale_return_items')->insert([
+                    'return_id'          => $returnRecordId,
+                    'sale_item_id'       => null,
+                    'item_id'            => $vri['item_id'],
+                    'item_name'          => $vri['item_name'],
+                    'batch_id'           => $vri['batch_id'],
+                    'batch_no'           => $vri['batch_no'],
+                    'expiry_date'        => $vri['expiry_date'],
+                    'return_sell_unit'   => $vri['sell_unit'],
+                    'return_qty'         => $vri['qty'],
+                    'units_per_pack'     => $vri['units_per_pack'],
+                    'return_total_units' => $vri['total_units'],
+                    'unit_price'         => $vri['unit_price'],
+                    'refund_rate'        => $vri['unit_price'],
+                    'discount_pct'       => 0.00,
+                    'discount_amount'    => 0.00,
+                    'hsn_code'           => $vri['hsn_code'],
+                    'gst_rate'           => $vri['gst_rate'],
+                    'taxable_value'      => $vri['taxable_value'],
+                    'cgst_amount'        => $vri['cgst_amount'],
+                    'sgst_amount'        => $vri['sgst_amount'],
+                    'igst_amount'        => $vri['igst_amount'],
+                    'refund_amount'      => $vri['line_refund_val'],
+                    'is_restocked'       => ($vri['return_condition'] === 'RESTOCKED' ? 1 : 0)
+                ]);
+            }
+        }
+
+        // Double-Entry Journal Postings
+        $salesHead  = $this->db->table('mst_account_heads')->where('head_code', '3001')->get()->getRowArray();
+        $retHead    = $this->db->table('mst_account_heads')->where('head_code', '3005')->get()->getRowArray();
+        $cgstHead   = $this->db->table('mst_account_heads')->where('head_code', '2002')->get()->getRowArray();
+        $sgstHead   = $this->db->table('mst_account_heads')->where('head_code', '2003')->get()->getRowArray();
+        $igstHead   = $this->db->table('mst_account_heads')->where('head_code', '2004')->get()->getRowArray();
+        $discHead   = $this->db->table('mst_account_heads')->where('head_code', '4002')->get()->getRowArray();
+        $cashHead   = $this->db->table('mst_account_heads')->where('head_code', '1001')->get()->getRowArray();
+        $bankHead   = $this->db->table('mst_account_heads')->where('head_code', '1002')->get()->getRowArray();
+
+        // 1. Debit Cash/Bank/Debtor for positive payments
+        if ($cashPaid > 0 && $cashHead) {
             $this->db->table('mst_ledger_entries')->insert([
                 'store_id' => $storeId, 'voucher_no' => $invoiceNo, 'voucher_type' => 'SALE', 'voucher_date' => date('Y-m-d'),
                 'account_head_id' => $cashHead['head_id'], 'debit_amount' => $cashPaid, 'credit_amount' => 0,
                 'reference_type' => 'sales_invoice', 'reference_id' => $saleId, 'narration' => "Cash received for bill $invoiceNo"
             ]);
         }
-        if ($upiPaid > 0 || $cardPaid > 0) {
-            $bankHead = $this->db->table('mst_account_heads')->where('head_code', '1002')->get()->getRowArray();
-            $refDetails = [];
-            if (!empty($upiRefNo)) $refDetails[] = "UTR: {$upiRefNo}";
-            if (!empty($cardRefNo)) $refDetails[] = "Card Auth: {$cardRefNo}";
-            if (!empty($bankName)) $refDetails[] = "Bank: {$bankName}";
+        if (($upiPaid + $cardPaid) > 0 && $bankHead) {
+            $refDetails = array_filter([$bankName ? "Bank: $bankName" : null, $upiRefNo ? "UPI Ref: $upiRefNo" : null, $cardRefNo ? "Card Auth: $cardRefNo" : null]);
             $narrationExtra = !empty($refDetails) ? " (" . implode(', ', $refDetails) . ")" : "";
             $auditRef = !empty($upiRefNo) ? $upiRefNo : $cardRefNo;
 
@@ -1071,12 +1405,28 @@ class MedicalStoreApi extends BaseController
         if ($creditAmount > 0) {
             $debtorHeadCode = ($paymentMode === 'IPD_Credit') ? '1005' : '1004';
             $debtorHead = $this->db->table('mst_account_heads')->where('head_code', $debtorHeadCode)->get()->getRowArray();
-            $this->db->table('mst_ledger_entries')->insert([
-                'store_id' => $storeId, 'voucher_no' => $invoiceNo, 'voucher_type' => 'SALE', 'voucher_date' => date('Y-m-d'),
-                'account_head_id' => $debtorHead['head_id'], 'debit_amount' => $creditAmount, 'credit_amount' => 0,
-                'reference_type' => 'sales_invoice', 'reference_id' => $saleId, 'narration' => "Credit/IPD charge for bill $invoiceNo"
-            ]);
+            if ($debtorHead) {
+                $this->db->table('mst_ledger_entries')->insert([
+                    'store_id' => $storeId, 'voucher_no' => $invoiceNo, 'voucher_type' => 'SALE', 'voucher_date' => date('Y-m-d'),
+                    'account_head_id' => $debtorHead['head_id'], 'debit_amount' => $creditAmount, 'credit_amount' => 0,
+                    'reference_type' => 'sales_invoice', 'reference_id' => $saleId, 'narration' => "Credit/IPD charge for bill $invoiceNo"
+                ]);
+            }
         }
+
+        // If net refund was paid to customer:
+        if ($refundAmount > 0) {
+            $refundAccountHead = ($refundMode === 'UPI' && $bankHead) ? $bankHead : $cashHead;
+            if ($refundAccountHead) {
+                $this->db->table('mst_ledger_entries')->insert([
+                    'store_id' => $storeId, 'voucher_no' => $invoiceNo, 'voucher_type' => 'SALES_RETURN', 'voucher_date' => date('Y-m-d'),
+                    'account_head_id' => $refundAccountHead['head_id'], 'debit_amount' => 0, 'credit_amount' => $refundAmount,
+                    'reference_type' => 'sales_return', 'reference_id' => $saleId, 'narration' => "Refund paid to customer ($refundMode) on bill $invoiceNo"
+                ]);
+            }
+        }
+
+        // Discount allowed
         if ($totalDiscount > 0 && $discHead) {
             $this->db->table('mst_ledger_entries')->insert([
                 'store_id' => $storeId, 'voucher_no' => $invoiceNo, 'voucher_type' => 'SALE', 'voucher_date' => date('Y-m-d'),
@@ -1085,32 +1435,47 @@ class MedicalStoreApi extends BaseController
             ]);
         }
 
-        // 2. Credit Sales & Output Tax
-        if ($salesHead) {
+        // Credit Sales & Output Tax for New Items
+        if ($taxableTotal > 0 && $salesHead) {
             $this->db->table('mst_ledger_entries')->insert([
                 'store_id' => $storeId, 'voucher_no' => $invoiceNo, 'voucher_type' => 'SALE', 'voucher_date' => date('Y-m-d'),
                 'account_head_id' => $salesHead['head_id'], 'debit_amount' => 0, 'credit_amount' => $taxableTotal,
                 'reference_type' => 'sales_invoice', 'reference_id' => $saleId, 'narration' => "Taxable Pharmacy Sales $invoiceNo"
             ]);
         }
-        if ($cgstTotal > 0 && $cgstHead) {
+
+        // Debit Sales Returns for returned items
+        if ($returnTaxableTotal > 0 && $retHead) {
+            $this->db->table('mst_ledger_entries')->insert([
+                'store_id' => $storeId, 'voucher_no' => $invoiceNo, 'voucher_type' => 'SALES_RETURN', 'voucher_date' => date('Y-m-d'),
+                'account_head_id' => $retHead['head_id'], 'debit_amount' => $returnTaxableTotal, 'credit_amount' => 0,
+                'reference_type' => 'sales_return', 'reference_id' => $saleId, 'narration' => "Sales Return adjustment on bill $invoiceNo"
+            ]);
+        }
+
+        // Net GST Output Liability
+        $netCgst = max(0, $cgstTotal - $returnCgstTotal);
+        $netSgst = max(0, $sgstTotal - $returnSgstTotal);
+        $netIgst = max(0, $igstTotal - $returnIgstTotal);
+
+        if ($netCgst > 0 && $cgstHead) {
             $this->db->table('mst_ledger_entries')->insert([
                 'store_id' => $storeId, 'voucher_no' => $invoiceNo, 'voucher_type' => 'SALE', 'voucher_date' => date('Y-m-d'),
-                'account_head_id' => $cgstHead['head_id'], 'debit_amount' => 0, 'credit_amount' => $cgstTotal,
+                'account_head_id' => $cgstHead['head_id'], 'debit_amount' => 0, 'credit_amount' => $netCgst,
                 'reference_type' => 'sales_invoice', 'reference_id' => $saleId, 'narration' => "Output CGST on $invoiceNo"
             ]);
         }
-        if ($sgstTotal > 0 && $sgstHead) {
+        if ($netSgst > 0 && $sgstHead) {
             $this->db->table('mst_ledger_entries')->insert([
                 'store_id' => $storeId, 'voucher_no' => $invoiceNo, 'voucher_type' => 'SALE', 'voucher_date' => date('Y-m-d'),
-                'account_head_id' => $sgstHead['head_id'], 'debit_amount' => 0, 'credit_amount' => $sgstTotal,
+                'account_head_id' => $sgstHead['head_id'], 'debit_amount' => 0, 'credit_amount' => $netSgst,
                 'reference_type' => 'sales_invoice', 'reference_id' => $saleId, 'narration' => "Output SGST on $invoiceNo"
             ]);
         }
-        if ($igstTotal > 0 && $igstHead) {
+        if ($netIgst > 0 && $igstHead) {
             $this->db->table('mst_ledger_entries')->insert([
                 'store_id' => $storeId, 'voucher_no' => $invoiceNo, 'voucher_type' => 'SALE', 'voucher_date' => date('Y-m-d'),
-                'account_head_id' => $igstHead['head_id'], 'debit_amount' => 0, 'credit_amount' => $igstTotal,
+                'account_head_id' => $igstHead['head_id'], 'debit_amount' => 0, 'credit_amount' => $netIgst,
                 'reference_type' => 'sales_invoice', 'reference_id' => $saleId, 'narration' => "Output IGST on $invoiceNo"
             ]);
         }
@@ -1118,15 +1483,21 @@ class MedicalStoreApi extends BaseController
         $this->db->transComplete();
 
         if ($this->db->transStatus() === false) {
-            return $this->response->setStatusCode(500)->setJSON(['status' => 0, 'message' => 'Failed to process sales invoice.']);
+            return $this->response->setStatusCode(500)->setJSON(['status' => 0, 'message' => 'Failed to process sales/exchange transaction.']);
         }
 
         return $this->response->setJSON([
             'status' => 1,
-            'message' => 'Invoice generated successfully.',
+            'message' => $isExchangeBill ? ($refundAmount > 0 ? 'Exchange/Return completed with patient refund.' : 'Exchange bill generated successfully.') : 'Invoice generated successfully.',
             'sale_id' => $saleId,
             'invoice_no' => $invoiceNo,
-            'net_amount' => $netRounded,
+            'credit_note_no' => $creditNoteNo,
+            'gross_sales' => round($grossAmount, 2),
+            'return_amount' => round($grossReturnAmount, 2),
+            'is_exchange_bill' => $isExchangeBill,
+            'net_amount' => $finalNetPayable,
+            'refund_amount' => $refundAmount,
+            'refund_mode' => $refundMode,
             'abdm' => [
                 'abha_id' => $abhaId,
                 'abha_address' => $abhaAddress,
@@ -1156,9 +1527,19 @@ class MedicalStoreApi extends BaseController
             ->get()
             ->getResultArray();
 
-        // Build HSN summary table for Indian GST invoice standard
-        $hsnSummary = [];
+        $saleItems = [];
+        $returnItems = [];
         foreach ($items as $it) {
+            if (($it['item_type'] ?? 'SALE') === 'RETURN') {
+                $returnItems[] = $it;
+            } else {
+                $saleItems[] = $it;
+            }
+        }
+
+        // Build HSN summary table for Indian GST invoice standard (for sale items)
+        $hsnSummary = [];
+        foreach ($saleItems as $it) {
             $hsn = $it['hsn_code'] ?: '3004';
             $rate = (string)$it['gst_rate'];
             $key = $hsn . '_' . $rate;
@@ -1180,6 +1561,12 @@ class MedicalStoreApi extends BaseController
             $hsnSummary[$key]['total_tax']     += ((float)$it['cgst_amount'] + (float)$it['sgst_amount'] + (float)$it['igst_amount']);
         }
 
+        // Check if there is a linked credit note in mst_sale_returns
+        $creditNote = null;
+        if (!empty($sale['is_exchange_bill'])) {
+            $creditNote = $this->db->table('mst_sale_returns')->where('new_sale_id', $saleId)->get()->getRowArray();
+        }
+
         // Dynamic UPI QR string
         $upiQrString = '';
         if (!empty($sale['upi_id'])) {
@@ -1189,7 +1576,10 @@ class MedicalStoreApi extends BaseController
         return $this->response->setJSON([
             'status' => 1,
             'sale' => $sale,
-            'items' => $items,
+            'items' => $saleItems,
+            'return_items' => $returnItems,
+            'all_items' => $items,
+            'credit_note' => $creditNote,
             'hsn_summary' => array_values($hsnSummary),
             'upi_qr_string' => $upiQrString
         ]);
@@ -1748,6 +2138,8 @@ class MedicalStoreApi extends BaseController
             ->getResultArray();
 
         $totalSales = 0;
+        $totalReturns = 0;
+        $totalRefunds = 0;
         $cashTotal = 0;
         $upiTotal = 0;
         $cardTotal = 0;
@@ -1757,8 +2149,23 @@ class MedicalStoreApi extends BaseController
 
         foreach ($sales as $s) {
             $totalSales += (float)$s['net_amount'];
-            $cashTotal += (float)$s['cash_paid'];
-            $upiTotal += (float)$s['upi_paid'];
+            $retAmt = (float)($s['return_amount'] ?? 0);
+            $totalReturns += $retAmt;
+            $refAmt = (float)($s['refund_amount'] ?? 0);
+            $totalRefunds += $refAmt;
+
+            $cPaid = (float)$s['cash_paid'];
+            if ($refAmt > 0 && ($s['refund_mode'] ?? 'Cash') === 'Cash') {
+                $cPaid -= $refAmt;
+            }
+            $cashTotal += $cPaid;
+
+            $uPaid = (float)$s['upi_paid'];
+            if ($refAmt > 0 && ($s['refund_mode'] ?? '') === 'UPI') {
+                $uPaid -= $refAmt;
+            }
+            $upiTotal += $uPaid;
+
             $cardTotal += (float)$s['card_paid'];
             $creditTotal += (float)$s['credit_amount'];
             $cgstTotal += (float)$s['cgst_amount'];
@@ -1772,6 +2179,8 @@ class MedicalStoreApi extends BaseController
             'summary' => [
                 'total_invoices' => count($sales),
                 'total_sales'    => round($totalSales, 2),
+                'total_returns'  => round($totalReturns, 2),
+                'total_refunds'  => round($totalRefunds, 2),
                 'cash_in_drawer' => round($cashTotal, 2),
                 'upi_collection' => round($upiTotal, 2),
                 'card_swipes'    => round($cardTotal, 2),
@@ -2161,6 +2570,138 @@ class MedicalStoreApi extends BaseController
         return $this->response->setJSON([
             'status'  => 1,
             'message' => 'ABHA details linked to invoice successfully. ABDM synchronization scheduled.'
+        ]);
+    }
+
+    public function lookupInvoiceForReturn()
+    {
+        $q = trim($this->request->getGet('q') ?? '');
+        $storeId = (int)($this->request->getGet('store_id') ?? 1);
+
+        if (empty($q)) {
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Please provide an invoice number, UHID, or patient mobile.']);
+        }
+
+        $sales = $this->db->table('mst_sales')
+            ->where('store_id', $storeId)
+            ->groupStart()
+                ->where('invoice_no', $q)
+                ->orLike('invoice_no', $q)
+                ->orWhere('uhid', $q)
+                ->orWhere('patient_mobile', $q)
+            ->groupEnd()
+            ->orderBy('sale_id', 'DESC')
+            ->limit(5)
+            ->get()
+            ->getResultArray();
+
+        if (empty($sales)) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'No sales invoice found matching "' . $q . '".']);
+        }
+
+        $results = [];
+        foreach ($sales as $sale) {
+            $items = $this->db->table('mst_sales_items si')
+                ->select('si.*, i.item_name, i.generic_name, i.category, i.unit_pack')
+                ->join('mst_items i', 'i.item_id = si.item_id')
+                ->where('si.sale_id', $sale['sale_id'])
+                ->where('si.item_type', 'SALE')
+                ->get()
+                ->getResultArray();
+
+            $processedItems = [];
+            foreach ($items as $it) {
+                // Check how many units have already been returned for this sale + item + batch
+                $returnedUnits = (int)$this->db->table('mst_sales_items')
+                    ->where('ref_sale_id', $sale['sale_id'])
+                    ->where('item_id', $it['item_id'])
+                    ->where('batch_id', $it['batch_id'])
+                    ->where('item_type', 'RETURN')
+                    ->selectSum('total_units', 'tot_ret')
+                    ->get()
+                    ->getRowArray()['tot_ret'] ?? 0;
+
+                $soldUnits = (int)$it['total_units'];
+                $remainingUnits = max(0, $soldUnits - $returnedUnits);
+                $unitsPerPack = max(1, (int)$it['units_per_pack']);
+
+                $processedItems[] = [
+                    'sale_item_id'            => $it['sale_item_id'],
+                    'item_id'                 => $it['item_id'],
+                    'item_name'               => $it['item_name'],
+                    'generic_name'            => $it['generic_name'] ?? '',
+                    'category'                => $it['category'] ?? 'Tablet',
+                    'batch_id'                => $it['batch_id'],
+                    'batch_no'                => $it['batch_no'],
+                    'expiry_date'             => $it['expiry_date'],
+                    'unit_pack'               => $it['unit_pack'] ?? '10 Tablets',
+                    'units_per_pack'          => $unitsPerPack,
+                    'sold_sell_unit'          => $it['sell_unit'],
+                    'sold_qty'                => $it['qty'],
+                    'sold_total_units'        => $soldUnits,
+                    'already_returned_units'  => $returnedUnits,
+                    'remaining_units'         => $remainingUnits,
+                    'remaining_strips'        => floor($remainingUnits / $unitsPerPack),
+                    'remaining_loose'         => $remainingUnits % $unitsPerPack,
+                    'effective_unit_price'    => round((float)$it['total_amount'] / max(1, $soldUnits), 2),
+                    'unit_mrp'                => (float)$it['unit_mrp'],
+                    'gst_rate'                => (float)$it['gst_rate'],
+                    'hsn_code'                => $it['hsn_code']
+                ];
+            }
+
+            $results[] = [
+                'sale'  => $sale,
+                'items' => $processedItems
+            ];
+        }
+
+        return $this->response->setJSON([
+            'status'  => 1,
+            'results' => $results
+        ]);
+    }
+
+    public function recentReturns()
+    {
+        $storeId = (int)($this->request->getGet('store_id') ?? 1);
+        $returns = $this->db->table('mst_sale_returns')
+            ->where('store_id', $storeId)
+            ->orderBy('return_id', 'DESC')
+            ->limit(30)
+            ->get()
+            ->getResultArray();
+
+        return $this->response->setJSON([
+            'status'  => 1,
+            'returns' => $returns
+        ]);
+    }
+
+    public function getCreditNoteInvoice(int $cnId)
+    {
+        $cn = $this->db->table('mst_sale_returns r')
+            ->select('r.*, st.store_name, st.building_name, st.floor_no, st.drug_license_no_20b, st.drug_license_no_21b, st.gstin, st.state_code, st.state_name, st.registered_pharmacist_name, st.contact_phone, st.address as store_address, st.upi_id')
+            ->join('mst_stores st', 'st.store_id = r.store_id')
+            ->where('r.return_id', $cnId)
+            ->get()
+            ->getRowArray();
+
+        if (!$cn) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Credit note not found.']);
+        }
+
+        $items = $this->db->table('mst_sale_return_items ri')
+            ->select('ri.*, i.unit_pack, i.generic_name')
+            ->join('mst_items i', 'i.item_id = ri.item_id')
+            ->where('ri.return_id', $cnId)
+            ->get()
+            ->getResultArray();
+
+        return $this->response->setJSON([
+            'status'      => 1,
+            'credit_note' => $cn,
+            'items'       => $items
         ]);
     }
 }
