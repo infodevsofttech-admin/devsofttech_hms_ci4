@@ -1641,6 +1641,25 @@ class MedicalStoreApi extends BaseController
         return $this->response->setJSON(['status' => 1, 'message' => 'Supplier saved successfully.', 'supplier_id' => $id]);
     }
 
+    public function deleteSupplier()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $id = (int)($json['supplier_id'] ?? 0);
+        if ($id <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Invalid supplier ID.']);
+        }
+
+        // Check if supplier is referenced in purchases
+        $hasPurchases = $this->db->table('mst_purchases')->where('supplier_id', $id)->countAllResults();
+        if ($hasPurchases > 0) {
+            $this->db->table('mst_suppliers')->where('supplier_id', $id)->update(['is_active' => 0]);
+            return $this->response->setJSON(['status' => 1, 'message' => 'Supplier deactivated (cannot delete because purchase bills are linked).']);
+        }
+
+        $this->db->table('mst_suppliers')->where('supplier_id', $id)->delete();
+        return $this->response->setJSON(['status' => 1, 'message' => 'Supplier removed successfully.']);
+    }
+
     public function savePurchase()
     {
         $json = $this->request->getJSON(true) ?: $this->request->getPost();
