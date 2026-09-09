@@ -4067,6 +4067,352 @@ function PurchaseView({ store, notify }) {
         { item_id: 0, item_name: '', generic_name: '', category: 'Tablet', batch_no: '', expiry_date: '', qty_packs: 1, free_qty_packs: 0, units_per_pack: 10, mrp: 0, ptr: 0, discount_pct: 0, gst_rate: 12, hsn_code: '3004' }
     ]);
 
+    // --- Supplier Ledger & Payments States ---
+    const [ledgerSummary, setLedgerSummary] = useState([]);
+    const [ledgerOverall, setLedgerOverall] = useState({ total_purchases: 0, total_paid: 0, outstanding_balance: 0, total_pending_bills: 0, total_suppliers: 0 });
+    const [activeLedgerSupplierId, setActiveLedgerSupplierId] = useState('');
+    const [activeLedgerDetail, setActiveLedgerDetail] = useState(null);
+    const [isLoadingLedger, setIsLoadingLedger] = useState(false);
+    const [showPaymentModal, setShowPaymentModal] = useState(false);
+    const [isRecordingPayment, setIsRecordingPayment] = useState(false);
+    const [paymentForm, setPaymentForm] = useState({
+        supplier_id: '',
+        purchase_id: '',
+        amount: '',
+        payment_mode: 'Bank',
+        reference_no: '',
+        bank_name: '',
+        payment_date: new Date().toISOString().split('T')[0],
+        remarks: ''
+    });
+
+    // --- Short Items / Deficiency Reorder States ---
+    const [shortItems, setShortItems] = useState([]);
+    const [selectedShortItemIds, setSelectedShortItemIds] = useState([]);
+    const [shortFilter, setShortFilter] = useState('all'); // all, out_of_stock, low_stock
+    const [shortSearch, setShortSearch] = useState('');
+    const [isLoadingShortItems, setIsLoadingShortItems] = useState(false);
+    const [showQuickReorderModal, setShowQuickReorderModal] = useState(false);
+    const [quickReorderForm, setQuickReorderForm] = useState({ item_id: '', item_name: '', min_reorder_level: 10 });
+    const [isSavingShortItem, setIsSavingShortItem] = useState(false);
+
+    // --- Purchase Orders States ---
+    const [purchaseOrders, setPurchaseOrders] = useState([]);
+    const [poStatusFilter, setPoStatusFilter] = useState('all');
+    const [isLoadingPOs, setIsLoadingPOs] = useState(false);
+    const [showPoCreateModal, setShowPoCreateModal] = useState(false);
+    const [poCreateForm, setPoCreateForm] = useState({
+        supplier_id: '',
+        expected_delivery_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+        remarks: '',
+        items: []
+    });
+    const [isSavingPO, setIsSavingPO] = useState(false);
+    const [showPoViewModal, setShowPoViewModal] = useState(false);
+    const [activeViewPo, setActiveViewPo] = useState(null);
+    const [loadedPoId, setLoadedPoId] = useState(null);
+    const [loadedPoNumber, setLoadedPoNumber] = useState('');
+
+    // --- Data Fetching & Action Handlers ---
+    const fetchLedgerSummary = async () => {
+        setIsLoadingLedger(true);
+        try {
+            const res = await fetch(API_BASE + 'suppliers/ledger-summary');
+            const data = await res.json();
+            if (data.status) {
+                setLedgerSummary(data.suppliers || []);
+                if (data.summary) setLedgerOverall(data.summary);
+            }
+        } catch (e) {
+            console.error('fetchLedgerSummary error:', e);
+        } finally {
+            setIsLoadingLedger(false);
+        }
+    };
+
+    const fetchSupplierLedger = async (supplierId) => {
+        if (!supplierId) {
+            setActiveLedgerDetail(null);
+            return;
+        }
+        setIsLoadingLedger(true);
+        try {
+            const res = await fetch(API_BASE + 'suppliers/ledger/' + supplierId);
+            const data = await res.json();
+            if (data.status) {
+                setActiveLedgerDetail(data);
+            } else {
+                notify(data.message || 'Failed to fetch supplier ledger.', 'error');
+            }
+        } catch (e) {
+            notify('Error fetching ledger: ' + e.message, 'error');
+        } finally {
+            setIsLoadingLedger(false);
+        }
+    };
+
+    const openPaymentModal = (supplierId, purchaseId = 0, defaultAmount = 0) => {
+        const sId = supplierId ? String(supplierId) : (activeLedgerSupplierId || '');
+        setPaymentForm({
+            supplier_id: sId,
+            purchase_id: purchaseId ? String(purchaseId) : '',
+            amount: defaultAmount > 0 ? defaultAmount : '',
+            payment_mode: 'Bank',
+            reference_no: '',
+            bank_name: '',
+            payment_date: new Date().toISOString().split('T')[0],
+            remarks: purchaseId ? ('Payment for invoice #' + purchaseId) : 'On-account settlement'
+        });
+        setShowPaymentModal(true);
+    };
+
+    const handleRecordPayment = async (e) => {
+        if (e) e.preventDefault();
+        const supId = Number(paymentForm.supplier_id);
+        const amt = parseFloat(paymentForm.amount);
+        if (!supId || isNaN(amt) || amt <= 0) {
+            notify('Please specify a supplier and valid payment amount.', 'error');
+            return;
+        }
+
+        setIsRecordingPayment(true);
+        try {
+            const res = await fetch(API_BASE + 'suppliers/record-payment', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    store_id: store.store_id,
+                    supplier_id: supId,
+                    purchase_id: Number(paymentForm.purchase_id) || 0,
+                    amount: amt,
+                    payment_mode: paymentForm.payment_mode,
+                    reference_no: paymentForm.reference_no,
+                    bank_name: paymentForm.bank_name,
+                    payment_date: paymentForm.payment_date,
+                    remarks: paymentForm.remarks
+                })
+            });
+            const data = await res.json();
+            if (data.status) {
+                notify('Payment recorded! Voucher #' + data.voucher_no, 'success');
+                setShowPaymentModal(false);
+                fetchLedgerSummary();
+                if (activeLedgerSupplierId && String(activeLedgerSupplierId) === String(supId)) {
+                    fetchSupplierLedger(supId);
+                }
+            } else {
+                notify(data.message || 'Failed to record payment.', 'error');
+            }
+        } catch (err) {
+            notify('Payment error: ' + err.message, 'error');
+        } finally {
+            setIsRecordingPayment(false);
+        }
+    };
+
+    const fetchShortItems = async () => {
+        setIsLoadingShortItems(true);
+        try {
+            const res = await fetch(API_BASE + 'stock/short-items?store_id=' + store.store_id);
+            const data = await res.json();
+            if (data.status) {
+                setShortItems(data.short_items || []);
+            }
+        } catch (e) {
+            console.error('fetchShortItems error:', e);
+        } finally {
+            setIsLoadingShortItems(false);
+        }
+    };
+
+    const handleSaveShortItemFlag = async (e) => {
+        if (e) e.preventDefault();
+        if (!quickReorderForm.item_id) {
+            notify('Please select an item to track in Short Book.', 'error');
+            return;
+        }
+        setIsSavingShortItem(true);
+        try {
+            const res = await fetch(API_BASE + 'stock/flag-short-item', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    item_id: Number(quickReorderForm.item_id),
+                    min_reorder_level: Number(quickReorderForm.min_reorder_level) || 10
+                })
+            });
+            const data = await res.json();
+            if (data.status) {
+                notify(data.message || 'Item updated in Short Book!', 'success');
+                setShowQuickReorderModal(false);
+                fetchShortItems();
+            } else {
+                notify(data.message || 'Failed to update reorder level.', 'error');
+            }
+        } catch (err) {
+            notify('Error: ' + err.message, 'error');
+        } finally {
+            setIsSavingShortItem(false);
+        }
+    };
+
+    const fetchPurchaseOrders = async () => {
+        setIsLoadingPOs(true);
+        try {
+            const res = await fetch(API_BASE + 'purchase-orders?store_id=' + store.store_id + '&status=' + poStatusFilter);
+            const data = await res.json();
+            if (data.status) {
+                setPurchaseOrders(data.purchase_orders || []);
+            }
+        } catch (e) {
+            console.error('fetchPurchaseOrders error:', e);
+        } finally {
+            setIsLoadingPOs(false);
+        }
+    };
+
+    const openCreatePoFromShortItems = () => {
+        const selected = shortItems.filter(it => selectedShortItemIds.includes(it.item_id));
+        if (selected.length === 0) {
+            notify('Please select at least one item from the short list.', 'warning');
+            return;
+        }
+
+        const defaultSupplier = selected.find(s => s.last_supplier_id > 0)?.last_supplier_id || (suppliers[0]?.supplier_id || '');
+
+        setPoCreateForm({
+            supplier_id: defaultSupplier ? String(defaultSupplier) : '',
+            expected_delivery_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+            remarks: 'Replenishment purchase order from hospital deficiency book',
+            items: selected.map(it => ({
+                item_id: it.item_id,
+                item_name: it.item_name,
+                generic_name: it.generic_name || '',
+                category: it.category || 'Tablet',
+                order_packs: it.suggested_packs || 1,
+                units_per_pack: it.units_per_pack || 10,
+                estimated_ptr: it.last_ptr || 0,
+                gst_rate: it.gst_rate || 12
+            }))
+        });
+        setShowPoCreateModal(true);
+    };
+
+    const handleSavePurchaseOrder = async (e) => {
+        if (e) e.preventDefault();
+        const supId = Number(poCreateForm.supplier_id);
+        if (!supId || poCreateForm.items.length === 0) {
+            notify('Supplier and at least one line item are required for PO.', 'error');
+            return;
+        }
+
+        setIsSavingPO(true);
+        try {
+            const res = await fetch(API_BASE + 'purchase-orders/save', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    store_id: store.store_id,
+                    supplier_id: supId,
+                    expected_delivery_date: poCreateForm.expected_delivery_date,
+                    remarks: poCreateForm.remarks,
+                    items: poCreateForm.items
+                })
+            });
+            const data = await res.json();
+            if (data.status) {
+                notify('Purchase Order ' + data.po_number + ' created successfully!', 'success');
+                setShowPoCreateModal(false);
+                setSelectedShortItemIds([]);
+                fetchPurchaseOrders();
+                setSubTab('purchase_orders');
+            } else {
+                notify(data.message || 'Failed to create PO.', 'error');
+            }
+        } catch (err) {
+            notify('PO error: ' + err.message, 'error');
+        } finally {
+            setIsSavingPO(false);
+        }
+    };
+
+    const handleViewPo = async (poId) => {
+        try {
+            const res = await fetch(API_BASE + 'purchase-orders/' + poId);
+            const data = await res.json();
+            if (data.status) {
+                setActiveViewPo(data);
+                setShowPoViewModal(true);
+            } else {
+                notify(data.message || 'PO not found', 'error');
+            }
+        } catch (err) {
+            notify('Error loading PO: ' + err.message, 'error');
+        }
+    };
+
+    const handleCancelPo = async (poId) => {
+        if (!confirm('Are you sure you want to cancel this Purchase Order?')) return;
+        try {
+            const res = await fetch(API_BASE + 'purchase-orders/cancel', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ po_id: poId })
+            });
+            const data = await res.json();
+            if (data.status) {
+                notify(data.message || 'PO cancelled', 'success');
+                fetchPurchaseOrders();
+            } else {
+                notify(data.message || 'Failed to cancel PO', 'error');
+            }
+        } catch (err) {
+            notify('Error: ' + err.message, 'error');
+        }
+    };
+
+    const loadPoIntoInwardBill = async (poId) => {
+        try {
+            const res = await fetch(API_BASE + 'purchase-orders/' + poId);
+            const data = await res.json();
+            if (data.status && data.purchase_order) {
+                const po = data.purchase_order;
+                const poItems = data.items || [];
+                setSelectedSupplierId(String(po.supplier_id));
+                setLoadedPoId(po.po_id);
+                setLoadedPoNumber(po.po_number);
+                setInvoiceNo('INV-' + po.po_number);
+
+                if (poItems.length > 0) {
+                    setRows(poItems.map(it => ({
+                        item_id: it.item_id || 0,
+                        item_name: it.item_name,
+                        generic_name: it.generic_name || '',
+                        category: it.category || 'Tablet',
+                        batch_no: '',
+                        expiry_date: '',
+                        qty_packs: it.order_packs || 1,
+                        free_qty_packs: 0,
+                        units_per_pack: it.units_per_pack || 10,
+                        mrp: it.estimated_ptr ? Math.round(Number(it.estimated_ptr) * 1.35) : 0,
+                        ptr: Number(it.estimated_ptr) || 0,
+                        discount_pct: 0,
+                        gst_rate: Number(it.gst_rate) || 12,
+                        hsn_code: '3004'
+                    })));
+                }
+
+                setSubTab('inward');
+                setShowPoViewModal(false);
+                notify('Loaded ' + poItems.length + ' items from ' + po.po_number + '. Verify batch & expiry to record inward bill.', 'info');
+            } else {
+                notify('Could not load PO details.', 'error');
+            }
+        } catch (err) {
+            notify('Error loading PO: ' + err.message, 'error');
+        }
+    };
+
     useEffect(() => {
         fetchSuppliers();
         fetchMasterSupportData();
@@ -4375,13 +4721,16 @@ function PurchaseView({ store, notify }) {
                     supplier_id: Number(selectedSupplierId),
                     supplier_invoice_no: invoiceNo,
                     invoice_date: invoiceDate,
+                    po_id: loadedPoId || undefined,
                     items: itemsPayload
                 })
             });
             const data = await res.json();
             if (data.status) {
-                notify('Purchase inward recorded! Supplier Ledger & Stock updated.', 'success');
+                notify('Purchase inward recorded! Stock & Supplier Ledger updated.' + (loadedPoNumber ? (' (PO ' + loadedPoNumber + ' marked as received)') : ''), 'success');
                 setInvoiceNo('');
+                setLoadedPoId(null);
+                setLoadedPoNumber('');
                 setRows([{ item_id: 0, item_name: '', generic_name: '', category: 'Tablet', batch_no: '', expiry_date: '', qty_packs: 1, free_qty_packs: 0, units_per_pack: 10, mrp: 0, ptr: 0, discount_pct: 0, gst_rate: 12, hsn_code: '3004' }]);
             } else {
                 notify(data.message || 'Failed to save purchase bill.', 'error');
@@ -4393,21 +4742,53 @@ function PurchaseView({ store, notify }) {
 
     return (
         <div>
-            <div className="d-flex gap-2 mb-3">
-                <button className={`btn btn-sm ${subTab === 'inward' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setSubTab('inward')}>
+            <div className="d-flex flex-wrap gap-2 mb-3 align-items-center">
+                <button className={`btn btn-sm ${subTab === 'inward' ? 'btn-primary shadow-sm' : 'btn-outline-secondary'}`} onClick={() => setSubTab('inward')}>
                     <i className="bi bi-box-arrow-in-down me-1"></i> Inward Purchase Bill
                 </button>
-                <button className={`btn btn-sm ${subTab === 'marg' ? 'btn-success' : 'btn-outline-secondary'}`} onClick={() => setSubTab('marg')}>
-                    <i className="bi bi-file-earmark-spreadsheet me-1"></i> Marg ERP / Excel Import
+                <button className={`btn btn-sm ${subTab === 'ledger' ? 'btn-primary shadow-sm' : 'btn-outline-secondary'}`} onClick={() => { setSubTab('ledger'); fetchLedgerSummary(); }}>
+                    <i className="bi bi-journal-bookmark me-1"></i> Supplier Ledger &amp; Payments
                 </button>
-                <button className={`btn btn-sm ${subTab === 'suppliers' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setSubTab('suppliers')}>
+                <button className={`btn btn-sm ${subTab === 'short_items' ? 'btn-warning text-dark fw-bold shadow-sm' : 'btn-outline-secondary'}`} onClick={() => { setSubTab('short_items'); fetchShortItems(); }}>
+                    <i className="bi bi-exclamation-triangle me-1"></i> Short Items &amp; PO Generator
+                    {shortItems.length > 0 && <span className="badge bg-danger ms-1">{shortItems.length}</span>}
+                </button>
+                <button className={`btn btn-sm ${subTab === 'purchase_orders' ? 'btn-primary shadow-sm' : 'btn-outline-secondary'}`} onClick={() => { setSubTab('purchase_orders'); fetchPurchaseOrders(); }}>
+                    <i className="bi bi-file-earmark-text me-1"></i> Purchase Orders
+                </button>
+                <button className={`btn btn-sm ${subTab === 'suppliers' ? 'btn-primary shadow-sm' : 'btn-outline-secondary'}`} onClick={() => setSubTab('suppliers')}>
                     <i className="bi bi-truck me-1"></i> Supplier Directory ({suppliers.length})
+                </button>
+                <button className={`btn btn-sm ${subTab === 'marg' ? 'btn-success shadow-sm' : 'btn-outline-secondary'}`} onClick={() => setSubTab('marg')}>
+                    <i className="bi bi-file-earmark-spreadsheet me-1"></i> Marg ERP / Excel Import
                 </button>
             </div>
 
             {subTab === 'inward' && (
                 <div className="counter-card">
-                    <h5 className="fw-bold mb-3"><i className="bi bi-receipt text-primary me-1"></i> Distributor Purchase Inward (Stock Entry)</h5>
+                    <div className="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
+                        <h5 className="fw-bold mb-0"><i className="bi bi-receipt text-primary me-1"></i> Distributor Purchase Inward (Stock Entry)</h5>
+                        <div className="d-flex align-items-center gap-2">
+                            {loadedPoNumber ? (
+                                <div className="badge bg-info-subtle text-info border border-info px-2 py-1.5 d-flex align-items-center gap-1.5" style={{ fontSize: '12px' }}>
+                                    <i className="bi bi-link-45deg fs-6"></i>
+                                    <span>Linked PO: <strong>{loadedPoNumber}</strong></span>
+                                    <button type="button" className="btn-close btn-close-dark ms-1" style={{ fontSize: '9px' }} onClick={() => { setLoadedPoId(null); setLoadedPoNumber(''); }} title="Unlink PO"></button>
+                                </div>
+                            ) : (
+                                <button 
+                                    type="button" 
+                                    className="btn btn-sm btn-outline-primary"
+                                    onClick={() => {
+                                        fetchPurchaseOrders();
+                                        setSubTab('purchase_orders');
+                                    }}
+                                >
+                                    <i className="bi bi-box-arrow-in-down-right me-1"></i> Load from Purchase Order
+                                </button>
+                            )}
+                        </div>
+                    </div>
                     <div className="row g-2 mb-3">
                         <div className="col-md-4">
                             <div className="d-flex justify-content-between align-items-center mb-1">
@@ -4813,6 +5194,665 @@ function PurchaseView({ store, notify }) {
                 </div>
             )}
 
+            {/* ================================================================= */}
+            {/* SUB-TAB: SUPPLIER LEDGER & PAYMENTS */}
+            {/* ================================================================= */}
+            {subTab === 'ledger' && (
+                <div className="counter-card">
+                    {/* KPI Cards Row */}
+                    <div className="row g-3 mb-4">
+                        <div className="col-md-3">
+                            <div className="card border-0 shadow-sm p-3 bg-white h-100 border-start border-4 border-primary">
+                                <div className="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small className="text-muted fw-semibold text-uppercase" style={{ fontSize: '11px' }}>Total Inward Purchases</small>
+                                        <h4 className="fw-bold text-dark mb-0 mt-1">₹{Number(ledgerOverall.total_purchases || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h4>
+                                    </div>
+                                    <div className="bg-primary-subtle text-primary p-2.5 rounded-circle">
+                                        <i className="bi bi-box-arrow-in-down fs-4"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="col-md-3">
+                            <div className="card border-0 shadow-sm p-3 bg-white h-100 border-start border-4 border-success">
+                                <div className="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small className="text-muted fw-semibold text-uppercase" style={{ fontSize: '11px' }}>Total Payments Settled</small>
+                                        <h4 className="fw-bold text-success mb-0 mt-1">₹{Number(ledgerOverall.total_paid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h4>
+                                    </div>
+                                    <div className="bg-success-subtle text-success p-2.5 rounded-circle">
+                                        <i className="bi bi-check2-circle fs-4"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="col-md-3">
+                            <div className="card border-0 shadow-sm p-3 bg-white h-100 border-start border-4 border-danger">
+                                <div className="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small className="text-muted fw-semibold text-uppercase" style={{ fontSize: '11px' }}>Balance Outstanding</small>
+                                        <h4 className="fw-bold text-danger mb-0 mt-1">₹{Number(ledgerOverall.outstanding_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}</h4>
+                                    </div>
+                                    <div className="bg-danger-subtle text-danger p-2.5 rounded-circle">
+                                        <i className="bi bi-exclamation-octagon fs-4"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                        <div className="col-md-3">
+                            <div className="card border-0 shadow-sm p-3 bg-white h-100 border-start border-4 border-warning">
+                                <div className="d-flex justify-content-between align-items-center">
+                                    <div>
+                                        <small className="text-muted fw-semibold text-uppercase" style={{ fontSize: '11px' }}>Pending Invoices</small>
+                                        <h4 className="fw-bold text-warning-emphasis mb-0 mt-1">{ledgerOverall.total_pending_bills || 0} Bills</h4>
+                                    </div>
+                                    <div className="bg-warning-subtle text-warning-emphasis p-2.5 rounded-circle">
+                                        <i className="bi bi-receipt fs-4"></i>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Filter & Action Toolbar */}
+                    <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 bg-light p-2.5 rounded-3 border">
+                        <div className="d-flex align-items-center gap-2 flex-grow-1">
+                            <label className="form-label small fw-bold mb-0 text-nowrap"><i className="bi bi-funnel me-1"></i>Select Supplier:</label>
+                            <select 
+                                className="form-select form-select-sm" 
+                                style={{ maxWidth: 320 }}
+                                value={activeLedgerSupplierId} 
+                                onChange={(e) => {
+                                    const val = e.target.value;
+                                    setActiveLedgerSupplierId(val);
+                                    if (val) fetchSupplierLedger(val);
+                                    else setActiveLedgerDetail(null);
+                                }}
+                            >
+                                <option value="">-- All Suppliers Summary --</option>
+                                {suppliers.map(s => (
+                                    <option key={s.supplier_id} value={s.supplier_id}>
+                                        {s.supplier_name}
+                                    </option>
+                                ))}
+                            </select>
+                            {activeLedgerSupplierId && (
+                                <button className="btn btn-outline-secondary btn-sm" onClick={() => { setActiveLedgerSupplierId(''); setActiveLedgerDetail(null); }}>
+                                    <i className="bi bi-x-circle me-1"></i> View All
+                                </button>
+                            )}
+                        </div>
+                        <div className="d-flex gap-2">
+                            <button className="btn btn-success btn-sm shadow-sm fw-semibold" onClick={() => openPaymentModal(activeLedgerSupplierId)}>
+                                <i className="bi bi-cash-stack me-1"></i> Record Supplier Payment
+                            </button>
+                            <button className="btn btn-outline-primary btn-sm" onClick={() => { fetchLedgerSummary(); if (activeLedgerSupplierId) fetchSupplierLedger(activeLedgerSupplierId); }} title="Refresh Ledger Data">
+                                <i className="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* VIEW A: Summary Table of All Suppliers */}
+                    {!activeLedgerSupplierId && (
+                        <div className="table-responsive shadow-sm rounded border">
+                            <table className="table table-hover align-middle mb-0">
+                                <thead className="table-light">
+                                    <tr>
+                                        <th style={{ width: 45 }}>#</th>
+                                        <th>Distributor / Agency</th>
+                                        <th>GSTIN &amp; Phone</th>
+                                        <th className="text-end">Total Purchases</th>
+                                        <th className="text-end">Total Paid</th>
+                                        <th className="text-end">Outstanding Due</th>
+                                        <th className="text-center">Pending Bills</th>
+                                        <th className="text-end pe-3">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {isLoadingLedger ? (
+                                        <tr><td colSpan="8" className="text-center py-4"><span className="spinner-border spinner-border-sm me-2"></span>Loading ledger summary...</td></tr>
+                                    ) : ledgerSummary.length === 0 ? (
+                                        <tr><td colSpan="8" className="text-center py-4 text-muted">No suppliers found.</td></tr>
+                                    ) : (
+                                        ledgerSummary.map((sup, idx) => (
+                                            <tr key={sup.supplier_id}>
+                                                <td className="text-muted fw-semibold">{idx + 1}</td>
+                                                <td>
+                                                    <div className="fw-bold text-dark">{sup.supplier_name}</div>
+                                                    {sup.contact_person && <small className="text-muted"><i className="bi bi-person me-1"></i>{sup.contact_person}</small>}
+                                                </td>
+                                                <td>
+                                                    <div><code className="text-primary fw-semibold">{sup.gstin || 'No GSTIN'}</code></div>
+                                                    {sup.phone && <small className="text-muted"><i className="bi bi-telephone me-1"></i>{sup.phone}</small>}
+                                                </td>
+                                                <td className="text-end fw-semibold">₹{Number(sup.total_purchases || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                                <td className="text-end text-success fw-semibold">₹{Number(sup.total_paid || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                                <td className="text-end">
+                                                    <span className={`badge ${sup.outstanding_balance > 0 ? 'bg-danger-subtle text-danger border border-danger-subtle fs-6' : 'bg-success-subtle text-success border border-success-subtle'} px-2.5 py-1.5`}>
+                                                        ₹{Number(sup.outstanding_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                                    </span>
+                                                </td>
+                                                <td className="text-center">
+                                                    {sup.pending_invoices > 0 ? (
+                                                        <span className="badge bg-warning text-dark border border-warning px-2 py-1">{sup.pending_invoices} Unpaid</span>
+                                                    ) : (
+                                                        <span className="badge bg-light text-muted border px-2 py-1">All Settled</span>
+                                                    )}
+                                                </td>
+                                                <td className="text-end pe-3">
+                                                    <div className="btn-group btn-group-sm">
+                                                        <button 
+                                                            className="btn btn-outline-primary"
+                                                            onClick={() => {
+                                                                setActiveLedgerSupplierId(String(sup.supplier_id));
+                                                                fetchSupplierLedger(sup.supplier_id);
+                                                            }}
+                                                            title="View detailed ledger statement"
+                                                        >
+                                                            <i className="bi bi-journal-text me-1"></i> Statement
+                                                        </button>
+                                                        <button 
+                                                            className="btn btn-outline-success"
+                                                            onClick={() => openPaymentModal(sup.supplier_id)}
+                                                            title="Record payment against this supplier"
+                                                        >
+                                                            <i className="bi bi-credit-card me-1"></i> Pay
+                                                        </button>
+                                                    </div>
+                                                </td>
+                                            </tr>
+                                        ))
+                                    )}
+                                </tbody>
+                            </table>
+                        </div>
+                    )}
+
+                    {/* VIEW B: Detailed Ledger Statement for Selected Supplier */}
+                    {activeLedgerSupplierId && activeLedgerDetail && (
+                        <div>
+                            {/* Supplier Profile Banner */}
+                            <div className="card border-0 shadow-sm p-3 mb-3 bg-white border-start border-4 border-primary">
+                                <div className="d-flex flex-wrap justify-content-between align-items-center gap-2">
+                                    <div>
+                                        <h5 className="fw-bold text-dark mb-1 d-flex align-items-center gap-2">
+                                            <i className="bi bi-building text-primary"></i>
+                                            {activeLedgerDetail.supplier.supplier_name}
+                                        </h5>
+                                        <div className="d-flex flex-wrap gap-3 text-muted small">
+                                            <span><strong>GSTIN:</strong> {activeLedgerDetail.supplier.gstin || 'N/A'}</span>
+                                            <span><strong>DL No:</strong> {activeLedgerDetail.supplier.dl_no_20b || activeLedgerDetail.supplier.dl_no_21b || 'N/A'}</span>
+                                            <span><strong>Phone:</strong> {activeLedgerDetail.supplier.phone || 'N/A'}</span>
+                                            <span><strong>Credit Days:</strong> {activeLedgerDetail.supplier.credit_days || 30} Days</span>
+                                        </div>
+                                    </div>
+                                    <div className="text-end">
+                                        <small className="text-muted text-uppercase d-block" style={{ fontSize: '11px' }}>Net Outstanding Balance</small>
+                                        <span className={`badge ${activeLedgerDetail.summary.outstanding_balance > 0 ? 'bg-danger text-white fs-5' : 'bg-success text-white fs-5'} px-3 py-2`}>
+                                            ₹{Number(activeLedgerDetail.summary.outstanding_balance || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                                        </span>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Section 1: Pending Unpaid / Partially Paid Invoices */}
+                            <div className="card border-0 shadow-sm mb-3">
+                                <div className="card-header bg-white py-2.5 px-3 d-flex justify-content-between align-items-center">
+                                    <h6 className="fw-bold text-dark mb-0">
+                                        <i className="bi bi-hourglass-split text-warning me-1"></i> Pending Invoices ({activeLedgerDetail.pending_invoices?.length || 0})
+                                    </h6>
+                                    <small className="text-muted">Invoices awaiting full or partial payment</small>
+                                </div>
+                                <div className="table-responsive">
+                                    <table className="table table-hover align-middle mb-0" style={{ fontSize: '13px' }}>
+                                        <thead className="table-light">
+                                            <tr>
+                                                <th>Bill / Invoice No</th>
+                                                <th>Invoice Date</th>
+                                                <th className="text-end">Bill Amount</th>
+                                                <th className="text-end">Paid Amount</th>
+                                                <th className="text-end">Pending Amount</th>
+                                                <th className="text-center">Status</th>
+                                                <th className="text-end pe-3">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {(!activeLedgerDetail.pending_invoices || activeLedgerDetail.pending_invoices.length === 0) ? (
+                                                <tr><td colSpan="7" className="text-center py-3 text-muted"><i className="bi bi-check2-all text-success me-1"></i>All purchase bills for this supplier are fully paid.</td></tr>
+                                            ) : (
+                                                activeLedgerDetail.pending_invoices.map((inv) => (
+                                                    <tr key={inv.purchase_id}>
+                                                        <td className="fw-bold text-primary">{inv.supplier_invoice_no}</td>
+                                                        <td>{inv.invoice_date}</td>
+                                                        <td className="text-end fw-semibold">₹{Number(inv.net_amount).toFixed(2)}</td>
+                                                        <td className="text-end text-success">₹{Number(inv.paid_amount).toFixed(2)}</td>
+                                                        <td className="text-end fw-bold text-danger">₹{Number(inv.pending_amount).toFixed(2)}</td>
+                                                        <td className="text-center">
+                                                            <span className={`badge ${inv.payment_status === 'partially_paid' ? 'bg-warning text-dark' : 'bg-danger'} px-2 py-1`}>
+                                                                {inv.payment_status === 'partially_paid' ? 'Partially Paid' : 'Unpaid'}
+                                                            </span>
+                                                        </td>
+                                                        <td className="text-end pe-3">
+                                                            <button 
+                                                                className="btn btn-sm btn-success py-1 px-2.5 shadow-sm fw-semibold"
+                                                                onClick={() => openPaymentModal(activeLedgerDetail.supplier.supplier_id, inv.purchase_id, inv.pending_amount)}
+                                                            >
+                                                                <i className="bi bi-cash me-1"></i> Pay Bill
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+
+                            {/* Section 2: Chronological Running Ledger Statement */}
+                            <div className="card border-0 shadow-sm">
+                                <div className="card-header bg-white py-2.5 px-3 d-flex justify-content-between align-items-center">
+                                    <h6 className="fw-bold text-dark mb-0">
+                                        <i className="bi bi-journal-check text-primary me-1"></i> Complete Ledger Statement &amp; Running Balance
+                                    </h6>
+                                    <span className="badge bg-light text-dark border px-2 py-1">
+                                        Total Transactions: {activeLedgerDetail.statement?.length || 0}
+                                    </span>
+                                </div>
+                                <div className="table-responsive">
+                                    <table className="table table-bordered table-hover align-middle mb-0" style={{ fontSize: '12.5px' }}>
+                                        <thead className="table-light">
+                                            <tr>
+                                                <th style={{ width: 100 }}>Date</th>
+                                                <th style={{ width: 130 }}>Voucher / Ref</th>
+                                                <th style={{ width: 100 }}>Type</th>
+                                                <th>Particulars &amp; Details</th>
+                                                <th className="text-end" style={{ width: 120 }}>Debit (₹ Payments)</th>
+                                                <th className="text-end" style={{ width: 120 }}>Credit (₹ Inward)</th>
+                                                <th className="text-end" style={{ width: 140 }}>Balance (₹ Payable)</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {(!activeLedgerDetail.statement || activeLedgerDetail.statement.length === 0) ? (
+                                                <tr><td colSpan="7" className="text-center py-4 text-muted">No transactions recorded for this supplier.</td></tr>
+                                            ) : (
+                                                activeLedgerDetail.statement.map((row, idx) => (
+                                                    <tr key={idx} className={row.type === 'PAYMENT' ? 'table-success-subtle' : ''}>
+                                                        <td className="text-nowrap">{row.date}</td>
+                                                        <td className="fw-semibold text-primary">{row.voucher_no}</td>
+                                                        <td>
+                                                            <span className={`badge ${row.type === 'INVOICE' ? 'bg-primary-subtle text-primary border border-primary-subtle' : 'bg-success text-white'}`}>
+                                                                {row.type === 'INVOICE' ? 'Purchase Bill' : 'Payment'}
+                                                            </span>
+                                                        </td>
+                                                        <td>{row.particulars}</td>
+                                                        <td className="text-end text-success fw-bold">
+                                                            {row.debit > 0 ? ('₹' + Number(row.debit).toFixed(2)) : '-'}
+                                                        </td>
+                                                        <td className="text-end text-dark fw-bold">
+                                                            {row.credit > 0 ? ('₹' + Number(row.credit).toFixed(2)) : '-'}
+                                                        </td>
+                                                        <td className="text-end fw-bold">
+                                                            <span className={row.balance > 0 ? 'text-danger' : 'text-success'}>
+                                                                ₹{Number(row.balance).toFixed(2)}
+                                                            </span>
+                                                        </td>
+                                                    </tr>
+                                                ))
+                                            )}
+                                        </tbody>
+                                        {activeLedgerDetail.statement?.length > 0 && (
+                                            <tfoot className="table-light fw-bold">
+                                                <tr>
+                                                    <td colSpan="4" className="text-end">Total Summary:</td>
+                                                    <td className="text-end text-success">₹{Number(activeLedgerDetail.summary.total_paid || 0).toFixed(2)}</td>
+                                                    <td className="text-end text-dark">₹{Number(activeLedgerDetail.summary.total_purchases || 0).toFixed(2)}</td>
+                                                    <td className="text-end text-danger fs-6">₹{Number(activeLedgerDetail.summary.outstanding_balance || 0).toFixed(2)}</td>
+                                                </tr>
+                                            </tfoot>
+                                        )}
+                                    </table>
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                </div>
+            )}
+
+            {/* ================================================================= */}
+            {/* SUB-TAB: SHORT ITEMS / DEFICIENCY BOOK & PO GENERATOR */}
+            {/* ================================================================= */}
+            {subTab === 'short_items' && (
+                <div className="counter-card">
+                    <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                        <div>
+                            <h5 className="fw-bold mb-0 text-dark">
+                                <i className="bi bi-exclamation-triangle text-warning me-1"></i> Short Items &amp; Deficiency Reorder Book
+                            </h5>
+                            <small className="text-muted">Real-time inventory shortage detection. Select items to generate consolidated Purchase Orders in 1-click.</small>
+                        </div>
+                        <div className="d-flex gap-2">
+                            <button 
+                                className="btn btn-primary btn-sm px-3 shadow-sm fw-bold"
+                                disabled={selectedShortItemIds.length === 0}
+                                onClick={openCreatePoFromShortItems}
+                            >
+                                <i className="bi bi-cart-plus me-1"></i> Create Purchase Order ({selectedShortItemIds.length} Selected)
+                            </button>
+                            <button className="btn btn-outline-primary btn-sm" onClick={fetchShortItems} title="Refresh Short List">
+                                <i className="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* Short Items Filter Bar */}
+                    <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3 bg-light p-2.5 rounded-3 border">
+                        <div className="btn-group btn-group-sm">
+                            <button className={`btn ${shortFilter === 'all' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => setShortFilter('all')}>
+                                All Shortages ({shortItems.length})
+                            </button>
+                            <button className={`btn ${shortFilter === 'out_of_stock' ? 'btn-danger' : 'btn-outline-secondary'}`} onClick={() => setShortFilter('out_of_stock')}>
+                                Out of Stock ({shortItems.filter(s => s.status === 'OUT_OF_STOCK').length})
+                            </button>
+                            <button className={`btn ${shortFilter === 'low_stock' ? 'btn-warning text-dark' : 'btn-outline-secondary'}`} onClick={() => setShortFilter('low_stock')}>
+                                Low Stock ({shortItems.filter(s => s.status === 'LOW_STOCK').length})
+                            </button>
+                        </div>
+                        <div className="input-group input-group-sm" style={{ width: 280 }}>
+                            <span className="input-group-text bg-white border-end-0"><i className="bi bi-search text-muted"></i></span>
+                            <input 
+                                type="text" 
+                                className="form-control border-start-0" 
+                                placeholder="Filter short medicine..."
+                                value={shortSearch}
+                                onChange={(e) => setShortSearch(e.target.value)}
+                            />
+                            {shortSearch && (
+                                <button className="btn btn-outline-secondary" type="button" onClick={() => setShortSearch('')}>
+                                    <i className="bi bi-x"></i>
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Short Items Table */}
+                    {(() => {
+                        const filtered = shortItems.filter(it => {
+                            if (shortFilter === 'out_of_stock' && it.status !== 'OUT_OF_STOCK') return false;
+                            if (shortFilter === 'low_stock' && it.status !== 'LOW_STOCK') return false;
+                            if (shortSearch.trim()) {
+                                const q = shortSearch.toLowerCase();
+                                return (it.item_name && it.item_name.toLowerCase().includes(q)) ||
+                                       (it.category && it.category.toLowerCase().includes(q)) ||
+                                       (it.last_supplier_name && it.last_supplier_name.toLowerCase().includes(q));
+                            }
+                            return true;
+                        });
+
+                        const allSelected = filtered.length > 0 && filtered.every(it => selectedShortItemIds.includes(it.item_id));
+
+                        return (
+                            <div className="table-responsive shadow-sm rounded border">
+                                <table className="table table-hover align-middle mb-0">
+                                    <thead className="table-light">
+                                        <tr>
+                                            <th style={{ width: 40 }} className="text-center">
+                                                <input 
+                                                    type="checkbox" 
+                                                    className="form-check-input"
+                                                    checked={allSelected}
+                                                    onChange={(e) => {
+                                                        if (e.target.checked) {
+                                                            setSelectedShortItemIds(filtered.map(it => it.item_id));
+                                                        } else {
+                                                            setSelectedShortItemIds([]);
+                                                        }
+                                                    }}
+                                                />
+                                            </th>
+                                            <th>Medicine / Formulation</th>
+                                            <th>Stock Status</th>
+                                            <th className="text-center">Current Stock</th>
+                                            <th className="text-center">Min Reorder</th>
+                                            <th style={{ width: 110 }}>Suggested Order</th>
+                                            <th className="text-end">Estimated PTR</th>
+                                            <th>Last Supplier</th>
+                                            <th className="text-end pe-3">Action</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody>
+                                        {isLoadingShortItems ? (
+                                            <tr><td colSpan="9" className="text-center py-4"><span className="spinner-border spinner-border-sm me-2"></span>Checking stock levels...</td></tr>
+                                        ) : filtered.length === 0 ? (
+                                            <tr><td colSpan="9" className="text-center py-4 text-muted"><i className="bi bi-check-circle text-success fs-3 d-block mb-1"></i>No medicines currently below reorder levels. Inventory is well-stocked!</td></tr>
+                                        ) : (
+                                            filtered.map((it) => {
+                                                const isSelected = selectedShortItemIds.includes(it.item_id);
+                                                return (
+                                                    <tr key={it.item_id} className={isSelected ? 'table-primary-subtle' : ''}>
+                                                        <td className="text-center">
+                                                            <input 
+                                                                type="checkbox" 
+                                                                className="form-check-input"
+                                                                checked={isSelected}
+                                                                onChange={(e) => {
+                                                                    if (e.target.checked) {
+                                                                        setSelectedShortItemIds([...selectedShortItemIds, it.item_id]);
+                                                                    } else {
+                                                                        setSelectedShortItemIds(selectedShortItemIds.filter(id => id !== it.item_id));
+                                                                    }
+                                                                }}
+                                                            />
+                                                        </td>
+                                                        <td>
+                                                            <div className="fw-bold text-dark fs-6">{it.item_name}</div>
+                                                            <div className="small text-muted d-flex gap-2 align-items-center">
+                                                                <span className="badge bg-light text-dark border">{it.category || 'Tablet'}</span>
+                                                                <span>{it.unit_pack || (it.units_per_pack + ' Units/Pack')}</span>
+                                                                {it.drug_schedule && <span className="badge bg-danger-subtle text-danger border">{it.drug_schedule}</span>}
+                                                            </div>
+                                                        </td>
+                                                        <td>
+                                                            {it.status === 'OUT_OF_STOCK' ? (
+                                                                <span className="badge bg-danger-subtle text-danger border border-danger-subtle px-2 py-1">
+                                                                    <i className="bi bi-x-circle me-1"></i>Out of Stock
+                                                                </span>
+                                                            ) : (
+                                                                <span className="badge bg-warning-subtle text-warning-emphasis border border-warning-subtle px-2 py-1">
+                                                                    <i className="bi bi-exclamation-triangle me-1"></i>Low Stock
+                                                                </span>
+                                                            )}
+                                                        </td>
+                                                        <td className="text-center">
+                                                            <span className="fw-bold fs-6 text-danger">{it.current_qty}</span>
+                                                            <small className="text-muted d-block" style={{ fontSize: '11px' }}>({it.current_packs} packs)</small>
+                                                        </td>
+                                                        <td className="text-center text-muted fw-semibold">
+                                                            {it.min_reorder_level} units
+                                                        </td>
+                                                        <td>
+                                                            <div className="input-group input-group-sm">
+                                                                <input 
+                                                                    type="number" 
+                                                                    className="form-control form-control-sm fw-bold text-center" 
+                                                                    min="1"
+                                                                    value={it.suggested_packs}
+                                                                    onChange={(e) => {
+                                                                        const val = Math.max(1, parseInt(e.target.value) || 1);
+                                                                        setShortItems(shortItems.map(si => si.item_id === it.item_id ? { ...si, suggested_packs: val } : si));
+                                                                    }}
+                                                                />
+                                                                <span className="input-group-text py-0 px-1 text-muted" style={{ fontSize: '11px' }}>Pks</span>
+                                                            </div>
+                                                        </td>
+                                                        <td className="text-end fw-semibold">
+                                                            {it.last_ptr > 0 ? ('₹' + Number(it.last_ptr).toFixed(2)) : <span className="text-muted">-</span>}
+                                                        </td>
+                                                        <td>
+                                                            <div className="fw-semibold text-truncate" style={{ maxWidth: 180 }} title={it.last_supplier_name}>
+                                                                {it.last_supplier_name}
+                                                            </div>
+                                                            {it.last_purchase_date && <small className="text-muted" style={{ fontSize: '11px' }}>Last: {it.last_purchase_date}</small>}
+                                                        </td>
+                                                        <td className="text-end pe-3">
+                                                            <button 
+                                                                className="btn btn-sm btn-outline-primary py-1 px-2 text-nowrap"
+                                                                onClick={() => {
+                                                                    setSelectedShortItemIds([it.item_id]);
+                                                                    openCreatePoFromShortItems();
+                                                                }}
+                                                            >
+                                                                <i className="bi bi-cart-plus me-1"></i> Order
+                                                            </button>
+                                                        </td>
+                                                    </tr>
+                                                );
+                                            })
+                                        )}
+                                    </tbody>
+                                </table>
+                            </div>
+                        );
+                    })()}
+                </div>
+            )}
+
+            {/* ================================================================= */}
+            {/* SUB-TAB: PURCHASE ORDERS DIRECTORY */}
+            {/* ================================================================= */}
+            {subTab === 'purchase_orders' && (
+                <div className="counter-card">
+                    <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-3">
+                        <div>
+                            <h5 className="fw-bold mb-0 text-dark">
+                                <i className="bi bi-file-earmark-text text-primary me-1"></i> Hospital Purchase Orders Directory
+                            </h5>
+                            <small className="text-muted">Track order status, print official supplier order formats, and load directly into inward bills.</small>
+                        </div>
+                        <div className="d-flex gap-2">
+                            <button 
+                                className="btn btn-primary btn-sm px-3 shadow-sm fw-semibold"
+                                onClick={() => {
+                                    setPoCreateForm({
+                                        supplier_id: suppliers[0]?.supplier_id ? String(suppliers[0].supplier_id) : '',
+                                        expected_delivery_date: new Date(Date.now() + 3 * 24 * 60 * 60 * 1000).toISOString().split('T')[0],
+                                        remarks: '',
+                                        items: [
+                                            { item_id: null, item_name: '', generic_name: '', category: 'Tablet', order_packs: 5, units_per_pack: 10, estimated_ptr: 0, gst_rate: 12 }
+                                        ]
+                                    });
+                                    setShowPoCreateModal(true);
+                                }}
+                            >
+                                <i className="bi bi-plus-circle me-1"></i> New Purchase Order
+                            </button>
+                            <button className="btn btn-outline-primary btn-sm" onClick={fetchPurchaseOrders} title="Refresh PO List">
+                                <i className="bi bi-arrow-clockwise"></i>
+                            </button>
+                        </div>
+                    </div>
+
+                    {/* PO Status Filter Bar */}
+                    <div className="btn-group btn-group-sm mb-3">
+                        <button className={`btn ${poStatusFilter === 'all' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => { setPoStatusFilter('all'); fetchPurchaseOrders(); }}>
+                            All Orders
+                        </button>
+                        <button className={`btn ${poStatusFilter === 'ordered' ? 'btn-primary' : 'btn-outline-secondary'}`} onClick={() => { setPoStatusFilter('ordered'); fetchPurchaseOrders(); }}>
+                            Ordered / In-Transit
+                        </button>
+                        <button className={`btn ${poStatusFilter === 'received' ? 'btn-success' : 'btn-outline-secondary'}`} onClick={() => { setPoStatusFilter('received'); fetchPurchaseOrders(); }}>
+                            Received / Inwarded
+                        </button>
+                        <button className={`btn ${poStatusFilter === 'cancelled' ? 'btn-danger' : 'btn-outline-secondary'}`} onClick={() => { setPoStatusFilter('cancelled'); fetchPurchaseOrders(); }}>
+                            Cancelled
+                        </button>
+                    </div>
+
+                    {/* PO Table */}
+                    <div className="table-responsive shadow-sm rounded border">
+                        <table className="table table-hover align-middle mb-0">
+                            <thead className="table-light">
+                                <tr>
+                                    <th>PO Number</th>
+                                    <th>PO Date</th>
+                                    <th>Expected Delivery</th>
+                                    <th>Supplier / Distributor</th>
+                                    <th className="text-center">Items</th>
+                                    <th className="text-end">Est. Total Amount</th>
+                                    <th className="text-center">Status</th>
+                                    <th className="text-end pe-3">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                                {isLoadingPOs ? (
+                                    <tr><td colSpan="8" className="text-center py-4"><span className="spinner-border spinner-border-sm me-2"></span>Loading purchase orders...</td></tr>
+                                ) : purchaseOrders.length === 0 ? (
+                                    <tr><td colSpan="8" className="text-center py-4 text-muted">No purchase orders found. Click "New Purchase Order" or generate from Short Items.</td></tr>
+                                ) : (
+                                    purchaseOrders.map((po) => (
+                                        <tr key={po.po_id}>
+                                            <td className="fw-bold text-primary">{po.po_number}</td>
+                                            <td>{po.po_date}</td>
+                                            <td>{po.expected_delivery_date || <span className="text-muted">-</span>}</td>
+                                            <td>
+                                                <div className="fw-semibold text-dark">{po.supplier_name}</div>
+                                                {po.phone && <small className="text-muted"><i className="bi bi-telephone me-1"></i>{po.phone}</small>}
+                                            </td>
+                                            <td className="text-center fw-bold">{po.total_items}</td>
+                                            <td className="text-end fw-bold">₹{Number(po.total_estimated_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</td>
+                                            <td className="text-center">
+                                                {po.status === 'ordered' && (
+                                                    <span className="badge bg-primary-subtle text-primary border border-primary-subtle px-2 py-1">
+                                                        <i className="bi bi-clock me-1"></i>Ordered
+                                                    </span>
+                                                )}
+                                                {po.status === 'received' && (
+                                                    <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-1">
+                                                        <i className="bi bi-check2-circle me-1"></i>Received
+                                                    </span>
+                                                )}
+                                                {po.status === 'cancelled' && (
+                                                    <span className="badge bg-secondary-subtle text-secondary border px-2 py-1">Cancelled</span>
+                                                )}
+                                            </td>
+                                            <td className="text-end pe-3">
+                                                <div className="btn-group btn-group-sm">
+                                                    <button 
+                                                        className="btn btn-outline-primary"
+                                                        onClick={() => handleViewPo(po.po_id)}
+                                                        title="View & Print PO"
+                                                    >
+                                                        <i className="bi bi-printer me-1"></i> Print
+                                                    </button>
+                                                    {po.status === 'ordered' && (
+                                                        <>
+                                                            <button 
+                                                                className="btn btn-success"
+                                                                onClick={() => loadPoIntoInwardBill(po.po_id)}
+                                                                title="Load this PO into Inward Purchase Bill"
+                                                            >
+                                                                <i className="bi bi-box-arrow-in-down me-1"></i> Inward
+                                                            </button>
+                                                            <button 
+                                                                className="btn btn-outline-danger"
+                                                                onClick={() => handleCancelPo(po.po_id)}
+                                                                title="Cancel this PO"
+                                                            >
+                                                                <i className="bi bi-x"></i>
+                                                            </button>
+                                                        </>
+                                                    )}
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    ))
+                                )}
+                            </tbody>
+                        </table>
+                    </div>
+                </div>
+            )}
+
             {/* Supplier Add / Edit Modal */}
             {showSupplierModal && (
                 <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(15, 23, 42, 0.75)' }} tabIndex="-1">
@@ -5195,6 +6235,537 @@ function PurchaseView({ store, notify }) {
                                     </button>
                                 </div>
                             </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ================================================================= */}
+            {/* MODAL: RECORD SUPPLIER PAYMENT */}
+            {/* ================================================================= */}
+            {showPaymentModal && (
+                <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(15, 23, 42, 0.75)' }} tabIndex="-1">
+                    <div className="modal-dialog modal-md modal-dialog-centered">
+                        <div className="modal-content border-0 shadow-lg">
+                            <div className="modal-header bg-dark text-white py-2.5 px-3 d-flex justify-content-between align-items-center">
+                                <div className="d-flex align-items-center gap-2">
+                                    <div className="bg-success text-white rounded p-1.5 d-flex align-items-center justify-content-center" style={{ width: 32, height: 32 }}>
+                                        <i className="bi bi-cash-coin fs-5"></i>
+                                    </div>
+                                    <div>
+                                        <h6 className="modal-title mb-0 fw-bold">Record Supplier Payment Voucher</h6>
+                                        <small className="text-light opacity-75">Outflow accounting against invoice or on-account</small>
+                                    </div>
+                                </div>
+                                <button type="button" className="btn-close btn-close-white" onClick={() => setShowPaymentModal(false)}></button>
+                            </div>
+
+                            <form onSubmit={handleRecordPayment}>
+                                <div className="modal-body p-3 bg-light">
+                                    <div className="card border-0 shadow-sm p-3 mb-3 bg-white">
+                                        <div className="row g-2">
+                                            <div className="col-12">
+                                                <label className="form-label small fw-bold mb-1">Supplier / Distributor <span className="text-danger">*</span></label>
+                                                <select 
+                                                    className="form-select form-select-sm fw-semibold" 
+                                                    value={paymentForm.supplier_id} 
+                                                    onChange={(e) => setPaymentForm({ ...paymentForm, supplier_id: e.target.value })}
+                                                    required
+                                                >
+                                                    <option value="">-- Choose Supplier --</option>
+                                                    {suppliers.map(s => (
+                                                        <option key={s.supplier_id} value={s.supplier_id}>
+                                                            {s.supplier_name} (GST: {s.gstin || 'N/A'})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+
+                                            <div className="col-md-6">
+                                                <label className="form-label small fw-bold mb-1">Payment Amount (₹) <span className="text-danger">*</span></label>
+                                                <input 
+                                                    type="number" 
+                                                    step="0.01"
+                                                    min="0.01" 
+                                                    className="form-control form-control-sm fw-bold text-success fs-6" 
+                                                    placeholder="0.00"
+                                                    value={paymentForm.amount}
+                                                    onChange={(e) => setPaymentForm({ ...paymentForm, amount: e.target.value })}
+                                                    required
+                                                    autoFocus
+                                                />
+                                            </div>
+
+                                            <div className="col-md-6">
+                                                <label className="form-label small fw-bold mb-1">Payment Mode</label>
+                                                <select 
+                                                    className="form-select form-select-sm"
+                                                    value={paymentForm.payment_mode}
+                                                    onChange={(e) => setPaymentForm({ ...paymentForm, payment_mode: e.target.value })}
+                                                >
+                                                    <option value="Bank">Bank Transfer (NEFT/RTGS)</option>
+                                                    <option value="UPI">UPI / QR Code</option>
+                                                    <option value="Cash">Cash in Hand</option>
+                                                    <option value="Cheque">Bank Cheque</option>
+                                                </select>
+                                            </div>
+
+                                            <div className="col-md-6">
+                                                <label className="form-label small fw-bold mb-1">Payment Date</label>
+                                                <input 
+                                                    type="date" 
+                                                    className="form-control form-control-sm" 
+                                                    value={paymentForm.payment_date}
+                                                    onChange={(e) => setPaymentForm({ ...paymentForm, payment_date: e.target.value })}
+                                                    required
+                                                />
+                                            </div>
+
+                                            <div className="col-md-6">
+                                                <label className="form-label small fw-bold mb-1">UTR / Cheque / Ref No</label>
+                                                <input 
+                                                    type="text" 
+                                                    className="form-control form-control-sm" 
+                                                    placeholder="e.g. UTR-9988112"
+                                                    value={paymentForm.reference_no}
+                                                    onChange={(e) => setPaymentForm({ ...paymentForm, reference_no: e.target.value })}
+                                                />
+                                            </div>
+
+                                            <div className="col-12">
+                                                <label className="form-label small fw-bold mb-1">Bank Name / Account Details</label>
+                                                <input 
+                                                    type="text" 
+                                                    className="form-control form-control-sm" 
+                                                    placeholder="e.g. HDFC Bank - Main Current A/c"
+                                                    value={paymentForm.bank_name}
+                                                    onChange={(e) => setPaymentForm({ ...paymentForm, bank_name: e.target.value })}
+                                                />
+                                            </div>
+
+                                            <div className="col-12">
+                                                <label className="form-label small fw-bold mb-1">Remarks / Settlement Note</label>
+                                                <input 
+                                                    type="text" 
+                                                    className="form-control form-control-sm" 
+                                                    placeholder="e.g. Cleared bill #APX-9941"
+                                                    value={paymentForm.remarks}
+                                                    onChange={(e) => setPaymentForm({ ...paymentForm, remarks: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="modal-footer py-2 px-3 bg-white d-flex justify-content-between">
+                                    <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => setShowPaymentModal(false)}>
+                                        Cancel
+                                    </button>
+                                    <button type="submit" className="btn btn-success btn-sm fw-bold px-4 shadow-sm" disabled={isRecordingPayment}>
+                                        {isRecordingPayment ? (
+                                            <>
+                                                <span className="spinner-border spinner-border-sm me-1"></span>
+                                                Recording Voucher...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <i className="bi bi-check2-circle me-1"></i>
+                                                Record Payment Voucher
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ================================================================= */}
+            {/* MODAL: CREATE PURCHASE ORDER */}
+            {/* ================================================================= */}
+            {showPoCreateModal && (
+                <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(15, 23, 42, 0.75)' }} tabIndex="-1">
+                    <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                        <div className="modal-content border-0 shadow-lg">
+                            <div className="modal-header bg-dark text-white py-2.5 px-3 d-flex justify-content-between align-items-center">
+                                <div className="d-flex align-items-center gap-2">
+                                    <div className="bg-primary text-white rounded p-1.5 d-flex align-items-center justify-content-center" style={{ width: 32, height: 32 }}>
+                                        <i className="bi bi-cart-check fs-5"></i>
+                                    </div>
+                                    <div>
+                                        <h6 className="modal-title mb-0 fw-bold">Generate New Purchase Order (PO)</h6>
+                                        <small className="text-light opacity-75">Order requisition for pharmaceutical distributor</small>
+                                    </div>
+                                </div>
+                                <button type="button" className="btn-close btn-close-white" onClick={() => setShowPoCreateModal(false)}></button>
+                            </div>
+
+                            <form onSubmit={handleSavePurchaseOrder}>
+                                <div className="modal-body p-3 bg-light">
+                                    {/* Header Info */}
+                                    <div className="card border-0 shadow-sm p-3 mb-3 bg-white">
+                                        <div className="row g-2">
+                                            <div className="col-md-5">
+                                                <label className="form-label small fw-bold mb-1">Target Supplier / Agency <span className="text-danger">*</span></label>
+                                                <select 
+                                                    className="form-select form-select-sm fw-semibold" 
+                                                    value={poCreateForm.supplier_id} 
+                                                    onChange={(e) => setPoCreateForm({ ...poCreateForm, supplier_id: e.target.value })}
+                                                    required
+                                                >
+                                                    <option value="">-- Choose Supplier --</option>
+                                                    {suppliers.map(s => (
+                                                        <option key={s.supplier_id} value={s.supplier_id}>
+                                                            {s.supplier_name} (GST: {s.gstin || 'N/A'})
+                                                        </option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="col-md-3">
+                                                <label className="form-label small fw-bold mb-1">Expected Delivery Date</label>
+                                                <input 
+                                                    type="date" 
+                                                    className="form-control form-control-sm"
+                                                    value={poCreateForm.expected_delivery_date}
+                                                    onChange={(e) => setPoCreateForm({ ...poCreateForm, expected_delivery_date: e.target.value })}
+                                                    required
+                                                />
+                                            </div>
+                                            <div className="col-md-4">
+                                                <label className="form-label small fw-bold mb-1">Remarks / Order Instructions</label>
+                                                <input 
+                                                    type="text" 
+                                                    className="form-control form-control-sm"
+                                                    placeholder="e.g. Urgent stock replenishment"
+                                                    value={poCreateForm.remarks}
+                                                    onChange={(e) => setPoCreateForm({ ...poCreateForm, remarks: e.target.value })}
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    {/* Order Items Table */}
+                                    <div className="card border-0 shadow-sm p-3 bg-white">
+                                        <div className="d-flex justify-content-between align-items-center mb-2">
+                                            <h6 className="fw-bold text-primary mb-0" style={{ fontSize: '13px' }}>
+                                                <i className="bi bi-box-seam me-1"></i> Ordered Items ({poCreateForm.items.length})
+                                            </h6>
+                                            <button 
+                                                type="button" 
+                                                className="btn btn-outline-primary btn-sm py-0.5 px-2"
+                                                onClick={() => {
+                                                    setPoCreateForm({
+                                                        ...poCreateForm,
+                                                        items: [
+                                                            ...poCreateForm.items,
+                                                            { item_id: null, item_name: '', generic_name: '', category: 'Tablet', order_packs: 1, units_per_pack: 10, estimated_ptr: 0, gst_rate: 12 }
+                                                        ]
+                                                    });
+                                                }}
+                                            >
+                                                <i className="bi bi-plus me-1"></i> Add Another Medicine
+                                            </button>
+                                        </div>
+
+                                        <div className="table-responsive">
+                                            <table className="table table-bordered align-middle mb-0" style={{ fontSize: '12.5px' }}>
+                                                <thead className="table-light">
+                                                    <tr>
+                                                        <th style={{ minWidth: 240 }}>Medicine Name</th>
+                                                        <th style={{ width: 100 }}>Category</th>
+                                                        <th style={{ width: 90 }}>Packs</th>
+                                                        <th style={{ width: 90 }}>Units/Pack</th>
+                                                        <th style={{ width: 100 }}>Est. PTR (₹)</th>
+                                                        <th style={{ width: 85 }}>GST%</th>
+                                                        <th style={{ width: 120 }} className="text-end">Est. Total (₹)</th>
+                                                        <th style={{ width: 40 }}></th>
+                                                    </tr>
+                                                </thead>
+                                                <tbody>
+                                                    {poCreateForm.items.map((it, idx) => {
+                                                        const lineTotal = Number(it.order_packs || 0) * Number(it.estimated_ptr || 0) * (1 + (Number(it.gst_rate || 0) / 100));
+                                                        return (
+                                                            <tr key={idx}>
+                                                                <td>
+                                                                    <input 
+                                                                        type="text" 
+                                                                        className="form-control form-control-sm fw-semibold" 
+                                                                        placeholder="Medicine name..." 
+                                                                        value={it.item_name}
+                                                                        onChange={(e) => {
+                                                                            const items = [...poCreateForm.items];
+                                                                            items[idx].item_name = e.target.value;
+                                                                            setPoCreateForm({ ...poCreateForm, items });
+                                                                        }}
+                                                                        required
+                                                                    />
+                                                                </td>
+                                                                <td>
+                                                                    <input 
+                                                                        type="text" 
+                                                                        className="form-control form-control-sm" 
+                                                                        value={it.category}
+                                                                        onChange={(e) => {
+                                                                            const items = [...poCreateForm.items];
+                                                                            items[idx].category = e.target.value;
+                                                                            setPoCreateForm({ ...poCreateForm, items });
+                                                                        }}
+                                                                    />
+                                                                </td>
+                                                                <td>
+                                                                    <input 
+                                                                        type="number" 
+                                                                        min="1" 
+                                                                        className="form-control form-control-sm text-center fw-bold" 
+                                                                        value={it.order_packs}
+                                                                        onChange={(e) => {
+                                                                            const items = [...poCreateForm.items];
+                                                                            items[idx].order_packs = Math.max(1, parseInt(e.target.value) || 1);
+                                                                            setPoCreateForm({ ...poCreateForm, items });
+                                                                        }}
+                                                                        required
+                                                                    />
+                                                                </td>
+                                                                <td>
+                                                                    <input 
+                                                                        type="number" 
+                                                                        min="1" 
+                                                                        className="form-control form-control-sm text-center" 
+                                                                        value={it.units_per_pack}
+                                                                        onChange={(e) => {
+                                                                            const items = [...poCreateForm.items];
+                                                                            items[idx].units_per_pack = Math.max(1, parseInt(e.target.value) || 1);
+                                                                            setPoCreateForm({ ...poCreateForm, items });
+                                                                        }}
+                                                                    />
+                                                                </td>
+                                                                <td>
+                                                                    <input 
+                                                                        type="number" 
+                                                                        step="0.01" 
+                                                                        min="0" 
+                                                                        className="form-control form-control-sm text-end" 
+                                                                        value={it.estimated_ptr}
+                                                                        onChange={(e) => {
+                                                                            const items = [...poCreateForm.items];
+                                                                            items[idx].estimated_ptr = parseFloat(e.target.value) || 0;
+                                                                            setPoCreateForm({ ...poCreateForm, items });
+                                                                        }}
+                                                                    />
+                                                                </td>
+                                                                <td>
+                                                                    <select 
+                                                                        className="form-select form-select-sm" 
+                                                                        value={it.gst_rate}
+                                                                        onChange={(e) => {
+                                                                            const items = [...poCreateForm.items];
+                                                                            items[idx].gst_rate = parseFloat(e.target.value) || 0;
+                                                                            setPoCreateForm({ ...poCreateForm, items });
+                                                                        }}
+                                                                    >
+                                                                        <option value="0">0%</option>
+                                                                        <option value="5">5%</option>
+                                                                        <option value="12">12%</option>
+                                                                        <option value="18">18%</option>
+                                                                        <option value="28">28%</option>
+                                                                    </select>
+                                                                </td>
+                                                                <td className="text-end fw-bold">
+                                                                    ₹{lineTotal.toFixed(2)}
+                                                                </td>
+                                                                <td className="text-center">
+                                                                    {poCreateForm.items.length > 1 && (
+                                                                        <button 
+                                                                            type="button" 
+                                                                            className="btn btn-sm btn-outline-danger py-0 px-1"
+                                                                            onClick={() => {
+                                                                                setPoCreateForm({
+                                                                                    ...poCreateForm,
+                                                                                    items: poCreateForm.items.filter((_, i) => i !== idx)
+                                                                                });
+                                                                            }}
+                                                                        >
+                                                                            <i className="bi bi-x"></i>
+                                                                        </button>
+                                                                    )}
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })}
+                                                </tbody>
+                                                <tfoot className="table-light fw-bold">
+                                                    <tr>
+                                                        <td colSpan="6" className="text-end">Estimated Total Amount:</td>
+                                                        <td className="text-end text-primary fs-6">
+                                                            ₹{poCreateForm.items.reduce((sum, it) => sum + (Number(it.order_packs || 0) * Number(it.estimated_ptr || 0) * (1 + (Number(it.gst_rate || 0) / 100))), 0).toFixed(2)}
+                                                        </td>
+                                                        <td></td>
+                                                    </tr>
+                                                </tfoot>
+                                            </table>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="modal-footer py-2 px-3 bg-white d-flex justify-content-between">
+                                    <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => setShowPoCreateModal(false)}>
+                                        Cancel
+                                    </button>
+                                    <button type="submit" className="btn btn-primary btn-sm fw-bold px-4 shadow-sm" disabled={isSavingPO}>
+                                        {isSavingPO ? (
+                                            <>
+                                                <span className="spinner-border spinner-border-sm me-1"></span>
+                                                Generating PO...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <i className="bi bi-check2-circle me-1"></i>
+                                                Generate Purchase Order
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ================================================================= */}
+            {/* MODAL: VIEW & PRINT PURCHASE ORDER */}
+            {/* ================================================================= */}
+            {showPoViewModal && activeViewPo && (
+                <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(15, 23, 42, 0.75)' }} tabIndex="-1">
+                    <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+                        <div className="modal-content border-0 shadow-lg">
+                            <div className="modal-header bg-dark text-white py-2.5 px-3 d-flex justify-content-between align-items-center">
+                                <div className="d-flex align-items-center gap-2">
+                                    <div className="bg-primary text-white rounded p-1.5 d-flex align-items-center justify-content-center" style={{ width: 32, height: 32 }}>
+                                        <i className="bi bi-printer fs-5"></i>
+                                    </div>
+                                    <div>
+                                        <h6 className="modal-title mb-0 fw-bold">Purchase Order Document: {activeViewPo.purchase_order.po_number}</h6>
+                                        <small className="text-light opacity-75">Status: <span className="text-uppercase fw-bold text-info">{activeViewPo.purchase_order.status}</span></small>
+                                    </div>
+                                </div>
+                                <button type="button" className="btn-close btn-close-white" onClick={() => setShowPoViewModal(false)}></button>
+                            </div>
+
+                            <div className="modal-body p-4 bg-white" id="printable-po-document">
+                                {/* Print Header */}
+                                <div className="d-flex justify-content-between align-items-start border-bottom pb-3 mb-3">
+                                    <div>
+                                        <h4 className="fw-bold text-primary mb-1">{store.store_name}</h4>
+                                        <div className="text-muted small">{store.building_name} | {store.room_no}</div>
+                                        <div className="text-muted small">Hospital Pharmacy &amp; Medical Supplies Dept.</div>
+                                    </div>
+                                    <div className="text-end">
+                                        <h5 className="fw-bold mb-0 text-dark">PURCHASE ORDER</h5>
+                                        <div className="badge bg-primary fs-6 mt-1">{activeViewPo.purchase_order.po_number}</div>
+                                        <div className="small text-muted mt-1">Date: <strong>{activeViewPo.purchase_order.po_date}</strong></div>
+                                        <div className="small text-muted">Delivery: <strong>{activeViewPo.purchase_order.expected_delivery_date || 'Prompt'}</strong></div>
+                                    </div>
+                                </div>
+
+                                {/* Vendor Card */}
+                                <div className="row g-3 mb-3">
+                                    <div className="col-md-6">
+                                        <div className="p-2.5 bg-light rounded border">
+                                            <small className="text-muted text-uppercase fw-bold" style={{ fontSize: '10px' }}>Vendor / Supplier:</small>
+                                            <h6 className="fw-bold mb-1 text-dark">{activeViewPo.purchase_order.supplier_name}</h6>
+                                            {activeViewPo.purchase_order.address && <div className="small text-muted">{activeViewPo.purchase_order.address}</div>}
+                                            <div className="small text-muted">GSTIN: <strong>{activeViewPo.purchase_order.gstin || 'N/A'}</strong></div>
+                                            <div className="small text-muted">Phone: {activeViewPo.purchase_order.phone || 'N/A'}</div>
+                                        </div>
+                                    </div>
+                                    <div className="col-md-6">
+                                        <div className="p-2.5 bg-light rounded border">
+                                            <small className="text-muted text-uppercase fw-bold" style={{ fontSize: '10px' }}>Ship To / Delivery Destination:</small>
+                                            <h6 className="fw-bold mb-1 text-dark">{store.store_name}</h6>
+                                            <div className="small text-muted">{store.building_name}, {store.floor_no}</div>
+                                            <div className="small text-muted">Remarks: <em>{activeViewPo.purchase_order.remarks || 'Supply per hospital contract terms'}</em></div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Items Table */}
+                                <div className="table-responsive mb-3">
+                                    <table className="table table-bordered table-sm align-middle mb-0" style={{ fontSize: '12px' }}>
+                                        <thead className="table-light">
+                                            <tr>
+                                                <th style={{ width: 35 }}>#</th>
+                                                <th>Item Name &amp; Description</th>
+                                                <th>Category</th>
+                                                <th className="text-center" style={{ width: 85 }}>Ordered Packs</th>
+                                                <th className="text-center" style={{ width: 85 }}>Units/Pack</th>
+                                                <th className="text-end" style={{ width: 95 }}>Est. PTR</th>
+                                                <th className="text-center" style={{ width: 65 }}>GST%</th>
+                                                <th className="text-end" style={{ width: 110 }}>Est. Amount</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {activeViewPo.items?.map((it, idx) => (
+                                                <tr key={idx}>
+                                                    <td className="text-muted text-center">{idx + 1}</td>
+                                                    <td>
+                                                        <div className="fw-bold text-dark">{it.item_name}</div>
+                                                        {it.generic_name && <small className="text-muted">{it.generic_name}</small>}
+                                                    </td>
+                                                    <td>{it.category || 'Tablet'}</td>
+                                                    <td className="text-center fw-bold">{it.order_packs}</td>
+                                                    <td className="text-center">{it.units_per_pack}</td>
+                                                    <td className="text-end">₹{Number(it.estimated_ptr).toFixed(2)}</td>
+                                                    <td className="text-center">{it.gst_rate}%</td>
+                                                    <td className="text-end fw-bold">₹{Number(it.estimated_amount).toFixed(2)}</td>
+                                                </tr>
+                                            ))}
+                                        </tbody>
+                                        <tfoot className="table-light fw-bold">
+                                            <tr>
+                                                <td colSpan="7" className="text-end">Total Estimated Value:</td>
+                                                <td className="text-end text-primary fs-6">₹{Number(activeViewPo.purchase_order.total_estimated_amount).toFixed(2)}</td>
+                                            </tr>
+                                        </tfoot>
+                                    </table>
+                                </div>
+
+                                {/* Signatures */}
+                                <div className="d-flex justify-content-between align-items-end pt-4 mt-4 border-top">
+                                    <div className="text-center" style={{ width: 180 }}>
+                                        <div className="border-bottom pb-4 mb-1"></div>
+                                        <small className="text-muted fw-bold">Prepared By / Pharmacist</small>
+                                    </div>
+                                    <div className="text-center" style={{ width: 180 }}>
+                                        <div className="border-bottom pb-4 mb-1"></div>
+                                        <small className="text-muted fw-bold">Authorized Signatory</small>
+                                    </div>
+                                </div>
+                            </div>
+
+                            <div className="modal-footer py-2 px-3 bg-light d-flex justify-content-between">
+                                <button type="button" className="btn btn-outline-secondary btn-sm" onClick={() => setShowPoViewModal(false)}>
+                                    Close
+                                </button>
+                                <div className="d-flex gap-2">
+                                    {activeViewPo.purchase_order.status === 'ordered' && (
+                                        <button 
+                                            type="button" 
+                                            className="btn btn-success btn-sm fw-bold px-3 shadow-sm"
+                                            onClick={() => loadPoIntoInwardBill(activeViewPo.purchase_order.po_id)}
+                                        >
+                                            <i className="bi bi-box-arrow-in-down me-1"></i> Inward into Purchase Bill
+                                        </button>
+                                    )}
+                                    <button 
+                                        type="button" 
+                                        className="btn btn-primary btn-sm fw-bold px-3 shadow-sm"
+                                        onClick={() => window.print()}
+                                    >
+                                        <i className="bi bi-printer me-1"></i> Print PO
+                                    </button>
+                                </div>
+                            </div>
                         </div>
                     </div>
                 </div>

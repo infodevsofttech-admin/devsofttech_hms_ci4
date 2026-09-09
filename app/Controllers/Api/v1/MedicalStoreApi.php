@@ -2245,6 +2245,17 @@ class MedicalStoreApi extends BaseController
         $this->db->table('mst_purchases')->insert($purchaseData);
         $purchaseId = $this->db->insertID();
 
+        // If inward bill is created against a Purchase Order, mark PO as received
+        $poId = (int)($json['po_id'] ?? 0);
+        if ($poId > 0 && $this->db->tableExists('mst_purchase_orders')) {
+            $this->db->table('mst_purchase_orders')
+                ->where('po_id', $poId)
+                ->update([
+                    'status'     => 'received',
+                    'updated_at' => date('Y-m-d H:i:s')
+                ]);
+        }
+
         foreach ($purchaseItems as $pi) {
             $pi['purchase_id'] = $purchaseId;
             $this->db->table('mst_purchase_items')->insert($pi);
@@ -2304,41 +2315,383 @@ class MedicalStoreApi extends BaseController
     {
         $json = $this->request->getJSON(true) ?: $this->request->getPost();
         $supplierId = (int)($json['supplier_id'] ?? 0);
+        $purchaseId = (int)($json['purchase_id'] ?? 0);
         $amount = (float)($json['amount'] ?? 0);
-        $paymentMode = trim($json['payment_mode'] ?? 'Bank'); // Cash, Bank, Cheque, NEFT
+        $paymentMode = trim($json['payment_mode'] ?? 'Bank'); // Cash, Bank, Cheque, NEFT, UPI
         $refNo = trim($json['reference_no'] ?? '');
+        $bankName = trim($json['bank_name'] ?? '');
+        $remarks = trim($json['remarks'] ?? '');
+        $paymentDate = !empty($json['payment_date']) ? trim($json['payment_date']) : date('Y-m-d');
         $storeId = (int)($json['store_id'] ?? 1);
 
         if ($supplierId <= 0 || $amount <= 0) {
-            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Supplier and valid amount required.']);
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Supplier and valid payment amount are required.']);
         }
 
-        $vNo = 'PMT-' . time();
+        $vNo = 'PMT-' . date('Ymd') . '-' . rand(1000, 9999);
+
+        $this->db->transStart();
+
+        // 1. Insert into mst_supplier_payments
+        $this->db->table('mst_supplier_payments')->insert([
+            'store_id'     => $storeId,
+            'supplier_id'  => $supplierId,
+            'purchase_id'  => $purchaseId > 0 ? $purchaseId : null,
+            'payment_date' => $paymentDate,
+            'amount'       => $amount,
+            'payment_mode' => $paymentMode,
+            'reference_no' => $refNo,
+            'bank_name'    => $bankName,
+            'voucher_no'   => $vNo,
+            'remarks'      => $remarks,
+            'created_at'   => date('Y-m-d H:i:s')
+        ]);
+        $paymentId = $this->db->insertID();
+
+        // 2. Adjust invoice(s) paid_amount and payment_status
+        if ($purchaseId > 0) {
+            $inv = $this->db->table('mst_purchases')->where('purchase_id', $purchaseId)->get()->getRowArray();
+            if ($inv) {
+                $newPaid = (float)$inv['paid_amount'] + $amount;
+                $newStatus = ($newPaid >= (float)$inv['net_amount']) ? 'paid' : 'partially_paid';
+                $this->db->table('mst_purchases')->where('purchase_id', $purchaseId)->update([
+                    'paid_amount'    => $newPaid,
+                    'payment_status' => $newStatus
+                ]);
+            }
+        } else {
+            // On-account payment: FIFO allocation against unpaid / partially paid invoices
+            $remaining = $amount;
+            $unpaidInvoices = $this->db->table('mst_purchases')
+                ->where('supplier_id', $supplierId)
+                ->whereIn('payment_status', ['unpaid', 'partially_paid'])
+                ->orderBy('invoice_date', 'ASC')
+                ->orderBy('purchase_id', 'ASC')
+                ->get()
+                ->getResultArray();
+
+            foreach ($unpaidInvoices as $uInv) {
+                if ($remaining <= 0) break;
+                $dueOnInv = max(0, (float)$uInv['net_amount'] - (float)$uInv['paid_amount']);
+                if ($dueOnInv <= 0) continue;
+
+                $alloc = min($remaining, $dueOnInv);
+                $newPaid = (float)$uInv['paid_amount'] + $alloc;
+                $newStatus = ($newPaid >= (float)$uInv['net_amount']) ? 'paid' : 'partially_paid';
+
+                $this->db->table('mst_purchases')->where('purchase_id', $uInv['purchase_id'])->update([
+                    'paid_amount'    => $newPaid,
+                    'payment_status' => $newStatus
+                ]);
+
+                $remaining -= $alloc;
+            }
+        }
+
+        // 3. Double-entry ledger in mst_ledger_entries: Dr Sundry Creditor, Cr Cash/Bank
         $creditorHead = $this->db->table('mst_account_heads')->where('head_code', '2001')->get()->getRowArray();
         $sourceHeadCode = ($paymentMode === 'Cash') ? '1001' : '1002';
         $sourceHead = $this->db->table('mst_account_heads')->where('head_code', $sourceHeadCode)->get()->getRowArray();
 
-        $this->db->transStart();
+        if ($creditorHead) {
+            $this->db->table('mst_ledger_entries')->insert([
+                'store_id'        => $storeId,
+                'voucher_no'      => $vNo,
+                'voucher_type'    => 'PAYMENT',
+                'voucher_date'    => $paymentDate,
+                'account_head_id' => $creditorHead['head_id'],
+                'debit_amount'    => $amount,
+                'credit_amount'   => 0,
+                'reference_type'  => 'supplier_payment',
+                'reference_id'    => $supplierId,
+                'narration'       => "Payment to Supplier #$supplierId via $paymentMode " . ($refNo ? "Ref: $refNo" : "")
+            ]);
+        }
 
-        // Dr Creditor (reducing liability)
-        $this->db->table('mst_ledger_entries')->insert([
-            'store_id' => $storeId, 'voucher_no' => $vNo, 'voucher_type' => 'PAYMENT', 'voucher_date' => date('Y-m-d'),
-            'account_head_id' => $creditorHead['head_id'], 'debit_amount' => $amount, 'credit_amount' => 0,
-            'reference_type' => 'supplier_payment', 'reference_id' => $supplierId,
-            'narration' => "Payment made to Supplier #$supplierId via $paymentMode Ref: $refNo"
-        ]);
-
-        // Cr Cash / Bank
-        $this->db->table('mst_ledger_entries')->insert([
-            'store_id' => $storeId, 'voucher_no' => $vNo, 'voucher_type' => 'PAYMENT', 'voucher_date' => date('Y-m-d'),
-            'account_head_id' => $sourceHead['head_id'], 'debit_amount' => 0, 'credit_amount' => $amount,
-            'reference_type' => 'supplier_payment', 'reference_id' => $supplierId,
-            'narration' => "Payment outflow via $paymentMode to Supplier #$supplierId"
-        ]);
+        if ($sourceHead) {
+            $this->db->table('mst_ledger_entries')->insert([
+                'store_id'        => $storeId,
+                'voucher_no'      => $vNo,
+                'voucher_type'    => 'PAYMENT',
+                'voucher_date'    => $paymentDate,
+                'account_head_id' => $sourceHead['head_id'],
+                'debit_amount'    => 0,
+                'credit_amount'   => $amount,
+                'reference_type'  => 'supplier_payment',
+                'reference_id'    => $supplierId,
+                'narration'       => "Payment outflow via $paymentMode to Supplier #$supplierId"
+            ]);
+        }
 
         $this->db->transComplete();
 
-        return $this->response->setJSON(['status' => 1, 'message' => 'Supplier payment recorded successfully.', 'voucher_no' => $vNo]);
+        if ($this->db->transStatus() === false) {
+            return $this->response->setStatusCode(500)->setJSON(['status' => 0, 'message' => 'Failed to record supplier payment.']);
+        }
+
+        return $this->response->setJSON([
+            'status'     => 1,
+            'message'    => 'Supplier payment recorded successfully.',
+            'voucher_no' => $vNo,
+            'payment_id' => $paymentId
+        ]);
+    }
+
+    // =========================================================================
+    // 5B. PURCHASE ORDERS (PO)
+    // =========================================================================
+
+    public function getPurchaseOrders()
+    {
+        $storeId = (int)($this->request->getGet('store_id') ?: 0);
+        $status = trim($this->request->getGet('status') ?: '');
+
+        $builder = $this->db->table('mst_purchase_orders po')
+            ->select('po.*, s.supplier_name, s.phone, s.contact_person, s.address, s.gstin')
+            ->join('mst_suppliers s', 's.supplier_id = po.supplier_id')
+            ->orderBy('po.po_date', 'DESC')
+            ->orderBy('po.po_id', 'DESC');
+
+        if ($storeId > 0) {
+            $builder->where('po.store_id', $storeId);
+        }
+        if (!empty($status) && $status !== 'all') {
+            $builder->where('po.status', $status);
+        }
+
+        $orders = $builder->get()->getResultArray();
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'purchase_orders' => $orders
+        ]);
+    }
+
+    public function getPurchaseOrderDetail(int $poId)
+    {
+        $po = $this->db->table('mst_purchase_orders po')
+            ->select('po.*, s.supplier_name, s.contact_person, s.phone, s.email, s.address, s.gstin, s.dl_no_20b, s.dl_no_21b')
+            ->join('mst_suppliers s', 's.supplier_id = po.supplier_id')
+            ->where('po.po_id', $poId)
+            ->get()
+            ->getRowArray();
+
+        if (!$po) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Purchase order not found.']);
+        }
+
+        $items = $this->db->table('mst_purchase_order_items')
+            ->where('po_id', $poId)
+            ->orderBy('po_item_id', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'purchase_order' => $po,
+            'items' => $items
+        ]);
+    }
+
+    public function savePurchaseOrder()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $storeId = (int)($json['store_id'] ?? 1);
+        $supplierId = (int)($json['supplier_id'] ?? 0);
+        $items = $json['items'] ?? [];
+        $expectedDate = !empty($json['expected_delivery_date']) ? trim($json['expected_delivery_date']) : date('Y-m-d', strtotime('+3 days'));
+        $remarks = trim($json['remarks'] ?? '');
+
+        if ($supplierId <= 0 || empty($items)) {
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Supplier and order items are required.']);
+        }
+
+        $poNumber = 'PO-' . date('Ymd') . '-' . rand(1000, 9999);
+
+        $totalEstAmount = 0;
+        $orderItems = [];
+
+        foreach ($items as $it) {
+            $itemId = (int)($it['item_id'] ?? 0);
+            $itemName = trim($it['item_name'] ?? '');
+            $orderPacks = max(1, (int)($it['order_packs'] ?? 1));
+            $unitsPerPack = max(1, (int)($it['units_per_pack'] ?? 10));
+            $estPtr = (float)($it['estimated_ptr'] ?? 0);
+            $gstRate = (float)($it['gst_rate'] ?? 12.00);
+
+            $lineNet = $orderPacks * $estPtr;
+            $lineTotal = round($lineNet * (1 + ($gstRate / 100)), 2);
+            $totalEstAmount += $lineTotal;
+
+            $orderItems[] = [
+                'item_id'          => $itemId > 0 ? $itemId : null,
+                'item_name'        => $itemName,
+                'generic_name'     => trim($it['generic_name'] ?? ''),
+                'category'         => trim($it['category'] ?? 'Tablet'),
+                'order_packs'      => $orderPacks,
+                'units_per_pack'   => $unitsPerPack,
+                'estimated_ptr'    => $estPtr,
+                'gst_rate'         => $gstRate,
+                'estimated_amount' => $lineTotal
+            ];
+        }
+
+        $this->db->transStart();
+
+        $this->db->table('mst_purchase_orders')->insert([
+            'store_id'               => $storeId,
+            'supplier_id'            => $supplierId,
+            'po_number'              => $poNumber,
+            'po_date'                => date('Y-m-d'),
+            'expected_delivery_date' => $expectedDate,
+            'total_items'            => count($orderItems),
+            'total_estimated_amount' => round($totalEstAmount, 2),
+            'status'                 => 'ordered',
+            'remarks'                => $remarks,
+            'created_at'             => date('Y-m-d H:i:s'),
+            'updated_at'             => date('Y-m-d H:i:s')
+        ]);
+        $poId = $this->db->insertID();
+
+        foreach ($orderItems as &$oi) {
+            $oi['po_id'] = $poId;
+            $this->db->table('mst_purchase_order_items')->insert($oi);
+        }
+        unset($oi);
+
+        $this->db->transComplete();
+
+        if ($this->db->transStatus() === false) {
+            return $this->response->setStatusCode(500)->setJSON(['status' => 0, 'message' => 'Failed to create purchase order.']);
+        }
+
+        return $this->response->setJSON([
+            'status'                 => 1,
+            'message'                => 'Purchase order created successfully.',
+            'po_id'                  => $poId,
+            'po_number'              => $poNumber,
+            'total_estimated_amount' => round($totalEstAmount, 2)
+        ]);
+    }
+
+    public function cancelPurchaseOrder()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $poId = (int)($json['po_id'] ?? 0);
+        if ($poId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Valid PO ID required.']);
+        }
+
+        $this->db->table('mst_purchase_orders')
+            ->where('po_id', $poId)
+            ->update([
+                'status'     => 'cancelled',
+                'updated_at' => date('Y-m-d H:i:s')
+            ]);
+
+        return $this->response->setJSON(['status' => 1, 'message' => 'Purchase order marked as cancelled.']);
+    }
+
+    // =========================================================================
+    // 5C. SHORT ITEMS & DEFICIENCY BOOK
+    // =========================================================================
+
+    public function getShortItems()
+    {
+        $storeId = (int)($this->request->getGet('store_id') ?: 1);
+
+        // Fetch items with current stock aggregated across batches for this store
+        $items = $this->db->table('mst_items i')
+            ->select('i.item_id, i.item_name, i.category, i.unit_pack, i.units_per_pack, i.min_reorder_level, i.drug_schedule, i.hsn_code, i.gst_rate, COALESCE(SUM(s.current_qty), 0) as current_qty')
+            ->join('mst_stock s', "s.item_id = i.item_id AND s.store_id = {$storeId}", 'left')
+            ->where('i.is_active', 1)
+            ->groupBy('i.item_id')
+            ->having('current_qty <= i.min_reorder_level OR current_qty = 0')
+            ->orderBy('current_qty', 'ASC')
+            ->orderBy('i.item_name', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        $shortList = [];
+        foreach ($items as $it) {
+            $itemId = (int)$it['item_id'];
+            $currentQty = (int)$it['current_qty'];
+            $minReorder = max(1, (int)$it['min_reorder_level']);
+            $unitsPerPack = max(1, (int)$it['units_per_pack']);
+
+            // Find last purchase details for supplier and PTR
+            $lastPurchase = $this->db->table('mst_purchase_items pi')
+                ->select('pi.ptr, pi.mrp, pi.gst_rate, p.supplier_id, p.received_date, s.supplier_name')
+                ->join('mst_purchases p', 'p.purchase_id = pi.purchase_id')
+                ->join('mst_suppliers s', 's.supplier_id = p.supplier_id')
+                ->where('pi.item_id', $itemId)
+                ->orderBy('p.received_date', 'DESC')
+                ->orderBy('p.purchase_id', 'DESC')
+                ->limit(1)
+                ->get()
+                ->getRowArray();
+
+            $lastPtr = (float)($lastPurchase['ptr'] ?? 0);
+            $lastMrp = (float)($lastPurchase['mrp'] ?? 0);
+            $lastSupplierId = (int)($lastPurchase['supplier_id'] ?? 0);
+            $lastSupplierName = $lastPurchase['supplier_name'] ?? 'Not Assigned';
+            $gstRate = (float)($lastPurchase['gst_rate'] ?? $it['gst_rate'] ?? 12.00);
+
+            // Suggested pack calculation: reorder up to (min_reorder_level * 2) units
+            $deficitUnits = max($unitsPerPack, ($minReorder * 2) - $currentQty);
+            $suggestedPacks = max(1, (int)ceil($deficitUnits / $unitsPerPack));
+
+            $status = ($currentQty <= 0) ? 'OUT_OF_STOCK' : 'LOW_STOCK';
+
+            $shortList[] = [
+                'item_id'            => $itemId,
+                'item_name'          => $it['item_name'],
+                'category'           => $it['category'],
+                'unit_pack'          => $it['unit_pack'],
+                'units_per_pack'     => $unitsPerPack,
+                'min_reorder_level'  => $minReorder,
+                'current_qty'        => $currentQty,
+                'current_packs'      => round($currentQty / $unitsPerPack, 1),
+                'suggested_packs'    => $suggestedPacks,
+                'status'             => $status,
+                'drug_schedule'      => $it['drug_schedule'],
+                'last_ptr'           => $lastPtr,
+                'last_mrp'           => $lastMrp,
+                'gst_rate'           => $gstRate,
+                'last_supplier_id'   => $lastSupplierId,
+                'last_supplier_name' => $lastSupplierName,
+                'last_purchase_date' => $lastPurchase['received_date'] ?? null
+            ];
+        }
+
+        return $this->response->setJSON([
+            'status'      => 1,
+            'store_id'    => $storeId,
+            'count'       => count($shortList),
+            'short_items' => $shortList
+        ]);
+    }
+
+    public function flagShortItem()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $itemId = (int)($json['item_id'] ?? 0);
+        $minReorder = (int)($json['min_reorder_level'] ?? 10);
+
+        if ($itemId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Valid Item ID is required.']);
+        }
+
+        $this->db->table('mst_items')->where('item_id', $itemId)->update([
+            'min_reorder_level' => $minReorder
+        ]);
+
+        return $this->response->setJSON([
+            'status'            => 1,
+            'message'           => 'Item reorder level updated and tracked in Short Book.',
+            'item_id'           => $itemId,
+            'min_reorder_level' => $minReorder
+        ]);
     }
 
     // =========================================================================
@@ -2516,6 +2869,87 @@ class MedicalStoreApi extends BaseController
     // 7. INDIAN ACCOUNTING, LEDGERS & GST REPORTS
     // =========================================================================
 
+    public function getSupplierLedgerSummary()
+    {
+        $suppliers = $this->db->table('mst_suppliers')
+            ->where('is_active', 1)
+            ->orderBy('supplier_name', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        $result = [];
+        $totalAllPurchases = 0;
+        $totalAllPaid = 0;
+        $totalAllBalance = 0;
+        $totalPendingBills = 0;
+
+        foreach ($suppliers as $sup) {
+            $supId = (int)$sup['supplier_id'];
+
+            // Purchases total
+            $purchases = $this->db->table('mst_purchases')
+                ->select('SUM(net_amount) as total_purchases, SUM(paid_amount) as total_paid_in_invoices, COUNT(*) as invoice_count, MAX(invoice_date) as last_invoice_date')
+                ->where('supplier_id', $supId)
+                ->get()
+                ->getRowArray();
+
+            $totalPurchases = (float)($purchases['total_purchases'] ?? 0);
+
+            // Payments total from mst_supplier_payments
+            $pmts = $this->db->table('mst_supplier_payments')
+                ->select('SUM(amount) as total_payments, COUNT(*) as payment_count, MAX(payment_date) as last_payment_date')
+                ->where('supplier_id', $supId)
+                ->get()
+                ->getRowArray();
+
+            $totalPayments = (float)($pmts['total_payments'] ?? 0);
+            $effectivePaid = max($totalPayments, (float)($purchases['total_paid_in_invoices'] ?? 0));
+            $balance = max(0, $totalPurchases - $effectivePaid);
+
+            // Pending invoices count
+            $pendingCount = $this->db->table('mst_purchases')
+                ->where('supplier_id', $supId)
+                ->whereIn('payment_status', ['unpaid', 'partially_paid'])
+                ->countAllResults();
+
+            $supData = [
+                'supplier_id'         => $supId,
+                'supplier_name'       => $sup['supplier_name'],
+                'contact_person'      => $sup['contact_person'] ?? '',
+                'phone'               => $sup['phone'] ?? '',
+                'email'               => $sup['email'] ?? '',
+                'gstin'               => $sup['gstin'] ?? '',
+                'city'                => $sup['city'] ?? '',
+                'total_purchases'     => round($totalPurchases, 2),
+                'total_paid'          => round($effectivePaid, 2),
+                'outstanding_balance' => round($balance, 2),
+                'invoice_count'       => (int)($purchases['invoice_count'] ?? 0),
+                'pending_invoices'    => $pendingCount,
+                'last_purchase_date'  => $purchases['last_invoice_date'] ?? null,
+                'last_payment_date'   => $pmts['last_payment_date'] ?? null,
+            ];
+
+            $totalAllPurchases += $totalPurchases;
+            $totalAllPaid += $effectivePaid;
+            $totalAllBalance += $balance;
+            $totalPendingBills += $pendingCount;
+
+            $result[] = $supData;
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'suppliers' => $result,
+            'summary' => [
+                'total_purchases'     => round($totalAllPurchases, 2),
+                'total_paid'          => round($totalAllPaid, 2),
+                'outstanding_balance' => round($totalAllBalance, 2),
+                'total_pending_bills' => $totalPendingBills,
+                'total_suppliers'     => count($result)
+            ]
+        ]);
+    }
+
     public function getSupplierLedger(int $supplierId)
     {
         $supplier = $this->db->table('mst_suppliers')->where('supplier_id', $supplierId)->get()->getRowArray();
@@ -2523,35 +2957,110 @@ class MedicalStoreApi extends BaseController
             return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Supplier not found.']);
         }
 
-        // Ledger entries for this supplier
-        $entries = $this->db->table('mst_ledger_entries le')
-            ->select('le.*, ah.head_name')
-            ->join('mst_account_heads ah', 'ah.head_id = le.account_head_id')
-            ->groupStart()
-                ->where('le.reference_type', 'purchase_invoice')
-                ->orWhere('le.reference_type', 'supplier_payment')
-            ->groupEnd()
-            ->orderBy('le.voucher_date', 'ASC')
-            ->orderBy('le.entry_id', 'ASC')
+        // 1. All invoices
+        $invoices = $this->db->table('mst_purchases')
+            ->where('supplier_id', $supplierId)
+            ->orderBy('invoice_date', 'DESC')
+            ->orderBy('purchase_id', 'DESC')
             ->get()
             ->getResultArray();
 
-        $runningBalance = 0; // Credit positive (Payable)
-        $statement = [];
-        foreach ($entries as $e) {
-            $debit = (float)$e['debit_amount'];
-            $credit = (float)$e['credit_amount'];
-            $runningBalance += ($credit - $debit);
+        $totalPurchases = 0;
+        $totalInvoicePaid = 0;
+        $pendingInvoices = [];
+        foreach ($invoices as &$inv) {
+            $net = (float)$inv['net_amount'];
+            $paid = (float)$inv['paid_amount'];
+            $pending = max(0, $net - $paid);
+            $inv['pending_amount'] = round($pending, 2);
+            $totalPurchases += $net;
+            $totalInvoicePaid += $paid;
+            if ($pending > 0 || in_array($inv['payment_status'], ['unpaid', 'partially_paid'])) {
+                $pendingInvoices[] = $inv;
+            }
+        }
+        unset($inv);
 
-            $e['balance'] = round($runningBalance, 2);
-            $statement[] = $e;
+        // 2. All payments
+        $payments = $this->db->table('mst_supplier_payments')
+            ->where('supplier_id', $supplierId)
+            ->orderBy('payment_date', 'DESC')
+            ->orderBy('payment_id', 'DESC')
+            ->get()
+            ->getResultArray();
+
+        $totalPaymentsMade = 0;
+        foreach ($payments as $pmt) {
+            $totalPaymentsMade += (float)$pmt['amount'];
+        }
+        $effectivePaid = max($totalPaymentsMade, $totalInvoicePaid);
+        $outstandingBalance = max(0, $totalPurchases - $effectivePaid);
+
+        // 3. Chronological Statement (Dr / Cr)
+        // Purchases are Credit (increases liability), Payments are Debit (reduces liability)
+        $rawEvents = [];
+        foreach ($invoices as $inv) {
+            $rawEvents[] = [
+                'date'        => $inv['invoice_date'],
+                'sort_order'  => 1,
+                'type'        => 'INVOICE',
+                'voucher_no'  => $inv['supplier_invoice_no'],
+                'particulars' => "Purchase Bill #" . $inv['supplier_invoice_no'] . " (" . $inv['payment_status'] . ")",
+                'debit'       => 0,
+                'credit'      => (float)$inv['net_amount'],
+                'invoice_id'  => (int)$inv['purchase_id'],
+                'payment_id'  => null,
+                'payment_mode'=> null,
+                'ref_no'      => null
+            ];
+        }
+
+        foreach ($payments as $pmt) {
+            $rawEvents[] = [
+                'date'        => $pmt['payment_date'],
+                'sort_order'  => 2,
+                'type'        => 'PAYMENT',
+                'voucher_no'  => $pmt['voucher_no'] ?: ('PMT-' . $pmt['payment_id']),
+                'particulars' => "Payment via " . $pmt['payment_mode'] . ($pmt['reference_no'] ? " (Ref: " . $pmt['reference_no'] . ")" : "") . ($pmt['bank_name'] ? " (" . $pmt['bank_name'] . ")" : ""),
+                'debit'       => (float)$pmt['amount'],
+                'credit'      => 0,
+                'invoice_id'  => (int)($pmt['purchase_id'] ?? 0),
+                'payment_id'  => (int)$pmt['payment_id'],
+                'payment_mode'=> $pmt['payment_mode'],
+                'ref_no'      => $pmt['reference_no']
+            ];
+        }
+
+        // Sort chronological (date ASC, invoices before payments on same date)
+        usort($rawEvents, function ($a, $b) {
+            $c = strcmp($a['date'], $b['date']);
+            if ($c !== 0) return $c;
+            return $a['sort_order'] - $b['sort_order'];
+        });
+
+        $runningBalance = 0;
+        $statement = [];
+        foreach ($rawEvents as $ev) {
+            $runningBalance += ($ev['credit'] - $ev['debit']);
+            $ev['balance'] = round($runningBalance, 2);
+            $statement[] = $ev;
         }
 
         return $this->response->setJSON([
             'status' => 1,
             'supplier' => $supplier,
-            'current_balance' => round($runningBalance, 2),
-            'statement' => $statement
+            'summary' => [
+                'total_purchases'        => round($totalPurchases, 2),
+                'total_paid'             => round($effectivePaid, 2),
+                'outstanding_balance'    => round($outstandingBalance, 2),
+                'total_invoices'         => count($invoices),
+                'pending_invoices_count' => count($pendingInvoices),
+                'pending_amount'         => round($outstandingBalance, 2)
+            ],
+            'pending_invoices' => $pendingInvoices,
+            'invoices'         => $invoices,
+            'payments'         => $payments,
+            'statement'        => $statement
         ]);
     }
 

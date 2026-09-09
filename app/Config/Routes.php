@@ -1675,8 +1675,21 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1'], static funct
     $routes->get('medical-store/suppliers', 'MedicalStoreApi::suppliers');
     $routes->post('medical-store/suppliers/save', 'MedicalStoreApi::saveSupplier');
     $routes->post('medical-store/suppliers/delete', 'MedicalStoreApi::deleteSupplier');
+    $routes->get('medical-store/suppliers/ledger-summary', 'MedicalStoreApi::getSupplierLedgerSummary');
+    $routes->get('medical-store/suppliers/ledger/(:num)', 'MedicalStoreApi::getSupplierLedger/$1');
+    $routes->post('medical-store/suppliers/record-payment', 'MedicalStoreApi::saveSupplierPayment');
+
+    // Purchase Orders & Inward Bill
+    $routes->get('medical-store/purchase-orders', 'MedicalStoreApi::getPurchaseOrders');
+    $routes->get('medical-store/purchase-orders/(:num)', 'MedicalStoreApi::getPurchaseOrderDetail/$1');
+    $routes->post('medical-store/purchase-orders/save', 'MedicalStoreApi::savePurchaseOrder');
+    $routes->post('medical-store/purchase-orders/cancel', 'MedicalStoreApi::cancelPurchaseOrder');
     $routes->post('medical-store/purchase/save', 'MedicalStoreApi::savePurchase');
     $routes->post('medical-store/purchase/payment', 'MedicalStoreApi::saveSupplierPayment');
+
+    // Short Items / Deficiency & Reorder Book
+    $routes->get('medical-store/stock/short-items', 'MedicalStoreApi::getShortItems');
+    $routes->post('medical-store/stock/flag-short-item', 'MedicalStoreApi::flagShortItem');
     $routes->post('medical-store/transfer/request', 'MedicalStoreApi::requestTransfer');
     $routes->post('medical-store/transfer/dispatch', 'MedicalStoreApi::dispatchTransfer');
     $routes->post('medical-store/transfer/receive', 'MedicalStoreApi::receiveTransfer');
