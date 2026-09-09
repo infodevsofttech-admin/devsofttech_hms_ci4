@@ -18,6 +18,13 @@ class Patient extends BaseController
 
     public function index()
     {
+        if (! $this->request->isAJAX()) {
+            return view('welcome_message', [
+                'initial_route' => base_url('billing/patient'),
+                'initial_title' => 'Patient Management',
+            ]);
+        }
+
         $user = auth()->user();
 
         $bloodGroupModel = new BloodGroupModel();

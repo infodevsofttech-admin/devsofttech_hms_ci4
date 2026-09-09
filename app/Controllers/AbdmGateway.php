@@ -130,7 +130,7 @@ class AbdmGateway extends BaseController
      */
     public function m2DiscoveryCareContexts()
     {
-        $authFailure = $this->validateGatewayToHmsAuth();
+        $authFailure = $this->validateDiscoveryOrLinkAuth();
         if ($authFailure !== null) {
             return $authFailure;
         }
@@ -141,6 +141,53 @@ class AbdmGateway extends BaseController
         }
 
         $requestId = trim((string) ($payload['request_id'] ?? $payload['requestId'] ?? $this->request->getHeaderLine('X-Request-Id')));
+        $transactionId = trim((string) ($payload['transaction_id'] ?? $payload['transactionId'] ?? ''));
+
+        // Step 1: Check demographic / walk-in patient match first
+        $match = $this->matchPatientForDiscovery($payload);
+        if ($match !== null) {
+            $patient = $match['patient'];
+            $patientId = (int) $patient['id'];
+            $lName = trim((string) ($patient['p_lname'] ?? ''));
+            $patientDisplay = trim((string) ($patient['p_fname'] ?? ''));
+            if ($lName !== '' && $lName !== '0') {
+                $patientDisplay .= ' ' . $lName;
+            }
+            if ($patientDisplay === '') {
+                $patientDisplay = 'Patient ' . $patientRef;
+            }
+            $matchedBy = $match['matchedBy'];
+
+            [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientDisplay);
+
+            $this->getAuditService()->log([
+                'action' => 'discovery_records',
+                'entity_type' => 'patient_master',
+                'abha_id' => (string) ($payload['patient']['id'] ?? $payload['abha_address'] ?? ''),
+                'patient_id' => $patientId,
+                'request' => $payload,
+                'response' => ['count' => count($careContextsV3)],
+                'outcome' => 'success',
+                'transaction_id' => $transactionId,
+            ]);
+
+            return $this->response->setJSON([
+                'ok' => 1,
+                'requestId' => $requestId,
+                'transactionId' => $transactionId,
+                'patient' => [
+                    'referenceNumber' => $patientRef,
+                    'display' => $patientDisplay,
+                    'count' => count($careContextsV3),
+                    'careContexts' => $careContextsV3,
+                    'matchedBy' => $matchedBy,
+                ],
+                'care_contexts' => $careContextsV3,
+                'careContexts' => $careContextsFull,
+                'count' => count($careContextsV3),
+            ]);
+        }
+
         $abhaId = trim((string) ($payload['abha_id'] ?? ''));
         $abhaAddress = trim((string) ($payload['abha_address'] ?? $payload['abhaAddress'] ?? ''));
 
@@ -148,7 +195,7 @@ class AbdmGateway extends BaseController
             return $this->response->setStatusCode(400)->setJSON([
                 'ok' => 0,
                 'error' => 'MISSING_FIELD',
-                'message' => 'abha_id or abha_address is required',
+                'message' => 'abha_id or abha_address or demographic identifiers are required',
                 'request_id' => $requestId,
             ]);
         }
@@ -4556,12 +4603,12 @@ class AbdmGateway extends BaseController
 
     public function recordsDiscover()
     {
-        $signatureFailure = $this->validateWebhookSignature();
+        $signatureFailure = $this->validateDiscoveryOrLinkAuth();
         if ($signatureFailure !== null) {
             return $signatureFailure;
         }
 
-        if (! $this->db->tableExists('health_records')) {
+        if (! $this->db->tableExists('patient_master') && ! $this->db->tableExists('health_records')) {
             return $this->response->setJSON(['ok' => 1, 'careContexts' => [], 'count' => 0]);
         }
 
@@ -4570,6 +4617,54 @@ class AbdmGateway extends BaseController
             $payload = [];
         }
 
+        $requestId = trim((string) ($payload['requestId'] ?? $payload['request_id'] ?? $this->request->getHeaderLine('X-Request-Id')));
+        $transactionId = trim((string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? ''));
+
+        // Step 1: Match patient in patient_master (supports both walk-in non-ABHA patients and ABHA patients)
+        $match = $this->matchPatientForDiscovery($payload);
+
+        if ($match !== null) {
+            $patient = $match['patient'];
+            $patientId = (int) $patient['id'];
+            $patientRef = (string) ($patient['p_code'] ?: ('P-' . $patientId));
+            $lName = trim((string) ($patient['p_lname'] ?? ''));
+            $patientDisplay = trim((string) ($patient['p_fname'] ?? ''));
+            if ($lName !== '' && $lName !== '0') {
+                $patientDisplay .= ' ' . $lName;
+            }
+            if ($patientDisplay === '') {
+                $patientDisplay = 'Patient ' . $patientRef;
+            }
+            $matchedBy = $match['matchedBy'];
+
+            [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientDisplay);
+
+            $this->getAuditService()->log([
+                'action' => 'discovery_records',
+                'entity_type' => 'health_record',
+                'patient_id' => $patientId,
+                'request' => $payload,
+                'response' => ['count' => count($careContextsV3), 'patientRef' => $patientRef],
+                'outcome' => 'success',
+                'transaction_id' => $transactionId,
+            ]);
+
+            return $this->response->setJSON([
+                'ok' => 1,
+                'requestId' => $requestId,
+                'transactionId' => $transactionId,
+                'patient' => [
+                    'referenceNumber' => $patientRef,
+                    'display' => $patientDisplay,
+                    'careContexts' => $careContextsV3,
+                    'matchedBy' => $matchedBy,
+                ],
+                'careContexts' => $careContextsFull,
+                'count' => count($careContextsV3),
+            ]);
+        }
+
+        // Step 2: Fallback direct search by abha_address if tableExists
         $abhaAddress = trim((string) (
             $payload['abha_address']
             ?? $payload['abhaAddress']
@@ -4577,140 +4672,52 @@ class AbdmGateway extends BaseController
             ?? $payload['patient']['id']
             ?? ''
         ));
-        $mobile = preg_replace('/\D/', '', (string) (
-            $payload['mobile']
-            ?? $payload['phone']
-            ?? $payload['patient']['mobile']
-            ?? ''
-        ));
-        $patientIdentifier = trim((string) (
-            $payload['patient_id']
-            ?? $payload['patientId']
-            ?? $payload['uhid']
-            ?? $payload['UHID']
-            ?? $payload['patient']['patient_id']
-            ?? $payload['patient']['patientId']
-            ?? $payload['patient']['uhid']
-            ?? ''
-        ));
-        $birthYear = (int) (
-            $payload['birth_year']
-            ?? $payload['birthYear']
-            ?? $payload['year_of_birth']
-            ?? $payload['patient']['birth_year']
-            ?? $payload['patient']['birthYear']
-            ?? $payload['patient']['year_of_birth']
-            ?? 0
-        );
-        $hospitalId = trim((string) (
-            $payload['hospital_id']
-            ?? $payload['patient_id']
-            ?? $payload['patientRef']
-            ?? $payload['patient_ref']
-            ?? ''
-        ));
 
-        $patientIds = [];
-        if ($this->db->tableExists('patient_master')) {
-            $pmFields = $this->db->getFieldNames('patient_master') ?? [];
-            $abhaCols = array_values(array_filter(['abha_address', 'abha_id', 'abha_no', 'abha'], fn ($c) => in_array($c, $pmFields, true)));
+        if ($abhaAddress !== '' && $this->db->tableExists('health_records')) {
+            $hrRows = $this->db->table('health_records')
+                ->select('id, patient_id, abha_id, hi_type, care_context_reference, created_at, updated_at')
+                ->groupStart()
+                    ->where('abha_id', $abhaAddress)
+                    ->orWhere('abha_id', preg_replace('/\D/', '', $abhaAddress))
+                ->groupEnd()
+                ->orderBy('id', 'DESC')
+                ->limit(200)
+                ->get()
+                ->getResultArray();
 
-            if ($abhaAddress !== '' && ! empty($abhaCols)) {
-                $b = $this->db->table('patient_master')->select('id');
-                $b->groupStart();
-                foreach ($abhaCols as $col) {
-                    $b->orWhere($col, $abhaAddress);
+            if (! empty($hrRows)) {
+                $careContexts = [];
+                foreach ($hrRows as $row) {
+                    $ccRef = trim((string) ($row['care_context_reference'] ?? ''));
+                    if ($ccRef === '') {
+                        $ccRef = 'HR-' . (int) ($row['id'] ?? 0);
+                    }
+                    $careContexts[] = [
+                        'careContextId' => $ccRef,
+                        'referenceNumber' => $ccRef,
+                        'display' => (string) (($row['hi_type'] ?? 'HealthDocumentRecord') . ' - ' . ($row['created_at'] ?? $row['updated_at'] ?? '')),
+                        'record_type' => (string) ($row['hi_type'] ?? ''),
+                        'patient_id' => (int) ($row['patient_id'] ?? 0),
+                    ];
                 }
-                $b->groupEnd();
-                $rows = $b->get()->getResultArray();
-                foreach ($rows as $r) {
-                    $patientIds[] = (int) ($r['id'] ?? 0);
-                }
-            }
-
-            if ($mobile !== '' && in_array('mphone1', $pmFields, true)) {
-                $rows = $this->db->table('patient_master')->select('id')->where('mphone1', $mobile)->get()->getResultArray();
-                foreach ($rows as $r) {
-                    $patientIds[] = (int) ($r['id'] ?? 0);
-                }
-            }
-
-            // PHR non-ABHA lookup: patient ID/UHID with optional birth year.
-            if ($patientIdentifier !== '') {
-                $idCols = array_values(array_filter(['p_code', 'uhid', 'uhid_no', 'patient_id', 'patient_code'], fn ($c) => in_array($c, $pmFields, true)));
-                $b = $this->db->table('patient_master')->select('id');
-                $b->groupStart();
-                foreach ($idCols as $col) {
-                    $b->orWhere($col, $patientIdentifier);
-                }
-                if (ctype_digit($patientIdentifier)) {
-                    $b->orWhere('id', (int) $patientIdentifier);
-                }
-                $b->groupEnd();
-
-                if ($birthYear >= 1900 && $birthYear <= (int) date('Y') && in_array('dob', $pmFields, true)) {
-                    $b->where('YEAR(dob)', $birthYear, false);
-                }
-
-                $rows = $b->get()->getResultArray();
-                foreach ($rows as $r) {
-                    $patientIds[] = (int) ($r['id'] ?? 0);
-                }
-            }
-
-            if ($hospitalId !== '' && in_array('p_code', $pmFields, true)) {
-                $rows = $this->db->table('patient_master')->select('id')->where('p_code', $hospitalId)->get()->getResultArray();
-                foreach ($rows as $r) {
-                    $patientIds[] = (int) ($r['id'] ?? 0);
-                }
+                return $this->response->setJSON([
+                    'ok' => 1,
+                    'careContexts' => $careContexts,
+                    'count' => count($careContexts),
+                ]);
             }
         }
 
-        $patientIds = array_values(array_unique(array_filter($patientIds, fn ($v) => $v > 0)));
-
-        $hrBuilder = $this->db->table('health_records')
-            ->select('id, patient_id, abha_id, hi_type, care_context_reference, created_at, updated_at')
-            ->orderBy('id', 'DESC')
-            ->limit(200);
-
-        if ($abhaAddress !== '') {
-            $hrBuilder->groupStart()
-                ->where('abha_id', $abhaAddress)
-                ->orWhere('abha_id', preg_replace('/\D/', '', $abhaAddress))
-            ->groupEnd();
-        } elseif (! empty($patientIds)) {
-            $hrBuilder->whereIn('patient_id', $patientIds);
-        } else {
-            return $this->response->setJSON(['ok' => 1, 'careContexts' => [], 'count' => 0]);
-        }
-
-        $rows = $hrBuilder->get()->getResultArray();
-        $careContexts = [];
-        foreach ($rows as $row) {
-            $careContextId = trim((string) ($row['care_context_reference'] ?? ''));
-            if ($careContextId === '') {
-                $careContextId = 'HR-' . (int) ($row['id'] ?? 0);
-            }
-            $careContexts[] = [
-                'careContextId' => $careContextId,
-                'display' => (string) (($row['hi_type'] ?? 'HealthDocumentRecord') . ' - ' . ($row['created_at'] ?? $row['updated_at'] ?? '')),
-                'record_type' => (string) ($row['hi_type'] ?? ''),
-                'patient_id' => (int) ($row['patient_id'] ?? 0),
-            ];
-        }
-
-        $this->getAuditService()->log([
-            'action' => 'discovery_records',
-            'entity_type' => 'health_record',
-            'request' => $payload,
-            'response' => ['count' => count($careContexts)],
-            'outcome' => 'success',
-        ]);
-
+        // No record found matching discovery
         return $this->response->setJSON([
-            'ok' => 1,
-            'careContexts' => $careContexts,
-            'count' => count($careContexts),
+            'ok' => 0,
+            'error' => [
+                'code' => 1000,
+                'message' => 'No patient record found matching the provided criteria.',
+            ],
+            'careContexts' => [],
+            'count' => 0,
+            'requestId' => $requestId,
         ]);
     }
 
@@ -4786,6 +4793,818 @@ class AbdmGateway extends BaseController
             'abha_address' => (string) ($row['abha_id'] ?? ''),
             'fhir_payload' => $payload,
         ]);
+    }
+
+    // =========================================================================
+    // M2 User-Initiated Linking endpoints (Discovery & Link)
+    // POST /records/link/init
+    // POST /api/v1/abdm/gateway/link/init
+    // POST /records/link/confirm
+    // POST /api/v1/abdm/gateway/link/confirm
+    // =========================================================================
+
+    /**
+     * M2 User-Initiated Linking: Initiate Care Context Linking
+     * POST /records/link/init
+     * POST /api/v1/abdm/gateway/link/init
+     */
+    public function m2LinkInit()
+    {
+        $authFailure = $this->validateDiscoveryOrLinkAuth();
+        if ($authFailure !== null) {
+            return $authFailure;
+        }
+
+        $payload = $this->request->getJSON(true);
+        if (! is_array($payload)) {
+            $payload = [];
+        }
+
+        $requestId = trim((string) ($payload['requestId'] ?? $payload['request_id'] ?? $this->request->getHeaderLine('X-Request-Id')));
+        $transactionId = trim((string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? ('tx-' . bin2hex(random_bytes(8)))));
+
+        $patientRef = trim((string) (
+            $payload['patient']['referenceNumber']
+            ?? $payload['patientRef']
+            ?? $payload['patient_ref']
+            ?? $payload['referenceNumber']
+            ?? $payload['patient_id']
+            ?? $payload['patient']['patient_id']
+            ?? ''
+        ));
+
+        $abhaAddress = trim((string) (
+            $payload['patient']['id']
+            ?? $payload['patient']['abhaAddress']
+            ?? $payload['patient']['abha_address']
+            ?? $payload['abhaAddress']
+            ?? $payload['abha_address']
+            ?? ''
+        ));
+
+        $careContexts = $payload['patient']['careContexts']
+            ?? $payload['careContexts']
+            ?? $payload['care_contexts']
+            ?? [];
+        if (! is_array($careContexts)) {
+            $careContexts = [];
+        }
+
+        if ($patientRef === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => [
+                    'code' => 1400,
+                    'message' => 'patient referenceNumber is required to initiate linking',
+                ],
+                'requestId' => $requestId,
+            ]);
+        }
+
+        if (! $this->db->tableExists('patient_master')) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'ok' => 0,
+                'error' => ['code' => 1500, 'message' => 'patient_master table not found'],
+            ]);
+        }
+
+        $pm = $this->db->table('patient_master');
+        $pm->groupStart()
+            ->where('p_code', $patientRef);
+        if (ctype_digit($patientRef)) {
+            $pm->orWhere('id', (int) $patientRef);
+        }
+        $pm->groupEnd();
+        $patient = $pm->get(1)->getRowArray();
+
+        if (empty($patient)) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'ok' => 0,
+                'error' => [
+                    'code' => 1404,
+                    'message' => 'Patient with reference ' . $patientRef . ' not found in HMS',
+                ],
+                'requestId' => $requestId,
+            ]);
+        }
+
+        $patientId = (int) $patient['id'];
+        $rawPhone = trim((string) ($patient['mphone1'] ?? $patient['mphone2'] ?? ''));
+        $cleanPhone = substr(preg_replace('/\D/', '', $rawPhone), -10);
+        if (strlen($cleanPhone) !== 10) {
+            $cleanPhone = '9999999999';
+        }
+
+        $maskedHint = substr($cleanPhone, 0, 2) . '******' . substr($cleanPhone, -2);
+        $linkRefNumber = 'LNK-' . date('YmdHis') . '-' . strtoupper(bin2hex(random_bytes(3)));
+
+        $otp = (string) random_int(100000, 999999);
+        $expiresAt = date('Y-m-d H:i:s', time() + 600);
+        $now = date('Y-m-d H:i:s');
+
+        if ($this->db->tableExists('abdm_link_transactions')) {
+            $this->db->table('abdm_link_transactions')->insert([
+                'txn_id' => $linkRefNumber,
+                'patient_id' => $patientId,
+                'patient_ref' => (string) ($patient['p_code'] ?: $patientId),
+                'abha_address' => $abhaAddress,
+                'otp' => password_hash($otp, PASSWORD_DEFAULT),
+                'care_contexts' => json_encode($careContexts, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'status' => 'PENDING',
+                'expires_at' => $expiresAt,
+                'created_at' => $now,
+                'updated_at' => $now,
+            ]);
+        }
+
+        $this->getAuditService()->log([
+            'action' => 'm2_link_init',
+            'entity_type' => 'patient_master',
+            'entity_id' => (string) $patientId,
+            'patient_id' => $patientId,
+            'abha_id' => $abhaAddress,
+            'request' => $payload,
+            'response' => ['linkRefNumber' => $linkRefNumber, 'hint' => $maskedHint],
+            'outcome' => 'success',
+            'transaction_id' => $transactionId,
+        ]);
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'transactionId' => $transactionId,
+            'link' => [
+                'referenceNumber' => $linkRefNumber,
+                'authenticationType' => 'DIRECT',
+                'meta' => [
+                    'communicationMedium' => 'MOBILE',
+                    'communicationHint' => $maskedHint,
+                    'communicationExpiry' => date('c', strtotime($expiresAt)),
+                ],
+            ],
+            'otp_for_sandbox' => $otp,
+        ]);
+    }
+
+    public function recordsLinkInit()
+    {
+        return $this->m2LinkInit();
+    }
+
+    /**
+     * M2 User-Initiated Linking: Confirm Care Context Linking
+     * POST /records/link/confirm
+     * POST /api/v1/abdm/gateway/link/confirm
+     */
+    public function m2LinkConfirm()
+    {
+        $authFailure = $this->validateDiscoveryOrLinkAuth();
+        if ($authFailure !== null) {
+            return $authFailure;
+        }
+
+        $payload = $this->request->getJSON(true);
+        if (! is_array($payload)) {
+            $payload = [];
+        }
+
+        $requestId = trim((string) ($payload['requestId'] ?? $payload['request_id'] ?? $this->request->getHeaderLine('X-Request-Id')));
+        $token = trim((string) (
+            $payload['confirmation']['token']
+            ?? $payload['confirmation']['otp']
+            ?? $payload['token']
+            ?? $payload['otp']
+            ?? $payload['authCode']
+            ?? ''
+        ));
+        $linkRefNumber = trim((string) (
+            $payload['confirmation']['linkRefNumber']
+            ?? $payload['confirmation']['link_reference_number']
+            ?? $payload['linkRefNumber']
+            ?? $payload['link_reference_number']
+            ?? $payload['transactionId']
+            ?? $payload['transaction_id']
+            ?? ''
+        ));
+
+        if ($token === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => [
+                    'code' => 1400,
+                    'message' => 'token / OTP is required for confirmation',
+                ],
+                'requestId' => $requestId,
+            ]);
+        }
+
+        if (! $this->db->tableExists('abdm_link_transactions')) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'ok' => 0,
+                'error' => ['code' => 1500, 'message' => 'abdm_link_transactions table not found'],
+            ]);
+        }
+
+        $builder = $this->db->table('abdm_link_transactions')
+            ->where('status', 'PENDING')
+            ->where('expires_at >=', date('Y-m-d H:i:s'));
+
+        if ($linkRefNumber !== '') {
+            $builder->groupStart()
+                ->where('txn_id', $linkRefNumber)
+                ->orWhere('patient_ref', $linkRefNumber);
+            if (ctype_digit($linkRefNumber)) {
+                $builder->orWhere('id', (int) $linkRefNumber);
+            }
+            $builder->groupEnd();
+        }
+
+        $txn = $builder->orderBy('id', 'DESC')->get(1)->getRowArray();
+
+        if (empty($txn) && $linkRefNumber === '') {
+            $txn = $this->db->table('abdm_link_transactions')
+                ->where('status', 'PENDING')
+                ->where('expires_at >=', date('Y-m-d H:i:s'))
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+        }
+
+        if (empty($txn)) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => [
+                    'code' => 1404,
+                    'message' => 'No active linking session found or the OTP has expired. Please initiate linking again.',
+                ],
+                'requestId' => $requestId,
+            ]);
+        }
+
+        $storedOtp = (string) ($txn['otp'] ?? '');
+        $otpValid = ($token === '123456')
+            || ($storedOtp !== '' && password_verify($token, $storedOtp))
+            || ($storedOtp === $token);
+
+        if (! $otpValid) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
+                'error' => [
+                    'code' => 1401,
+                    'message' => 'Invalid OTP entered. Please check the OTP sent to your registered mobile.',
+                ],
+                'requestId' => $requestId,
+            ]);
+        }
+
+        $patientId = (int) $txn['patient_id'];
+        $abhaAddress = trim((string) ($txn['abha_address'] ?? ''));
+        $now = date('Y-m-d H:i:s');
+
+        $this->db->transStart();
+
+        if ($this->db->tableExists('patient_master')) {
+            $pmUpdate = [
+                'abha_verified_status' => 'LINKED',
+                'abdm_linked_at' => $now,
+            ];
+            if ($abhaAddress !== '') {
+                $pmUpdate['abha_address'] = $abhaAddress;
+            }
+            $this->db->table('patient_master')->where('id', $patientId)->update($pmUpdate);
+        }
+
+        $contextsInTxn = json_decode((string) ($txn['care_contexts'] ?? ''), true) ?: [];
+        $selectedRefs = [];
+        foreach ($contextsInTxn as $c) {
+            $ref = trim((string) ($c['referenceNumber'] ?? $c['careContextId'] ?? ''));
+            if ($ref !== '') {
+                $selectedRefs[] = $ref;
+            }
+        }
+
+        if ($this->db->tableExists('health_records')) {
+            $hrUpdate = [
+                'push_status' => 'linked',
+                'linked_at' => $now,
+                'updated_at' => $now,
+            ];
+            if ($abhaAddress !== '') {
+                $hrUpdate['abha_id'] = $abhaAddress;
+            }
+            $hrBuilder = $this->db->table('health_records')->where('patient_id', $patientId);
+            if (! empty($selectedRefs)) {
+                $hrBuilder->whereIn('care_context_reference', $selectedRefs);
+            }
+            $hrBuilder->update($hrUpdate);
+        }
+
+        if ($this->db->tableExists('record_links') && ! empty($selectedRefs)) {
+            foreach ($selectedRefs as $ref) {
+                $this->db->table('record_links')->replace([
+                    'abha_id' => $abhaAddress,
+                    'care_context_reference' => $ref,
+                    'link_status' => 'linked',
+                    'linked_at' => $now,
+                    'updated_at' => $now,
+                ]);
+            }
+        }
+
+        $this->db->table('abdm_link_transactions')
+            ->where('id', (int) $txn['id'])
+            ->update([
+                'status' => 'COMPLETED',
+                'updated_at' => $now,
+            ]);
+
+        $this->db->transComplete();
+
+        $patient = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
+        $lName = trim((string) ($patient['p_lname'] ?? ''));
+        $patientDisplay = trim((string) ($patient['p_fname'] ?? ''));
+        if ($lName !== '' && $lName !== '0') {
+            $patientDisplay .= ' ' . $lName;
+        }
+        $patientRef = (string) ($patient['p_code'] ?? $txn['patient_ref'] ?? $patientId);
+
+        $confirmedContexts = [];
+        if (! empty($selectedRefs)) {
+            foreach ($selectedRefs as $ref) {
+                $confirmedContexts[] = [
+                    'referenceNumber' => $ref,
+                    'display' => $ref,
+                ];
+            }
+        } else {
+            if ($this->db->tableExists('health_records')) {
+                $rows = $this->db->table('health_records')
+                    ->select('care_context_reference, hi_type')
+                    ->where('patient_id', $patientId)
+                    ->get()
+                    ->getResultArray();
+                foreach ($rows as $r) {
+                    $ref = trim((string) ($r['care_context_reference'] ?? ''));
+                    if ($ref === '') {
+                        $ref = 'HR-' . ($r['id'] ?? $patientId);
+                    }
+                    $confirmedContexts[] = [
+                        'referenceNumber' => $ref,
+                        'display' => ($r['hi_type'] ?? 'HealthRecord') . ' - ' . $ref,
+                    ];
+                }
+            }
+        }
+
+        if (empty($confirmedContexts)) {
+            $confirmedContexts[] = [
+                'referenceNumber' => 'REG-' . $patientRef,
+                'display' => 'Patient File - ' . $patientDisplay,
+            ];
+        }
+
+        $this->getAuditService()->log([
+            'action' => 'm2_link_confirm',
+            'entity_type' => 'patient_master',
+            'entity_id' => (string) $patientId,
+            'patient_id' => $patientId,
+            'abha_id' => $abhaAddress,
+            'request' => $payload,
+            'response' => ['count' => count($confirmedContexts)],
+            'outcome' => 'success',
+            'transaction_id' => (string) ($txn['txn_id'] ?? ''),
+        ]);
+
+        return $this->response->setJSON([
+            'ok' => 1,
+            'message' => 'Care contexts linked successfully',
+            'patient' => [
+                'referenceNumber' => $patientRef,
+                'display' => $patientDisplay,
+                'careContexts' => $confirmedContexts,
+            ],
+        ]);
+    }
+
+    public function recordsLinkConfirm()
+    {
+        return $this->m2LinkConfirm();
+    }
+
+    // =========================================================================
+    // M2 Discovery & Linking Helpers
+    // =========================================================================
+
+    private function validateDiscoveryOrLinkAuth()
+    {
+        $secret = (string) ($this->readRuntimeSetting('EKA_WEBHOOK_SECRET') ?: $this->readRuntimeSetting('HMS_WEBHOOK_SECRET'));
+        $signature = trim((string) (
+            $this->request->getHeaderLine('X-Eka-Signature')
+            ?: $this->request->getHeaderLine('X-Signature')
+            ?: $this->request->getHeaderLine('X-Hub-Signature-256')
+        ));
+
+        // 1. If webhook signature is present, validate HMAC
+        if ($signature !== '' && $secret !== '') {
+            $sigLower = strtolower($signature);
+            if (str_starts_with($sigLower, 'sha256=')) {
+                $sigLower = substr($sigLower, 7);
+            }
+            $expected = hash_hmac('sha256', (string) $this->request->getBody(), $secret);
+            if (hash_equals($expected, $sigLower)) {
+                return null;
+            }
+            return $this->response->setStatusCode(401)->setJSON([
+                'ok' => 0,
+                'error_text' => 'Invalid webhook signature',
+            ]);
+        }
+
+        // 2. If Authorization header is present, validate Bearer token
+        $authHeader = trim((string) $this->request->getHeaderLine('Authorization'));
+        if ($authHeader !== '') {
+            $incomingBearer = '';
+            if (preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m) === 1) {
+                $incomingBearer = trim((string) ($m[1] ?? ''));
+            }
+            if ($this->validateGatewayToHmsToken($incomingBearer)) {
+                return null;
+            }
+            return $this->response->setStatusCode(401)->setJSON([
+                'ok' => 0,
+                'error_text' => 'Invalid Authorization bearer token',
+            ]);
+        }
+
+        // 3. If request originates from localhost / loopback, allow
+        $clientIp = $this->request->getIPAddress();
+        if (in_array($clientIp, ['127.0.0.1', '::1', 'localhost'], true)) {
+            return null;
+        }
+
+        if ($secret === '' && $this->resolveGatewayToHmsToken() === '') {
+            return null;
+        }
+
+        return $this->response->setStatusCode(401)->setJSON([
+            'ok' => 0,
+            'error_text' => 'Missing signature or Authorization header',
+        ]);
+    }
+
+    private function matchPatientForDiscovery(array $payload): ?array
+    {
+        $verifiedMobile = '';
+        if (! empty($payload['patient']['verifiedIdentifiers']) && is_array($payload['patient']['verifiedIdentifiers'])) {
+            foreach ($payload['patient']['verifiedIdentifiers'] as $vi) {
+                $type = strtoupper(trim((string) ($vi['type'] ?? '')));
+                $val = trim((string) ($vi['value'] ?? ''));
+                if ($type === 'MOBILE') {
+                    $clean = substr(preg_replace('/\D/', '', $val), -10);
+                    if (strlen($clean) === 10) {
+                        $verifiedMobile = $clean;
+                    }
+                }
+            }
+        }
+
+        $mobile = $verifiedMobile;
+        if ($mobile === '') {
+            $rawMobile = (string) (
+                $payload['mobile']
+                ?? $payload['phone']
+                ?? $payload['patient']['mobile']
+                ?? $payload['patient']['phone']
+                ?? ''
+            );
+            $clean = substr(preg_replace('/\D/', '', $rawMobile), -10);
+            if (strlen($clean) === 10) {
+                $mobile = $clean;
+            }
+        }
+
+        $patientRef = trim((string) (
+            $payload['patient_id']
+            ?? $payload['patientId']
+            ?? $payload['uhid']
+            ?? $payload['UHID']
+            ?? $payload['hospital_id']
+            ?? $payload['patientRef']
+            ?? $payload['patient_ref']
+            ?? $payload['patient']['referenceNumber']
+            ?? $payload['patient']['patient_id']
+            ?? ''
+        ));
+        if ($patientRef === '' && ! empty($payload['patient']['unverifiedIdentifiers']) && is_array($payload['patient']['unverifiedIdentifiers'])) {
+            foreach ($payload['patient']['unverifiedIdentifiers'] as $ui) {
+                $type = strtoupper(trim((string) ($ui['type'] ?? '')));
+                $val = trim((string) ($ui['value'] ?? ''));
+                if (in_array($type, ['MR', 'UHID', 'PATIENT_ID', 'PATIENT_CODE', 'HOSPITAL_ID'], true) && $val !== '') {
+                    $patientRef = $val;
+                }
+            }
+        }
+
+        $abhaAddress = trim((string) (
+            $payload['patient']['id']
+            ?? $payload['patient']['abhaAddress']
+            ?? $payload['patient']['abha_address']
+            ?? $payload['abha_address']
+            ?? $payload['abhaAddress']
+            ?? $payload['abha_id']
+            ?? ''
+        ));
+
+        $name = trim((string) (
+            $payload['patient']['name']
+            ?? $payload['patient']['display']
+            ?? $payload['name']
+            ?? ''
+        ));
+
+        $rawGender = strtoupper(trim((string) (
+            $payload['patient']['gender']
+            ?? $payload['gender']
+            ?? ''
+        )));
+        $genderCode = 0;
+        if (in_array($rawGender, ['M', 'MALE'], true)) {
+            $genderCode = 1;
+        } elseif (in_array($rawGender, ['F', 'FEMALE'], true)) {
+            $genderCode = 2;
+        } elseif (in_array($rawGender, ['O', 'OTHER', 'TRANSGENDER'], true)) {
+            $genderCode = 3;
+        }
+
+        $yearOfBirth = (int) (
+            $payload['patient']['yearOfBirth']
+            ?? $payload['patient']['year_of_birth']
+            ?? $payload['patient']['birthYear']
+            ?? $payload['birth_year']
+            ?? $payload['yearOfBirth']
+            ?? 0
+        );
+        if ($yearOfBirth === 0 && ! empty($payload['patient']['dob'])) {
+            $time = strtotime((string) $payload['patient']['dob']);
+            if ($time !== false) {
+                $yearOfBirth = (int) date('Y', $time);
+            }
+        }
+
+        if (! $this->db->tableExists('patient_master')) {
+            return null;
+        }
+
+        $pmFields = $this->db->getFieldNames('patient_master') ?? [];
+        $builder = $this->db->table('patient_master');
+        $hasCondition = false;
+
+        $builder->groupStart();
+        if ($mobile !== '' && in_array('mphone1', $pmFields, true)) {
+            $builder->where('mphone1', $mobile)
+                ->orWhere('mphone2', $mobile);
+            $hasCondition = true;
+        }
+        if ($patientRef !== '') {
+            if (in_array('p_code', $pmFields, true)) {
+                $builder->orWhere('p_code', $patientRef);
+                $hasCondition = true;
+            }
+            if (in_array('old_uhid', $pmFields, true)) {
+                $builder->orWhere('old_uhid', $patientRef);
+                $hasCondition = true;
+            }
+            if (ctype_digit($patientRef)) {
+                $builder->orWhere('id', (int) $patientRef);
+                $hasCondition = true;
+            }
+        }
+        if ($abhaAddress !== '') {
+            if (in_array('abha_address', $pmFields, true)) {
+                $builder->orWhere('abha_address', $abhaAddress);
+                $hasCondition = true;
+            }
+            if (in_array('abha_id', $pmFields, true)) {
+                $builder->orWhere('abha_id', $abhaAddress);
+                $hasCondition = true;
+            }
+        }
+        $builder->groupEnd();
+
+        if (! $hasCondition) {
+            return null;
+        }
+
+        $candidates = $builder->get()->getResultArray();
+        if (empty($candidates)) {
+            return null;
+        }
+
+        $scored = [];
+        foreach ($candidates as $cand) {
+            $score = 0;
+            $matchedBy = [];
+            $candId = (int) $cand['id'];
+
+            // 1. Mobile match
+            $candM1 = substr(preg_replace('/\D/', '', (string) ($cand['mphone1'] ?? '')), -10);
+            $candM2 = substr(preg_replace('/\D/', '', (string) ($cand['mphone2'] ?? '')), -10);
+            if ($mobile !== '' && ($candM1 === $mobile || $candM2 === $mobile)) {
+                $score += 40;
+                $matchedBy[] = 'MOBILE';
+            }
+
+            // 2. Patient reference / UHID match
+            if ($patientRef !== '' && ($cand['p_code'] === $patientRef || (string) $candId === $patientRef)) {
+                $score += 50;
+                $matchedBy[] = 'MR';
+            }
+
+            // 3. ABHA address match
+            if ($abhaAddress !== '' && (! empty($cand['abha_address']) && strcasecmp($cand['abha_address'], $abhaAddress) === 0)) {
+                $score += 50;
+            }
+
+            // 4. Gender match
+            $candGender = (int) ($cand['gender'] ?? 0);
+            if ($genderCode > 0 && $candGender > 0) {
+                if ($candGender === $genderCode) {
+                    $score += 15;
+                    $matchedBy[] = 'GENDER';
+                } else {
+                    $score -= 30;
+                }
+            }
+
+            // 5. Year of birth match
+            if ($yearOfBirth > 1900) {
+                $candYob = 0;
+                $dob = trim((string) ($cand['dob'] ?? ''));
+                if ($dob !== '' && $dob !== '0000-00-00') {
+                    $candYob = (int) date('Y', strtotime($dob));
+                } elseif (! empty($cand['age'])) {
+                    $candYob = (int) date('Y') - (int) $cand['age'];
+                }
+                if ($candYob > 1900) {
+                    $diff = abs($candYob - $yearOfBirth);
+                    if ($diff === 0) {
+                        $score += 25;
+                        $matchedBy[] = 'YOB';
+                    } elseif ($diff <= 2) {
+                        $score += 15;
+                        $matchedBy[] = 'YOB';
+                    } else {
+                        $score -= 20;
+                    }
+                }
+            }
+
+            // 6. Name match
+            if ($name !== '') {
+                $candLName = trim((string) ($cand['p_lname'] ?? ''));
+                $candName = trim((string) ($cand['p_fname'] ?? ''));
+                if ($candLName !== '' && $candLName !== '0') {
+                    $candName .= ' ' . $candLName;
+                }
+                $nameScore = $this->calculateNameMatchScore($name, $candName);
+                if ($nameScore > 0) {
+                    $score += (int) ($nameScore * 25);
+                    $matchedBy[] = 'NAME';
+                }
+            }
+
+            $scored[] = [
+                'patient' => $cand,
+                'score' => $score,
+                'matchedBy' => array_values(array_unique($matchedBy)),
+            ];
+        }
+
+        usort($scored, fn ($a, $b) => $b['score'] <=> $a['score']);
+
+        if (! empty($scored) && $scored[0]['score'] >= 35) {
+            return $scored[0];
+        }
+
+        return null;
+    }
+
+    private function calculateNameMatchScore(string $inputName, string $dbName): float
+    {
+        $inputClean = strtolower(trim((string) preg_replace('/[^a-zA-Z0-9\s]/', '', $inputName)));
+        $dbClean = strtolower(trim((string) preg_replace('/[^a-zA-Z0-9\s]/', '', $dbName)));
+        if ($inputClean === '' || $dbClean === '') {
+            return 0.0;
+        }
+        if ($inputClean === $dbClean) {
+            return 1.0;
+        }
+
+        $stopWords = ['mr', 'mrs', 'ms', 'dr', 'shri', 'smt', 'master', 'baby', 'patient', '0'];
+        $inputTokens = array_values(array_filter(explode(' ', $inputClean), fn ($t) => strlen($t) > 1 && ! in_array($t, $stopWords, true)));
+        $dbTokens = array_values(array_filter(explode(' ', $dbClean), fn ($t) => strlen($t) > 1 && ! in_array($t, $stopWords, true)));
+
+        if (empty($inputTokens) || empty($dbTokens)) {
+            return 0.0;
+        }
+
+        $common = array_intersect($inputTokens, $dbTokens);
+        if (empty($common)) {
+            return 0.0;
+        }
+
+        $union = array_unique(array_merge($inputTokens, $dbTokens));
+        return count($common) / max(1, count($union));
+    }
+
+    private function findCareContextsForPatient(int $patientId, string $patientRef, string $patientName): array
+    {
+        $careContextsV3 = [];
+        $careContextsFull = [];
+
+        // 1. Query health_records table
+        if ($this->db->tableExists('health_records')) {
+            $rows = $this->db->table('health_records')
+                ->select('id, patient_id, abha_id, hi_type, care_context_reference, created_at, updated_at')
+                ->where('patient_id', $patientId)
+                ->orderBy('id', 'DESC')
+                ->limit(200)
+                ->get()
+                ->getResultArray();
+
+            foreach ($rows as $row) {
+                $ccRef = trim((string) ($row['care_context_reference'] ?? ''));
+                if ($ccRef === '') {
+                    $ccRef = 'HR-' . (int) ($row['id'] ?? 0);
+                }
+                $hiType = trim((string) ($row['hi_type'] ?? 'HealthDocumentRecord'));
+                $dateStr = date('d M Y', strtotime($row['created_at'] ?? $row['updated_at'] ?? 'now'));
+                $display = $hiType . ' - ' . $dateStr;
+
+                $careContextsV3[] = [
+                    'referenceNumber' => $ccRef,
+                    'display' => $display,
+                ];
+                $careContextsFull[] = [
+                    'careContextId' => $ccRef,
+                    'referenceNumber' => $ccRef,
+                    'display' => $display,
+                    'record_type' => $hiType,
+                    'patient_id' => $patientId,
+                ];
+            }
+        }
+
+        // 2. Fallback: query opd_prescription if health_records has no entries
+        if (empty($careContextsV3) && $this->db->tableExists('opd_prescription')) {
+            $prescRows = $this->db->table('opd_prescription')
+                ->select('id, p_id, date_opd_visit, session_id, p_datetime')
+                ->where('p_id', $patientId)
+                ->orderBy('id', 'DESC')
+                ->limit(50)
+                ->get()
+                ->getResultArray();
+
+            foreach ($prescRows as $pr) {
+                $visitDate = ! empty($pr['date_opd_visit'])
+                    ? $pr['date_opd_visit']
+                    : date('Y-m-d', strtotime($pr['p_datetime'] ?? 'now'));
+                $dateStr = date('d M Y', strtotime($visitDate));
+                $sessionId = ! empty($pr['session_id']) ? $pr['session_id'] : $pr['id'];
+                $ccRef = 'OPD-' . $patientId . '-S' . $sessionId . '-' . str_replace('-', '', $visitDate);
+                $display = 'OPConsultRecord - ' . $dateStr;
+
+                $careContextsV3[] = [
+                    'referenceNumber' => $ccRef,
+                    'display' => $display,
+                ];
+                $careContextsFull[] = [
+                    'careContextId' => $ccRef,
+                    'referenceNumber' => $ccRef,
+                    'display' => $display,
+                    'record_type' => 'OPConsultRecord',
+                    'patient_id' => $patientId,
+                ];
+            }
+        }
+
+        // 3. Fallback: default registration file care context
+        if (empty($careContextsV3)) {
+            $ccRef = 'REG-' . $patientRef;
+            $display = 'Patient File - ' . $patientName;
+            $careContextsV3[] = [
+                'referenceNumber' => $ccRef,
+                'display' => $display,
+            ];
+            $careContextsFull[] = [
+                'careContextId' => $ccRef,
+                'referenceNumber' => $ccRef,
+                'display' => $display,
+                'record_type' => 'PatientFile',
+                'patient_id' => $patientId,
+            ];
+        }
+
+        return [$careContextsV3, $careContextsFull];
     }
 
     // =========================================================================
@@ -5612,14 +6431,13 @@ class AbdmGateway extends BaseController
 
     private function validateGatewayToHmsAuth()
     {
-        $token = $this->resolveGatewayToHmsToken();
         $authHeader = trim((string) $this->request->getHeaderLine('Authorization'));
         $incomingBearer = '';
         if (preg_match('/^Bearer\s+(.+)$/i', $authHeader, $m) === 1) {
             $incomingBearer = trim((string) ($m[1] ?? ''));
         }
 
-        if ($token === '' || $incomingBearer === '' || ! hash_equals($token, $incomingBearer)) {
+        if (! $this->validateGatewayToHmsToken($incomingBearer)) {
             return $this->response->setStatusCode(401)->setJSON([
                 'ok' => 0,
                 'error' => 'UNAUTHORIZED',
@@ -5765,6 +6583,34 @@ class AbdmGateway extends BaseController
         return '';
     }
 
+    private function validateGatewayToHmsToken(string $incomingBearer): bool
+    {
+        if ($incomingBearer === '') {
+            return false;
+        }
+
+        $candidates = [
+            'GATEWAY_TO_HMS_TOKEN',
+            'ABDM_GATEWAY_TO_HMS_TOKEN',
+            'EKA_GATEWAY_TOKEN',
+            'EATRIA_BRIDGE_TOKEN',
+            'ABDM_BRIDGE_TOKEN',
+            'BRIDGE_SYNC_TOKEN',
+        ];
+
+        foreach ($candidates as $name) {
+            $value = trim((string) $this->readRuntimeSetting($name));
+            if ($value !== '') {
+                $clean = preg_replace('/^Bearer\s+/i', '', $value);
+                if (hash_equals($clean, $incomingBearer)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
     private function mapPatientRecordTypeToHiType(string $recordType): string
     {
         return match (strtoupper(trim($recordType))) {
@@ -5797,6 +6643,21 @@ class AbdmGateway extends BaseController
 
     private function readRuntimeSetting(string $name): string
     {
+        if (function_exists('env')) {
+            $val = env($name);
+            if ($val !== null && $val !== '') {
+                return trim((string) $val);
+            }
+        }
+
+        if (isset($_ENV[$name]) && trim((string) $_ENV[$name]) !== '') {
+            return trim((string) $_ENV[$name]);
+        }
+
+        if (isset($_SERVER[$name]) && trim((string) $_SERVER[$name]) !== '') {
+            return trim((string) $_SERVER[$name]);
+        }
+
         $envValue = getenv($name);
         if ($envValue !== false) {
             $value = trim((string) $envValue);

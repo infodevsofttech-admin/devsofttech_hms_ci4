@@ -717,10 +717,16 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             return ['ok' => 0, 'error_text' => 'ABHA number or ABHA address is required'];
         }
 
+        $patientToken = trim((string) ($payload['token'] ?? $payload['x_token'] ?? $payload['X-Token'] ?? ''));
+        if ($patientToken === '') {
+            $patientToken = $this->extractPatientXToken($payload);
+        }
+        $headers = $patientToken !== '' ? ['X-Token' => 'Bearer ' . $patientToken] : [];
+
         $result = $this->get('/v3/abha/card', array_filter([
             'abha_number' => $abhaNumber,
             'abha_address' => $abhaAddress,
-        ], static fn($value): bool => trim((string) $value) !== ''));
+        ], static fn($value): bool => trim((string) $value) !== ''), $headers);
 
         if (empty($result['ok']) || (int) $result['ok'] !== 1) {
             return $result;

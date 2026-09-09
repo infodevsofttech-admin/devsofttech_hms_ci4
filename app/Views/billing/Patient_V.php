@@ -1513,13 +1513,14 @@
                     return;
                 }
 
-                printWindow.document.write('<!doctype html><html><head><title>Health Facility QR</title>'
+                var htmlContent = '<!doctype html><html><' + 'head><title>Health Facility QR<' + '/title>'
                     + '<style>body{font-family:Arial,sans-serif;text-align:center;padding:28px;color:#111}h2{margin:0 0 8px;font-size:22px}.muted{color:#555;margin-bottom:18px}.qr{width:320px;max-width:90%;border:1px solid #ddd;padding:14px}.hint{margin-top:18px;font-size:14px;line-height:1.5}@media print{button{display:none}}</style>'
-                    + '</head><body><h2>' + safeHospitalName + '</h2>'
+                    + '<' + '/head><body><h2>' + safeHospitalName + '</h2>'
                     + '<div class="muted">Health Facility QR' + (safeHfrId ? ' | HFR ID: ' + safeHfrId : '') + '</div>'
                     + '<img class="qr" src="' + qrSrc + '" alt="Health Facility QR">'
                     + '<div class="hint">Scan this QR using ABHA / PHR app for Scan &amp; Share OPD registration.</div>'
-                    + '<p><button onclick="window.print()">Print</button></p></body></html>');
+                    + '<p><button onclick="window.print()">Print</button></p></body></html>';
+                printWindow.document.write(htmlContent);
                 printWindow.document.close();
                 printWindow.focus();
             }

@@ -752,6 +752,13 @@ $routes->post('api/v1/abdm/gateway/consent/upsert', 'AbdmGateway::m2ConsentUpser
 $routes->post('api/v1/abdm/gateway/link/status', 'AbdmGateway::m2LinkStatus');
 // ABDM M2 compatibility endpoints (Gateway -> HMS)
 $routes->post('records/discover', 'AbdmGateway::recordsDiscover');
+$routes->post('records/link/init', 'AbdmGateway::m2LinkInit');
+$routes->post('records/link/confirm', 'AbdmGateway::m2LinkConfirm');
+$routes->post('api/v1/abdm/gateway/link/init', 'AbdmGateway::m2LinkInit');
+$routes->post('api/v1/abdm/gateway/link/confirm', 'AbdmGateway::m2LinkConfirm');
+$routes->post('v3/hip/patient/care-context/discover', 'AbdmGateway::recordsDiscover');
+$routes->post('v3/hip/link/patient/care-context/init', 'AbdmGateway::m2LinkInit');
+$routes->post('v3/hip/link/patient/care-context/confirm', 'AbdmGateway::m2LinkConfirm');
 $routes->get('records/fetch/(:any)', 'AbdmGateway::recordsFetch/$1');
 $routes->post('records/fetch/(:any)', 'AbdmGateway::recordsFetch/$1');
 $routes->post('AbdmGateway/share_prescription_bundle', 'AbdmGateway::sharePrescriptionBundle', ['filter' => $abdmPermFilter]);
@@ -812,9 +819,9 @@ $routes->post('AbdmGateway/abha_mobile_verify_otp', 'AbdmGateway::abhaMobileVeri
 $routes->post('abha/create/initiate', 'Abha::initiate', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/create/verify_otp', 'Abha::verifyOtp', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/create/communication', 'Abha::communication', ['filter' => 'permission:abdm.abha.create']);
-$routes->post('abha/create/verify_comm_otp', 'Abha::verifyCommOtp', ['filter' => 'permission:abdm.abha.create']);
-$routes->post('abha/find/mobile/request-otp', 'Abha::communication', ['filter' => 'permission:abdm.abha.create']);
-$routes->post('abha/find/mobile/verify-otp', 'Abha::verifyCommOtp', ['filter' => 'permission:abdm.abha.create']);
+$routes->post('abha/find/mobile/search', 'Abha::findMobileSearch', ['filter' => 'permission:abdm.abha.create']);
+$routes->post('abha/find/mobile/request-otp', 'Abha::findMobileRequestOtp', ['filter' => 'permission:abdm.abha.create']);
+$routes->post('abha/find/mobile/verify-otp', 'Abha::findMobileVerifyOtp', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/find/mobile/select-account', 'Abha::selectAccount', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/create/confirm_patient', 'Abha::confirmPatient', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/create/address', 'Abha::address', ['filter' => 'permission:abdm.abha.create']);
