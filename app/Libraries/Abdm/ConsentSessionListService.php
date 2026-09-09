@@ -25,99 +25,141 @@ class ConsentSessionListService
      */
     public function getGlobalConsentRequestsList(array $filters = [], int $limit = 300): array
     {
-        if (! $this->db->tableExists('abdm_hiu_workflows') || ! $this->db->tableExists('patient_master')) {
-            return ['ok' => 1, 'requests' => []];
-        }
+        @ini_set('memory_limit', '256M');
 
-        $fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
-        $select = ['id', 'operation', 'workflow_state', 'status', 'request_id', 'consent_id', 'hfr_id', 'abha_address', 'created_at', 'updated_at', 'completed_at', 'expired_at', 'revoked_at', 'last_error', 'http_code', 'request_json', 'response_json'];
-        foreach (['abdm_consent_request_id', 'abdm_consent_artifact_id', 'gateway_request_id'] as $optionalField) {
-            if (in_array($optionalField, $fields, true)) {
-                $select[] = $optionalField;
+        try {
+            if (! $this->db->tableExists('abdm_hiu_workflows') || ! $this->db->tableExists('patient_master')) {
+                return ['ok' => 1, 'requests' => []];
             }
-        }
 
-        $rows = $this->db->table('abdm_hiu_workflows')
-            ->select(implode(', ', $select))
-            ->whereIn('operation', [
-                'consent_request',
-                'consent_status',
-                'consent_reconcile',
-                'data_fetch',
-                'consent_callback',
-                'hi_on_request_callback',
-                'hi_data_push_callback',
-            ])
-            ->orderBy('id', 'DESC')
-            ->get(2000)
-            ->getResultArray();
-
-        if ($rows === []) {
-            return ['ok' => 1, 'requests' => []];
-        }
-
-        // Group rows by abha_address, preserving the DESC-by-id order within each group.
-        $byAddress = [];
-        foreach ($rows as $row) {
-            $addr = trim((string) ($row['abha_address'] ?? ''));
-            if ($addr === '') {
-                continue;
+            $fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
+            if ($fields === []) {
+                return ['ok' => 1, 'requests' => []];
             }
-            $byAddress[$addr][] = $row;
-        }
 
-        if ($byAddress === []) {
-            return ['ok' => 1, 'requests' => []];
-        }
-
-        $patientsByAddress = $this->lookupPatientsByAbhaAddress(array_keys($byAddress));
-
-        $statusFilter = strtoupper(trim((string) ($filters['status'] ?? '')));
-        $q = strtolower(trim((string) ($filters['q'] ?? '')));
-
-        $out = [];
-        foreach ($byAddress as $addr => $addrRows) {
-            $patientInfo = $patientsByAddress[$addr] ?? [
-                'patient_id' => 0,
-                'patient_code' => '',
-                'patient_name' => '',
-                'mobile' => '',
+            $candidateColumns = [
+                'id', 'operation', 'workflow_state', 'status', 'request_id', 'consent_id',
+                'hfr_id', 'abha_address', 'created_at', 'updated_at', 'completed_at',
+                'expired_at', 'revoked_at', 'last_error', 'http_code',
+                'abdm_consent_request_id', 'abdm_consent_artifact_id', 'gateway_request_id',
             ];
+            $select = [];
+            foreach ($candidateColumns as $col) {
+                if (in_array($col, $fields, true)) {
+                    $select[] = $col;
+                }
+            }
+            if ($select === []) {
+                $select[] = 'id';
+            }
 
-            $sessions = $this->groupWorkflowRowsIntoSessions($addrRows);
-            foreach ($sessions as $sessionRows) {
-                $detail = $this->computeConsentSessionDetail($sessionRows, $addr);
-                if ((int) ($detail['ok'] ?? 0) !== 1) {
+            // Exclude huge FHIR bundles and decrypted base64 document attachments
+            // in data_fetch and hi_data_push_callback rows from being buffered into PHP memory.
+            if (in_array('request_json', $fields, true)) {
+                $select[] = "(CASE WHEN operation IN ('data_fetch', 'hi_data_push_callback', 'DATA_FETCH', 'HI_DATA_PUSH_CALLBACK') THEN NULL ELSE request_json END) AS request_json";
+            }
+            if (in_array('response_json', $fields, true)) {
+                $select[] = "(CASE WHEN operation IN ('data_fetch', 'hi_data_push_callback', 'DATA_FETCH', 'HI_DATA_PUSH_CALLBACK') THEN NULL ELSE response_json END) AS response_json";
+            }
+
+            $selectSql = implode(', ', $select);
+
+            $rows = $this->db->table('abdm_hiu_workflows')
+                ->select($selectSql)
+                ->whereIn('operation', [
+                    'consent_request',
+                    'consent_status',
+                    'consent_reconcile',
+                    'data_fetch',
+                    'consent_callback',
+                    'hi_on_request_callback',
+                    'hi_data_push_callback',
+                    'CONSENT_REQUEST',
+                    'CONSENT_STATUS',
+                    'CONSENT_RECONCILE',
+                    'DATA_FETCH',
+                    'CONSENT_CALLBACK',
+                    'HI_ON_REQUEST_CALLBACK',
+                    'HI_DATA_PUSH_CALLBACK',
+                ])
+                ->orderBy('id', 'DESC')
+                ->get(2000)
+                ->getResultArray();
+
+            if ($rows === []) {
+                return ['ok' => 1, 'requests' => []];
+            }
+
+            // Group rows by abha_address, preserving the DESC-by-id order within each group.
+            $byAddress = [];
+            foreach ($rows as $row) {
+                $addr = trim((string) ($row['abha_address'] ?? ''));
+                if ($addr === '') {
                     continue;
                 }
-                $consent = $detail['consent'];
+                $byAddress[$addr][] = $row;
+            }
 
-                if ($statusFilter !== '' && strtoupper((string) $consent['status']) !== $statusFilter) {
-                    continue;
-                }
-                if ($q !== '') {
-                    $haystack = strtolower(
-                        $patientInfo['patient_name'] . ' ' . $patientInfo['patient_code'] . ' '
-                        . $patientInfo['mobile'] . ' ' . $addr
-                    );
-                    if (strpos($haystack, $q) === false) {
+            if ($byAddress === []) {
+                return ['ok' => 1, 'requests' => []];
+            }
+
+            $patientsByAddress = $this->lookupPatientsByAbhaAddress(array_keys($byAddress));
+
+            $statusFilter = strtoupper(trim((string) ($filters['status'] ?? '')));
+            $q = strtolower(trim((string) ($filters['q'] ?? '')));
+
+            $out = [];
+            foreach ($byAddress as $addr => $addrRows) {
+                $patientInfo = $patientsByAddress[$addr] ?? [
+                    'patient_id' => 0,
+                    'patient_code' => '',
+                    'patient_name' => '',
+                    'mobile' => '',
+                ];
+
+                $sessions = $this->groupWorkflowRowsIntoSessions($addrRows);
+                foreach ($sessions as $sessionRows) {
+                    $detail = $this->computeConsentSessionDetail($sessionRows, $addr);
+                    if ((int) ($detail['ok'] ?? 0) !== 1) {
                         continue;
                     }
+                    $consent = $detail['consent'];
+
+                    if ($statusFilter !== '' && strtoupper((string) ($consent['status'] ?? '')) !== $statusFilter) {
+                        continue;
+                    }
+                    if ($q !== '') {
+                        $haystack = strtolower(
+                            ($patientInfo['patient_name'] ?? '') . ' ' . ($patientInfo['patient_code'] ?? '') . ' '
+                            . ($patientInfo['mobile'] ?? '') . ' ' . $addr
+                        );
+                        if (strpos($haystack, $q) === false) {
+                            continue;
+                        }
+                    }
+
+                    $out[] = array_merge($patientInfo, $consent);
                 }
-
-                $out[] = array_merge($patientInfo, $consent);
             }
+
+            usort($out, function ($a, $b) {
+                return strcmp((string) ($b['requested_on'] ?? ''), (string) ($a['requested_on'] ?? ''));
+            });
+
+            if ($limit > 0 && count($out) > $limit) {
+                $out = array_slice($out, 0, $limit);
+            }
+
+            return ['ok' => 1, 'requests' => $out];
+        } catch (\Throwable $e) {
+            log_message('error', 'ConsentSessionListService::getGlobalConsentRequestsList failure: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+            return [
+                'ok' => 0,
+                'error' => 'Failed to load consent requests: ' . $e->getMessage(),
+                'requests' => [],
+            ];
         }
-
-        usort($out, function ($a, $b) {
-            return strcmp((string) ($b['requested_on'] ?? ''), (string) ($a['requested_on'] ?? ''));
-        });
-
-        if ($limit > 0 && count($out) > $limit) {
-            $out = array_slice($out, 0, $limit);
-        }
-
-        return ['ok' => 1, 'requests' => $out];
     }
 
     /**
@@ -126,45 +168,68 @@ class ConsentSessionListService
      */
     private function lookupPatientsByAbhaAddress(array $abhaAddresses): array
     {
-        $fields = $this->db->getFieldNames('patient_master') ?? [];
-        $idCol = $this->resolveExistingColumn($fields, ['id']);
-        $uhidCol = $this->resolveExistingColumn($fields, ['p_code', 'uhid', 'uhid_no', 'patient_code', 'patient_id']);
-        $nameCol = $this->resolveExistingColumn($fields, ['p_fname', 'patient_name', 'name']);
-        $mobileCol = $this->resolveExistingColumn($fields, ['p_mobile', 'mobile', 'phone', 'contact_no']);
-        $abhaAddressCol = $this->resolveExistingColumn($fields, ['abha_address', 'abha_addr']);
+        try {
+            if ($abhaAddresses === [] || ! $this->db->tableExists('patient_master')) {
+                return [];
+            }
 
-        if ($idCol === null || $abhaAddressCol === null || $abhaAddresses === []) {
+            $fields = $this->db->getFieldNames('patient_master') ?? [];
+            $idCol = $this->resolveExistingColumn($fields, ['id']);
+            $uhidCol = $this->resolveExistingColumn($fields, ['p_code', 'uhid', 'uhid_no', 'patient_code', 'patient_id']);
+            $nameCol = $this->resolveExistingColumn($fields, ['p_fname', 'patient_name', 'name']);
+            $lastNameCol = $this->resolveExistingColumn($fields, ['p_lname', 'last_name']);
+            $mobileCol = $this->resolveExistingColumn($fields, ['mphone1', 'mphone2', 'p_mobile', 'mobile', 'phone', 'contact_no', 'phone1']);
+            $abhaAddressCol = $this->resolveExistingColumn($fields, ['abha_address', 'abha_addr']);
+
+            if ($idCol === null || $abhaAddressCol === null) {
+                return [];
+            }
+
+            $selectParts = [$idCol . ' AS id', $abhaAddressCol . ' AS abha_address'];
+            if ($uhidCol !== null) {
+                $selectParts[] = $uhidCol . ' AS uhid';
+            }
+            if ($nameCol !== null) {
+                $selectParts[] = $nameCol . ' AS name';
+            }
+            if ($lastNameCol !== null) {
+                $selectParts[] = $lastNameCol . ' AS last_name';
+            }
+            if ($mobileCol !== null) {
+                $selectParts[] = $mobileCol . ' AS mobile';
+            }
+
+            $rows = $this->db->table('patient_master')
+                ->select(implode(', ', $selectParts), false)
+                ->whereIn($abhaAddressCol, $abhaAddresses)
+                ->get()
+                ->getResultArray();
+
+            $out = [];
+            foreach ($rows as $p) {
+                $addr = trim((string) ($p['abha_address'] ?? ''));
+                if ($addr === '') {
+                    continue;
+                }
+                $firstName = trim((string) ($p['name'] ?? ''));
+                $lastName = trim((string) ($p['last_name'] ?? ''));
+                if ($lastName === '0') {
+                    $lastName = '';
+                }
+                $fullName = trim($firstName . ' ' . $lastName);
+                $out[$addr] = [
+                    'patient_id' => (int) ($p['id'] ?? 0),
+                    'patient_code' => trim((string) ($p['uhid'] ?? '')),
+                    'patient_name' => $fullName !== '' ? $fullName : $firstName,
+                    'mobile' => trim((string) ($p['mobile'] ?? '')),
+                ];
+            }
+
+            return $out;
+        } catch (\Throwable $e) {
+            log_message('warning', 'ConsentSessionListService::lookupPatientsByAbhaAddress error: ' . $e->getMessage());
             return [];
         }
-
-        $builder = $this->db->table('patient_master')
-            ->select('' . $idCol . ' AS id, ' . $abhaAddressCol . ' AS abha_address', false);
-        if ($uhidCol !== null) {
-            $builder->select($uhidCol . ' AS uhid', false);
-        }
-        if ($nameCol !== null) {
-            $builder->select($nameCol . ' AS name', false);
-        }
-        if ($mobileCol !== null) {
-            $builder->select($mobileCol . ' AS mobile', false);
-        }
-        $builder->whereIn($abhaAddressCol, $abhaAddresses);
-
-        $out = [];
-        foreach ($builder->get()->getResultArray() as $p) {
-            $addr = trim((string) ($p['abha_address'] ?? ''));
-            if ($addr === '') {
-                continue;
-            }
-            $out[$addr] = [
-                'patient_id' => (int) ($p['id'] ?? 0),
-                'patient_code' => trim((string) ($p['uhid'] ?? '')),
-                'patient_name' => trim((string) ($p['name'] ?? '')),
-                'mobile' => trim((string) ($p['mobile'] ?? '')),
-            ];
-        }
-
-        return $out;
     }
 
     private function resolveExistingColumn(array $fields, array $candidates): ?string
@@ -179,11 +244,9 @@ class ConsentSessionListService
     }
 
     /**
-     * Splits a DESC-by-id set of workflow rows (all belonging to one ABHA
-     * address) into distinct consent request "sessions" — each
-     * CONSENT_REQUEST row starts a new session, and every subsequent row
-     * belongs to that session until the next CONSENT_REQUEST row appears.
-     * Returns sessions in chronological order (oldest session first).
+     * Splits a DESC-by-id set of workflow rows into distinct consent request
+     * "sessions", correlating rows by their stable identifiers (request_id /
+     * abdm_consent_request_id / consent_id) rather than simple chronological proximity.
      *
      * @param array<int, array<string, mixed>> $rows rows ordered DESC by id
      * @return array<int, array<int, array<string, mixed>>>
@@ -193,20 +256,94 @@ class ConsentSessionListService
         $chronological = array_reverse($rows);
 
         $sessions = [];
-        $current = [];
+        $order = [];
+        $abdmIdToAnchor = [];
+        $requestIdToAnchor = [];
+        $anchorHasAbdmId = [];
+        $openAnchor = null;
+
         foreach ($chronological as $row) {
             $operation = strtoupper(trim((string) ($row['operation'] ?? '')));
-            if ($operation === 'CONSENT_REQUEST' && $current !== []) {
-                $sessions[] = $current;
-                $current = [];
+            $rowRequestId = trim((string) ($row['request_id'] ?? ''));
+            $rowAbdmConsentRequestId = trim((string) ($row['abdm_consent_request_id'] ?? ''));
+            $rowConsentId = trim((string) ($row['consent_id'] ?? ''));
+
+            if ($operation === 'CONSENT_REQUEST') {
+                $anchorKey = 'anchor_' . count($order);
+                $order[] = $anchorKey;
+                $sessions[$anchorKey] = [$row];
+                if ($rowRequestId !== '') {
+                    $requestIdToAnchor[$rowRequestId] = $anchorKey;
+                }
+                if ($rowAbdmConsentRequestId !== '') {
+                    $abdmIdToAnchor[$rowAbdmConsentRequestId] = $anchorKey;
+                    $requestIdToAnchor[$rowAbdmConsentRequestId] = $anchorKey;
+                    $anchorHasAbdmId[$anchorKey] = true;
+                }
+                if ($rowConsentId !== '') {
+                    $abdmIdToAnchor[$rowConsentId] = $anchorKey;
+                    $requestIdToAnchor[$rowConsentId] = $anchorKey;
+                }
+                $openAnchor = $anchorKey;
+                continue;
             }
-            $current[] = $row;
-        }
-        if ($current !== []) {
-            $sessions[] = $current;
+
+            $anchorKey = null;
+            if ($rowAbdmConsentRequestId !== '' && isset($abdmIdToAnchor[$rowAbdmConsentRequestId])) {
+                $anchorKey = $abdmIdToAnchor[$rowAbdmConsentRequestId];
+            } elseif ($rowRequestId !== '' && isset($requestIdToAnchor[$rowRequestId])) {
+                $anchorKey = $requestIdToAnchor[$rowRequestId];
+            } elseif ($rowConsentId !== '' && isset($requestIdToAnchor[$rowConsentId])) {
+                $anchorKey = $requestIdToAnchor[$rowConsentId];
+            } elseif ($openAnchor !== null && ($rowAbdmConsentRequestId === '' || empty($anchorHasAbdmId[$openAnchor]))) {
+                $anchorKey = $openAnchor;
+            }
+
+            if ($anchorKey === null) {
+                $anchorKey = 'orphan_' . count($order);
+                $order[] = $anchorKey;
+                $sessions[$anchorKey] = [];
+            }
+
+            $sessions[$anchorKey][] = $row;
+
+            if ($anchorKey === $openAnchor) {
+                $openAnchor = null;
+            }
+            if ($rowAbdmConsentRequestId !== '') {
+                $abdmIdToAnchor[$rowAbdmConsentRequestId] = $anchorKey;
+                $anchorHasAbdmId[$anchorKey] = true;
+            }
+            if ($rowRequestId !== '') {
+                $requestIdToAnchor[$rowRequestId] = $anchorKey;
+            }
+            if ($rowConsentId !== '') {
+                $requestIdToAnchor[$rowConsentId] = $anchorKey;
+            }
         }
 
-        return $sessions;
+        $result = [];
+        foreach ($order as $anchorKey) {
+            if (! empty($sessions[$anchorKey])) {
+                $result[] = $sessions[$anchorKey];
+            }
+        }
+
+        return $result;
+    }
+
+    /**
+     * Extracts a clean scalar string from mixed input (preventing Array-to-string conversion notices).
+     *
+     * @param mixed $val
+     */
+    private function extractScalarString($val): string
+    {
+        if (is_scalar($val)) {
+            return trim((string) $val);
+        }
+
+        return '';
     }
 
     /**
@@ -234,25 +371,27 @@ class ConsentSessionListService
 
             $rawConsentStatus = '';
             if (isset($decoded['consent']) && is_array($decoded['consent'])) {
-                $rawConsentStatus = trim((string) (
+                $rawConsentStatus = $this->extractScalarString(
                     $decoded['consent']['status']
                     ?? $decoded['consent']['consent_status']
                     ?? $decoded['consent']['consentStatus']
-                    ?? ''
-                ));
+                    ?? null
+                );
             }
             if ($rawConsentStatus === '' && isset($decoded['consentDetail']) && is_array($decoded['consentDetail'])) {
-                $rawConsentStatus = trim((string) ($decoded['consentDetail']['status'] ?? ''));
+                $rawConsentStatus = $this->extractScalarString($decoded['consentDetail']['status'] ?? null);
             }
             if ($rawConsentStatus === '' && isset($decoded['data']['consent']) && is_array($decoded['data']['consent'])) {
-                $rawConsentStatus = trim((string) ($decoded['data']['consent']['status'] ?? ''));
+                $rawConsentStatus = $this->extractScalarString($decoded['data']['consent']['status'] ?? null);
             }
             if ($rawConsentStatus === '') {
-                $rawConsentStatus = trim((string) ($decoded['consent_status'] ?? $decoded['consentStatus'] ?? ''));
+                $rawConsentStatus = $this->extractScalarString(
+                    $decoded['consent_status'] ?? $decoded['consentStatus'] ?? null
+                );
             }
             if ($rawConsentStatus === '' || in_array(strtolower($rawConsentStatus), ['success', 'ok', 'failed', 'error', 'status_checked'], true)) {
-                $topStatus = trim((string) ($decoded['status'] ?? ''));
-                if (! in_array(strtolower($topStatus), ['success', 'ok', 'failed', 'error', 'status_checked', '1', '0'], true)) {
+                $topStatus = $this->extractScalarString($decoded['status'] ?? null);
+                if (! in_array(strtolower($topStatus), ['success', 'ok', 'failed', 'error', 'status_checked', '1', '0', ''], true)) {
                     $rawConsentStatus = $topStatus;
                 }
             }
@@ -264,9 +403,12 @@ class ConsentSessionListService
             $phase = 'REQUESTED';
             $priority = 120;
 
-            if (($operation === 'DATA_FETCH' || $operation === 'HI_DATA_PUSH_CALLBACK') && $status === 'SUCCESS') {
+            if (($operation === 'DATA_FETCH' || $operation === 'HI_DATA_PUSH_CALLBACK') && $status === 'SUCCESS' && $state === 'DATA_RECEIVED') {
                 $phase = 'COMPLETED';
                 $priority = 500;
+            } elseif (($operation === 'DATA_FETCH' || $operation === 'HI_DATA_PUSH_CALLBACK') && $status === 'SUCCESS') {
+                $phase = 'COMPLETED';
+                $priority = 490;
             } elseif (in_array($rawConsentStatus, ['GRANTED', 'APPROVED', 'ACTIVE'], true)) {
                 $phase = 'GRANTED';
                 $priority = 430;
@@ -325,20 +467,22 @@ class ConsentSessionListService
             }
             $rowStatus = '';
             if (isset($rowDecoded['consent']) && is_array($rowDecoded['consent'])) {
-                $rowStatus = trim((string) (
+                $rowStatus = $this->extractScalarString(
                     $rowDecoded['consent']['status']
                     ?? $rowDecoded['consent']['consent_status']
-                    ?? ''
-                ));
+                    ?? null
+                );
             }
             if ($rowStatus === '' && isset($rowDecoded['consentDetail']) && is_array($rowDecoded['consentDetail'])) {
-                $rowStatus = trim((string) ($rowDecoded['consentDetail']['status'] ?? ''));
+                $rowStatus = $this->extractScalarString($rowDecoded['consentDetail']['status'] ?? null);
             }
             if ($rowStatus === '' && isset($rowDecoded['data']['consent']) && is_array($rowDecoded['data']['consent'])) {
-                $rowStatus = trim((string) ($rowDecoded['data']['consent']['status'] ?? ''));
+                $rowStatus = $this->extractScalarString($rowDecoded['data']['consent']['status'] ?? null);
             }
             if ($rowStatus === '') {
-                $rowStatus = trim((string) ($rowDecoded['consent_status'] ?? $rowDecoded['consentStatus'] ?? ''));
+                $rowStatus = $this->extractScalarString(
+                    $rowDecoded['consent_status'] ?? $rowDecoded['consentStatus'] ?? null
+                );
             }
             if ($rowStatus === '' || in_array(strtolower($rowStatus), ['success', 'ok', 'failed', 'error', 'status_checked'], true)) {
                 $rowState = strtoupper(trim((string) ($row['workflow_state'] ?? '')));
@@ -359,6 +503,7 @@ class ConsentSessionListService
         if ($terminalPhase !== '') {
             $phase = $terminalPhase;
         }
+
         $consentId = '';
         $consentRequestId = '';
         foreach ($rows as $row) {
@@ -370,19 +515,19 @@ class ConsentSessionListService
             $rowConsentId = trim((string) (
                 $row['abdm_consent_artifact_id']
                 ?? $row['consent_id']
-                ?? $rowDecoded['consent_id']
-                ?? $rowDecoded['consentId']
-                ?? $rowDecoded['consent']['id']
-                ?? $rowDecoded['consent']['consent_id']
-                ?? $rowDecoded['consent']['consentId']
-                ?? $rowDecoded['consentDetail']['id']
-                ?? $rowDecoded['consentDetail']['consentId']
-                ?? $rowDecoded['consent_artifact_id']
-                ?? $rowDecoded['consent_artefact_id']
-                ?? $rowDecoded['consentArtifactId']
-                ?? $rowDecoded['consentArtefactId']
-                ?? $rowDecoded['data']['consent']['id']
-                ?? $rowDecoded['data']['consent_id']
+                ?? $this->extractScalarString($rowDecoded['consent_id'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['consentId'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['consent']['id'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['consent']['consent_id'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['consent']['consentId'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['consentDetail']['id'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['consentDetail']['consentId'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['consent_artifact_id'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['consent_artefact_id'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['consentArtifactId'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['consentArtefactId'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['data']['consent']['id'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['data']['consent_id'] ?? null)
                 ?? ''
             ));
             if ($rowConsentId !== '' && ! preg_match('/^REQ-/i', $rowConsentId)) {
@@ -391,14 +536,14 @@ class ConsentSessionListService
 
             $rowConsentRequestId = trim((string) (
                 $row['abdm_consent_request_id']
-                ?? $rowDecoded['abdm_consent_request_id']
-                ?? $rowDecoded['consent_request_id']
-                ?? $rowDecoded['consentRequestId']
-                ?? $rowDecoded['consent']['consent_request_id']
-                ?? $rowDecoded['consent']['consentRequestId']
-                ?? $rowDecoded['consentDetail']['consent_request_id']
-                ?? $rowDecoded['consentDetail']['consentRequestId']
-                ?? $rowDecoded['data']['consent_request_id']
+                ?? $this->extractScalarString($rowDecoded['abdm_consent_request_id'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['consent_request_id'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['consentRequestId'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['consent']['consent_request_id'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['consent']['consentRequestId'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['consentDetail']['consent_request_id'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['consentDetail']['consentRequestId'] ?? null)
+                ?? $this->extractScalarString($rowDecoded['data']['consent_request_id'] ?? null)
                 ?? ''
             ));
             if ($rowConsentRequestId !== '' && ! preg_match('/^REQ-/i', $rowConsentRequestId)) {
@@ -418,6 +563,11 @@ class ConsentSessionListService
             }
         }
 
+        $anchorState = strtoupper(trim((string) (is_array($consentRequestRow) ? ($consentRequestRow['workflow_state'] ?? '') : '')));
+        if (in_array($anchorState, ['EXPIRED', 'DENIED', 'REVOKED'], true)) {
+            $phase = $anchorState;
+        }
+
         $requestedHiTypes = [];
         $requestedOn = '';
         $purpose = '';
@@ -435,11 +585,23 @@ class ConsentSessionListService
             $consentBlock = (array) ($reqPayload['consent'] ?? []);
             $requestedHiTypes = $this->normalizeHiTypesList($consentBlock['hiTypes'] ?? $consentBlock['hi_types'] ?? []);
             $requestedOn = trim((string) ($consentRequestRow['created_at'] ?? ''));
-            $purpose = trim((string) ($consentBlock['purpose']['text'] ?? $consentBlock['purpose']['code'] ?? ''));
-            $validFrom = trim((string) ($consentBlock['permission']['dateRange']['from'] ?? $consentBlock['permission']['date_range']['from'] ?? ''));
-            $validTo = trim((string) ($consentBlock['permission']['dateRange']['to'] ?? $consentBlock['permission']['date_range']['to'] ?? ''));
-            $eraseAt = trim((string) ($consentBlock['permission']['dataEraseAt'] ?? $consentBlock['permission']['data_erase_at'] ?? ''));
-            $requestedBy = trim((string) ($consentBlock['requester']['name'] ?? ''));
+            $purpose = $this->extractScalarString($consentBlock['purpose']['text'] ?? $consentBlock['purpose']['code'] ?? null);
+            $validFrom = $this->extractScalarString(
+                $consentBlock['permission']['dateRange']['from']
+                ?? $consentBlock['permission']['date_range']['from']
+                ?? null
+            );
+            $validTo = $this->extractScalarString(
+                $consentBlock['permission']['dateRange']['to']
+                ?? $consentBlock['permission']['date_range']['to']
+                ?? null
+            );
+            $eraseAt = $this->extractScalarString(
+                $consentBlock['permission']['dataEraseAt']
+                ?? $consentBlock['permission']['data_erase_at']
+                ?? null
+            );
+            $requestedBy = $this->extractScalarString($consentBlock['requester']['name'] ?? null);
             if ($hfrId === '') {
                 $hfrId = trim((string) ($consentRequestRow['hfr_id'] ?? ''));
             }
@@ -463,47 +625,47 @@ class ConsentSessionListService
                     continue;
                 }
                 if ($validFrom === '') {
-                    $validFrom = trim((string) (
+                    $validFrom = $this->extractScalarString(
                         $c['permission']['dateRange']['from']
                         ?? $c['permission']['date_range']['from']
                         ?? $c['date_range']['from']
                         ?? $c['dateRange']['from']
-                        ?? ''
-                    ));
+                        ?? null
+                    );
                 }
                 if ($validTo === '') {
-                    $validTo = trim((string) (
+                    $validTo = $this->extractScalarString(
                         $c['permission']['dateRange']['to']
                         ?? $c['permission']['date_range']['to']
                         ?? $c['date_range']['to']
                         ?? $c['dateRange']['to']
-                        ?? ''
-                    ));
+                        ?? null
+                    );
                 }
                 if ($eraseAt === '') {
-                    $eraseAt = trim((string) (
+                    $eraseAt = $this->extractScalarString(
                         $c['permission']['dataEraseAt']
                         ?? $c['permission']['data_erase_at']
-                        ?? $c['expiry']
+                        ?? (is_array($c['expiry'] ?? null) ? ($c['expiry']['date'] ?? null) : ($c['expiry'] ?? null))
                         ?? $c['dataEraseAt']
                         ?? $c['data_erase_at']
-                        ?? ''
-                    ));
+                        ?? null
+                    );
                 }
                 if ($purpose === '') {
-                    $purpose = trim((string) (
+                    $purpose = $this->extractScalarString(
                         $c['purpose']['text']
                         ?? $c['purpose']['code']
                         ?? $c['purpose']
-                        ?? ''
-                    ));
+                        ?? null
+                    );
                 }
                 if ($requestedBy === '') {
-                    $requestedBy = trim((string) (
+                    $requestedBy = $this->extractScalarString(
                         $c['requester']['name']
                         ?? $c['requester']
-                        ?? ''
-                    ));
+                        ?? null
+                    );
                 }
                 if ($requestedOn === '') {
                     $requestedOn = trim((string) ($row['created_at'] ?? ''));
@@ -521,7 +683,10 @@ class ConsentSessionListService
             $rowHiTypes = $this->normalizeHiTypesList($decoded['hi_types'] ?? $decoded['consent']['hi_types'] ?? []);
             if ($rowHiTypes !== []) {
                 $grantedHiTypes = $rowHiTypes;
-                $grantedOn = trim((string) ($decoded['granted_at'] ?? $row['updated_at'] ?? ''));
+                $grantedOn = trim((string) (
+                    $this->extractScalarString($decoded['granted_at'] ?? null)
+                    ?: ($row['updated_at'] ?? '')
+                ));
                 break;
             }
         }
@@ -529,7 +694,10 @@ class ConsentSessionListService
         $revokedOn = trim((string) ($best['revoked_at'] ?? ''));
         $expiredOn = trim((string) ($best['expired_at'] ?? ''));
         if (in_array($phase, ['GRANTED', 'COMPLETED'], true) && $grantedOn === '') {
-            $grantedOn = trim((string) ($bestDecoded['granted_at'] ?? $best['updated_at'] ?? ''));
+            $grantedOn = trim((string) (
+                $this->extractScalarString($bestDecoded['granted_at'] ?? null)
+                ?: ($best['updated_at'] ?? '')
+            ));
         }
 
         $items = [];
@@ -607,9 +775,15 @@ class ConsentSessionListService
 
         $out = [];
         foreach ($value as $v) {
-            $v = trim((string) $v);
-            if ($v !== '' && ! in_array($v, $out, true)) {
-                $out[] = $v;
+            if (is_array($v)) {
+                $v = $v['type'] ?? $v['hiType'] ?? $v['name'] ?? $v['code'] ?? null;
+            }
+            if (! is_scalar($v)) {
+                continue;
+            }
+            $s = trim((string) $v);
+            if ($s !== '' && ! in_array($s, $out, true)) {
+                $out[] = $s;
             }
         }
 

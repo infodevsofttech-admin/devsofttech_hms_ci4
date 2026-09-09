@@ -28,17 +28,27 @@ class AbdmHiu extends BaseController
 
     public function patientRequestListData()
     {
-        $q = trim((string) ($this->request->getGet('q') ?? ''));
-        $status = trim((string) ($this->request->getGet('status') ?? ''));
-        $limit = (int) ($this->request->getGet('limit') ?? 300);
-        if ($limit <= 0 || $limit > 1000) {
-            $limit = 300;
+        try {
+            $q = trim((string) ($this->request->getGet('q') ?? ''));
+            $status = trim((string) ($this->request->getGet('status') ?? ''));
+            $limit = (int) ($this->request->getGet('limit') ?? 300);
+            if ($limit <= 0 || $limit > 1000) {
+                $limit = 300;
+            }
+
+            $service = new \App\Libraries\Abdm\ConsentSessionListService();
+            $result = $service->getGlobalConsentRequestsList(['q' => $q, 'status' => $status], $limit);
+
+            return $this->response->setJSON($result);
+        } catch (\Throwable $e) {
+            log_message('error', 'AbdmHiu::patientRequestListData failure: ' . $e->getMessage() . "\n" . $e->getTraceAsString());
+
+            return $this->response->setJSON([
+                'ok' => 0,
+                'error' => 'Unable to load consent requests: ' . $e->getMessage(),
+                'requests' => [],
+            ]);
         }
-
-        $service = new \App\Libraries\Abdm\ConsentSessionListService();
-        $result = $service->getGlobalConsentRequestsList(['q' => $q, 'status' => $status], $limit);
-
-        return $this->response->setJSON($result);
     }
 
     public function documents()

@@ -202,7 +202,11 @@
         $('#prlCountBox').text('Loading...');
         var url = listUrl + '?q=' + encodeURIComponent($('#prlSearch').val() || '') + '&status=' + encodeURIComponent($('#prlStatus').val() || '');
         fetch(url, { credentials: 'same-origin' })
-            .then(function(resp) { return resp.json(); })
+            .then(function(resp) {
+                return resp.json().catch(function() {
+                    return { ok: 0, error: 'Server returned HTTP ' + resp.status + (resp.statusText ? (' (' + resp.statusText + ')') : '') };
+                });
+            })
             .then(function(data) {
                 if (!data || data.ok !== 1) {
                     throw new Error((data && data.error) || 'Unable to load consent requests.');
