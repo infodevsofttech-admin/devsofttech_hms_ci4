@@ -4041,13 +4041,48 @@ function PurchaseView({ store, notify }) {
         bank_details: ''
     });
 
+    // Master Medicine Autocomplete & Add Modal State
+    const [activeSearchRow, setActiveSearchRow] = useState(null);
+    const [suggestions, setSuggestions] = useState([]);
+    const [isSearchingMeds, setIsSearchingMeds] = useState(false);
+    const [showMasterModal, setShowMasterModal] = useState(false);
+    const [masterTargetRow, setMasterTargetRow] = useState(null);
+    const [supportData, setSupportData] = useState({ formulations: [], companies: [], gst_rates: [0, 5, 12, 18, 28], schedules: [] });
+    const [isSavingMaster, setIsSavingMaster] = useState(false);
+    const [masterForm, setMasterForm] = useState({
+        item_name: '',
+        generic_name: '',
+        formulation: 'Tablet',
+        units_per_pack: 10,
+        packing: '10',
+        hsn_code: '3004',
+        gst_rate: 12,
+        drug_schedule: 'Schedule H',
+        company_name: '',
+        min_reorder_level: 10
+    });
+    const searchTimerRef = useRef(null);
+
     const [rows, setRows] = useState([
-        { item_name: '', generic_name: '', batch_no: '', expiry_date: '', qty_packs: 1, free_qty_packs: 0, units_per_pack: 10, mrp: 0, ptr: 0, discount_pct: 0, gst_rate: 12 }
+        { item_id: 0, item_name: '', generic_name: '', category: 'Tablet', batch_no: '', expiry_date: '', qty_packs: 1, free_qty_packs: 0, units_per_pack: 10, mrp: 0, ptr: 0, discount_pct: 0, gst_rate: 12, hsn_code: '3004' }
     ]);
 
     useEffect(() => {
         fetchSuppliers();
+        fetchMasterSupportData();
     }, []);
+
+    const fetchMasterSupportData = async () => {
+        try {
+            const res = await fetch(API_BASE + 'items/master-support-data');
+            const data = await res.json();
+            if (data.status) {
+                setSupportData(data);
+            }
+        } catch (e) {
+            console.error('Error fetching master support data:', e);
+        }
+    };
 
     const fetchSuppliers = async () => {
         try {
@@ -4161,7 +4196,7 @@ function PurchaseView({ store, notify }) {
     });
 
     const addRow = () => {
-        setRows([...rows, { item_name: '', generic_name: '', batch_no: '', expiry_date: '', qty_packs: 1, free_qty_packs: 0, units_per_pack: 10, mrp: 0, ptr: 0, discount_pct: 0, gst_rate: 12 }]);
+        setRows([...rows, { item_id: 0, item_name: '', generic_name: '', category: 'Tablet', batch_no: '', expiry_date: '', qty_packs: 1, free_qty_packs: 0, units_per_pack: 10, mrp: 0, ptr: 0, discount_pct: 0, gst_rate: 12, hsn_code: '3004' }]);
     };
 
     const updateRow = (idx, field, val) => {
@@ -4171,7 +4206,135 @@ function PurchaseView({ store, notify }) {
     };
 
     const removeRow = (idx) => {
+        if (rows.length <= 1) {
+            setRows([{ item_id: 0, item_name: '', generic_name: '', category: 'Tablet', batch_no: '', expiry_date: '', qty_packs: 1, free_qty_packs: 0, units_per_pack: 10, mrp: 0, ptr: 0, discount_pct: 0, gst_rate: 12, hsn_code: '3004' }]);
+            return;
+        }
         setRows(rows.filter((_, i) => i !== idx));
+    };
+
+    // Autocomplete searching for Medicine Name
+    const handleMedicineInputChange = (rowIndex, value) => {
+        updateRow(rowIndex, 'item_name', value);
+        setActiveSearchRow(rowIndex);
+
+        if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
+
+        if (!value.trim() || value.trim().length < 1) {
+            setSuggestions([]);
+            return;
+        }
+
+        searchTimerRef.current = setTimeout(async () => {
+            setIsSearchingMeds(true);
+            try {
+                const res = await fetch(API_BASE + 'items/search-master?q=' + encodeURIComponent(value.trim()));
+                const data = await res.json();
+                if (data.status) {
+                    setSuggestions(data.items || []);
+                }
+            } catch (err) {
+                console.error('Master search error:', err);
+            } finally {
+                setIsSearchingMeds(false);
+            }
+        }, 200);
+    };
+
+    const handleSelectMedicine = (rowIndex, item) => {
+        const updated = [...rows];
+        updated[rowIndex] = {
+            ...updated[rowIndex],
+            item_id: item.item_id || 0,
+            item_name: item.item_name,
+            generic_name: item.generic_name || '',
+            category: item.category || 'Tablet',
+            units_per_pack: Number(item.units_per_pack) > 0 ? Number(item.units_per_pack) : 10,
+            gst_rate: item.gst_rate !== undefined ? Number(item.gst_rate) : 12,
+            hsn_code: item.hsn_code || '3004'
+        };
+        setRows(updated);
+        setActiveSearchRow(null);
+        setSuggestions([]);
+
+        // Focus Batch No field for this row
+        setTimeout(() => {
+            const batchInput = document.getElementById(`batch-input-${rowIndex}`);
+            if (batchInput) {
+                batchInput.focus();
+                batchInput.select();
+            }
+        }, 50);
+    };
+
+    const openAddMasterModal = (rowIndex = null, initialName = '') => {
+        const prefillName = initialName || (rowIndex !== null && rows[rowIndex] ? rows[rowIndex].item_name : '');
+        setMasterTargetRow(rowIndex);
+        setMasterForm({
+            item_name: prefillName,
+            generic_name: '',
+            formulation: 'Tablet',
+            units_per_pack: 10,
+            packing: '10',
+            hsn_code: '3004',
+            gst_rate: 12,
+            drug_schedule: 'Schedule H',
+            company_name: '',
+            min_reorder_level: 10
+        });
+        setActiveSearchRow(null);
+        setSuggestions([]);
+        setShowMasterModal(true);
+    };
+
+    const handleSaveMasterMedicine = async (e) => {
+        if (e) e.preventDefault();
+        if (!masterForm.item_name.trim()) {
+            notify('Medicine name is required.', 'error');
+            return;
+        }
+
+        setIsSavingMaster(true);
+        try {
+            const res = await fetch(API_BASE + 'items/save-master', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(masterForm)
+            });
+            const data = await res.json();
+            if (data.status && data.item) {
+                notify(`"${data.item.item_name}" saved to Pharmacy Master & selected!`, 'success');
+                setShowMasterModal(false);
+
+                // Auto-select into the target row or create a new row
+                if (masterTargetRow !== null && masterTargetRow < rows.length) {
+                    handleSelectMedicine(masterTargetRow, data.item);
+                } else {
+                    setRows([...rows, {
+                        item_id: data.item.item_id || 0,
+                        item_name: data.item.item_name,
+                        generic_name: data.item.generic_name || '',
+                        category: data.item.category || 'Tablet',
+                        batch_no: '',
+                        expiry_date: '',
+                        qty_packs: 1,
+                        free_qty_packs: 0,
+                        units_per_pack: Number(data.item.units_per_pack) || 10,
+                        mrp: 0,
+                        ptr: 0,
+                        discount_pct: 0,
+                        gst_rate: Number(data.item.gst_rate) || 12,
+                        hsn_code: data.item.hsn_code || '3004'
+                    }]);
+                }
+            } else {
+                notify(data.message || 'Failed to save medicine to master.', 'error');
+            }
+        } catch (err) {
+            notify('Error saving to master: ' + err.message, 'error');
+        } finally {
+            setIsSavingMaster(false);
+        }
     };
 
     const savePurchaseBill = async () => {
@@ -4187,27 +4350,22 @@ function PurchaseView({ store, notify }) {
         }
 
         try {
-            const itemsPayload = [];
-            for (const r of validItems) {
-                const searchRes = await fetch(API_BASE + `items/search?store_id=${store.store_id}&q=${encodeURIComponent(r.item_name)}`);
-                const sData = await searchRes.json();
-                let itemId = 1;
-                if (sData.status && sData.items && sData.items.length > 0) {
-                    itemId = sData.items[0].item_id;
-                }
-                itemsPayload.push({
-                    item_id: itemId,
-                    batch_no: r.batch_no,
-                    expiry_date: r.expiry_date,
-                    qty_packs: Number(r.qty_packs),
-                    free_qty_packs: Number(r.free_qty_packs || 0),
-                    units_per_pack: Number(r.units_per_pack || 10),
-                    mrp: Number(r.mrp),
-                    ptr: Number(r.ptr),
-                    discount_pct: Number(r.discount_pct || 0),
-                    gst_rate: Number(r.gst_rate || 12)
-                });
-            }
+            const itemsPayload = validItems.map(r => ({
+                item_id: Number(r.item_id || 0),
+                item_name: r.item_name,
+                generic_name: r.generic_name || '',
+                category: r.category || 'Tablet',
+                batch_no: r.batch_no,
+                expiry_date: r.expiry_date,
+                qty_packs: Number(r.qty_packs),
+                free_qty_packs: Number(r.free_qty_packs || 0),
+                units_per_pack: Number(r.units_per_pack || 10),
+                mrp: Number(r.mrp),
+                ptr: Number(r.ptr),
+                discount_pct: Number(r.discount_pct || 0),
+                gst_rate: Number(r.gst_rate || 12),
+                hsn_code: r.hsn_code || '3004'
+            }));
 
             const res = await fetch(API_BASE + 'purchase/save', {
                 method: 'POST',
@@ -4224,7 +4382,7 @@ function PurchaseView({ store, notify }) {
             if (data.status) {
                 notify('Purchase inward recorded! Supplier Ledger & Stock updated.', 'success');
                 setInvoiceNo('');
-                setRows([{ item_name: '', generic_name: '', batch_no: '', expiry_date: '', qty_packs: 1, free_qty_packs: 0, units_per_pack: 10, mrp: 0, ptr: 0, discount_pct: 0, gst_rate: 12 }]);
+                setRows([{ item_id: 0, item_name: '', generic_name: '', category: 'Tablet', batch_no: '', expiry_date: '', qty_packs: 1, free_qty_packs: 0, units_per_pack: 10, mrp: 0, ptr: 0, discount_pct: 0, gst_rate: 12, hsn_code: '3004' }]);
             } else {
                 notify(data.message || 'Failed to save purchase bill.', 'error');
             }
@@ -4277,33 +4435,178 @@ function PurchaseView({ store, notify }) {
                         </div>
                     </div>
 
-                    <div className="table-responsive">
+                    <div className="table-responsive" style={{ overflow: 'visible' }}>
                         <table className="table table-pos table-bordered">
                             <thead>
                                 <tr>
-                                    <th>Medicine Name</th>
-                                    <th>Batch No</th>
-                                    <th>Expiry</th>
-                                    <th style={{ width: 70 }}>Packs</th>
+                                    <th style={{ minWidth: 280 }}>
+                                        <div className="d-flex justify-content-between align-items-center">
+                                            <span>Medicine Name (Master Auto-Search)</span>
+                                            <button 
+                                                type="button" 
+                                                className="btn btn-link btn-sm p-0 text-decoration-none fw-semibold" 
+                                                style={{ fontSize: '11px' }} 
+                                                onClick={() => openAddMasterModal(rows.length - 1, '')}
+                                            >
+                                                <i className="bi bi-plus-circle me-1"></i>+ Add to Master
+                                            </button>
+                                        </div>
+                                    </th>
+                                    <th style={{ width: 130 }}>Batch No</th>
+                                    <th style={{ width: 140 }}>Expiry</th>
+                                    <th style={{ width: 75 }}>Packs</th>
                                     <th style={{ width: 65 }}>Free</th>
-                                    <th style={{ width: 80 }}>Units/Pack</th>
+                                    <th style={{ width: 85 }}>Units/Pack</th>
                                     <th style={{ width: 85 }}>PTR (₹)</th>
                                     <th style={{ width: 85 }}>MRP (₹)</th>
-                                    <th style={{ width: 65 }}>GST%</th>
+                                    <th style={{ width: 75 }}>GST%</th>
                                     <th style={{ width: 40 }}></th>
                                 </tr>
                             </thead>
                             <tbody>
                                 {rows.map((r, i) => (
                                     <tr key={i}>
-                                        <td>
-                                            <input type="text" className="form-control form-control-sm" placeholder="e.g. Augmentin 625" value={r.item_name} onChange={(e) => updateRow(i, 'item_name', e.target.value)} />
+                                        <td style={{ position: 'relative' }}>
+                                            <div className="input-group input-group-sm">
+                                                <input 
+                                                    type="text" 
+                                                    id={`med-search-input-${i}`}
+                                                    className={`form-control form-control-sm fw-semibold ${r.item_id ? 'border-success' : ''}`} 
+                                                    placeholder="Type medicine name (e.g. Augmentin)..." 
+                                                    value={r.item_name} 
+                                                    autoComplete="off"
+                                                    onChange={(e) => handleMedicineInputChange(i, e.target.value)} 
+                                                    onFocus={(e) => {
+                                                        setActiveSearchRow(i);
+                                                        if (e.target.value.trim().length >= 1) {
+                                                            handleMedicineInputChange(i, e.target.value);
+                                                        }
+                                                    }}
+                                                />
+                                                {r.item_id > 0 && (
+                                                    <span className="input-group-text bg-success text-white py-0 px-1.5" title="Item matched in Master Catalog">
+                                                        <i className="bi bi-check2"></i>
+                                                    </span>
+                                                )}
+                                            </div>
+
+                                            {/* Subtext with Generic and Category */}
+                                            {r.generic_name ? (
+                                                <div className="text-muted text-truncate mt-1 d-flex align-items-center gap-1" style={{ fontSize: '11px', maxWidth: '270px' }}>
+                                                    <span className="badge bg-light text-primary border" style={{ fontSize: '9.5px' }}>{r.category || 'Tablet'}</span>
+                                                    <span>{r.generic_name}</span>
+                                                </div>
+                                            ) : null}
+
+                                            {/* Autocomplete Dropdown */}
+                                            {activeSearchRow === i && (
+                                                <div 
+                                                    className="shadow-lg border rounded-2 bg-white"
+                                                    style={{
+                                                        position: 'absolute',
+                                                        top: '100%',
+                                                        left: 0,
+                                                        width: '380px',
+                                                        maxHeight: '280px',
+                                                        overflowY: 'auto',
+                                                        zIndex: 1060,
+                                                        marginTop: '2px'
+                                                    }}
+                                                >
+                                                    {/* Dropdown Header */}
+                                                    <div className="bg-light px-2.5 py-1.5 border-bottom d-flex justify-content-between align-items-center">
+                                                        <span className="small fw-bold text-secondary" style={{ fontSize: '11px' }}>
+                                                            {isSearchingMeds ? (
+                                                                <span><i className="bi bi-hourglass-split spinner-border spinner-border-sm me-1"></i>Searching master...</span>
+                                                            ) : (
+                                                                <span><i className="bi bi-database-check me-1 text-primary"></i>Pharmacy Master ({suggestions.length} found)</span>
+                                                            )}
+                                                        </span>
+                                                        <button 
+                                                            type="button" 
+                                                            className="btn-close" 
+                                                            style={{ fontSize: '9px' }}
+                                                            onClick={() => setActiveSearchRow(null)}
+                                                        ></button>
+                                                    </div>
+
+                                                    {/* Suggestions List */}
+                                                    {suggestions.length > 0 ? (
+                                                        suggestions.map((item, sIdx) => (
+                                                            <div
+                                                                key={sIdx}
+                                                                className="p-2 border-bottom hover-bg-light"
+                                                                style={{ cursor: 'pointer', transition: 'background-color 0.15s' }}
+                                                                onMouseDown={(e) => {
+                                                                    e.preventDefault();
+                                                                    handleSelectMedicine(i, item);
+                                                                }}
+                                                            >
+                                                                <div className="d-flex justify-content-between align-items-center">
+                                                                    <span className="fw-bold text-dark" style={{ fontSize: '12.5px' }}>{item.item_name}</span>
+                                                                    <span className="badge bg-primary-subtle text-primary border" style={{ fontSize: '10px' }}>
+                                                                        {item.category || 'Tablet'}
+                                                                    </span>
+                                                                </div>
+                                                                {item.generic_name && (
+                                                                    <div className="text-muted text-truncate small" style={{ fontSize: '11px' }}>
+                                                                        {item.generic_name}
+                                                                    </div>
+                                                                )}
+                                                                <div className="d-flex gap-2 mt-1 align-items-center" style={{ fontSize: '10.5px' }}>
+                                                                    <span className="text-secondary">Pack: <strong>{item.units_per_pack || 10}s</strong></span>
+                                                                    <span className="text-secondary">GST: <strong>{item.gst_rate}%</strong></span>
+                                                                    <span className="text-secondary">HSN: <strong>{item.hsn_code || '3004'}</strong></span>
+                                                                    {item.drug_schedule && item.drug_schedule !== 'OTC' && (
+                                                                        <span className="badge bg-danger-subtle text-danger" style={{ fontSize: '9px' }}>{item.drug_schedule}</span>
+                                                                    )}
+                                                                </div>
+                                                            </div>
+                                                        ))
+                                                    ) : (
+                                                        !isSearchingMeds && (
+                                                            <div className="p-3 text-center text-muted">
+                                                                <i className="bi bi-search fs-4 d-block mb-1 text-secondary"></i>
+                                                                <div className="small fw-semibold">No medicine found matching "{r.item_name}"</div>
+                                                                <div className="text-muted" style={{ fontSize: '11px' }}>Click below to add it directly into Pharmacy Master</div>
+                                                            </div>
+                                                        )
+                                                    )}
+
+                                                    {/* Pinned Add to Master Option */}
+                                                    <div className="p-2 bg-light border-top text-center">
+                                                        <button 
+                                                            type="button" 
+                                                            className="btn btn-sm btn-outline-primary w-100 fw-bold py-1"
+                                                            style={{ fontSize: '12px' }}
+                                                            onMouseDown={(e) => {
+                                                                e.preventDefault();
+                                                                openAddMasterModal(i, r.item_name);
+                                                            }}
+                                                        >
+                                                            <i className="bi bi-plus-circle-fill me-1"></i>+ Add "{r.item_name || 'New Medicine'}" in Master
+                                                        </button>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </td>
                                         <td>
-                                            <input type="text" className="form-control form-control-sm" placeholder="Batch" value={r.batch_no} onChange={(e) => updateRow(i, 'batch_no', e.target.value)} />
+                                            <input 
+                                                type="text" 
+                                                id={`batch-input-${i}`}
+                                                className="form-control form-control-sm" 
+                                                placeholder="Batch No" 
+                                                value={r.batch_no} 
+                                                onChange={(e) => updateRow(i, 'batch_no', e.target.value)} 
+                                            />
                                         </td>
                                         <td>
-                                            <input type="date" className="form-control form-control-sm" value={r.expiry_date} onChange={(e) => updateRow(i, 'expiry_date', e.target.value)} />
+                                            <input 
+                                                type="date" 
+                                                className="form-control form-control-sm" 
+                                                value={r.expiry_date} 
+                                                onChange={(e) => updateRow(i, 'expiry_date', e.target.value)} 
+                                            />
                                         </td>
                                         <td>
                                             <input type="number" className="form-control form-control-sm" min="1" value={r.qty_packs} onChange={(e) => updateRow(i, 'qty_packs', e.target.value)} />
@@ -4326,10 +4629,11 @@ function PurchaseView({ store, notify }) {
                                                 <option value="5">5%</option>
                                                 <option value="12">12%</option>
                                                 <option value="18">18%</option>
+                                                <option value="28">28%</option>
                                             </select>
                                         </td>
                                         <td>
-                                            <button className="btn btn-sm btn-outline-danger py-0 px-1" onClick={() => removeRow(i)}>
+                                            <button className="btn btn-sm btn-outline-danger py-0 px-1" onClick={() => removeRow(i)} title="Remove row">
                                                 <i className="bi bi-x"></i>
                                             </button>
                                         </td>
@@ -4706,6 +5010,186 @@ function PurchaseView({ store, notify }) {
                                             <>
                                                 <i className="bi bi-check2-circle me-1"></i>
                                                 {supplierForm.supplier_id ? 'Update Supplier' : 'Save Supplier'}
+                                            </>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Medicine Master Add Modal */}
+            {showMasterModal && (
+                <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(15, 23, 42, 0.75)' }} tabIndex="-1">
+                    <div className="modal-dialog modal-lg modal-dialog-centered modal-dialog-scrollable">
+                        <div className="modal-content border-0 shadow-lg">
+                            <div className="modal-header bg-dark text-white py-2.5 px-3 d-flex justify-content-between align-items-center">
+                                <div className="d-flex align-items-center gap-2">
+                                    <div className="bg-success text-white rounded p-1.5 d-flex align-items-center justify-content-center" style={{ width: 32, height: 32 }}>
+                                        <i className="bi bi-capsule fs-5"></i>
+                                    </div>
+                                    <div>
+                                        <h6 className="modal-title mb-0 fw-bold">Add New Medicine to Pharmacy Master</h6>
+                                        <small className="text-light opacity-75">Saved to shared master <code>med_product_master</code> (shared between MedicalStore &amp; HMSPharmacy)</small>
+                                    </div>
+                                </div>
+                                <button type="button" className="btn-close btn-close-white" onClick={() => setShowMasterModal(false)}></button>
+                            </div>
+
+                            <form onSubmit={handleSaveMasterMedicine}>
+                                <div className="modal-body p-3 bg-light">
+                                    <div className="card border-0 shadow-sm p-3 mb-3 bg-white">
+                                        <h6 className="fw-bold text-primary mb-2" style={{ fontSize: '13px' }}>
+                                            <i className="bi bi-prescription2 me-1"></i> Medicine Name &amp; Formulation
+                                        </h6>
+                                        <div className="row g-2">
+                                            <div className="col-md-7">
+                                                <label className="form-label small fw-bold mb-1">Brand / Medicine Name <span className="text-danger">*</span></label>
+                                                <input 
+                                                    type="text" 
+                                                    className="form-control form-control-sm fw-semibold" 
+                                                    placeholder="e.g. Augmentin 625 Duo Tablet" 
+                                                    value={masterForm.item_name} 
+                                                    onChange={(e) => setMasterForm({ ...masterForm, item_name: e.target.value })} 
+                                                    required 
+                                                    autoFocus
+                                                />
+                                            </div>
+                                            <div className="col-md-5">
+                                                <label className="form-label small fw-bold mb-1">Formulation / Category</label>
+                                                <input 
+                                                    type="text" 
+                                                    list="ms-formulation-list" 
+                                                    className="form-control form-control-sm" 
+                                                    placeholder="e.g. Tablet, Capsule, Syrup..." 
+                                                    value={masterForm.formulation} 
+                                                    onChange={(e) => setMasterForm({ ...masterForm, formulation: e.target.value })} 
+                                                />
+                                                <datalist id="ms-formulation-list">
+                                                    {(supportData.formulations || []).map((f, idx) => (
+                                                        <option key={idx} value={f} />
+                                                    ))}
+                                                </datalist>
+                                            </div>
+                                            <div className="col-12">
+                                                <label className="form-label small fw-bold mb-1">Generic Molecule Composition</label>
+                                                <input 
+                                                    type="text" 
+                                                    className="form-control form-control-sm" 
+                                                    placeholder="e.g. Amoxycillin (500mg) + Clavulanic Acid (125mg)" 
+                                                    value={masterForm.generic_name} 
+                                                    onChange={(e) => setMasterForm({ ...masterForm, generic_name: e.target.value })} 
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+
+                                    <div className="card border-0 shadow-sm p-3 bg-white">
+                                        <h6 className="fw-bold text-primary mb-2" style={{ fontSize: '13px' }}>
+                                            <i className="bi bi-box-seam me-1"></i> Packing, Tax &amp; Regulatory Specifications
+                                        </h6>
+                                        <div className="row g-2">
+                                            <div className="col-md-3">
+                                                <label className="form-label small fw-bold mb-1">Units per Pack (Strip/Bottle) <span className="text-danger">*</span></label>
+                                                <input 
+                                                    type="number" 
+                                                    min="1" 
+                                                    className="form-control form-control-sm fw-bold" 
+                                                    placeholder="10" 
+                                                    value={masterForm.units_per_pack} 
+                                                    onChange={(e) => setMasterForm({ ...masterForm, units_per_pack: e.target.value, packing: e.target.value })} 
+                                                    required 
+                                                />
+                                            </div>
+                                            <div className="col-md-3">
+                                                <label className="form-label small fw-bold mb-1">GST Rate (%)</label>
+                                                <select 
+                                                    className="form-select form-select-sm fw-bold" 
+                                                    value={masterForm.gst_rate} 
+                                                    onChange={(e) => setMasterForm({ ...masterForm, gst_rate: Number(e.target.value) })}
+                                                >
+                                                    {(supportData.gst_rates || [0, 5, 12, 18, 28]).map((g, idx) => (
+                                                        <option key={idx} value={g}>{g}% GST</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="col-md-3">
+                                                <label className="form-label small fw-bold mb-1">HSN Code</label>
+                                                <input 
+                                                    type="text" 
+                                                    className="form-control form-control-sm" 
+                                                    placeholder="3004" 
+                                                    value={masterForm.hsn_code} 
+                                                    onChange={(e) => setMasterForm({ ...masterForm, hsn_code: e.target.value })} 
+                                                />
+                                            </div>
+                                            <div className="col-md-3">
+                                                <label className="form-label small fw-bold mb-1">Drug Schedule</label>
+                                                <select 
+                                                    className="form-select form-select-sm" 
+                                                    value={masterForm.drug_schedule} 
+                                                    onChange={(e) => setMasterForm({ ...masterForm, drug_schedule: e.target.value })}
+                                                >
+                                                    {(supportData.schedules || ['OTC', 'Schedule H', 'Schedule H1', 'Schedule X', 'Narcotic']).map((sc, idx) => (
+                                                        <option key={idx} value={sc}>{sc}</option>
+                                                    ))}
+                                                </select>
+                                            </div>
+                                            <div className="col-md-8">
+                                                <label className="form-label small fw-bold mb-1">Manufacturer / Pharma Company</label>
+                                                <input 
+                                                    type="text" 
+                                                    list="ms-company-list" 
+                                                    className="form-control form-control-sm" 
+                                                    placeholder="e.g. Cipla Ltd, Sun Pharma, Alkem..." 
+                                                    value={masterForm.company_name} 
+                                                    onChange={(e) => setMasterForm({ ...masterForm, company_name: e.target.value })} 
+                                                />
+                                                <datalist id="ms-company-list">
+                                                    {(supportData.companies || []).map((c, idx) => (
+                                                        <option key={idx} value={c} />
+                                                    ))}
+                                                </datalist>
+                                            </div>
+                                            <div className="col-md-4">
+                                                <label className="form-label small fw-bold mb-1">Min Reorder Level</label>
+                                                <input 
+                                                    type="number" 
+                                                    min="1" 
+                                                    className="form-control form-control-sm" 
+                                                    placeholder="10" 
+                                                    value={masterForm.min_reorder_level} 
+                                                    onChange={(e) => setMasterForm({ ...masterForm, min_reorder_level: e.target.value })} 
+                                                />
+                                            </div>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div className="modal-footer py-2 px-3 bg-white d-flex justify-content-between">
+                                    <button 
+                                        type="button" 
+                                        className="btn btn-outline-secondary btn-sm" 
+                                        onClick={() => setShowMasterModal(false)}
+                                    >
+                                        Cancel
+                                    </button>
+                                    <button 
+                                        type="submit" 
+                                        className="btn btn-success btn-sm fw-bold px-4" 
+                                        disabled={isSavingMaster}
+                                    >
+                                        {isSavingMaster ? (
+                                            <>
+                                                <span className="spinner-border spinner-border-sm me-1" role="status"></span>
+                                                Saving to Master...
+                                            </>
+                                        ) : (
+                                            <>
+                                                <i className="bi bi-check-circle me-1"></i>
+                                                Save to Master &amp; Select into Bill
                                             </>
                                         )}
                                     </button>

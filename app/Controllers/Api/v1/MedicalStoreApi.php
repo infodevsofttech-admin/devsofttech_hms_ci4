@@ -350,6 +350,393 @@ class MedicalStoreApi extends BaseController
         return $this->response->setJSON(['status' => 1, 'items' => $enriched]);
     }
 
+    /**
+     * Searches both med_product_master and mst_items for purchase inward autocomplete.
+     */
+    public function searchMasterItems()
+    {
+        $q = trim($this->request->getGet('q') ?? '');
+
+        $results = [];
+        $seenNames = [];
+
+        // 1. Query mst_items
+        $builder = $this->db->table('mst_items i');
+        $builder->select('i.item_id, i.product_master_id, i.item_name, i.generic_name, i.category, i.hsn_code, i.gst_rate, i.unit_pack, i.units_per_pack, i.drug_schedule, i.manufacturer_name');
+        $builder->where('i.is_active', 1);
+
+        if (!empty($q)) {
+            $builder->groupStart()
+                ->like('i.item_name', $q)
+                ->orLike('i.generic_name', $q)
+                ->groupEnd();
+        }
+
+        $mstItems = $builder->limit(40)->get()->getResultArray();
+
+        foreach ($mstItems as $it) {
+            $nameKey = strtolower(trim($it['item_name']));
+            $seenNames[$nameKey] = true;
+            $results[] = [
+                'item_id'           => (int)$it['item_id'],
+                'product_master_id' => !empty($it['product_master_id']) ? (int)$it['product_master_id'] : null,
+                'item_name'         => $it['item_name'],
+                'generic_name'      => $it['generic_name'] ?? '',
+                'category'          => $it['category'] ?? 'Tablet',
+                'hsn_code'          => $it['hsn_code'] ?? '3004',
+                'gst_rate'          => (float)($it['gst_rate'] ?? 12.00),
+                'unit_pack'         => $it['unit_pack'] ?? '',
+                'units_per_pack'    => (int)($it['units_per_pack'] ?? 10),
+                'drug_schedule'     => $it['drug_schedule'] ?? 'OTC',
+                'manufacturer_name' => $it['manufacturer_name'] ?? '',
+                'source'            => 'mst_items'
+            ];
+        }
+
+        // 2. Query legacy/shared med_product_master
+        if ($this->db->tableExists('med_product_master')) {
+            $pmBuilder = $this->db->table('med_product_master p');
+            $pmBuilder->select('p.id, p.item_name, p.formulation, p.genericname, p.packing, p.HSNCODE, p.CGST_per, p.SGST_per, p.company_name, p.mfgname, p.schedule_h, p.schedule_h1, p.schedule_x, p.narcotic');
+            $pmBuilder->where('p.is_continue', 1);
+
+            if (!empty($q)) {
+                $pmBuilder->groupStart()
+                    ->like('p.item_name', $q)
+                    ->orLike('p.genericname', $q)
+                    ->groupEnd();
+            }
+
+            $pmItems = $pmBuilder->limit(40)->get()->getResultArray();
+
+            foreach ($pmItems as $pm) {
+                $nameKey = strtolower(trim($pm['item_name']));
+                if (isset($seenNames[$nameKey])) {
+                    continue;
+                }
+                $seenNames[$nameKey] = true;
+
+                $packNum = (int)preg_replace('/[^0-9]/', '', (string)($pm['packing'] ?? ''));
+                if ($packNum <= 0) $packNum = 10;
+
+                $gst = (float)($pm['CGST_per'] ?? 0) + (float)($pm['SGST_per'] ?? 0);
+                if ($gst <= 0) $gst = 12.00;
+
+                $schedule = 'OTC';
+                if (!empty($pm['schedule_h1'])) $schedule = 'Schedule H1';
+                else if (!empty($pm['schedule_h'])) $schedule = 'Schedule H';
+                else if (!empty($pm['schedule_x'])) $schedule = 'Schedule X';
+                else if (!empty($pm['narcotic'])) $schedule = 'Narcotic';
+
+                $company = !empty($pm['company_name']) && $pm['company_name'] !== '0' ? $pm['company_name'] : (!empty($pm['mfgname']) && $pm['mfgname'] !== '0' ? $pm['mfgname'] : '');
+                $formulation = !empty($pm['formulation']) && $pm['formulation'] !== '0' ? trim($pm['formulation']) : 'Tablet';
+
+                // Ensure it exists in mst_items with linked product_master_id
+                $existingMst = $this->db->table('mst_items')
+                    ->where('product_master_id', (int)$pm['id'])
+                    ->orWhere('LOWER(TRIM(item_name))', $nameKey)
+                    ->get()
+                    ->getRowArray();
+
+                if ($existingMst) {
+                    $itemId = (int)$existingMst['item_id'];
+                    if (empty($existingMst['product_master_id'])) {
+                        $this->db->table('mst_items')->where('item_id', $itemId)->update(['product_master_id' => (int)$pm['id']]);
+                    }
+                } else {
+                    $newMstData = [
+                        'product_master_id' => (int)$pm['id'],
+                        'item_name'         => trim($pm['item_name']),
+                        'generic_name'      => trim($pm['genericname'] ?? ''),
+                        'category'          => $formulation,
+                        'hsn_code'          => !empty($pm['HSNCODE']) && $pm['HSNCODE'] !== '0' ? trim($pm['HSNCODE']) : '3004',
+                        'gst_rate'          => $gst,
+                        'unit_pack'         => $packNum . ' ' . $formulation,
+                        'units_per_pack'    => $packNum,
+                        'drug_schedule'     => $schedule,
+                        'manufacturer_name' => $company,
+                        'is_active'         => 1,
+                        'min_reorder_level' => 10
+                    ];
+                    $this->db->table('mst_items')->insert($newMstData);
+                    $itemId = (int)$this->db->insertID();
+                }
+
+                $results[] = [
+                    'item_id'           => $itemId,
+                    'product_master_id' => (int)$pm['id'],
+                    'item_name'         => trim($pm['item_name']),
+                    'generic_name'      => trim($pm['genericname'] ?? ''),
+                    'category'          => $formulation,
+                    'hsn_code'          => !empty($pm['HSNCODE']) && $pm['HSNCODE'] !== '0' ? trim($pm['HSNCODE']) : '3004',
+                    'gst_rate'          => $gst,
+                    'unit_pack'         => $packNum . ' ' . $formulation,
+                    'units_per_pack'    => $packNum,
+                    'drug_schedule'     => $schedule,
+                    'manufacturer_name' => $company,
+                    'source'            => 'med_product_master'
+                ];
+            }
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'items'  => $results
+        ]);
+    }
+
+    /**
+     * Returns support table data (formulations, companies, GST rates) for adding medicines to master.
+     */
+    public function getMasterSupportData()
+    {
+        $formulations = [];
+        if ($this->db->tableExists('med_formulation')) {
+            $rows = $this->db->table('med_formulation')
+                ->select('formulation, formulation_length')
+                ->where('formulation !=', '')
+                ->where('formulation !=', '0')
+                ->orderBy('formulation', 'ASC')
+                ->limit(100)
+                ->get()
+                ->getResultArray();
+            foreach ($rows as $r) {
+                $f = trim($r['formulation']);
+                if ($f !== '' && !in_array($f, $formulations, true)) {
+                    $formulations[] = $f;
+                }
+            }
+        }
+        $defaults = ['Tablet', 'Capsule', 'Syrup', 'Injection', 'Ointment', 'Cream', 'Gel', 'Drops', 'Suspension', 'Inhaler', 'IV Fluid', 'Powder', 'Lotion', 'Mouthwash', 'Spray', 'Soap'];
+        foreach ($defaults as $d) {
+            if (!in_array($d, $formulations, true)) {
+                array_unshift($formulations, $d);
+            }
+        }
+
+        $companies = [];
+        if ($this->db->tableExists('med_company')) {
+            $cRows = $this->db->table('med_company')
+                ->select('id, company_name')
+                ->where('company_name !=', '')
+                ->where('company_name !=', '0')
+                ->orderBy('company_name', 'ASC')
+                ->limit(200)
+                ->get()
+                ->getResultArray();
+            foreach ($cRows as $cr) {
+                $cn = trim($cr['company_name']);
+                if ($cn !== '' && !in_array($cn, $companies, true)) {
+                    $companies[] = $cn;
+                }
+            }
+        }
+
+        $gstRates = [0, 5, 12, 18, 28];
+        if ($this->db->tableExists('med_gst_per')) {
+            $gRows = $this->db->table('med_gst_per')->select('gst_per')->orderBy('gst_per', 'ASC')->get()->getResultArray();
+            if (!empty($gRows)) {
+                $customRates = [];
+                foreach ($gRows as $gr) {
+                    $r = (float)$gr['gst_per'];
+                    if (!in_array($r, $customRates, true)) {
+                        $customRates[] = $r;
+                    }
+                }
+                if (!empty($customRates)) {
+                    $gstRates = $customRates;
+                }
+            }
+        }
+
+        $schedules = ['OTC', 'Schedule H', 'Schedule H1', 'Schedule X', 'Schedule G', 'Narcotic'];
+
+        return $this->response->setJSON([
+            'status'       => 1,
+            'formulations' => array_values($formulations),
+            'companies'    => array_values($companies),
+            'gst_rates'    => $gstRates,
+            'schedules'    => $schedules
+        ]);
+    }
+
+    /**
+     * Saves a new or updated medicine into the shared med_product_master and mirrors into mst_items.
+     */
+    public function saveProductMaster()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $itemName = trim($json['item_name'] ?? '');
+
+        if ($itemName === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'status'  => 0,
+                'message' => 'Medicine Name is required.'
+            ]);
+        }
+
+        $genericName   = trim($json['generic_name'] ?? '');
+        $formulation   = trim($json['formulation'] ?? $json['category'] ?? 'Tablet');
+        if ($formulation === '') $formulation = 'Tablet';
+        $unitsPerPack  = max(1, (int)($json['units_per_pack'] ?? 10));
+        $packing       = trim($json['packing'] ?? (string)$unitsPerPack);
+        $hsnCode       = trim($json['hsn_code'] ?? '3004');
+        $gstRate       = (float)($json['gst_rate'] ?? 12.00);
+        $drugSchedule  = trim($json['drug_schedule'] ?? 'OTC');
+        $companyName   = trim($json['company_name'] ?? $json['manufacturer_name'] ?? '');
+        $minReorder    = max(1, (int)($json['min_reorder_level'] ?? 10));
+
+        $this->db->transStart();
+
+        // 1. Sync support table med_formulation
+        $formulationId = 0;
+        if ($this->db->tableExists('med_formulation') && $formulation !== '') {
+            $existingForm = $this->db->table('med_formulation')
+                ->where('LOWER(TRIM(formulation))', strtolower($formulation))
+                ->get()
+                ->getRowArray();
+            if ($existingForm) {
+                $formulationId = (int)$existingForm['id'];
+            } else {
+                $this->db->table('med_formulation')->insert([
+                    'formulation'        => $formulation,
+                    'formulation_length' => $formulation
+                ]);
+                $formulationId = (int)$this->db->insertID();
+            }
+        }
+
+        // 2. Sync support table med_company
+        $companyId = 0;
+        if ($this->db->tableExists('med_company') && $companyName !== '') {
+            $existingComp = $this->db->table('med_company')
+                ->where('LOWER(TRIM(company_name))', strtolower($companyName))
+                ->get()
+                ->getRowArray();
+            if ($existingComp) {
+                $companyId = (int)$existingComp['id'];
+            } else {
+                $this->db->table('med_company')->insert([
+                    'company_name' => $companyName
+                ]);
+                $companyId = (int)$this->db->insertID();
+            }
+        }
+
+        // 3. Save into med_product_master
+        $productMasterId = 0;
+        $halfGst = round($gstRate / 2, 2);
+        if ($this->db->tableExists('med_product_master')) {
+            $pFields = $this->db->getFieldNames('med_product_master') ?? [];
+
+            $pmRow = $this->db->table('med_product_master')
+                ->where('LOWER(TRIM(item_name))', strtolower($itemName))
+                ->get()
+                ->getRowArray();
+
+            $pmData = [
+                'item_name'            => $itemName,
+                'formulation'          => $formulation,
+                'formulation_id'       => $formulationId,
+                'genericname'          => $genericName,
+                'packing'              => $packing,
+                'unit_1'               => '0',
+                'unit_2'               => '0',
+                'HSNCODE'              => $hsnCode,
+                'CGST_per'             => $halfGst,
+                'SGST_per'             => $halfGst,
+                'company_name'         => $companyName,
+                'company_id'           => $companyId,
+                'mfgname'              => $companyName,
+                're_order_qty'         => $minReorder,
+                'is_continue'          => 1,
+                'batch_applicable'     => 1,
+                'exp_date_applicable'  => 1,
+                'schedule_h'           => (stripos($drugSchedule, 'Schedule H1') === false && stripos($drugSchedule, 'Schedule H') !== false) ? 1 : 0,
+                'schedule_h1'          => stripos($drugSchedule, 'Schedule H1') !== false ? 1 : 0,
+                'schedule_x'           => stripos($drugSchedule, 'Schedule X') !== false ? 1 : 0,
+                'schedule_g'           => stripos($drugSchedule, 'Schedule G') !== false ? 1 : 0,
+                'narcotic'             => stripos($drugSchedule, 'Narcotic') !== false ? 1 : 0,
+                'update_by'            => 'MedicalStore'
+            ];
+
+            $filteredPm = [];
+            foreach ($pmData as $k => $v) {
+                if (in_array($k, $pFields, true)) {
+                    $filteredPm[$k] = $v;
+                }
+            }
+
+            if ($pmRow) {
+                $productMasterId = (int)$pmRow['id'];
+                $this->db->table('med_product_master')->where('id', $productMasterId)->update($filteredPm);
+            } else {
+                if (in_array('insert_by', $pFields, true)) {
+                    $filteredPm['insert_by'] = 'MedicalStore';
+                }
+                $this->db->table('med_product_master')->insert($filteredPm);
+                $productMasterId = (int)$this->db->insertID();
+            }
+        }
+
+        // 4. Save/mirror into mst_items
+        $mstRow = $this->db->table('mst_items')
+            ->where('LOWER(TRIM(item_name))', strtolower($itemName))
+            ->get()
+            ->getRowArray();
+
+        $mstData = [
+            'product_master_id' => $productMasterId > 0 ? $productMasterId : null,
+            'item_name'         => $itemName,
+            'generic_name'      => $genericName,
+            'category'          => $formulation,
+            'hsn_code'          => $hsnCode,
+            'gst_rate'          => $gstRate,
+            'unit_pack'         => $unitsPerPack . ' ' . $formulation,
+            'units_per_pack'    => $unitsPerPack,
+            'drug_schedule'     => $drugSchedule,
+            'manufacturer_name' => $companyName,
+            'min_reorder_level' => $minReorder,
+            'is_active'         => 1,
+            'updated_at'        => date('Y-m-d H:i:s')
+        ];
+
+        if ($mstRow) {
+            $itemId = (int)$mstRow['item_id'];
+            $this->db->table('mst_items')->where('item_id', $itemId)->update($mstData);
+        } else {
+            $mstData['created_at'] = date('Y-m-d H:i:s');
+            $this->db->table('mst_items')->insert($mstData);
+            $itemId = (int)$this->db->insertID();
+        }
+
+        $this->db->transComplete();
+
+        if ($this->db->transStatus() === false) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'status'  => 0,
+                'message' => 'Database transaction failed while saving medicine to master.'
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'status'  => 1,
+            'message' => 'Medicine "' . $itemName . '" added to Master successfully!',
+            'item'    => [
+                'item_id'           => $itemId,
+                'product_master_id' => $productMasterId,
+                'item_name'         => $itemName,
+                'generic_name'      => $genericName,
+                'category'          => $formulation,
+                'units_per_pack'    => $unitsPerPack,
+                'packing'           => $packing,
+                'hsn_code'          => $hsnCode,
+                'gst_rate'          => $gstRate,
+                'drug_schedule'     => $drugSchedule,
+                'manufacturer_name' => $companyName
+            ]
+        ]);
+    }
+
     public function saveOpeningStock()
     {
         $json = $this->request->getJSON(true) ?: $this->request->getPost();
@@ -1682,7 +2069,61 @@ class MedicalStoreApi extends BaseController
         $purchaseItems = [];
 
         foreach ($items as $it) {
-            $itemId = (int)$it['item_id'];
+            $itemId = (int)($it['item_id'] ?? 0);
+            $itemName = trim($it['item_name'] ?? '');
+
+            if ($itemId <= 0 && $itemName !== '') {
+                $mst = $this->db->table('mst_items')
+                    ->where('LOWER(TRIM(item_name))', strtolower($itemName))
+                    ->get()
+                    ->getRowArray();
+                if ($mst) {
+                    $itemId = (int)$mst['item_id'];
+                } else {
+                    $uPack = (int)($it['units_per_pack'] ?? 10);
+                    $gRate = (float)($it['gst_rate'] ?? 12.00);
+                    $hCode = trim($it['hsn_code'] ?? '3004');
+
+                    $pmId = 0;
+                    if ($this->db->tableExists('med_product_master')) {
+                        $pmRow = $this->db->table('med_product_master')
+                            ->where('LOWER(TRIM(item_name))', strtolower($itemName))
+                            ->get()
+                            ->getRowArray();
+                        if ($pmRow) {
+                            $pmId = (int)$pmRow['id'];
+                        } else {
+                            $this->db->table('med_product_master')->insert([
+                                'item_name'    => $itemName,
+                                'formulation'  => 'Tablet',
+                                'genericname'  => '',
+                                'packing'      => (string)$uPack,
+                                'HSNCODE'      => $hCode,
+                                'CGST_per'     => round($gRate / 2, 2),
+                                'SGST_per'     => round($gRate / 2, 2),
+                                'is_continue'  => 1,
+                                'insert_by'    => 'Purchase Inward Auto'
+                            ]);
+                            $pmId = (int)$this->db->insertID();
+                        }
+                    }
+
+                    $this->db->table('mst_items')->insert([
+                        'product_master_id' => $pmId > 0 ? $pmId : null,
+                        'item_name'         => $itemName,
+                        'category'          => 'Tablet',
+                        'hsn_code'          => $hCode,
+                        'gst_rate'          => $gRate,
+                        'units_per_pack'    => $uPack,
+                        'unit_pack'         => $uPack . ' Units',
+                        'drug_schedule'     => 'OTC',
+                        'is_active'         => 1,
+                        'min_reorder_level' => 10
+                    ]);
+                    $itemId = (int)$this->db->insertID();
+                }
+            }
+
             $batchNo = trim($it['batch_no']);
             $expiryDate = trim($it['expiry_date']);
             $qtyPacks = (int)$it['qty_packs'];
