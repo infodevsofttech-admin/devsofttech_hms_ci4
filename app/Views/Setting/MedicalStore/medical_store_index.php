@@ -5,8 +5,8 @@
             <small class="text-muted">Manage hospital building stores, Indian Drug Licenses (20B/21B), GSTIN, direct URLs, and machine terminal security</small>
         </div>
         <div class="d-flex gap-2">
-            <button type="button" class="btn btn-outline-success btn-sm" id="btn_open_marg_import">
-                <i class="bi bi-file-earmark-arrow-up me-1"></i> Marg ERP / Excel Import
+            <button type="button" class="btn btn-outline-success btn-sm" id="btn_open_excel_import">
+                <i class="bi bi-file-earmark-arrow-up me-1"></i> Excel / CSV Import
             </button>
             <button type="button" class="btn btn-primary btn-sm" id="btn_add_store">
                 <i class="bi bi-plus-lg me-1"></i> Add Medical Store
@@ -414,23 +414,23 @@
     </div>
 </div>
 
-<!-- Modal 3: Marg ERP / Excel Inventory Import -->
-<div class="modal fade" id="margImportModal" tabindex="-1" aria-hidden="true">
+<!-- Modal 3: Excel / CSV Inventory Import -->
+<div class="modal fade" id="excelImportModal" tabindex="-1" aria-hidden="true">
     <div class="modal-dialog modal-dialog-centered">
         <div class="modal-content border-0 shadow">
             <div class="modal-header bg-success text-white py-2.5">
-                <h6 class="modal-title fw-bold"><i class="bi bi-file-earmark-arrow-up me-1"></i> Marg ERP / Excel Inventory Import</h6>
+                <h6 class="modal-title fw-bold"><i class="bi bi-file-earmark-arrow-up me-1"></i> Excel / CSV Inventory Import</h6>
                 <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
-            <form id="margImportForm" enctype="multipart/form-data">
+            <form id="excelImportForm" enctype="multipart/form-data">
                 <div class="modal-body p-3">
                     <p class="small text-muted mb-3">
-                        Quickly migrate stock from <strong>Marg Pharmacy Software</strong> or Microsoft Excel into the store's shared master catalog and batch stock.
+                        Quickly migrate stock from Microsoft Excel or CSV files into the store's shared master catalog and batch stock.
                     </p>
 
                     <div class="mb-3">
                         <label class="form-label small fw-bold mb-1">Target Medical Store Counter <span class="text-danger">*</span></label>
-                        <select class="form-select form-select-sm" name="store_id" id="marg_store_id" required>
+                        <select class="form-select form-select-sm" name="store_id" id="excel_store_id" required>
                             <?php foreach ($stores as $st): ?>
                                 <option value="<?= (int)$st['store_id'] ?>"><?= esc($st['store_name']) ?> (<?= esc($st['building_name'] ?: 'Building') ?>)</option>
                             <?php endforeach; ?>
@@ -439,7 +439,7 @@
 
                     <div class="mb-3">
                         <label class="form-label small fw-bold mb-1">Upload CSV / Excel Export <span class="text-danger">*</span></label>
-                        <input type="file" class="form-control form-control-sm" name="import_file" id="marg_file" accept=".csv, .txt" required>
+                        <input type="file" class="form-control form-control-sm" name="import_file" id="excel_file" accept=".csv, .txt" required>
                         <small class="text-muted" style="font-size: 11px;">
                             Supported columns: Item Name, Generic, Batch No, Expiry (MM/YY), MRP, PTR/Cost, HSN, GST%, Opening Qty.
                         </small>
@@ -447,12 +447,12 @@
 
                     <div class="alert alert-light border py-2 mb-0" style="font-size: 11px;">
                         <i class="bi bi-download text-primary me-1"></i>
-                        <a href="javascript:downloadSampleMargCsv()" class="text-decoration-none fw-bold">Download Sample Marg CSV Template</a>
+                        <a href="javascript:downloadSampleCsv()" class="text-decoration-none fw-bold">Download Sample CSV Template</a>
                     </div>
                 </div>
                 <div class="modal-footer py-2 bg-light">
                     <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Cancel</button>
-                    <button type="submit" class="btn btn-success btn-sm" id="btn_submit_marg">
+                    <button type="submit" class="btn btn-success btn-sm" id="btn_submit_excel">
                         <i class="bi bi-upload me-1"></i> Start Import
                     </button>
                 </div>
@@ -528,8 +528,8 @@ document.getElementById('btn_add_store').addEventListener('click', function() {
     modal.show();
 });
 
-document.getElementById('btn_open_marg_import').addEventListener('click', function() {
-    var modal = new bootstrap.Modal(document.getElementById('margImportModal'));
+document.getElementById('btn_open_excel_import').addEventListener('click', function() {
+    var modal = new bootstrap.Modal(document.getElementById('excelImportModal'));
     modal.show();
 });
 
@@ -627,15 +627,15 @@ function deleteStore(storeId, storeName) {
     });
 }
 
-// Marg CSV Import Submit
-$('#margImportForm').on('submit', function(e) {
+// Excel / CSV Import Submit
+$('#excelImportForm').on('submit', function(e) {
     e.preventDefault();
     var formData = new FormData(this);
-    var btn = $('#btn_submit_marg');
+    var btn = $('#btn_submit_excel');
     btn.prop('disabled', true).text('Importing records...');
 
     $.ajax({
-        url: '<?= base_url('setting/admin/medical-store/import-marg') ?>',
+        url: '<?= base_url('setting/admin/medical-store/import-excel') ?>',
         method: 'POST',
         data: formData,
         contentType: false,
@@ -657,7 +657,7 @@ $('#margImportForm').on('submit', function(e) {
     });
 });
 
-function downloadSampleMargCsv() {
+function downloadSampleCsv() {
     var csvContent = "Item Name,Generic Name,Category,Packing,Batch No,Expiry Date,MRP,PTR,HSN Code,GST Rate,Opening Qty,Barcode\n" +
         "Augmentin 625 Duo Tablet,Amoxycillin + Clavulanic Acid,Tablet,10 Tab,AUG-991,10/27,204.50,155.00,3004,12,100,890103000001\n" +
         "Pan 40 Tablet,Pantoprazole 40mg,Tablet,15 Tab,PAN-442,04/27,162.00,115.00,3004,12,150,890103000002\n" +
@@ -668,7 +668,7 @@ function downloadSampleMargCsv() {
     var link = document.createElement("a");
     var url = URL.createObjectURL(blob);
     link.setAttribute("href", url);
-    link.setAttribute("download", "Marg_Pharmacy_Sample_Import.csv");
+    link.setAttribute("download", "Pharmacy_Sample_Stock_Import.csv");
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);

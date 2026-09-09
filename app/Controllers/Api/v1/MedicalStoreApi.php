@@ -3481,10 +3481,10 @@ class MedicalStoreApi extends BaseController
         return $this->response->setJSON(['status' => 0, 'authorized' => false, 'message' => 'Device authorization revoked or not found.']);
     }
 
-    public function importMarg()
+    public function importExcel()
     {
         $admin = new \App\Controllers\Setting\MedicalStoreAdmin();
-        return $admin->importMarg();
+        return $admin->importExcel();
     }
 
     // =========================================================================

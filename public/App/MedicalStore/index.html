@@ -677,7 +677,7 @@ function App() {
                     <i className="bi bi-boxes me-1"></i> Live Stock &amp; Batches
                 </button>
                 <button className={`nav-link ${activeTab === 'purchase' ? 'active' : ''}`} onClick={() => setActiveTab('purchase')}>
-                    <i className="bi bi-box-arrow-in-down me-1"></i> Purchases &amp; Marg Import
+                    <i className="bi bi-box-arrow-in-down me-1"></i> Purchases &amp; Stock Import
                 </button>
                 <button className={`nav-link ${activeTab === 'transfer' ? 'active' : ''}`} onClick={() => setActiveTab('transfer')}>
                     <i className="bi bi-arrow-left-right me-1"></i> Inter-Store Indents
@@ -1532,7 +1532,7 @@ function PosCounter({ store, notify }) {
         }
     };
 
-    // Global Keyboard Shortcuts (Marg ERP / Desktop Pharmacy Standard)
+    // Global Keyboard Shortcuts (Desktop Pharmacy Standard)
     useEffect(() => {
         const handleGlobalKeyDown = (e) => {
             // Dismiss Modals on Escape
@@ -3495,7 +3495,7 @@ function PosCounter({ store, notify }) {
                     </div>
                 )}
 
-                {/* Sales Return & Same-Invoice Exchange Modal (B2C Marg ERP Standard) */}
+                {/* Sales Return & Same-Invoice Exchange Modal (B2C Retail Standard) */}
                 {showReturnModal && (
                     <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(15, 23, 42, 0.75)' }} tabIndex="-1">
                         <div className="modal-dialog modal-xl modal-dialog-scrollable">
@@ -3506,7 +3506,7 @@ function PosCounter({ store, notify }) {
                                         <div>
                                             <h6 className="modal-title mb-0 fw-bold">Sales Return &amp; Same-Invoice Exchange Desk</h6>
                                             <small className="text-secondary" style={{ fontSize: '0.75rem' }}>
-                                                B2C Retail Returns • Stock Replenishment • GST Credit Note • Marg ERP Standard (F6 / Alt+R)
+                                                B2C Retail Returns • Stock Replenishment • GST Credit Note • Fast POS Standard (F6 / Alt+R)
                                             </small>
                                         </div>
                                     </div>
@@ -4011,11 +4011,11 @@ function InventoryView({ store, notify }) {
 }
 
 // =========================================================================
-// 3. INWARD PURCHASES, SUPPLIERS & MARG ERP IMPORT
+// 3. INWARD PURCHASES, SUPPLIERS & EXCEL / CSV IMPORT
 // =========================================================================
 function PurchaseView({ store, notify }) {
     if (!store) return null;
-    const [subTab, setSubTab] = useState('inward'); // inward, marg, suppliers
+    const [subTab, setSubTab] = useState('inward'); // inward, excel, suppliers
     const [suppliers, setSuppliers] = useState([]);
     const [selectedSupplierId, setSelectedSupplierId] = useState('');
     const [invoiceNo, setInvoiceNo] = useState('');
@@ -4759,8 +4759,8 @@ function PurchaseView({ store, notify }) {
                 <button className={`btn btn-sm ${subTab === 'suppliers' ? 'btn-primary shadow-sm' : 'btn-outline-secondary'}`} onClick={() => setSubTab('suppliers')}>
                     <i className="bi bi-truck me-1"></i> Supplier Directory ({suppliers.length})
                 </button>
-                <button className={`btn btn-sm ${subTab === 'marg' ? 'btn-success shadow-sm' : 'btn-outline-secondary'}`} onClick={() => setSubTab('marg')}>
-                    <i className="bi bi-file-earmark-spreadsheet me-1"></i> Marg ERP / Excel Import
+                <button className={`btn btn-sm ${subTab === 'excel' ? 'btn-success shadow-sm' : 'btn-outline-secondary'}`} onClick={() => setSubTab('excel')}>
+                    <i className="bi bi-file-earmark-spreadsheet me-1"></i> Excel / CSV Import
                 </button>
             </div>
 
@@ -5035,22 +5035,22 @@ function PurchaseView({ store, notify }) {
                 </div>
             )}
 
-            {subTab === 'marg' && (
+            {subTab === 'excel' && (
                 <div className="counter-card">
-                    <h5 className="fw-bold text-success mb-2"><i className="bi bi-file-earmark-spreadsheet me-1"></i> Marg ERP / Excel Inventory Importer</h5>
+                    <h5 className="fw-bold text-success mb-2"><i className="bi bi-file-earmark-spreadsheet me-1"></i> Excel / CSV Inventory Importer</h5>
                     <p className="text-muted small mb-3">
-                        Upload your stock export from <strong>Marg Pharmacy Software</strong> or Microsoft Excel to seamlessly import medicines, batch numbers, MRP, PTR, HSN codes, and opening stock into <strong>{store.store_name}</strong>.
+                        Upload your stock export from Microsoft Excel or CSV format to seamlessly import medicines, batch numbers, MRP, PTR, HSN codes, and opening stock into <strong>{store.store_name}</strong>.
                     </p>
 
                     <div className="p-4 bg-light rounded-3 border text-center mb-3">
                         <i className="bi bi-cloud-arrow-up fs-1 text-success d-block mb-2"></i>
-                        <h6 className="fw-bold">Upload Marg CSV / Excel File</h6>
-                        <p className="small text-muted mb-3">Ensure file is exported in CSV format from Marg ERP.</p>
-                        <input type="file" id="marg_file_input" accept=".csv, .txt" className="form-control form-control-sm w-50 mx-auto mb-3" />
+                        <h6 className="fw-bold">Upload CSV / Excel File</h6>
+                        <p className="small text-muted mb-3">Ensure file is formatted as standard CSV or Excel-exported CSV.</p>
+                        <input type="file" id="excel_file_input" accept=".csv, .txt" className="form-control form-control-sm w-50 mx-auto mb-3" />
                         <button 
                             className="btn btn-success-custom"
                             onClick={async () => {
-                                const fileInput = document.getElementById('marg_file_input');
+                                const fileInput = document.getElementById('excel_file_input');
                                 if (!fileInput.files || fileInput.files.length === 0) {
                                     alert('Please select a CSV file first.');
                                     return;
@@ -5060,7 +5060,7 @@ function PurchaseView({ store, notify }) {
                                 formData.append('import_file', fileInput.files[0]);
 
                                 try {
-                                    const res = await fetch(API_BASE + 'stock/import-marg', {
+                                    const res = await fetch(API_BASE + 'stock/import-excel', {
                                         method: 'POST',
                                         body: formData
                                     });

@@ -1426,7 +1426,7 @@ $routes->group('setting', static function($routes) {
     $routes->post('admin/medical-store/generate-otp', 'Setting\\MedicalStoreAdmin::generateOtp');
     $routes->post('admin/medical-store/regenerate-key', 'Setting\\MedicalStoreAdmin::regenerateSecurityKey');
     $routes->post('admin/medical-store/revoke-device', 'Setting\\MedicalStoreAdmin::revokeDevice');
-    $routes->post('admin/medical-store/import-marg', 'Setting\\MedicalStoreAdmin::importMarg');
+    $routes->post('admin/medical-store/import-excel', 'Setting\\MedicalStoreAdmin::importExcel');
 
     $routes->get('admin/bed-management', 'Setting\\BedManagement::index', ['filter' => $settingsBedFilter]);
     $routes->get('admin/departments', 'Setting\\BedManagement::departments', ['filter' => $settingsBedFilter]);
@@ -1702,7 +1702,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1'], static funct
     $routes->get('medical-store/compliance/schedule-h1-register', 'MedicalStoreApi::getScheduleH1Register');
     $routes->post('medical-store/device/verify', 'MedicalStoreApi::verifyDevice');
     $routes->post('medical-store/device/check', 'MedicalStoreApi::checkDeviceStatus');
-    $routes->post('medical-store/stock/import-marg', 'MedicalStoreApi::importMarg');
+    $routes->post('medical-store/stock/import-excel', 'MedicalStoreApi::importExcel');
     $routes->get('medical-store/abdm/bundle/(:num)', 'MedicalStoreApi::getAbdmBundle/$1');
     $routes->post('medical-store/abdm/link-abha', 'MedicalStoreApi::linkAbha');
     $routes->get('medical-store/returns/lookup-invoice', 'MedicalStoreApi::lookupInvoiceForReturn');

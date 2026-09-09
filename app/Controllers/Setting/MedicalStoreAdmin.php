@@ -235,9 +235,9 @@ class MedicalStoreAdmin extends BaseController
     }
 
     /**
-     * Marg Pharmacy Software / Excel CSV Inventory Import
+     * Excel / CSV Inventory Import
      */
-    public function importMarg()
+    public function importExcel()
     {
         $storeId = (int)($this->request->getPost('store_id') ?? 0);
         if ($storeId <= 0) {
@@ -251,7 +251,7 @@ class MedicalStoreAdmin extends BaseController
 
         $ext = strtolower($file->getClientExtension());
         if (!in_array($ext, ['csv', 'txt'])) {
-            return $this->response->setJSON(['ok' => false, 'error' => 'Please upload CSV formatted export from Marg ERP or Excel.']);
+            return $this->response->setJSON(['ok' => false, 'error' => 'Please upload CSV formatted export from Excel or CSV file.']);
         }
 
         $handle = fopen($file->getTempName(), 'r');
@@ -322,7 +322,7 @@ class MedicalStoreAdmin extends BaseController
             $qty     = ($colQty !== null) ? (int)preg_replace('/[^0-9]/', '', $row[$colQty] ?? '10') : 10;
             $barcode = ($colBarcode !== null) ? trim($row[$colBarcode] ?? '') : '';
 
-            // Parse Marg Expiry formats (MM/YY, MM/YYYY, DD-MM-YYYY, YYYY-MM-DD)
+            // Parse standard date and expiry formats (MM/YY, MM/YYYY, DD-MM-YYYY, YYYY-MM-DD)
             $expiryDate = date('Y-12-31', strtotime('+1 year'));
             if (!empty($expRaw)) {
                 if (preg_match('/^(\d{1,2})[\/\-](\d{2})$/', $expRaw, $m)) {
@@ -418,7 +418,7 @@ class MedicalStoreAdmin extends BaseController
 
         // Record opening stock valuation journal voucher in double-entry ledgers
         if ($totalValuation > 0) {
-            $voucherNo = 'MARG-IMP-' . $storeId . '-' . date('YmdHis');
+            $voucherNo = 'CSV-IMP-' . $storeId . '-' . date('YmdHis');
             $stockHead = $this->db->table('mst_account_heads')->where('head_code', '1003')->get()->getRowArray();
             $equityHead = $this->db->table('mst_account_heads')->where('head_code', '3004')->get()->getRowArray();
 
@@ -426,12 +426,12 @@ class MedicalStoreAdmin extends BaseController
                 $this->db->table('mst_ledger_entries')->insert([
                     'store_id' => $storeId, 'voucher_no' => $voucherNo, 'voucher_type' => 'OPENING_STOCK', 'voucher_date' => date('Y-m-d'),
                     'account_head_id' => $stockHead['head_id'], 'debit_amount' => $totalValuation, 'credit_amount' => 0,
-                    'narration' => "Marg ERP Opening Stock Inward ($importedRows lines)"
+                    'narration' => "Excel/CSV Opening Stock Inward ($importedRows lines)"
                 ]);
                 $this->db->table('mst_ledger_entries')->insert([
                     'store_id' => $storeId, 'voucher_no' => $voucherNo, 'voucher_type' => 'OPENING_STOCK', 'voucher_date' => date('Y-m-d'),
                     'account_head_id' => $equityHead['head_id'], 'debit_amount' => 0, 'credit_amount' => $totalValuation,
-                    'narration' => "Marg ERP Opening Capital Credit"
+                    'narration' => "Excel/CSV Opening Capital Credit"
                 ]);
             }
         }
@@ -440,7 +440,7 @@ class MedicalStoreAdmin extends BaseController
 
         return $this->response->setJSON([
             'ok' => true,
-            'message' => "Successfully imported {$importedRows} inventory lines from Marg Pharmacy file.",
+            'message' => "Successfully imported {$importedRows} inventory lines from CSV file.",
             'details' => [
                 'imported_rows'    => $importedRows,
                 'new_catalog_items'=> $newItems,

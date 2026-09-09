@@ -25,7 +25,7 @@
 
 ### HMS Admin Management
 - **URL:** [http://localhost:8080/setting/admin/medical-store](http://localhost:8080/setting/admin/medical-store)
-- **Features:** Store configuration, DL 20B/21B licenses, GSTIN, Pharmacist details, ABDM HFR/HIP/HPR registries, 60-min OTP generator, terminal device authorization, and Marg ERP CSV import.
+- **Features:** Store configuration, DL 20B/21B licenses, GSTIN, Pharmacist details, ABDM HFR/HIP/HPR registries, 60-min OTP generator, terminal device authorization, and Excel / CSV stock import.
 
 ### Direct Counter Desks (React PWA)
 - **Counter A (Main Hospital Block A):**
@@ -59,15 +59,15 @@
    - 80mm Thermal Slip (Fast 1–5 item OTC/OPD).
    - A5 Invoice (Normal OPD/Walk-in with GST summary).
    - A4 Hospital Tax Invoice (IPD admissions & large bills).
-4. **Marg ERP Migration:**
-   - Supported CSV import with auto-detected columns. Sample test file: `scratch/test_marg_sample.csv`.
+4. **Excel / CSV Stock Migration:**
+   - Supported CSV import with auto-detected columns.
 5. **Double-Entry Accounting & Statutory Drug Register:**
    - Automated ledger postings, Daily Cash Book, GSTR-1 outward reports, and mandatory Schedule H1 drug register.
 6. **Retail Loose Tablet & Unit Dispensing:**
    - Exact per-tablet pricing (`Strip MRP / units_per_pack`), exact stock deduction in individual tablets, and support for Loose Tab, Strip, and Combo sales.
 7. **Split / Mixed Payment Mode & Audit:**
    - Supports partial payments (e.g. ₹35 Cash + ₹100 UPI) with 12-digit UTR and bank name capturing for bank reconciliation and audit.
-8. **Keyboard-First Zero-Mouse POS Workflow (Marg ERP Standard):**
+8. **Keyboard-First Zero-Mouse POS Workflow (Desktop Pharmacy Standard):**
    - High-contrast single-line Quick Keys ribbon.
    - Hotkeys: `F2` (Medicine Search), `F4` (Patient Search), `F7` (Whole Discount), `F8` (Payment Mode), `F9 / Ctrl+Enter` (Complete Sale & Print), `Alt+T` (Loose Tab), `Alt+S` (Strip), `Shift+Delete` (Remove Item).
    - Auto-focus on Medicine Search on page load; `Enter` on quantity immediately commits and jumps focus back to Medicine Lookup for the next scan.
