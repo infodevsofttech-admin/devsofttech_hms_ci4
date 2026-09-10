@@ -2311,6 +2311,394 @@ class MedicalStoreApi extends BaseController
         ]);
     }
 
+    public function getPurchases()
+    {
+        $storeId = (int)($this->request->getGet('store_id') ?: 0);
+        $supplierId = (int)($this->request->getGet('supplier_id') ?: 0);
+        $search = trim($this->request->getGet('search') ?: '');
+
+        $builder = $this->db->table('mst_purchases p')
+            ->select('p.*, s.supplier_name, s.phone, s.contact_person, s.gstin, COUNT(pi.purchase_item_id) as items_count')
+            ->join('mst_suppliers s', 's.supplier_id = p.supplier_id', 'left')
+            ->join('mst_purchase_items pi', 'pi.purchase_id = p.purchase_id', 'left')
+            ->groupBy('p.purchase_id')
+            ->orderBy('p.invoice_date', 'DESC')
+            ->orderBy('p.purchase_id', 'DESC')
+            ->limit(100);
+
+        if ($storeId > 0) {
+            $builder->where('p.store_id', $storeId);
+        }
+        if ($supplierId > 0) {
+            $builder->where('p.supplier_id', $supplierId);
+        }
+        if (!empty($search)) {
+            $builder->groupStart()
+                ->like('p.supplier_invoice_no', $search)
+                ->orLike('s.supplier_name', $search)
+                ->groupEnd();
+        }
+
+        $purchases = $builder->get()->getResultArray();
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'purchases' => $purchases
+        ]);
+    }
+
+    public function getPurchaseDetail(int $purchaseId)
+    {
+        $purchase = $this->db->table('mst_purchases p')
+            ->select('p.*, s.supplier_name, s.contact_person, s.phone, s.email, s.address, s.gstin, s.dl_no_20b, s.dl_no_21b')
+            ->join('mst_suppliers s', 's.supplier_id = p.supplier_id', 'left')
+            ->where('p.purchase_id', $purchaseId)
+            ->get()
+            ->getRowArray();
+
+        if (!$purchase) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Purchase invoice not found.']);
+        }
+
+        $items = $this->db->table('mst_purchase_items pi')
+            ->select('pi.*, i.item_name, i.generic_name, i.category')
+            ->join('mst_items i', 'i.item_id = pi.item_id', 'left')
+            ->where('pi.purchase_id', $purchaseId)
+            ->orderBy('pi.purchase_item_id', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'purchase' => $purchase,
+            'items' => $items
+        ]);
+    }
+
+    public function updatePurchase()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $purchaseId = (int)($json['purchase_id'] ?? 0);
+        $storeId = (int)($json['store_id'] ?? 1);
+        $supplierId = (int)($json['supplier_id'] ?? 0);
+        $items = $json['items'] ?? [];
+
+        if ($purchaseId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Valid Purchase ID is required.']);
+        }
+        if ($supplierId <= 0 || empty($items)) {
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Supplier and items are required.']);
+        }
+
+        $existingPurchase = $this->db->table('mst_purchases')->where('purchase_id', $purchaseId)->get()->getRowArray();
+        if (!$existingPurchase) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Purchase invoice not found.']);
+        }
+
+        $paidAmount = (float)($existingPurchase['paid_amount'] ?? 0);
+        if ($paidAmount > 0 && $supplierId !== (int)$existingPurchase['supplier_id']) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'status' => 0,
+                'message' => "Cannot change the supplier on an invoice that already has payments recorded against it. Please reverse the payment first."
+            ]);
+        }
+
+        // Fetch current purchase items to compute stock rollback
+        $oldItems = $this->db->table('mst_purchase_items')->where('purchase_id', $purchaseId)->get()->getResultArray();
+
+        $this->db->transStart();
+
+        // Step 1: Revert previous stock quantities added by old purchase items
+        foreach ($oldItems as $oldIt) {
+            $oldBatch = $this->db->table('mst_batches')
+                ->where('store_id', $existingPurchase['store_id'])
+                ->where('item_id', $oldIt['item_id'])
+                ->where('batch_no', $oldIt['batch_no'])
+                ->get()
+                ->getRowArray();
+
+            if ($oldBatch) {
+                $batchId = (int)$oldBatch['batch_id'];
+                $stockRow = $this->db->table('mst_stock')
+                    ->where('store_id', $existingPurchase['store_id'])
+                    ->where('item_id', $oldIt['item_id'])
+                    ->where('batch_id', $batchId)
+                    ->get()
+                    ->getRowArray();
+
+                if ($stockRow) {
+                    $newQty = max(0, (int)$stockRow['current_qty'] - (int)$oldIt['total_units']);
+                    $this->db->table('mst_stock')
+                        ->where('stock_id', $stockRow['stock_id'])
+                        ->update(['current_qty' => $newQty]);
+                }
+            }
+        }
+
+        // Delete old purchase items
+        $this->db->table('mst_purchase_items')->where('purchase_id', $purchaseId)->delete();
+
+        // Step 2: Process new items, create/update items & batches, and add new stock
+        $taxableTotal = 0;
+        $cgstTotal = 0;
+        $sgstTotal = 0;
+        $igstTotal = 0;
+        $discountTotal = (float)($json['discount_amount'] ?? 0);
+        $purchaseItems = [];
+
+        foreach ($items as $it) {
+            $itemId = (int)($it['item_id'] ?? 0);
+            $itemName = trim($it['item_name'] ?? '');
+
+            if ($itemId <= 0 && $itemName !== '') {
+                $mst = $this->db->table('mst_items')
+                    ->where('LOWER(TRIM(item_name))', strtolower($itemName))
+                    ->get()
+                    ->getRowArray();
+                if ($mst) {
+                    $itemId = (int)$mst['item_id'];
+                } else {
+                    $uPack = (int)($it['units_per_pack'] ?? 10);
+                    $gRate = (float)($it['gst_rate'] ?? 12.00);
+                    $hCode = trim($it['hsn_code'] ?? '3004');
+
+                    $pmId = 0;
+                    if ($this->db->tableExists('med_product_master')) {
+                        $pmRow = $this->db->table('med_product_master')
+                            ->where('LOWER(TRIM(item_name))', strtolower($itemName))
+                            ->get()
+                            ->getRowArray();
+                        if ($pmRow) {
+                            $pmId = (int)$pmRow['id'];
+                        } else {
+                            $this->db->table('med_product_master')->insert([
+                                'item_name'    => $itemName,
+                                'formulation'  => 'Tablet',
+                                'genericname'  => '',
+                                'packing'      => (string)$uPack,
+                                'HSNCODE'      => $hCode,
+                                'CGST_per'     => round($gRate / 2, 2),
+                                'SGST_per'     => round($gRate / 2, 2),
+                                'is_continue'  => 1,
+                                'insert_by'    => 'Purchase Update Auto'
+                            ]);
+                            $pmId = (int)$this->db->insertID();
+                        }
+                    }
+
+                    $this->db->table('mst_items')->insert([
+                        'product_master_id' => $pmId > 0 ? $pmId : null,
+                        'item_name'         => $itemName,
+                        'category'          => 'Tablet',
+                        'hsn_code'          => $hCode,
+                        'gst_rate'          => $gRate,
+                        'units_per_pack'    => $uPack,
+                        'unit_pack'         => $uPack . ' Units',
+                        'drug_schedule'     => 'OTC',
+                        'is_active'         => 1,
+                        'min_reorder_level' => 10
+                    ]);
+                    $itemId = (int)$this->db->insertID();
+                }
+            }
+
+            $batchNo = trim($it['batch_no']);
+            $expiryDate = trim($it['expiry_date']);
+            $qtyPacks = (int)$it['qty_packs'];
+            $freePacks = (int)($it['free_qty_packs'] ?? 0);
+            $unitsPerPack = (int)($it['units_per_pack'] ?? 10);
+            $totalUnits = ($qtyPacks + $freePacks) * $unitsPerPack;
+
+            $mrp = (float)$it['mrp'];
+            $ptr = (float)$it['ptr'];
+            $discPct = (float)($it['discount_pct'] ?? 0);
+            $gstRate = (float)($it['gst_rate'] ?? 12.00);
+
+            $lineNetPtr = ($qtyPacks * $ptr) * (1 - ($discPct / 100));
+            $taxAmount = round($lineNetPtr * ($gstRate / 100), 2);
+
+            $cgst = round($taxAmount / 2, 2);
+            $sgst = round($taxAmount - $cgst, 2);
+            $igst = 0;
+            $lineTotal = round($lineNetPtr + $taxAmount, 2);
+            $netUnitLanding = $totalUnits > 0 ? round($lineTotal / $totalUnits, 2) : 0;
+
+            $taxableTotal += $lineNetPtr;
+            $cgstTotal += $cgst;
+            $sgstTotal += $sgst;
+
+            $purchaseItems[] = [
+                'purchase_id'           => $purchaseId,
+                'item_id'               => $itemId,
+                'batch_no'              => $batchNo,
+                'expiry_date'           => $expiryDate,
+                'qty_packs'             => $qtyPacks,
+                'free_qty_packs'        => $freePacks,
+                'units_per_pack'        => $unitsPerPack,
+                'total_units'           => $totalUnits,
+                'mrp'                   => $mrp,
+                'ptr'                   => $ptr,
+                'discount_pct'          => $discPct,
+                'hsn_code'              => $it['hsn_code'] ?? '3004',
+                'gst_rate'              => $gstRate,
+                'taxable_value'         => $lineNetPtr,
+                'cgst_amount'           => $cgst,
+                'sgst_amount'           => $sgst,
+                'igst_amount'           => $igst,
+                'total_amount'          => $lineTotal,
+                'net_unit_landing_cost' => $netUnitLanding
+            ];
+
+            // Update/create batch in mst_batches
+            $batchRow = $this->db->table('mst_batches')
+                ->where('store_id', $storeId)
+                ->where('item_id', $itemId)
+                ->where('batch_no', $batchNo)
+                ->get()
+                ->getRowArray();
+
+            if ($batchRow) {
+                $batchId = (int)$batchRow['batch_id'];
+                $this->db->table('mst_batches')->where('batch_id', $batchId)->update([
+                    'expiry_date'       => $expiryDate,
+                    'mrp'               => $mrp,
+                    'ptr'               => $ptr,
+                    'purchase_rate_net' => $netUnitLanding,
+                    'gst_rate'          => $gstRate
+                ]);
+            } else {
+                $this->db->table('mst_batches')->insert([
+                    'store_id'          => $storeId,
+                    'item_id'           => $itemId,
+                    'batch_no'          => $batchNo,
+                    'expiry_date'       => $expiryDate,
+                    'mrp'               => $mrp,
+                    'ptr'               => $ptr,
+                    'purchase_rate_net' => $netUnitLanding,
+                    'gst_rate'          => $gstRate
+                ]);
+                $batchId = $this->db->insertID();
+            }
+
+            // Increase stock in mst_stock
+            $stockRow = $this->db->table('mst_stock')
+                ->where('store_id', $storeId)
+                ->where('item_id', $itemId)
+                ->where('batch_id', $batchId)
+                ->get()
+                ->getRowArray();
+
+            if ($stockRow) {
+                $this->db->table('mst_stock')
+                    ->where('stock_id', $stockRow['stock_id'])
+                    ->update(['current_qty' => $stockRow['current_qty'] + $totalUnits]);
+            } else {
+                $this->db->table('mst_stock')->insert([
+                    'store_id'    => $storeId,
+                    'item_id'     => $itemId,
+                    'batch_id'    => $batchId,
+                    'current_qty' => $totalUnits
+                ]);
+            }
+        }
+
+        $grandTotal = round($taxableTotal + $cgstTotal + $sgstTotal + $igstTotal - $discountTotal);
+
+        // Validation against paid_amount
+        if ($paidAmount > 0 && $grandTotal < $paidAmount) {
+            $this->db->transRollback();
+            return $this->response->setStatusCode(400)->setJSON([
+                'status' => 0,
+                'message' => "Cannot reduce invoice net amount to ₹$grandTotal because ₹$paidAmount has already been paid to the supplier. Adjust or reverse the payment first."
+            ]);
+        }
+
+        // Determine updated payment_status
+        $paymentStatus = 'unpaid';
+        if ($paidAmount >= $grandTotal && $grandTotal > 0) {
+            $paymentStatus = 'paid';
+        } elseif ($paidAmount > 0) {
+            $paymentStatus = 'partially_paid';
+        }
+
+        // Update purchase record
+        $updateData = [
+            'store_id'            => $storeId,
+            'supplier_id'         => $supplierId,
+            'supplier_invoice_no' => trim($json['supplier_invoice_no'] ?: $existingPurchase['supplier_invoice_no']),
+            'invoice_date'        => $json['invoice_date'] ?? $existingPurchase['invoice_date'],
+            'taxable_amount'      => $taxableTotal,
+            'cgst_amount'         => $cgstTotal,
+            'sgst_amount'         => $sgstTotal,
+            'igst_amount'         => $igstTotal,
+            'discount_amount'     => $discountTotal,
+            'net_amount'          => $grandTotal,
+            'payment_status'      => $paymentStatus,
+            'remarks'             => trim($json['remarks'] ?? $existingPurchase['remarks'])
+        ];
+        $this->db->table('mst_purchases')->where('purchase_id', $purchaseId)->update($updateData);
+
+        // Insert new purchase items
+        foreach ($purchaseItems as $pi) {
+            $this->db->table('mst_purchase_items')->insert($pi);
+        }
+
+        // Step 3: Refresh double-entry ledger postings
+        $this->db->table('mst_ledger_entries')
+            ->where('voucher_type', 'PURCHASE')
+            ->where('reference_type', 'purchase_invoice')
+            ->where('reference_id', $purchaseId)
+            ->delete();
+
+        $purchaseHead = $this->db->table('mst_account_heads')->where('head_code', '4001')->get()->getRowArray();
+        $inputCgstHead = $this->db->table('mst_account_heads')->where('head_code', '1006')->get()->getRowArray();
+        $inputSgstHead = $this->db->table('mst_account_heads')->where('head_code', '1007')->get()->getRowArray();
+        $creditorHead = $this->db->table('mst_account_heads')->where('head_code', '2001')->get()->getRowArray();
+
+        $vNo = $updateData['supplier_invoice_no'];
+        if ($purchaseHead) {
+            $this->db->table('mst_ledger_entries')->insert([
+                'store_id' => $storeId, 'voucher_no' => $vNo, 'voucher_type' => 'PURCHASE', 'voucher_date' => $updateData['invoice_date'],
+                'account_head_id' => $purchaseHead['head_id'], 'debit_amount' => $taxableTotal, 'credit_amount' => 0,
+                'reference_type' => 'purchase_invoice', 'reference_id' => $purchaseId, 'narration' => "Updated Purchase from Supplier #$supplierId Bill $vNo"
+            ]);
+        }
+        if ($cgstTotal > 0 && $inputCgstHead) {
+            $this->db->table('mst_ledger_entries')->insert([
+                'store_id' => $storeId, 'voucher_no' => $vNo, 'voucher_type' => 'PURCHASE', 'voucher_date' => $updateData['invoice_date'],
+                'account_head_id' => $inputCgstHead['head_id'], 'debit_amount' => $cgstTotal, 'credit_amount' => 0,
+                'reference_type' => 'purchase_invoice', 'reference_id' => $purchaseId, 'narration' => "Updated Input CGST credit on $vNo"
+            ]);
+        }
+        if ($sgstTotal > 0 && $inputSgstHead) {
+            $this->db->table('mst_ledger_entries')->insert([
+                'store_id' => $storeId, 'voucher_no' => $vNo, 'voucher_type' => 'PURCHASE', 'voucher_date' => $updateData['invoice_date'],
+                'account_head_id' => $inputSgstHead['head_id'], 'debit_amount' => $sgstTotal, 'credit_amount' => 0,
+                'reference_type' => 'purchase_invoice', 'reference_id' => $purchaseId, 'narration' => "Updated Input SGST credit on $vNo"
+            ]);
+        }
+        if ($creditorHead) {
+            $this->db->table('mst_ledger_entries')->insert([
+                'store_id' => $storeId, 'voucher_no' => $vNo, 'voucher_type' => 'PURCHASE', 'voucher_date' => $updateData['invoice_date'],
+                'account_head_id' => $creditorHead['head_id'], 'debit_amount' => 0, 'credit_amount' => $grandTotal,
+                'reference_type' => 'purchase_invoice', 'reference_id' => $purchaseId, 'narration' => "Updated Credit payable to Supplier #$supplierId"
+            ]);
+        }
+
+        $this->db->transComplete();
+
+        if ($this->db->transStatus() === false) {
+            return $this->response->setStatusCode(500)->setJSON(['status' => 0, 'message' => 'Failed to update purchase invoice.']);
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'message' => 'Purchase invoice #' . $vNo . ' updated successfully! Stock and ledgers adjusted.',
+            'purchase_id' => $purchaseId,
+            'net_amount' => $grandTotal
+        ]);
+    }
+
     public function saveSupplierPayment()
     {
         $json = $this->request->getJSON(true) ?: $this->request->getPost();

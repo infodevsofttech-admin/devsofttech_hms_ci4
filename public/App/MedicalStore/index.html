@@ -4113,6 +4113,13 @@ function PurchaseView({ store, notify }) {
     const [loadedPoId, setLoadedPoId] = useState(null);
     const [loadedPoNumber, setLoadedPoNumber] = useState('');
 
+    // --- Purchase Invoice History & Edit States ---
+    const [editingPurchaseId, setEditingPurchaseId] = useState(null);
+    const [recentPurchases, setRecentPurchases] = useState([]);
+    const [isLoadingPurchases, setIsLoadingPurchases] = useState(false);
+    const [showPurchaseHistoryModal, setShowPurchaseHistoryModal] = useState(false);
+    const [purchaseHistorySearch, setPurchaseHistorySearch] = useState('');
+
     // --- Data Fetching & Action Handlers ---
     const fetchLedgerSummary = async () => {
         setIsLoadingLedger(true);
@@ -4128,6 +4135,71 @@ function PurchaseView({ store, notify }) {
         } finally {
             setIsLoadingLedger(false);
         }
+    };
+
+    const fetchRecentPurchases = async () => {
+        setIsLoadingPurchases(true);
+        try {
+            const res = await fetch(API_BASE + 'purchases?store_id=' + store.store_id);
+            const data = await res.json();
+            if (data.status && data.purchases) {
+                setRecentPurchases(data.purchases);
+            }
+        } catch (e) {
+            console.error('fetchRecentPurchases error:', e);
+        } finally {
+            setIsLoadingPurchases(false);
+        }
+    };
+
+    const loadPurchaseForEdit = async (purchaseId) => {
+        if (!purchaseId) return;
+        try {
+            const res = await fetch(API_BASE + 'purchase/' + purchaseId);
+            const data = await res.json();
+            if (data.status && data.purchase) {
+                setEditingPurchaseId(Number(data.purchase.purchase_id));
+                setSelectedSupplierId(String(data.purchase.supplier_id));
+                setInvoiceNo(data.purchase.supplier_invoice_no || '');
+                setInvoiceDate(data.purchase.invoice_date || new Date().toISOString().split('T')[0]);
+                setLoadedPoId(null);
+                setLoadedPoNumber('');
+                if (data.items && data.items.length > 0) {
+                    setRows(data.items.map(it => ({
+                        item_id: Number(it.item_id || 0),
+                        item_name: it.item_name || '',
+                        generic_name: it.generic_name || '',
+                        category: it.category || 'Tablet',
+                        batch_no: it.batch_no || '',
+                        expiry_date: it.expiry_date || '',
+                        qty_packs: Number(it.qty_packs || 1),
+                        free_qty_packs: Number(it.free_qty_packs || 0),
+                        units_per_pack: Number(it.units_per_pack || 10),
+                        mrp: Number(it.mrp || 0),
+                        ptr: Number(it.ptr || 0),
+                        discount_pct: Number(it.discount_pct || 0),
+                        gst_rate: Number(it.gst_rate || 12),
+                        hsn_code: it.hsn_code || '3004'
+                    })));
+                }
+                setSubTab('inward');
+                setShowPurchaseHistoryModal(false);
+                notify('Purchase Invoice #' + data.purchase.supplier_invoice_no + ' loaded for editing.', 'info');
+            } else {
+                notify(data.message || 'Could not load purchase details.', 'error');
+            }
+        } catch (e) {
+            notify('Error loading purchase invoice: ' + e.message, 'error');
+        }
+    };
+
+    const cancelEditPurchase = () => {
+        setEditingPurchaseId(null);
+        setInvoiceNo('');
+        setLoadedPoId(null);
+        setLoadedPoNumber('');
+        setRows([{ item_id: 0, item_name: '', generic_name: '', category: 'Tablet', batch_no: '', expiry_date: '', qty_packs: 1, free_qty_packs: 0, units_per_pack: 10, mrp: 0, ptr: 0, discount_pct: 0, gst_rate: 12, hsn_code: '3004' }]);
+        notify('Exited purchase edit mode. Ready for new inward entry.', 'info');
     };
 
     const fetchSupplierLedger = async (supplierId) => {
@@ -4416,6 +4488,7 @@ function PurchaseView({ store, notify }) {
     useEffect(() => {
         fetchSuppliers();
         fetchMasterSupportData();
+        fetchRecentPurchases();
     }, []);
 
     const fetchMasterSupportData = async () => {
@@ -4713,30 +4786,45 @@ function PurchaseView({ store, notify }) {
                 hsn_code: r.hsn_code || '3004'
             }));
 
-            const res = await fetch(API_BASE + 'purchase/save', {
+            const endpoint = editingPurchaseId ? (API_BASE + 'purchase/update') : (API_BASE + 'purchase/save');
+            const payload = {
+                store_id: store.store_id,
+                supplier_id: Number(selectedSupplierId),
+                supplier_invoice_no: invoiceNo,
+                invoice_date: invoiceDate,
+                items: itemsPayload
+            };
+            if (editingPurchaseId) {
+                payload.purchase_id = editingPurchaseId;
+            } else if (loadedPoId) {
+                payload.po_id = loadedPoId;
+            }
+
+            const res = await fetch(endpoint, {
                 method: 'POST',
                 headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({
-                    store_id: store.store_id,
-                    supplier_id: Number(selectedSupplierId),
-                    supplier_invoice_no: invoiceNo,
-                    invoice_date: invoiceDate,
-                    po_id: loadedPoId || undefined,
-                    items: itemsPayload
-                })
+                body: JSON.stringify(payload)
             });
             const data = await res.json();
             if (data.status) {
-                notify('Purchase inward recorded! Stock & Supplier Ledger updated.' + (loadedPoNumber ? (' (PO ' + loadedPoNumber + ' marked as received)') : ''), 'success');
+                if (editingPurchaseId) {
+                    notify('Purchase invoice #' + invoiceNo + ' updated successfully! Stock & supplier ledger adjusted.', 'success');
+                } else {
+                    notify('Purchase inward recorded! Stock & Supplier Ledger updated.' + (loadedPoNumber ? (' (PO ' + loadedPoNumber + ' marked as received)') : ''), 'success');
+                }
+                setEditingPurchaseId(null);
                 setInvoiceNo('');
                 setLoadedPoId(null);
                 setLoadedPoNumber('');
                 setRows([{ item_id: 0, item_name: '', generic_name: '', category: 'Tablet', batch_no: '', expiry_date: '', qty_packs: 1, free_qty_packs: 0, units_per_pack: 10, mrp: 0, ptr: 0, discount_pct: 0, gst_rate: 12, hsn_code: '3004' }]);
+                fetchRecentPurchases();
+                if (activeLedgerSupplierId) fetchSupplierLedger(activeLedgerSupplierId);
+                fetchLedgerSummary();
             } else {
-                notify(data.message || 'Failed to save purchase bill.', 'error');
+                notify(data.message || 'Failed to save purchase invoice.', 'error');
             }
         } catch (e) {
-            notify('Purchase bill error: ' + e.message, 'error');
+            notify('Purchase invoice error: ' + e.message, 'error');
         }
     };
 
@@ -4767,8 +4855,27 @@ function PurchaseView({ store, notify }) {
             {subTab === 'inward' && (
                 <div className="counter-card">
                     <div className="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
-                        <h5 className="fw-bold mb-0"><i className="bi bi-receipt text-primary me-1"></i> Distributor Purchase Inward (Stock Entry)</h5>
+                        <div>
+                            <h5 className="fw-bold mb-0">
+                                <i className="bi bi-receipt text-primary me-1"></i> 
+                                {editingPurchaseId ? 'Edit Distributor Purchase Inward' : 'Distributor Purchase Inward (Stock Entry)'}
+                            </h5>
+                            <small className="text-muted">
+                                {editingPurchaseId ? `Modifying existing Bill #${invoiceNo} (Ref #${editingPurchaseId})` : 'Enter vendor delivery challan / tax invoice to replenish store stock'}
+                            </small>
+                        </div>
                         <div className="d-flex align-items-center gap-2">
+                            <button 
+                                type="button" 
+                                className="btn btn-sm btn-outline-secondary"
+                                onClick={() => {
+                                    fetchRecentPurchases();
+                                    setShowPurchaseHistoryModal(true);
+                                }}
+                                title="View recent inward bills and select one to edit"
+                            >
+                                <i className="bi bi-clock-history me-1"></i> Inward Bills History / Edit ({recentPurchases.length})
+                            </button>
                             {loadedPoNumber ? (
                                 <div className="badge bg-info-subtle text-info border border-info px-2 py-1.5 d-flex align-items-center gap-1.5" style={{ fontSize: '12px' }}>
                                     <i className="bi bi-link-45deg fs-6"></i>
@@ -4789,6 +4896,25 @@ function PurchaseView({ store, notify }) {
                             )}
                         </div>
                     </div>
+
+                    {editingPurchaseId && (
+                        <div className="alert alert-warning border border-warning-subtle shadow-sm py-2 px-3 mb-3 d-flex justify-content-between align-items-center">
+                            <div className="d-flex align-items-center gap-2">
+                                <span className="badge bg-warning text-dark fs-6 px-2.5 py-1.5"><i className="bi bi-pencil-square me-1"></i>EDIT MODE</span>
+                                <div>
+                                    <strong className="text-dark d-block">Editing Purchase Invoice #{invoiceNo} (Purchase ID: #{editingPurchaseId})</strong>
+                                    <small className="text-muted">Updating this invoice will recalculate batch stock in this store and adjust supplier ledger balances.</small>
+                                </div>
+                            </div>
+                            <button 
+                                type="button" 
+                                className="btn btn-outline-dark btn-sm fw-semibold"
+                                onClick={cancelEditPurchase}
+                            >
+                                <i className="bi bi-x-circle me-1"></i> Cancel Edit &amp; New Inward
+                            </button>
+                        </div>
+                    )}
                     <div className="row g-2 mb-3">
                         <div className="col-md-4">
                             <div className="d-flex justify-content-between align-items-center mb-1">
@@ -5024,13 +5150,24 @@ function PurchaseView({ store, notify }) {
                         </table>
                     </div>
 
-                    <div className="d-flex justify-content-between mt-2">
+                    <div className="d-flex justify-content-between align-items-center mt-3">
                         <button className="btn btn-sm btn-outline-primary" onClick={addRow}>
                             <i className="bi bi-plus-circle me-1"></i> Add Another Item
                         </button>
-                        <button className="btn btn-success-custom" onClick={savePurchaseBill}>
-                            <i className="bi bi-check-circle me-1"></i> Record Inward Bill &amp; Update Inventory
-                        </button>
+                        <div className="d-flex gap-2">
+                            {editingPurchaseId && (
+                                <button type="button" className="btn btn-outline-secondary btn-sm px-3" onClick={cancelEditPurchase}>
+                                    <i className="bi bi-x-circle me-1"></i> Cancel Edit
+                                </button>
+                            )}
+                            <button 
+                                className={editingPurchaseId ? "btn btn-warning shadow-sm fw-bold px-3 py-2 text-dark" : "btn btn-success-custom shadow-sm"} 
+                                onClick={savePurchaseBill}
+                            >
+                                <i className={editingPurchaseId ? "bi bi-check2-all me-1" : "bi bi-check-circle me-1"}></i> 
+                                {editingPurchaseId ? `Update Purchase Invoice #${invoiceNo}` : 'Record Inward Bill & Update Inventory'}
+                            </button>
+                        </div>
                     </div>
                 </div>
             )}
@@ -5434,12 +5571,21 @@ function PurchaseView({ store, notify }) {
                                                             </span>
                                                         </td>
                                                         <td className="text-end pe-3">
-                                                            <button 
-                                                                className="btn btn-sm btn-success py-1 px-2.5 shadow-sm fw-semibold"
-                                                                onClick={() => openPaymentModal(activeLedgerDetail.supplier.supplier_id, inv.purchase_id, inv.pending_amount)}
-                                                            >
-                                                                <i className="bi bi-cash me-1"></i> Pay Bill
-                                                            </button>
+                                                            <div className="btn-group btn-group-sm">
+                                                                <button 
+                                                                    className="btn btn-outline-primary py-1 px-2 shadow-sm"
+                                                                    onClick={() => loadPurchaseForEdit(inv.purchase_id)}
+                                                                    title="Edit this Purchase Invoice"
+                                                                >
+                                                                    <i className="bi bi-pencil-square me-1"></i> Edit
+                                                                </button>
+                                                                <button 
+                                                                    className="btn btn-success py-1 px-2.5 shadow-sm fw-semibold"
+                                                                    onClick={() => openPaymentModal(activeLedgerDetail.supplier.supplier_id, inv.purchase_id, inv.pending_amount)}
+                                                                >
+                                                                    <i className="bi bi-cash me-1"></i> Pay Bill
+                                                                </button>
+                                                            </div>
                                                         </td>
                                                     </tr>
                                                 ))
@@ -5479,7 +5625,20 @@ function PurchaseView({ store, notify }) {
                                                 activeLedgerDetail.statement.map((row, idx) => (
                                                     <tr key={idx} className={row.type === 'PAYMENT' ? 'table-success-subtle' : ''}>
                                                         <td className="text-nowrap">{row.date}</td>
-                                                        <td className="fw-semibold text-primary">{row.voucher_no}</td>
+                                                        <td className="fw-semibold text-primary">
+                                                            {row.type === 'INVOICE' && row.invoice_id ? (
+                                                                <button 
+                                                                    type="button"
+                                                                    className="btn btn-link p-0 text-decoration-none fw-bold text-primary"
+                                                                    onClick={() => loadPurchaseForEdit(row.invoice_id)}
+                                                                    title="Click to edit purchase invoice"
+                                                                >
+                                                                    {row.voucher_no} <i className="bi bi-pencil-square text-muted ms-1" style={{ fontSize: '11px' }}></i>
+                                                                </button>
+                                                            ) : (
+                                                                row.voucher_no
+                                                            )}
+                                                        </td>
                                                         <td>
                                                             <span className={`badge ${row.type === 'INVOICE' ? 'bg-primary-subtle text-primary border border-primary-subtle' : 'bg-success text-white'}`}>
                                                                 {row.type === 'INVOICE' ? 'Purchase Bill' : 'Payment'}
@@ -6765,6 +6924,115 @@ function PurchaseView({ store, notify }) {
                                         <i className="bi bi-printer me-1"></i> Print PO
                                     </button>
                                 </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* ================================================================= */}
+            {/* MODAL: INWARD PURCHASE BILLS HISTORY & EDIT SELECTOR */}
+            {/* ================================================================= */}
+            {showPurchaseHistoryModal && (
+                <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(15, 23, 42, 0.75)' }} tabIndex="-1">
+                    <div className="modal-dialog modal-xl modal-dialog-centered modal-dialog-scrollable">
+                        <div className="modal-content border-0 shadow-lg">
+                            <div className="modal-header bg-dark text-white py-2.5 px-3 d-flex justify-content-between align-items-center">
+                                <div className="d-flex align-items-center gap-2">
+                                    <div className="bg-primary text-white rounded p-1.5 d-flex align-items-center justify-content-center" style={{ width: 32, height: 32 }}>
+                                        <i className="bi bi-clock-history fs-5"></i>
+                                    </div>
+                                    <div>
+                                        <h6 className="modal-title mb-0 fw-bold">Inward Purchase Bills History &amp; Edit</h6>
+                                        <small className="text-light opacity-75">Browse past invoices and click Edit to modify lines, rates, or batches</small>
+                                    </div>
+                                </div>
+                                <button type="button" className="btn-close btn-close-white" onClick={() => setShowPurchaseHistoryModal(false)}></button>
+                            </div>
+                            <div className="modal-body p-3 bg-light">
+                                <div className="d-flex justify-content-between align-items-center gap-2 mb-3">
+                                    <div className="input-group input-group-sm" style={{ maxWidth: 350 }}>
+                                        <span className="input-group-text bg-white"><i className="bi bi-search text-muted"></i></span>
+                                        <input 
+                                            type="text" 
+                                            className="form-control" 
+                                            placeholder="Search by Bill No or Supplier Name..." 
+                                            value={purchaseHistorySearch} 
+                                            onChange={(e) => setPurchaseHistorySearch(e.target.value)} 
+                                        />
+                                        {purchaseHistorySearch && (
+                                            <button className="btn btn-outline-secondary" onClick={() => setPurchaseHistorySearch('')}>
+                                                <i className="bi bi-x"></i>
+                                            </button>
+                                        )}
+                                    </div>
+                                    <button className="btn btn-outline-primary btn-sm" onClick={fetchRecentPurchases} title="Refresh Invoices">
+                                        <i className="bi bi-arrow-clockwise me-1"></i> Refresh
+                                    </button>
+                                </div>
+
+                                <div className="table-responsive bg-white rounded border shadow-sm">
+                                    <table className="table table-hover align-middle mb-0" style={{ fontSize: '13px' }}>
+                                        <thead className="table-light">
+                                            <tr>
+                                                <th style={{ width: 110 }}>Date</th>
+                                                <th>Bill / Invoice No</th>
+                                                <th>Supplier / Distributor</th>
+                                                <th className="text-center">Items</th>
+                                                <th className="text-end">Net Bill Amount</th>
+                                                <th className="text-end">Paid Amount</th>
+                                                <th className="text-center">Payment Status</th>
+                                                <th className="text-end pe-3">Action</th>
+                                            </tr>
+                                        </thead>
+                                        <tbody>
+                                            {isLoadingPurchases ? (
+                                                <tr><td colSpan="8" className="text-center py-4"><span className="spinner-border spinner-border-sm me-2"></span>Loading invoices...</td></tr>
+                                            ) : recentPurchases.length === 0 ? (
+                                                <tr><td colSpan="8" className="text-center py-4 text-muted">No inward purchase bills recorded yet.</td></tr>
+                                            ) : (
+                                                recentPurchases
+                                                    .filter(p => {
+                                                        if (!purchaseHistorySearch) return true;
+                                                        const q = purchaseHistorySearch.toLowerCase();
+                                                        return (p.supplier_invoice_no || '').toLowerCase().includes(q) || (p.supplier_name || '').toLowerCase().includes(q);
+                                                    })
+                                                    .map(p => (
+                                                        <tr key={p.purchase_id}>
+                                                            <td>{p.invoice_date}</td>
+                                                            <td className="fw-bold text-primary">{p.supplier_invoice_no}</td>
+                                                            <td>
+                                                                <div className="fw-semibold text-dark">{p.supplier_name || 'Unknown Supplier'}</div>
+                                                                {p.gstin && <small className="text-muted">GST: {p.gstin}</small>}
+                                                            </td>
+                                                            <td className="text-center">
+                                                                <span className="badge bg-light text-dark border px-2 py-1">{p.items_count || 1} lines</span>
+                                                            </td>
+                                                            <td className="text-end fw-bold text-dark">₹{Number(p.net_amount || 0).toFixed(2)}</td>
+                                                            <td className="text-end text-success">₹{Number(p.paid_amount || 0).toFixed(2)}</td>
+                                                            <td className="text-center">
+                                                                <span className={`badge ${p.payment_status === 'paid' ? 'bg-success' : p.payment_status === 'partially_paid' ? 'bg-warning text-dark' : 'bg-danger'} px-2 py-1`}>
+                                                                    {p.payment_status === 'paid' ? 'Paid' : p.payment_status === 'partially_paid' ? 'Partially Paid' : 'Unpaid'}
+                                                                </span>
+                                                            </td>
+                                                            <td className="text-end pe-3">
+                                                                <button 
+                                                                    className="btn btn-sm btn-outline-primary py-1 px-2.5 shadow-sm fw-semibold"
+                                                                    onClick={() => loadPurchaseForEdit(p.purchase_id)}
+                                                                    title="Load this bill into Inward form to edit items and rates"
+                                                                >
+                                                                    <i className="bi bi-pencil-square me-1"></i> Edit Invoice
+                                                                </button>
+                                                            </td>
+                                                        </tr>
+                                                    ))
+                                            )}
+                                        </tbody>
+                                    </table>
+                                </div>
+                            </div>
+                            <div className="modal-footer py-2 bg-light">
+                                <button type="button" className="btn btn-secondary btn-sm" onClick={() => setShowPurchaseHistoryModal(false)}>Close</button>
                             </div>
                         </div>
                     </div>
