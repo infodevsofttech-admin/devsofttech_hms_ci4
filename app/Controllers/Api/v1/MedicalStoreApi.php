@@ -213,7 +213,174 @@ class MedicalStoreApi extends BaseController
         return $this->response->setJSON(['status' => 1, 'patients' => $enriched]);
     }
 
+    public function patientHistory()
+    {
+        $patientId = (int)($this->request->getGet('patient_id') ?? 0);
+        $uhid = trim($this->request->getGet('uhid') ?? '');
+        $mobile = trim($this->request->getGet('mobile') ?? '');
+        $storeId = (int)($this->request->getGet('store_id') ?? 0);
+
+        if ($patientId <= 0 && empty($uhid) && empty($mobile)) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'status'  => 0,
+                'message' => 'Please provide patient_id, uhid, or mobile number.'
+            ]);
+        }
+
+        // Fetch sales history for this patient
+        $builder = $this->db->table('mst_sales s');
+        $builder->select('s.*, st.store_name, st.store_code');
+        $builder->join('mst_stores st', 'st.store_id = s.store_id', 'left');
+
+        $builder->groupStart();
+        if ($patientId > 0) {
+            $builder->orWhere('s.patient_id', $patientId);
+        }
+        if (!empty($uhid)) {
+            $builder->orWhere('s.uhid', $uhid);
+        }
+        if (!empty($mobile) && strlen($mobile) >= 10) {
+            $builder->orWhere('s.patient_mobile', $mobile);
+        }
+        $builder->groupEnd();
+
+        $builder->orderBy('s.sale_id', 'DESC');
+        $sales = $builder->limit(30)->get()->getResultArray();
+
+        $invoices = [];
+        $totalSpend = 0;
+        $uniqueMedicinesMap = [];
+
+        foreach ($sales as $sale) {
+            $totalSpend += (float)($sale['net_amount'] ?? 0);
+
+            // Fetch items for this sale
+            $items = $this->db->table('mst_sales_items si')
+                ->select('si.*, i.item_name, i.generic_name, i.category, i.unit_pack, i.drug_schedule, i.manufacturer_name')
+                ->join('mst_items i', 'i.item_id = si.item_id', 'left')
+                ->where('si.sale_id', $sale['sale_id'])
+                ->get()
+                ->getResultArray();
+
+            $processedItems = [];
+            foreach ($items as $it) {
+                $returnedUnits = 0;
+                if (($it['item_type'] ?? 'SALE') === 'SALE') {
+                    $retRow = $this->db->table('mst_sales_items')
+                        ->where('ref_sale_id', $sale['sale_id'])
+                        ->where('item_id', $it['item_id'])
+                        ->where('batch_id', $it['batch_id'])
+                        ->where('item_type', 'RETURN')
+                        ->selectSum('total_units', 'tot_ret')
+                        ->get()
+                        ->getRowArray();
+                    $returnedUnits = (int)($retRow['tot_ret'] ?? 0);
+                }
+
+                $soldUnits = (int)($it['total_units'] ?? $it['qty']);
+                $remainingUnits = max(0, $soldUnits - $returnedUnits);
+                $unitsPerPack = max(1, (int)($it['units_per_pack'] ?? 1));
+
+                $processedItem = [
+                    'sale_item_id'           => (int)$it['sale_item_id'],
+                    'sale_id'                => (int)$it['sale_id'],
+                    'item_id'                => (int)$it['item_id'],
+                    'item_name'              => $it['item_name'] ?? 'Unknown Medicine',
+                    'generic_name'           => $it['generic_name'] ?? '',
+                    'category'               => $it['category'] ?? '',
+                    'unit_pack'              => $it['unit_pack'] ?? '',
+                    'drug_schedule'          => $it['drug_schedule'] ?? '',
+                    'batch_id'               => (int)$it['batch_id'],
+                    'batch_no'               => $it['batch_no'] ?? '',
+                    'expiry_date'            => $it['expiry_date'] ?? '',
+                    'qty'                    => (int)$it['qty'],
+                    'sell_unit'              => $it['sell_unit'] ?? 'Strip',
+                    'units_per_pack'         => $unitsPerPack,
+                    'total_units'            => $soldUnits,
+                    'already_returned_units' => $returnedUnits,
+                    'remaining_units'        => $remainingUnits,
+                    'remaining_strips'       => floor($remainingUnits / $unitsPerPack),
+                    'remaining_loose'        => $remainingUnits % $unitsPerPack,
+                    'unit_mrp'               => (float)($it['unit_mrp'] ?? 0),
+                    'effective_unit_price'   => round((float)($it['total_amount'] ?? 0) / max(1, $soldUnits), 2),
+                    'gst_rate'               => (float)($it['gst_rate'] ?? 0),
+                    'total_amount'           => (float)($it['total_amount'] ?? 0),
+                    'item_type'              => $it['item_type'] ?? 'SALE'
+                ];
+
+                $processedItems[] = $processedItem;
+
+                if (($it['item_type'] ?? 'SALE') === 'SALE' && !empty($it['item_id'])) {
+                    $mId = (int)$it['item_id'];
+                    if (!isset($uniqueMedicinesMap[$mId])) {
+                        $uniqueMedicinesMap[$mId] = [
+                            'item_id'          => $mId,
+                            'item_name'        => $it['item_name'] ?? '',
+                            'generic_name'     => $it['generic_name'] ?? '',
+                            'category'         => $it['category'] ?? '',
+                            'unit_pack'        => $it['unit_pack'] ?? '',
+                            'last_batch_no'    => $it['batch_no'] ?? '',
+                            'last_dispensed'   => $sale['sale_date'],
+                            'last_invoice_no'  => $sale['invoice_no'],
+                            'last_qty'         => (int)$it['qty'],
+                            'last_sell_unit'   => $it['sell_unit'] ?? 'Strip',
+                            'times_dispensed'  => 1
+                        ];
+                    } else {
+                        $uniqueMedicinesMap[$mId]['times_dispensed']++;
+                    }
+                }
+            }
+
+            $invoices[] = [
+                'sale'  => $sale,
+                'items' => $processedItems
+            ];
+        }
+
+        $lastInvoice = $invoices[0] ?? null;
+        $lastDispensedItems = [];
+        if ($lastInvoice) {
+            $lastDispensedItems = array_values(array_filter($lastInvoice['items'], function($it) {
+                return ($it['item_type'] ?? 'SALE') === 'SALE';
+            }));
+        }
+
+        // Fetch OPD doctor prescriptions for this patient if patient_id > 0
+        $docPrescriptions = [];
+        if ($patientId > 0) {
+            try {
+                $docPrescriptions = $this->db->table('opd_prescription op')
+                    ->select('opp.id as presc_item_id, opp.med_id, opp.med_name, opp.med_type, opp.dosage, opp.dosage_freq_str, opp.no_of_days, opp.remark, opp.qty as presc_qty, op.id as presc_id, op.opd_id, op.date_opd_visit, opm.doc_name')
+                    ->join('opd_prescrption_prescribed opp', 'opp.opd_pre_id = op.id')
+                    ->join('opd_master opm', 'opm.opd_id = op.opd_id', 'left')
+                    ->where('op.p_id', $patientId)
+                    ->orderBy('op.id', 'DESC')
+                    ->limit(20)
+                    ->get()
+                    ->getResultArray();
+            } catch (\Exception $e) {
+                $docPrescriptions = [];
+            }
+        }
+
+
+        return $this->response->setJSON([
+            'status'               => 1,
+            'patient_id'           => $patientId,
+            'uhid'                 => $uhid,
+            'total_sales'          => count($sales),
+            'total_spend'          => round($totalSpend, 2),
+            'last_sale'            => $lastInvoice ? $lastInvoice['sale'] : null,
+            'last_dispensed_items' => $lastDispensedItems,
+            'invoices'             => $invoices,
+            'unique_medicines'     => array_values($uniqueMedicinesMap),
+            'doctor_prescriptions' => $docPrescriptions
+        ]);
+    }
+
     public function getPrescription(string $encounterType, int $encounterId)
+
     {
         $medicines = [];
         $encounterType = strtolower($encounterType);

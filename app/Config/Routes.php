@@ -1661,6 +1661,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1'], static funct
     $routes->get('medical-store/stores', 'MedicalStoreApi::stores');
     $routes->post('medical-store/stores/save', 'MedicalStoreApi::saveStore');
     $routes->get('medical-store/patient/search', 'MedicalStoreApi::searchPatient');
+    $routes->get('medical-store/patient/history', 'MedicalStoreApi::patientHistory');
     $routes->get('medical-store/patient/prescription/(:segment)/(:num)', 'MedicalStoreApi::getPrescription/$1/$2');
     $routes->get('medical-store/items/search', 'MedicalStoreApi::searchItems');
     $routes->get('medical-store/items/search-master', 'MedicalStoreApi::searchMasterItems');
