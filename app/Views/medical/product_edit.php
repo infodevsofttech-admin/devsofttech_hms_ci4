@@ -121,33 +121,34 @@ $flag = static function ($v): string {
             <div class="col-md-1">
                 <label class="form-label">CGST</label>
                 <select class="form-select" name="input_CGST" id="input_CGST">
-                    <?php if (! empty($gstRates)): ?>
-                        <?php foreach ($gstRates as $rate): ?>
-                            <?php $gstValue = trim((string) ($rate->gst_per ?? '0')); ?>
-                            <?php if ($gstValue === '') { $gstValue = '0'; } ?>
-                            <option value="<?= esc($gstValue) ?>" <?= ((float) $gstValue === (float) $cgst) ? 'selected' : '' ?>><?= esc($gstValue) ?></option>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <?php foreach (['0', '2.5', '5', '6', '9', '12'] as $gstValue): ?>
-                            <option value="<?= esc($gstValue) ?>" <?= ((float) $gstValue === (float) $cgst) ? 'selected' : '' ?>><?= esc($gstValue) ?></option>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                    <?php 
+                    $formatGstOptionLabel = static function($val) {
+                        $f = (float)$val;
+                        if ($f == 0.0) return '0% (Exempt)';
+                        if ($f == 2.5) return '2.5% (5% GST)';
+                        if ($f == 9.0) return '9.0% (18% GST)';
+                        if ($f == 20.0) return '20% (40% GST)';
+                        if ($f == 6.0) return '6.0% (12% Legacy)';
+                        if ($f == 14.0) return '14% (28% Legacy)';
+                        return $val . '%';
+                    };
+                    $standardGstValues = ['0', '2.5', '9', '20', '6', '14'];
+                    $rawRates = !empty($gstRates) ? array_map(static fn($r) => trim((string)($r->gst_per ?? '0')), $gstRates) : $standardGstValues;
+                    foreach ($standardGstValues as $sv) {
+                        if (!in_array($sv, $rawRates, true)) $rawRates[] = $sv;
+                    }
+                    ?>
+                    <?php foreach ($rawRates as $gstValue): ?>
+                        <option value="<?= esc($gstValue) ?>" <?= ((float) $gstValue === (float) $cgst) ? 'selected' : '' ?>><?= esc($formatGstOptionLabel($gstValue)) ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
             <div class="col-md-1">
                 <label class="form-label">SGST</label>
                 <select class="form-select" name="input_SGST" id="input_SGST">
-                    <?php if (! empty($gstRates)): ?>
-                        <?php foreach ($gstRates as $rate): ?>
-                            <?php $gstValue = trim((string) ($rate->gst_per ?? '0')); ?>
-                            <?php if ($gstValue === '') { $gstValue = '0'; } ?>
-                            <option value="<?= esc($gstValue) ?>" <?= ((float) $gstValue === (float) $sgst) ? 'selected' : '' ?>><?= esc($gstValue) ?></option>
-                        <?php endforeach; ?>
-                    <?php else: ?>
-                        <?php foreach (['0', '2.5', '5', '6', '9', '12'] as $gstValue): ?>
-                            <option value="<?= esc($gstValue) ?>" <?= ((float) $gstValue === (float) $sgst) ? 'selected' : '' ?>><?= esc($gstValue) ?></option>
-                        <?php endforeach; ?>
-                    <?php endif; ?>
+                    <?php foreach ($rawRates as $gstValue): ?>
+                        <option value="<?= esc($gstValue) ?>" <?= ((float) $gstValue === (float) $sgst) ? 'selected' : '' ?>><?= esc($formatGstOptionLabel($gstValue)) ?></option>
+                    <?php endforeach; ?>
                 </select>
             </div>
 

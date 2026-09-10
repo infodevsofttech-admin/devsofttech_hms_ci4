@@ -11053,11 +11053,13 @@ class Medical extends BaseController
             $camt = (float) ($row['cgst_2_5'] ?? 0)
                 + (float) ($row['cgst_6'] ?? 0)
                 + (float) ($row['cgst_9'] ?? 0)
-                + (float) ($row['cgst_14'] ?? 0);
+                + (float) ($row['cgst_14'] ?? 0)
+                + (float) ($row['cgst_20'] ?? 0);
             $samt = (float) ($row['sgst_2_5'] ?? 0)
                 + (float) ($row['sgst_6'] ?? 0)
                 + (float) ($row['sgst_9'] ?? 0)
-                + (float) ($row['sgst_14'] ?? 0);
+                + (float) ($row['sgst_14'] ?? 0)
+                + (float) ($row['sgst_20'] ?? 0);
 
             $hsnData[] = [
                 'num' => $num++,
@@ -11240,6 +11242,9 @@ class Medical extends BaseController
             . 'ROUND(SUM(CASE WHEN ' . $cgstPerExpr . '=14 THEN ' . $taxableExpr . ' ELSE 0 END),0) AS sale_28_amount,'
             . 'SUM(CASE WHEN ' . $cgstPerExpr . '=14 THEN ' . $cgstExpr . ' ELSE 0 END) AS cgst_14,'
             . 'SUM(CASE WHEN ' . $cgstPerExpr . '=14 THEN ' . $sgstExpr . ' ELSE 0 END) AS sgst_14,'
+            . 'ROUND(SUM(CASE WHEN ' . $cgstPerExpr . '=20 THEN ' . $taxableExpr . ' ELSE 0 END),0) AS sale_40_amount,'
+            . 'SUM(CASE WHEN ' . $cgstPerExpr . '=20 THEN ' . $cgstExpr . ' ELSE 0 END) AS cgst_20,'
+            . 'SUM(CASE WHEN ' . $cgstPerExpr . '=20 THEN ' . $sgstExpr . ' ELSE 0 END) AS sgst_20,'
             . 'ROUND(SUM(CASE WHEN ' . $cgstPerExpr . '=0 THEN ' . $taxableExpr . ' ELSE 0 END),0) AS sale_0_amount '
             . 'FROM invoice_med_master m '
             . 'JOIN inv_med_item i ON m.' . $mid . '=i.' . $invMedId . ' '

@@ -30,6 +30,9 @@ $showHeader = !empty($showHeader);
             <th class="text-end">Tax.Amt.28%</th>
             <th class="text-end">CGST 14%</th>
             <th class="text-end">SGST 14%</th>
+            <th class="text-end">Tax.Amt.40%</th>
+            <th class="text-end">CGST 20%</th>
+            <th class="text-end">SGST 20%</th>
             <th class="text-end">Tax.Amt.0%</th>
         </tr>
         </thead>
@@ -54,6 +57,9 @@ $showHeader = !empty($showHeader);
                     <td class="text-end"><?= esc(number_format((float) ($row['sale_28_amount'] ?? 0), 2)) ?></td>
                     <td class="text-end"><?= esc(number_format((float) ($row['cgst_14'] ?? 0), 2)) ?></td>
                     <td class="text-end"><?= esc(number_format((float) ($row['sgst_14'] ?? 0), 2)) ?></td>
+                    <td class="text-end"><?= esc(number_format((float) ($row['sale_40_amount'] ?? 0), 2)) ?></td>
+                    <td class="text-end"><?= esc(number_format((float) ($row['cgst_20'] ?? 0), 2)) ?></td>
+                    <td class="text-end"><?= esc(number_format((float) ($row['sgst_20'] ?? 0), 2)) ?></td>
                     <td class="text-end"><?= esc(number_format((float) ($row['sale_0_amount'] ?? 0), 2)) ?></td>
                 </tr>
             <?php endforeach; ?>

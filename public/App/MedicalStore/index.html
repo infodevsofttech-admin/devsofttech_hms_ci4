@@ -4047,7 +4047,7 @@ function PurchaseView({ store, notify }) {
     const [isSearchingMeds, setIsSearchingMeds] = useState(false);
     const [showMasterModal, setShowMasterModal] = useState(false);
     const [masterTargetRow, setMasterTargetRow] = useState(null);
-    const [supportData, setSupportData] = useState({ formulations: [], companies: [], gst_rates: [0, 5, 12, 18, 28], schedules: [] });
+    const [supportData, setSupportData] = useState({ formulations: [], companies: [], gst_rates: [0, 5, 18, 40, 12, 28], schedules: [] });
     const [isSavingMaster, setIsSavingMaster] = useState(false);
     const [masterForm, setMasterForm] = useState({
         item_name: '',
@@ -4056,7 +4056,7 @@ function PurchaseView({ store, notify }) {
         units_per_pack: 10,
         packing: '10',
         hsn_code: '3004',
-        gst_rate: 12,
+        gst_rate: 5,
         drug_schedule: 'Schedule H',
         company_name: '',
         min_reorder_level: 10
@@ -5819,11 +5819,12 @@ function PurchaseView({ store, notify }) {
                                                             handleItemFormChange('sgst_pct', val);
                                                         }}
                                                     >
-                                                        <option value="0">0%</option>
-                                                        <option value="2.5">2.5%</option>
-                                                        <option value="6">6.0%</option>
-                                                        <option value="9">9.0%</option>
-                                                        <option value="14">14.0%</option>
+                                                        <option value="0">0% (Nil / Exempt)</option>
+                                                        <option value="2.5">2.5% (5% GST)</option>
+                                                        <option value="9">9.0% (18% GST)</option>
+                                                        <option value="20">20.0% (40% GST)</option>
+                                                        <option value="6">6.0% (12% Legacy)</option>
+                                                        <option value="14">14.0% (28% Legacy)</option>
                                                     </select>
                                                 </div>
                                                 <div className="col-md-2 col-6">
@@ -5833,11 +5834,12 @@ function PurchaseView({ store, notify }) {
                                                         value={itemForm.sgst_pct} 
                                                         onChange={(e) => handleItemFormChange('sgst_pct', parseFloat(e.target.value) || 0)}
                                                     >
-                                                        <option value="0">0%</option>
-                                                        <option value="2.5">2.5%</option>
-                                                        <option value="6">6.0%</option>
-                                                        <option value="9">9.0%</option>
-                                                        <option value="14">14.0%</option>
+                                                        <option value="0">0% (Nil / Exempt)</option>
+                                                        <option value="2.5">2.5% (5% GST)</option>
+                                                        <option value="9">9.0% (18% GST)</option>
+                                                        <option value="20">20.0% (40% GST)</option>
+                                                        <option value="6">6.0% (12% Legacy)</option>
+                                                        <option value="14">14.0% (28% Legacy)</option>
                                                     </select>
                                                 </div>
                                                 <div className="col-md-2 col-6">
@@ -7270,9 +7272,12 @@ function PurchaseView({ store, notify }) {
                                                     value={masterForm.gst_rate} 
                                                     onChange={(e) => setMasterForm({ ...masterForm, gst_rate: Number(e.target.value) })}
                                                 >
-                                                    {(supportData.gst_rates || [0, 5, 12, 18, 28]).map((g, idx) => (
-                                                        <option key={idx} value={g}>{g}% GST</option>
-                                                    ))}
+                                                    <option value="0">0% (Nil / Exempt)</option>
+                                                    <option value="5">5% (Common / Basic Services)</option>
+                                                    <option value="18">18% (Standard - Most Products)</option>
+                                                    <option value="40">40% (Demerit / Sin Tax)</option>
+                                                    <option value="12">12% (Legacy Medicine Slab)</option>
+                                                    <option value="28">28% (Legacy High Slab)</option>
                                                 </select>
                                             </div>
                                             <div className="col-md-3">
@@ -7684,11 +7689,12 @@ function PurchaseView({ store, notify }) {
                                                                             setPoCreateForm({ ...poCreateForm, items });
                                                                         }}
                                                                     >
-                                                                        <option value="0">0%</option>
+                                                                        <option value="0">0% (Exempt)</option>
                                                                         <option value="5">5%</option>
-                                                                        <option value="12">12%</option>
                                                                         <option value="18">18%</option>
-                                                                        <option value="28">28%</option>
+                                                                        <option value="40">40%</option>
+                                                                        <option value="12">12% (Legacy)</option>
+                                                                        <option value="28">28% (Legacy)</option>
                                                                     </select>
                                                                 </td>
                                                                 <td className="text-end fw-bold">

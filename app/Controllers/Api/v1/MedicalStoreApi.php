@@ -531,20 +531,27 @@ class MedicalStoreApi extends BaseController
             }
         }
 
-        $gstRates = [0, 5, 12, 18, 28];
+        // Current GST Slabs: 0% (Nil/Exempt), 5% (Common/Basic), 18% (Standard), 40% (Demerit/Sin), plus legacy 12% and 28%
+        $gstRates = [0, 5, 18, 40, 12, 28];
         if ($this->db->tableExists('med_gst_per')) {
             $gRows = $this->db->table('med_gst_per')->select('gst_per')->orderBy('gst_per', 'ASC')->get()->getResultArray();
             if (!empty($gRows)) {
-                $customRates = [];
+                $mappedRates = [];
                 foreach ($gRows as $gr) {
-                    $r = (float)$gr['gst_per'];
-                    if (!in_array($r, $customRates, true)) {
-                        $customRates[] = $r;
+                    $half = (float)$gr['gst_per'];
+                    $tot = round($half * 2, 2); // med_gst_per stores CGST half-rate
+                    if ($tot > 0 && !in_array($tot, $mappedRates)) {
+                        $mappedRates[] = $tot;
                     }
                 }
-                if (!empty($customRates)) {
-                    $gstRates = $customRates;
+                foreach ([0, 5, 18, 40, 12, 28] as $reqRate) {
+                    if (!in_array($reqRate, $mappedRates)) {
+                        $mappedRates[] = $reqRate;
+                    }
                 }
+                $mappedRates = array_values(array_unique($mappedRates));
+                sort($mappedRates);
+                $gstRates = $mappedRates;
             }
         }
 
