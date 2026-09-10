@@ -3002,9 +3002,62 @@ class MedicalStoreApi extends BaseController
             }
         }
 
+        // Determine latest batch, expiry, mrp, ptr, gst, hsn, shelf_no, rack_no, storage_type
+        $latestBatchRow = $this->db->table('mst_batches')
+            ->where('item_id', $itemId)
+            ->orderBy('batch_id', 'DESC')
+            ->limit(1)
+            ->get()
+            ->getRowArray();
+
+        $latestPiRow = !empty($rows) ? $rows[0] : null;
+
+        $batchNo = $latestPiRow['batch_no'] ?? ($latestBatchRow['batch_no'] ?? ($history[0]['batch_no'] ?? ''));
+        $expDate = $latestPiRow['expiry_date'] ?? ($latestBatchRow['expiry_date'] ?? ($history[0]['expiry_date'] ?? ''));
+        $mrp = (float)($latestPiRow['mrp'] ?? ($latestBatchRow['mrp'] ?? ($history[0]['mrp'] ?? 0)));
+        $ptr = (float)($latestPiRow['ptr'] ?? ($latestBatchRow['ptr'] ?? ($history[0]['ptr'] ?? 0)));
+        $discPct = (float)($latestPiRow['discount_pct'] ?? ($history[0]['discount_pct'] ?? 0));
+        $gstRate = (float)($latestPiRow['gst_rate'] ?? ($latestBatchRow['gst_rate'] ?? ($history[0]['gst_rate'] ?? ($mstItem['gst_rate'] ?? 12.00))));
+        $hsnCode = $latestPiRow['hsn_code'] ?? ($latestBatchRow['hsn_code'] ?? ($history[0]['hsn_code'] ?? ($mstItem['hsn_code'] ?? '3004')));
+        $shelfNo = $latestPiRow['shelf_no'] ?? ($latestBatchRow['shelf_no'] ?? ($history[0]['shelf_no'] ?? ''));
+        $rackNo = $latestPiRow['rack_no'] ?? ($latestBatchRow['rack_no'] ?? ($history[0]['rack_no'] ?? ''));
+        $storageType = $latestPiRow['storage_type'] ?? ($latestBatchRow['storage_type'] ?? ($history[0]['storage_type'] ?? 'Normal'));
+        $unitsPerPack = (int)($latestPiRow['units_per_pack'] ?? ($mstItem['units_per_pack'] ?? 10));
+        $sellingPrice = (float)($latestPiRow['selling_price'] ?? ($mrp > 0 ? $mrp : 0));
+
+        $expMonth = '12';
+        $expYear = '28';
+        if (!empty($expDate)) {
+            $parts = explode('-', $expDate);
+            if (count($parts) >= 2) {
+                $expYear = substr($parts[0], -2);
+                $expMonth = str_pad($parts[1], 2, '0', STR_PAD_LEFT);
+            }
+        }
+
+        $latestInfo = [
+            'batch_no'       => $batchNo,
+            'expiry_date'    => $expDate,
+            'exp_month'      => $expMonth,
+            'exp_year'       => $expYear,
+            'mrp'            => $mrp > 0 ? $mrp : '',
+            'ptr'            => $ptr > 0 ? $ptr : '',
+            'discount_pct'   => $discPct,
+            'gst_rate'       => $gstRate,
+            'cgst_pct'       => round($gstRate / 2, 2),
+            'sgst_pct'       => round($gstRate / 2, 2),
+            'hsn_code'       => $hsnCode ?: '3004',
+            'shelf_no'       => $shelfNo,
+            'rack_no'        => $rackNo,
+            'storage_type'   => $storageType ?: 'Normal',
+            'units_per_pack' => $unitsPerPack > 0 ? $unitsPerPack : 10,
+            'selling_price'  => $sellingPrice > 0 ? $sellingPrice : ''
+        ];
+
         return $this->response->setJSON([
-            'status'  => 1,
-            'history' => $history
+            'status'      => 1,
+            'history'     => $history,
+            'latest_info' => $latestInfo
         ]);
     }
 

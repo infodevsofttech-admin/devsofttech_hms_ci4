@@ -4222,6 +4222,28 @@ function PurchaseView({ store, notify }) {
             } else {
                 setProductHistory([]);
             }
+            if (data.status && data.latest_info) {
+                const info = data.latest_info;
+                setItemForm(prev => recomputeItemForm({
+                    ...prev,
+                    batch_no: info.batch_no || prev.batch_no,
+                    exp_month: info.exp_month || prev.exp_month,
+                    exp_year: info.exp_year || prev.exp_year,
+                    expiry_date: info.expiry_date || prev.expiry_date,
+                    mrp: (info.mrp !== undefined && info.mrp !== '') ? Number(info.mrp) : prev.mrp,
+                    ptr: (info.ptr !== undefined && info.ptr !== '') ? Number(info.ptr) : prev.ptr,
+                    discount_pct: info.discount_pct !== undefined ? Number(info.discount_pct) : prev.discount_pct,
+                    gst_rate: info.gst_rate !== undefined ? Number(info.gst_rate) : prev.gst_rate,
+                    cgst_pct: info.cgst_pct !== undefined ? Number(info.cgst_pct) : prev.cgst_pct,
+                    sgst_pct: info.sgst_pct !== undefined ? Number(info.sgst_pct) : prev.sgst_pct,
+                    hsn_code: info.hsn_code || prev.hsn_code || '3004',
+                    shelf_no: info.shelf_no || prev.shelf_no,
+                    rack_no: info.rack_no || prev.rack_no,
+                    storage_type: info.storage_type || prev.storage_type || 'Normal',
+                    units_per_pack: info.units_per_pack ? Number(info.units_per_pack) : (prev.units_per_pack || 10),
+                    selling_price: info.selling_price ? Number(info.selling_price) : (info.mrp ? Number(info.mrp) : prev.selling_price)
+                }));
+            }
         } catch (e) {
             console.error('fetchProductPurchaseHistory error:', e);
             setProductHistory([]);
@@ -5620,271 +5642,295 @@ function PurchaseView({ store, notify }) {
                                         </div>
                                     </div>
 
-                                    {/* Row 2: Packaging, Batch No, Exp Month, Exp Year, MRP, Qty */}
-                                    <div className="row g-2 mb-2">
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">Packaging</label>
-                                            <input 
-                                                type="number" 
-                                                className="form-control form-control-sm" 
-                                                placeholder="10" 
-                                                value={itemForm.units_per_pack} 
-                                                onChange={(e) => handleItemFormChange('units_per_pack', e.target.value)} 
-                                            />
-                                        </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">Batch No. <span className="text-danger">*</span></label>
-                                            <input 
-                                                type="text" 
-                                                className="form-control form-control-sm text-uppercase" 
-                                                placeholder="e.g. B-902" 
-                                                value={itemForm.batch_no} 
-                                                onChange={(e) => handleItemFormChange('batch_no', e.target.value)} 
-                                            />
-                                        </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">Exp. Month</label>
-                                            <select 
-                                                className="form-select form-select-sm" 
-                                                value={itemForm.exp_month} 
-                                                onChange={(e) => handleItemFormChange('exp_month', e.target.value)}
-                                            >
-                                                {['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => (
-                                                    <option key={m} value={m}>{m} ({['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1]})</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">Exp. Year</label>
-                                            <select 
-                                                className="form-select form-select-sm" 
-                                                value={itemForm.exp_year} 
-                                                onChange={(e) => handleItemFormChange('exp_year', e.target.value)}
-                                            >
-                                                {['24','25','26','27','28','29','30','31','32','33','34','35','36'].map(y => (
-                                                    <option key={y} value={y}>20{y}</option>
-                                                ))}
-                                            </select>
-                                        </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">MRP (₹)</label>
-                                            <input 
-                                                type="number" 
-                                                step="0.01" 
-                                                className="form-control form-control-sm" 
-                                                placeholder="0.00" 
-                                                value={itemForm.mrp} 
-                                                onChange={(e) => handleItemFormChange('mrp', e.target.value)} 
-                                            />
-                                        </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">Qty (Packs) <span className="text-danger">*</span></label>
-                                            <input 
-                                                type="number" 
-                                                min="1" 
-                                                className="form-control form-control-sm fw-bold" 
-                                                value={itemForm.qty_packs} 
-                                                onChange={(e) => handleItemFormChange('qty_packs', e.target.value)} 
-                                            />
-                                        </div>
-                                    </div>
+                                    {/* Conditional display: Only show details below Product Search when a product is selected or editing */}
+                                    {(itemForm.item_id > 0 || editingItemIndex !== null) ? (
+                                        <>
+                                            {/* Auto-filled Notification Banner */}
+                                            <div className="d-flex align-items-center justify-content-between bg-primary-subtle border border-primary-subtle px-2.5 py-1 rounded mb-2">
+                                                <span className="small text-primary fw-semibold">
+                                                    <i className="bi bi-check-circle-fill me-1 text-success"></i>
+                                                    {editingItemIndex !== null 
+                                                        ? `Editing: ${itemForm.item_name}` 
+                                                        : `Selected: ${itemForm.item_name} (Auto-filled with last batch, rate & location)`
+                                                    }
+                                                </span>
+                                                <button type="button" className="btn btn-link btn-sm p-0 text-danger text-decoration-none fw-semibold" style={{ fontSize: '11px' }} onClick={resetItemForm}>
+                                                    <i className="bi bi-x-circle me-1"></i> Change Product
+                                                </button>
+                                            </div>
 
-                                    {/* Row 3: Free Qty, Purchase Rate, Amount, Discount %, SCH Amount, SCH Discount % */}
-                                    <div className="row g-2 mb-2">
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">Free Qty</label>
-                                            <input 
-                                                type="number" 
-                                                min="0" 
-                                                className="form-control form-control-sm" 
-                                                value={itemForm.free_qty_packs} 
-                                                onChange={(e) => handleItemFormChange('free_qty_packs', e.target.value)} 
-                                            />
-                                        </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">Purchase Rate (PTR)</label>
-                                            <input 
-                                                type="number" 
-                                                step="0.01" 
-                                                className="form-control form-control-sm" 
-                                                placeholder="0.00" 
-                                                value={itemForm.ptr} 
-                                                onChange={(e) => handleItemFormChange('ptr', e.target.value)} 
-                                            />
-                                        </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">Amount</label>
-                                            <input 
-                                                type="text" 
-                                                className="form-control form-control-sm bg-light text-secondary fw-semibold" 
-                                                value={'₹' + Number(itemForm.amount || 0).toFixed(2)} 
-                                                readOnly 
-                                            />
-                                        </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">Discount %</label>
-                                            <input 
-                                                type="number" 
-                                                step="0.1" 
-                                                min="0" 
-                                                max="100" 
-                                                className="form-control form-control-sm" 
-                                                value={itemForm.discount_pct} 
-                                                onChange={(e) => handleItemFormChange('discount_pct', e.target.value)} 
-                                            />
-                                        </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">SCH Amount</label>
-                                            <input 
-                                                type="number" 
-                                                step="0.01" 
-                                                min="0" 
-                                                className="form-control form-control-sm" 
-                                                value={itemForm.sch_disc_amount} 
-                                                onChange={(e) => handleItemFormChange('sch_disc_amount', e.target.value)} 
-                                            />
-                                        </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">SCH Discount %</label>
-                                            <input 
-                                                type="number" 
-                                                step="0.1" 
-                                                min="0" 
-                                                max="100" 
-                                                className="form-control form-control-sm" 
-                                                value={itemForm.sch_disc_pct} 
-                                                onChange={(e) => handleItemFormChange('sch_disc_pct', e.target.value)} 
-                                            />
-                                        </div>
-                                    </div>
+                                            {/* Row 2: Packaging, Batch No, Exp Month, Exp Year, MRP, Qty */}
+                                            <div className="row g-2 mb-2">
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">Packaging</label>
+                                                    <input 
+                                                        type="number" 
+                                                        className="form-control form-control-sm" 
+                                                        placeholder="10" 
+                                                        value={itemForm.units_per_pack} 
+                                                        onChange={(e) => handleItemFormChange('units_per_pack', e.target.value)} 
+                                                    />
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">Batch No. <span className="text-danger">*</span></label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="form-control form-control-sm text-uppercase" 
+                                                        placeholder="e.g. B-902" 
+                                                        value={itemForm.batch_no} 
+                                                        onChange={(e) => handleItemFormChange('batch_no', e.target.value)} 
+                                                    />
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">Exp. Month</label>
+                                                    <select 
+                                                        className="form-select form-select-sm" 
+                                                        value={itemForm.exp_month} 
+                                                        onChange={(e) => handleItemFormChange('exp_month', e.target.value)}
+                                                    >
+                                                        {['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => (
+                                                            <option key={m} value={m}>{m} ({['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1]})</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">Exp. Year</label>
+                                                    <select 
+                                                        className="form-select form-select-sm" 
+                                                        value={itemForm.exp_year} 
+                                                        onChange={(e) => handleItemFormChange('exp_year', e.target.value)}
+                                                    >
+                                                        {['24','25','26','27','28','29','30','31','32','33','34','35','36'].map(y => (
+                                                            <option key={y} value={y}>20{y}</option>
+                                                        ))}
+                                                    </select>
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">MRP (₹)</label>
+                                                    <input 
+                                                        type="number" 
+                                                        step="0.01" 
+                                                        className="form-control form-control-sm" 
+                                                        placeholder="0.00" 
+                                                        value={itemForm.mrp} 
+                                                        onChange={(e) => handleItemFormChange('mrp', e.target.value)} 
+                                                    />
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">Qty (Packs) <span className="text-danger">*</span></label>
+                                                    <input 
+                                                        type="number" 
+                                                        min="1" 
+                                                        className="form-control form-control-sm fw-bold" 
+                                                        value={itemForm.qty_packs} 
+                                                        onChange={(e) => handleItemFormChange('qty_packs', e.target.value)} 
+                                                    />
+                                                </div>
+                                            </div>
 
-                                    {/* Row 4: Taxable Amount, CGST %, SGST / IGST %, Net Amount, Selling Price, HSNCODE */}
-                                    <div className="row g-2 mb-2">
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">Taxable Amount</label>
-                                            <input 
-                                                type="text" 
-                                                className="form-control form-control-sm bg-light text-secondary fw-semibold" 
-                                                value={'₹' + Number(itemForm.taxable_amount || 0).toFixed(2)} 
-                                                readOnly 
-                                            />
-                                        </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">CGST %</label>
-                                            <select 
-                                                className="form-select form-select-sm" 
-                                                value={itemForm.cgst_pct} 
-                                                onChange={(e) => {
-                                                    const val = parseFloat(e.target.value) || 0;
-                                                    handleItemFormChange('cgst_pct', val);
-                                                    handleItemFormChange('sgst_pct', val);
-                                                }}
-                                            >
-                                                <option value="0">0%</option>
-                                                <option value="2.5">2.5%</option>
-                                                <option value="6">6.0%</option>
-                                                <option value="9">9.0%</option>
-                                                <option value="14">14.0%</option>
-                                            </select>
-                                        </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">SGST / IGST %</label>
-                                            <select 
-                                                className="form-select form-select-sm" 
-                                                value={itemForm.sgst_pct} 
-                                                onChange={(e) => handleItemFormChange('sgst_pct', parseFloat(e.target.value) || 0)}
-                                            >
-                                                <option value="0">0%</option>
-                                                <option value="2.5">2.5%</option>
-                                                <option value="6">6.0%</option>
-                                                <option value="9">9.0%</option>
-                                                <option value="14">14.0%</option>
-                                            </select>
-                                        </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">Net Amount</label>
-                                            <input 
-                                                type="text" 
-                                                className="form-control form-control-sm bg-primary-subtle text-primary fw-bold" 
-                                                value={'₹' + Number(itemForm.net_amount || 0).toFixed(2)} 
-                                                readOnly 
-                                            />
-                                        </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">Selling Price</label>
-                                            <input 
-                                                type="number" 
-                                                step="0.01" 
-                                                className="form-control form-control-sm" 
-                                                placeholder="MRP" 
-                                                value={itemForm.selling_price} 
-                                                onChange={(e) => handleItemFormChange('selling_price', e.target.value)} 
-                                            />
-                                        </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">HSNCODE</label>
-                                            <input 
-                                                type="text" 
-                                                className="form-control form-control-sm" 
-                                                value={itemForm.hsn_code} 
-                                                onChange={(e) => handleItemFormChange('hsn_code', e.target.value)} 
-                                            />
-                                        </div>
-                                    </div>
+                                            {/* Row 3: Free Qty, Purchase Rate, Amount, Discount %, SCH Amount, SCH Discount % */}
+                                            <div className="row g-2 mb-2">
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">Free Qty</label>
+                                                    <input 
+                                                        type="number" 
+                                                        min="0" 
+                                                        className="form-control form-control-sm" 
+                                                        value={itemForm.free_qty_packs} 
+                                                        onChange={(e) => handleItemFormChange('free_qty_packs', e.target.value)} 
+                                                    />
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">Purchase Rate (PTR)</label>
+                                                    <input 
+                                                        type="number" 
+                                                        step="0.01" 
+                                                        className="form-control form-control-sm" 
+                                                        placeholder="0.00" 
+                                                        value={itemForm.ptr} 
+                                                        onChange={(e) => handleItemFormChange('ptr', e.target.value)} 
+                                                    />
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">Amount</label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="form-control form-control-sm bg-light text-secondary fw-semibold" 
+                                                        value={'₹' + Number(itemForm.amount || 0).toFixed(2)} 
+                                                        readOnly 
+                                                    />
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">Discount %</label>
+                                                    <input 
+                                                        type="number" 
+                                                        step="0.1" 
+                                                        min="0" 
+                                                        max="100" 
+                                                        className="form-control form-control-sm" 
+                                                        value={itemForm.discount_pct} 
+                                                        onChange={(e) => handleItemFormChange('discount_pct', e.target.value)} 
+                                                    />
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">SCH Amount</label>
+                                                    <input 
+                                                        type="number" 
+                                                        step="0.01" 
+                                                        min="0" 
+                                                        className="form-control form-control-sm" 
+                                                        value={itemForm.sch_disc_amount} 
+                                                        onChange={(e) => handleItemFormChange('sch_disc_amount', e.target.value)} 
+                                                    />
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">SCH Discount %</label>
+                                                    <input 
+                                                        type="number" 
+                                                        step="0.1" 
+                                                        min="0" 
+                                                        max="100" 
+                                                        className="form-control form-control-sm" 
+                                                        value={itemForm.sch_disc_pct} 
+                                                        onChange={(e) => handleItemFormChange('sch_disc_pct', e.target.value)} 
+                                                    />
+                                                </div>
+                                            </div>
 
-                                    {/* Row 5: Storage, Shelf No., Rack No., Buttons */}
-                                    <div className="row g-2 align-items-end">
-                                        <div className="col-md-3 col-6">
-                                            <label className="form-label small fw-bold mb-1">Storage</label>
-                                            <select 
-                                                className="form-select form-select-sm" 
-                                                value={itemForm.storage_type} 
-                                                onChange={(e) => handleItemFormChange('storage_type', e.target.value)}
-                                            >
-                                                <option value="Normal">Normal</option>
-                                                <option value="Cold Storage">Cold Storage (2-8°C)</option>
-                                                <option value="Cool">Cool (8-15°C)</option>
-                                                <option value="Deep Freeze">Deep Freeze (-20°C)</option>
-                                            </select>
+                                            {/* Row 4: Taxable Amount, CGST %, SGST / IGST %, Net Amount, Selling Price, HSNCODE */}
+                                            <div className="row g-2 mb-2">
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">Taxable Amount</label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="form-control form-control-sm bg-light text-secondary fw-semibold" 
+                                                        value={'₹' + Number(itemForm.taxable_amount || 0).toFixed(2)} 
+                                                        readOnly 
+                                                    />
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">CGST %</label>
+                                                    <select 
+                                                        className="form-select form-select-sm" 
+                                                        value={itemForm.cgst_pct} 
+                                                        onChange={(e) => {
+                                                            const val = parseFloat(e.target.value) || 0;
+                                                            handleItemFormChange('cgst_pct', val);
+                                                            handleItemFormChange('sgst_pct', val);
+                                                        }}
+                                                    >
+                                                        <option value="0">0%</option>
+                                                        <option value="2.5">2.5%</option>
+                                                        <option value="6">6.0%</option>
+                                                        <option value="9">9.0%</option>
+                                                        <option value="14">14.0%</option>
+                                                    </select>
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">SGST / IGST %</label>
+                                                    <select 
+                                                        className="form-select form-select-sm" 
+                                                        value={itemForm.sgst_pct} 
+                                                        onChange={(e) => handleItemFormChange('sgst_pct', parseFloat(e.target.value) || 0)}
+                                                    >
+                                                        <option value="0">0%</option>
+                                                        <option value="2.5">2.5%</option>
+                                                        <option value="6">6.0%</option>
+                                                        <option value="9">9.0%</option>
+                                                        <option value="14">14.0%</option>
+                                                    </select>
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">Net Amount</label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="form-control form-control-sm bg-primary-subtle text-primary fw-bold" 
+                                                        value={'₹' + Number(itemForm.net_amount || 0).toFixed(2)} 
+                                                        readOnly 
+                                                    />
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">Selling Price</label>
+                                                    <input 
+                                                        type="number" 
+                                                        step="0.01" 
+                                                        className="form-control form-control-sm" 
+                                                        placeholder="MRP" 
+                                                        value={itemForm.selling_price} 
+                                                        onChange={(e) => handleItemFormChange('selling_price', e.target.value)} 
+                                                    />
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">HSNCODE</label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="form-control form-control-sm" 
+                                                        value={itemForm.hsn_code} 
+                                                        onChange={(e) => handleItemFormChange('hsn_code', e.target.value)} 
+                                                    />
+                                                </div>
+                                            </div>
+
+                                            {/* Row 5: Storage, Shelf No., Rack No., Buttons */}
+                                            <div className="row g-2 align-items-end">
+                                                <div className="col-md-3 col-6">
+                                                    <label className="form-label small fw-bold mb-1">Storage</label>
+                                                    <select 
+                                                        className="form-select form-select-sm" 
+                                                        value={itemForm.storage_type} 
+                                                        onChange={(e) => handleItemFormChange('storage_type', e.target.value)}
+                                                    >
+                                                        <option value="Normal">Normal</option>
+                                                        <option value="Cold Storage">Cold Storage (2-8°C)</option>
+                                                        <option value="Cool">Cool (8-15°C)</option>
+                                                        <option value="Deep Freeze">Deep Freeze (-20°C)</option>
+                                                    </select>
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">Shelf No.</label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="form-control form-control-sm" 
+                                                        placeholder="e.g. S-1" 
+                                                        value={itemForm.shelf_no} 
+                                                        onChange={(e) => handleItemFormChange('shelf_no', e.target.value)} 
+                                                    />
+                                                </div>
+                                                <div className="col-md-2 col-6">
+                                                    <label className="form-label small fw-bold mb-1">Rack No.</label>
+                                                    <input 
+                                                        type="text" 
+                                                        className="form-control form-control-sm" 
+                                                        placeholder="e.g. R-10" 
+                                                        value={itemForm.rack_no} 
+                                                        onChange={(e) => handleItemFormChange('rack_no', e.target.value)} 
+                                                    />
+                                                </div>
+                                                <div className="col-md-5 col-12 d-flex gap-2 justify-content-end mt-2 mt-md-0">
+                                                    <button 
+                                                        type="button" 
+                                                        className="btn btn-outline-secondary btn-sm px-3" 
+                                                        onClick={resetItemForm}
+                                                    >
+                                                        <i className="bi bi-arrow-counterclockwise me-1"></i> Clear
+                                                    </button>
+                                                    <button 
+                                                        type="button" 
+                                                        className={editingItemIndex !== null ? "btn btn-warning text-dark fw-bold btn-sm px-3 shadow-sm" : "btn btn-primary fw-bold btn-sm px-4 shadow-sm"}
+                                                        onClick={handleAddOrUpdateItem}
+                                                    >
+                                                        <i className={editingItemIndex !== null ? "bi bi-check2-circle me-1" : "bi bi-plus-circle me-1"}></i>
+                                                        {editingItemIndex !== null ? 'Update Stock Item' : 'Add Stock'}
+                                                    </button>
+                                                </div>
+                                            </div>
+                                        </>
+                                    ) : (
+                                        <div className="text-center py-4 text-muted small bg-light rounded-2 border border-dashed mt-2">
+                                            <i className="bi bi-search text-primary me-1.5 fs-5 d-block mb-1"></i>
+                                            <span>Search and select a medicine in <strong>Product Search</strong> above to enter stock details and auto-fill last batch, expiry, MRP, rate &amp; rack location.</span>
                                         </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">Shelf No.</label>
-                                            <input 
-                                                type="text" 
-                                                className="form-control form-control-sm" 
-                                                placeholder="e.g. S-1" 
-                                                value={itemForm.shelf_no} 
-                                                onChange={(e) => handleItemFormChange('shelf_no', e.target.value)} 
-                                            />
-                                        </div>
-                                        <div className="col-md-2 col-6">
-                                            <label className="form-label small fw-bold mb-1">Rack No.</label>
-                                            <input 
-                                                type="text" 
-                                                className="form-control form-control-sm" 
-                                                placeholder="e.g. R-10" 
-                                                value={itemForm.rack_no} 
-                                                onChange={(e) => handleItemFormChange('rack_no', e.target.value)} 
-                                            />
-                                        </div>
-                                        <div className="col-md-5 col-12 d-flex gap-2 justify-content-end mt-2 mt-md-0">
-                                            <button 
-                                                type="button" 
-                                                className="btn btn-outline-secondary btn-sm px-3" 
-                                                onClick={resetItemForm}
-                                            >
-                                                <i className="bi bi-arrow-counterclockwise me-1"></i> Clear
-                                            </button>
-                                            <button 
-                                                type="button" 
-                                                className={editingItemIndex !== null ? "btn btn-warning text-dark fw-bold btn-sm px-3 shadow-sm" : "btn btn-primary fw-bold btn-sm px-4 shadow-sm"}
-                                                onClick={handleAddOrUpdateItem}
-                                            >
-                                                <i className={editingItemIndex !== null ? "bi bi-check2-circle me-1" : "bi bi-plus-circle me-1"}></i>
-                                                {editingItemIndex !== null ? 'Update Stock Item' : 'Add Stock'}
-                                            </button>
-                                        </div>
-                                    </div>
+                                    )}
                                 </div>
 
                                 {/* Primary Save Button Bar */}
