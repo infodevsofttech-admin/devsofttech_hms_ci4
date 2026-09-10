@@ -2007,12 +2007,12 @@ class MedicalStoreApi extends BaseController
         $mpdfConfig = [
             'tempDir'       => $tmpDir,
             'mode'          => 'utf-8',
-            'format'        => $isA5 ? 'A5' : 'A4',
-            'orientation'   => 'P',
+            'format'        => $isA5 ? 'A5-L' : 'A4',
+            'orientation'   => $isA5 ? 'L' : 'P',
             'margin_left'   => $isA5 ? 6 : 8,
             'margin_right'  => $isA5 ? 6 : 8,
-            'margin_top'    => $isA5 ? 6 : 8,
-            'margin_bottom' => $isA5 ? 6 : 8,
+            'margin_top'    => $isA5 ? 5 : 8,
+            'margin_bottom' => $isA5 ? 5 : 8,
             'default_font'  => 'dejavusans'
         ];
 
@@ -2022,7 +2022,7 @@ class MedicalStoreApi extends BaseController
             $mpdf->WriteHTML($html);
 
             $safeInv = preg_replace('/[^A-Za-z0-9_-]/', '_', $data['sale']['invoice_no'] ?: ('INV_' . $saleId));
-            $fileName = "Invoice_{$safeInv}_{$format}.pdf";
+            $fileName = "Invoice_{$safeInv}_" . ($isA5 ? 'a5_landscape' : $format) . ".pdf";
 
             $pdfBinary = $mpdf->Output('', \Mpdf\Output\Destination::STRING_RETURN);
 

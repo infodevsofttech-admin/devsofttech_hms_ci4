@@ -391,13 +391,13 @@
             border-radius: 4px;
         }
 
-        /* 2. A5 Half-Page Invoice */
+        /* 2. A5 Landscape Invoice (210mm x 148mm) */
         .print-a5-invoice {
             width: 100%;
-            max-width: 650px;
+            max-width: 820px;
             min-height: auto;
             font-family: 'Inter', sans-serif;
-            font-size: 11px;
+            font-size: 10.5px;
             color: #1e293b;
             padding: 16px;
             margin: auto;
@@ -3297,7 +3297,7 @@ function PosCounter({ store, notify }) {
                                 className={`btn ${printFormat === 'a5' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}
                                 onClick={() => setPrintFormat('a5')}
                             >
-                                <i className="bi bi-file-earmark-pdf me-1"></i> A5 (PDF)
+                                <i className="bi bi-file-earmark-pdf me-1"></i> A5 Landscape (PDF)
                             </button>
                             <button 
                                 type="button" 
@@ -3321,9 +3321,9 @@ function PosCounter({ store, notify }) {
                         ) : refundPayable > 0 ? (
                             <span><i className="bi bi-arrow-return-left me-2"></i> Process Return &amp; Refund ₹{refundPayable}</span>
                         ) : returnCart.length > 0 ? (
-                            <span><i className="bi bi-arrow-left-right me-2"></i> Complete Exchange Bill &amp; Print ({printFormat.toUpperCase()})</span>
+                            <span><i className="bi bi-arrow-left-right me-2"></i> Complete Exchange Bill &amp; Print ({printFormat === 'a5' ? 'A5 LANDSCAPE' : printFormat.toUpperCase()})</span>
                         ) : (
-                            <span><i className="bi bi-printer me-2"></i> Complete Sale &amp; Print ({printFormat.toUpperCase()})</span>
+                            <span><i className="bi bi-printer me-2"></i> Complete Sale &amp; Print ({printFormat === 'a5' ? 'A5 LANDSCAPE' : printFormat.toUpperCase()})</span>
                         )}
                     </button>
             </div>
@@ -3367,7 +3367,7 @@ function PosCounter({ store, notify }) {
                                     <i className="bi bi-receipt me-1"></i> Thermal (Text)
                                 </button>
                                 <button className={`btn btn-xs py-1 px-2 ${printFormat === 'a5' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light text-white'}`} style={{ fontSize: '0.72rem' }} onClick={() => setPrintFormat('a5')}>
-                                    <i className="bi bi-file-earmark-pdf me-1"></i> A5 (PDF)
+                                    <i className="bi bi-file-earmark-pdf me-1"></i> A5 Landscape (PDF)
                                 </button>
                                 <button className={`btn btn-xs py-1 px-2 ${printFormat === 'a4' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light text-white'}`} style={{ fontSize: '0.72rem' }} onClick={() => setPrintFormat('a4')}>
                                     <i className="bi bi-file-earmark-pdf me-1"></i> A4 (PDF)
@@ -3375,30 +3375,20 @@ function PosCounter({ store, notify }) {
                             </div>
 
                             {printFormat === 'thermal' ? (
-                                <>
-                                    <button 
-                                        className="btn btn-sm btn-outline-light py-1 px-2 text-white" 
-                                        onClick={copyThermalReceiptText} 
-                                        title="Copy plain-text receipt to clipboard"
-                                        style={{ fontSize: '0.75rem' }}
-                                    >
-                                        <i className="bi bi-clipboard me-1 text-warning"></i> Copy Text
-                                    </button>
-                                    <button 
-                                        className="btn btn-sm btn-warning text-dark fw-bold py-1 px-2.5 ms-0.5" 
-                                        onClick={printThermalReceipt} 
-                                        title="Print on 80mm Thermal Receipt Printer"
-                                        style={{ fontSize: '0.75rem' }}
-                                    >
-                                        <i className="bi bi-printer-fill me-1"></i> Print Thermal
-                                    </button>
-                                </>
+                                <button 
+                                    className="btn btn-sm btn-warning text-dark fw-bold py-1 px-2.5 ms-0.5" 
+                                    onClick={printThermalReceipt} 
+                                    title="Print on 80mm Thermal Receipt Printer"
+                                    style={{ fontSize: '0.75rem' }}
+                                >
+                                    <i className="bi bi-printer-fill me-1"></i> Print Thermal
+                                </button>
                             ) : (
                                 <>
                                     <button 
                                         className="btn btn-sm btn-outline-light py-1 px-2 text-white" 
                                         onClick={() => downloadPdf(printFormat)} 
-                                        title={`Download ${printFormat.toUpperCase()} PDF Document`}
+                                        title={`Download ${printFormat === 'a5' ? 'A5 Landscape' : printFormat.toUpperCase()} PDF Document`}
                                         style={{ fontSize: '0.75rem' }}
                                     >
                                         <i className="bi bi-download me-1 text-info"></i> PDF
@@ -3406,10 +3396,10 @@ function PosCounter({ store, notify }) {
                                     <button 
                                         className="btn btn-sm btn-primary py-1 px-2.5 ms-0.5 fw-bold" 
                                         onClick={() => printPdf(printFormat)} 
-                                        title={`Print Vector-Clean ${printFormat.toUpperCase()} PDF`}
+                                        title={`Print Vector-Clean ${printFormat === 'a5' ? 'A5 Landscape' : printFormat.toUpperCase()} PDF`}
                                         style={{ fontSize: '0.75rem' }}
                                     >
-                                        <i className="bi bi-printer me-1"></i> Print PDF ({printFormat.toUpperCase()})
+                                        <i className="bi bi-printer me-1"></i> Print PDF ({printFormat === 'a5' ? 'A5 LANDSCAPE' : printFormat.toUpperCase()})
                                     </button>
                                 </>
                             )}
@@ -3436,19 +3426,10 @@ function PosCounter({ store, notify }) {
                                         <span className="badge bg-dark text-warning border border-secondary" style={{ fontSize: '0.72rem' }}>
                                             <i className="bi bi-receipt me-1"></i> 80mm Thermal Receipt (Plain Text)
                                         </span>
-                                        <div className="d-flex gap-1">
+                                        <div>
                                             <button 
                                                 type="button" 
-                                                className="btn btn-xs btn-outline-secondary text-dark bg-light py-0.5 px-2"
-                                                onClick={copyThermalReceiptText}
-                                                title="Copy receipt text to clipboard"
-                                                style={{ fontSize: '0.72rem' }}
-                                            >
-                                                <i className="bi bi-clipboard me-1 text-primary"></i> Copy Text
-                                            </button>
-                                            <button 
-                                                type="button" 
-                                                className="btn btn-xs btn-warning text-dark fw-bold py-0.5 px-2"
+                                                className="btn btn-xs btn-warning text-dark fw-bold py-0.5 px-2.5"
                                                 onClick={printThermalReceipt}
                                                 title="Print Thermal 80mm Receipt"
                                                 style={{ fontSize: '0.72rem' }}
@@ -3482,15 +3463,15 @@ function PosCounter({ store, notify }) {
                                 </div>
                             )}
 
-                            {/* Format 2: A5 Half-Page Invoice (Normal OPD/Walk-in) */}
+                            {/* Format 2: A5 Landscape Invoice */}
                             {printFormat === 'a5' && (
                                 <div className="print-a5-invoice">
                                     <div className="d-flex justify-content-between align-items-center bg-primary-subtle border border-primary-subtle rounded px-2.5 py-1.5 mb-2.5 no-print">
                                         <div className="d-flex align-items-center gap-2">
                                             <i className="bi bi-file-earmark-pdf-fill text-danger fs-5"></i>
                                             <div>
-                                                <div className="fw-bold text-dark" style={{ fontSize: '0.78rem' }}>A5 Retail Tax Invoice (PDF Ready)</div>
-                                                <small className="text-muted" style={{ fontSize: '0.68rem' }}>Direct server vector PDF • Zero clipped columns</small>
+                                                <div className="fw-bold text-dark" style={{ fontSize: '0.78rem' }}>A5 Landscape Tax Invoice (PDF Ready)</div>
+                                                <small className="text-muted" style={{ fontSize: '0.68rem' }}>Direct server vector PDF (Landscape: 210 × 148 mm) • Zero clipped columns</small>
                                             </div>
                                         </div>
                                         <div className="d-flex gap-1.5">
@@ -3498,7 +3479,7 @@ function PosCounter({ store, notify }) {
                                                 <i className="bi bi-download me-1"></i> Download PDF
                                             </button>
                                             <button className="btn btn-xs btn-primary py-1 px-2.5 fw-bold" onClick={() => printPdf('a5')} style={{ fontSize: '0.72rem' }}>
-                                                <i className="bi bi-printer me-1"></i> Print PDF
+                                                <i className="bi bi-printer me-1"></i> Print PDF (A5 Landscape)
                                             </button>
                                         </div>
                                     </div>
@@ -3997,21 +3978,16 @@ function PosCounter({ store, notify }) {
                                 Done / Close (Esc)
                             </button>
                             {printFormat === 'thermal' ? (
-                                <>
-                                    <button className="btn btn-sm btn-outline-dark px-3" onClick={copyThermalReceiptText}>
-                                        <i className="bi bi-clipboard me-1 text-primary"></i> Copy Text
-                                    </button>
-                                    <button className="btn btn-sm btn-warning text-dark px-3 fw-bold" onClick={printThermalReceipt}>
-                                        <i className="bi bi-printer-fill me-1"></i> Print Thermal Receipt
-                                    </button>
-                                </>
+                                <button className="btn btn-sm btn-warning text-dark px-3 fw-bold" onClick={printThermalReceipt}>
+                                    <i className="bi bi-printer-fill me-1"></i> Print Thermal Receipt
+                                </button>
                             ) : (
                                 <>
                                     <button className="btn btn-sm btn-outline-primary px-3" onClick={() => downloadPdf(printFormat)}>
                                         <i className="bi bi-download me-1"></i> Download PDF
                                     </button>
                                     <button className="btn btn-sm btn-primary px-3 fw-bold" onClick={() => printPdf(printFormat)}>
-                                        <i className="bi bi-printer me-1"></i> Print PDF ({printFormat.toUpperCase()})
+                                        <i className="bi bi-printer me-1"></i> Print PDF ({printFormat === 'a5' ? 'A5 LANDSCAPE' : printFormat.toUpperCase()})
                                     </button>
                                 </>
                             )}
