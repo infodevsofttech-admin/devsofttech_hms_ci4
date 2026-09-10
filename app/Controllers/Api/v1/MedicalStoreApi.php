@@ -1901,7 +1901,7 @@ class MedicalStoreApi extends BaseController
         ]);
     }
 
-    public function getInvoice(int $saleId)
+    protected function getInvoiceData(int $saleId): ?array
     {
         $sale = $this->db->table('mst_sales s')
             ->select('s.*, st.store_name, st.building_name, st.floor_no, st.room_no, st.drug_license_no_20b, st.drug_license_no_21b, st.drug_license_no_20f_x, st.gstin, st.pan_no, st.fssai_no, st.state_code, st.state_name, st.registered_pharmacist_name, st.pharmacist_reg_no, st.contact_phone, st.contact_email, st.address as store_address, st.upi_id, st.terms_conditions, st.abdm_hfr_id, st.abdm_hip_id, st.pharmacist_hpr_id')
@@ -1911,7 +1911,7 @@ class MedicalStoreApi extends BaseController
             ->getRowArray();
 
         if (!$sale) {
-            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Invoice not found.']);
+            return null;
         }
 
         $items = $this->db->table('mst_sales_items si')
@@ -1967,8 +1967,7 @@ class MedicalStoreApi extends BaseController
             $upiQrString = "upi://pay?pa={$sale['upi_id']}&pn=" . urlencode($sale['store_name']) . "&am={$sale['net_amount']}&cu=INR&tn=" . urlencode("Bill " . $sale['invoice_no']);
         }
 
-        return $this->response->setJSON([
-            'status' => 1,
+        return [
             'sale' => $sale,
             'items' => $saleItems,
             'return_items' => $returnItems,
@@ -1976,8 +1975,539 @@ class MedicalStoreApi extends BaseController
             'credit_note' => $creditNote,
             'hsn_summary' => array_values($hsnSummary),
             'upi_qr_string' => $upiQrString
-        ]);
+        ];
     }
+
+    public function getInvoice(int $saleId)
+    {
+        $data = $this->getInvoiceData($saleId);
+        if (!$data) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Invoice not found.']);
+        }
+
+        return $this->response->setJSON(array_merge(['status' => 1], $data));
+    }
+
+    public function invoicePdf(int $saleId)
+    {
+        $data = $this->getInvoiceData($saleId);
+        if (!$data) {
+            return $this->response->setStatusCode(404)->setBody('Invoice not found.');
+        }
+
+        $format = strtolower($this->request->getGet('format') ?? 'a4');
+        $download = (bool)($this->request->getGet('download') ?? false);
+        $isA5 = ($format === 'a5');
+
+        $tmpDir = WRITEPATH . 'cache/mpdf';
+        if (!is_dir($tmpDir)) {
+            @mkdir($tmpDir, 0777, true);
+        }
+
+        $mpdfConfig = [
+            'tempDir'       => $tmpDir,
+            'mode'          => 'utf-8',
+            'format'        => $isA5 ? 'A5' : 'A4',
+            'orientation'   => 'P',
+            'margin_left'   => $isA5 ? 6 : 8,
+            'margin_right'  => $isA5 ? 6 : 8,
+            'margin_top'    => $isA5 ? 6 : 8,
+            'margin_bottom' => $isA5 ? 6 : 8,
+            'default_font'  => 'dejavusans'
+        ];
+
+        try {
+            $mpdf = new \Mpdf\Mpdf($mpdfConfig);
+            $html = $this->renderInvoicePdfHtml($data, $isA5);
+            $mpdf->WriteHTML($html);
+
+            $safeInv = preg_replace('/[^A-Za-z0-9_-]/', '_', $data['sale']['invoice_no'] ?: ('INV_' . $saleId));
+            $fileName = "Invoice_{$safeInv}_{$format}.pdf";
+
+            $pdfBinary = $mpdf->Output('', \Mpdf\Output\Destination::STRING_RETURN);
+
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setHeader('Content-Disposition', ($download ? 'attachment' : 'inline') . '; filename="' . $fileName . '"')
+                ->setBody($pdfBinary);
+        } catch (\Throwable $e) {
+            log_message('error', 'MedicalStoreApi::invoicePdf failed: ' . $e->getMessage());
+            return $this->response->setStatusCode(500)->setBody('Failed to generate PDF: ' . $e->getMessage());
+        }
+    }
+
+    protected function renderInvoicePdfHtml(array $data, bool $isA5): string
+    {
+        $sale = $data['sale'];
+        $items = $data['items'];
+        $returnItems = $data['return_items'];
+        $creditNote = $data['credit_note'];
+        $hsnSummary = $data['hsn_summary'];
+        $upiQrString = $data['upi_qr_string'];
+
+        $esc = fn($v) => htmlspecialchars((string)($v ?? ''), ENT_QUOTES, 'UTF-8');
+        $curr = fn($v) => '&#8377;' . number_format((float)($v ?? 0), 2, '.', '');
+
+        $fontSize = $isA5 ? '7pt' : '8pt';
+        $thPadding = $isA5 ? '2.5px 3.5px' : '4px 5px';
+        $tdPadding = $isA5 ? '2.5px 3.5px' : '3.5px 5px';
+
+        $qrCodeValue = $upiQrString ?: $sale['invoice_no'];
+        $qrHtml = '';
+        if (!empty($qrCodeValue)) {
+            $qrSize = $isA5 ? '0.55' : '0.65';
+            $qrHtml = '<barcode code="' . $esc($qrCodeValue) . '" size="' . $qrSize . '" type="QR" error="M" class="barcode" />';
+        }
+
+        $html = '
+        <html>
+        <head>
+        <meta charset="utf-8">
+        <style>
+            body {
+                font-family: dejavusans, sans-serif;
+                font-size: ' . $fontSize . ';
+                color: #0f172a;
+                line-height: 1.25;
+            }
+            table {
+                width: 100%;
+                border-collapse: collapse;
+            }
+            .header-table td {
+                vertical-align: top;
+            }
+            .border-box {
+                border: 0.3mm solid #94a3b8;
+                border-radius: 1.5mm;
+                padding: ' . ($isA5 ? '4px' : '6px') . ';
+                background-color: #f8fafc;
+                margin-bottom: ' . ($isA5 ? '4px' : '6px') . ';
+            }
+            .items-table {
+                width: 100%;
+                border-collapse: collapse;
+                margin-bottom: ' . ($isA5 ? '4px' : '6px') . ';
+            }
+            .items-table th {
+                background-color: #0f766e;
+                color: #ffffff;
+                font-weight: bold;
+                font-size: ' . ($isA5 ? '6.5pt' : '7.5pt') . ';
+                padding: ' . $thPadding . ';
+                border: 0.2mm solid #0f766e;
+                text-align: left;
+            }
+            .items-table td {
+                padding: ' . $tdPadding . ';
+                border: 0.2mm solid #cbd5e1;
+                font-size: ' . ($isA5 ? '6.5pt' : '7.5pt') . ';
+                vertical-align: top;
+            }
+            .items-table tr:nth-child(even) td {
+                background-color: #f8fafc;
+            }
+            .return-table th {
+                background-color: #be123c !important;
+                border-color: #be123c !important;
+            }
+            .return-table td {
+                border-color: #fecdd3 !important;
+                background-color: #fff1f2 !important;
+                color: #9f1239;
+            }
+            .hsn-table th {
+                background-color: #334155;
+                color: #ffffff;
+                font-size: ' . ($isA5 ? '6pt' : '7pt') . ';
+                padding: ' . ($isA5 ? '2px 3px' : '3px 4px') . ';
+                border: 0.2mm solid #334155;
+            }
+            .hsn-table td {
+                font-size: ' . ($isA5 ? '6pt' : '7pt') . ';
+                padding: ' . ($isA5 ? '2px 3px' : '3px 4px') . ';
+                border: 0.2mm solid #cbd5e1;
+                text-align: center;
+            }
+            .text-center { text-align: center; }
+            .text-right { text-align: right; }
+            .fw-bold { font-weight: bold; }
+            .text-muted { color: #64748b; }
+            .text-primary { color: #0284c7; }
+            .text-danger { color: #dc2626; }
+            .text-success { color: #16a34a; }
+            .badge {
+                display: inline-block;
+                padding: 1px 4px;
+                border-radius: 1mm;
+                font-size: 6pt;
+                font-weight: bold;
+            }
+            .badge-teal { background-color: #ccfbf1; color: #0f766e; border: 0.2mm solid #14b8a6; }
+            .badge-green { background-color: #dcfce7; color: #15803d; border: 0.2mm solid #22c55e; }
+            .badge-blue { background-color: #e0f2fe; color: #0369a1; border: 0.2mm solid #0ea5e9; }
+            .total-box {
+                background-color: #f0fdf4;
+                border: 0.4mm solid #16a34a;
+                padding: ' . ($isA5 ? '3px 5px' : '5px 7px') . ';
+                border-radius: 1.5mm;
+                color: #14532d;
+            }
+        </style>
+        </head>
+        <body>';
+
+        // 1. Header Table
+        $html .= '
+        <table class="header-table" style="margin-bottom: ' . ($isA5 ? '4px' : '8px') . ';">
+            <tr>
+                <td style="width: 66%;">
+                    <div style="font-size: ' . ($isA5 ? '11pt' : '13pt') . '; font-weight: bold; color: #0f766e; margin-bottom: 2px;">
+                        ' . $esc($sale['store_name'] ?: 'City Hospital Central Pharmacy') . '
+                    </div>
+                    <div style="color: #475569; font-size: ' . ($isA5 ? '6.5pt' : '7.5pt') . ';">
+                        ' . $esc($sale['building_name'] ?: 'Main Hospital Block A') . ', ' . $esc($sale['floor_no'] ?: 'Ground Floor') . ($sale['store_address'] ? ', ' . $esc($sale['store_address']) : '') . '
+                    </div>
+                    <div style="font-size: ' . ($isA5 ? '6.5pt' : '7.5pt') . '; margin-top: 2px;">
+                        <strong>DL 20-B:</strong> ' . $esc($sale['drug_license_no_20b'] ?: 'N/A') . ' | <strong>DL 21-B:</strong> ' . $esc($sale['drug_license_no_21b'] ?: 'N/A') . '
+                        ' . ($sale['fssai_no'] ? ' | <strong>FSSAI:</strong> ' . $esc($sale['fssai_no']) : '') . '
+                    </div>
+                    <div style="font-size: ' . ($isA5 ? '6.5pt' : '7.5pt') . ';">
+                        <strong>GSTIN:</strong> ' . $esc($sale['gstin'] ?: 'N/A') . ' | <strong>State:</strong> ' . $esc($sale['state_name'] ?: 'Delhi') . ' (Code: ' . $esc($sale['state_code'] ?: '07') . ')
+                        ' . ($sale['abdm_hfr_id'] ? ' | <strong>ABDM HFR:</strong> ' . $esc($sale['abdm_hfr_id']) : '') . '
+                    </div>
+                </td>
+                <td style="width: 34%; text-align: right;">
+                    <table style="width: 100%;">
+                        <tr>
+                            <td style="text-align: right; vertical-align: top;">
+                                <div style="display: inline-block; background-color: #0f766e; color: #ffffff; padding: 2px 6px; font-weight: bold; font-size: ' . ($isA5 ? '7pt' : '8pt') . '; border-radius: 1mm; margin-bottom: 2px;">
+                                    ' . ($isA5 ? 'RETAIL TAX INVOICE' : 'HOSPITAL GST TAX INVOICE') . '
+                                </div>
+                                <div style="font-size: ' . ($isA5 ? '9pt' : '11pt') . '; font-weight: bold; color: #0f172a;">
+                                    ' . $esc($sale['invoice_no']) . '
+                                </div>
+                                <div style="color: #64748b; font-size: ' . ($isA5 ? '6.5pt' : '7.5pt') . ';">
+                                    ' . $esc($sale['sale_date']) . '
+                                </div>
+                            </td>
+                            ' . ($qrHtml ? '<td style="width: 45px; text-align: right; vertical-align: top; padding-left: 5px;">' . $qrHtml . '</td>' : '') . '
+                        </tr>
+                    </table>
+                </td>
+            </tr>
+        </table>';
+
+        // 2. Patient & Doctor Info Table
+        $html .= '
+        <div class="border-box">
+            <table style="font-size: ' . ($isA5 ? '6.5pt' : '7.5pt') . ';">
+                <tr>
+                    <td style="width: 35%;">
+                        <strong>Patient Name:</strong> ' . $esc($sale['patient_name'] ?: 'Walk-in Customer') . '<br>
+                        <strong>UHID No:</strong> <span class="text-primary fw-bold">' . $esc($sale['uhid'] ?: 'Walk-in') . '</span>
+                    </td>
+                    <td style="width: 30%;">
+                        <strong>Phone:</strong> ' . $esc($sale['patient_mobile'] ?: 'N/A') . '<br>
+                        <strong>Age / Gender:</strong> ' . $esc($sale['age'] ?: 'N/A') . ' / ' . $esc($sale['gender'] ?: 'N/A') . '
+                    </td>
+                    <td style="width: 35%;">
+                        <strong>Prescribing Doctor:</strong> ' . $esc($sale['doctor_name'] ?: 'Dr. Consultant') . '<br>
+                        <strong>Doctor Reg No:</strong> ' . $esc($sale['doctor_reg_no'] ?: 'N/A') . '
+                    </td>
+                </tr>';
+
+        if (!empty($sale['abha_id']) || !empty($sale['abha_address']) || !empty($sale['abdm_care_context_ref'])) {
+            $html .= '
+                <tr>
+                    <td colspan="3" style="padding-top: 3px; border-top: 0.2mm solid #e2e8f0; color: #15803d; font-weight: bold;">
+                        &#10003; ABDM Linked: ABHA No: ' . $esc($sale['abha_id'] ?: 'N/A') . ' | Address: ' . $esc($sale['abha_address'] ?: 'N/A') . ($sale['abdm_care_context_ref'] ? ' | Care Context: ' . $esc($sale['abdm_care_context_ref']) : '') . '
+                    </td>
+                </tr>';
+        }
+
+        if (!empty($sale['ipd_id'])) {
+            $html .= '
+                <tr>
+                    <td colspan="3" style="padding-top: 2px; border-top: 0.2mm solid #e2e8f0; color: #b91c1c; font-weight: bold;">
+                        &#127973; IPD Admission #' . $esc($sale['ipd_id']) . ' &bull; Ward: ' . $esc($sale['ward_name'] ?: 'General') . ' &bull; Bed: ' . $esc($sale['bed_no'] ?: 'Bed') . ' (Charged to IPD Running Bill)
+                    </td>
+                </tr>';
+        }
+
+        $html .= '
+            </table>
+        </div>';
+
+        // 3. Dispensed Medicines Table
+        $html .= '
+        <table class="items-table">
+            <thead>
+                <tr>
+                    <th style="width: 3%; text-align: center;">#</th>
+                    <th style="width: 27%;">Medicine &amp; Formulation</th>
+                    <th style="width: 8%; text-align: center;">HSN</th>
+                    <th style="width: 10%; text-align: center;">Batch</th>
+                    <th style="width: 8%; text-align: center;">Exp</th>
+                    <th style="width: 10%; text-align: center;">Qty &amp; Unit</th>
+                    <th style="width: 8%; text-align: right;">Rate</th>
+                    <th style="width: 8%; text-align: right;">Taxable</th>
+                    <th style="width: 5%; text-align: right;">CGST</th>
+                    <th style="width: 5%; text-align: right;">SGST</th>
+                    <th style="width: 8%; text-align: right;">Total</th>
+                </tr>
+            </thead>
+            <tbody>';
+
+        if (empty($items)) {
+            $html .= '
+                <tr>
+                    <td colspan="11" class="text-center text-muted" style="padding: 10px;">
+                        - No new medicines dispensed (Sales Return &amp; Customer Refund Bill) -
+                    </td>
+                </tr>';
+        } else {
+            foreach ($items as $idx => $it) {
+                $qtyUnitStr = '';
+                if ($it['sell_unit'] === 'Tablet') {
+                    $qtyUnitStr = $it['total_units'] . ' Tab';
+                } elseif ($it['sell_unit'] === 'Combo') {
+                    $qtyUnitStr = $it['qty'] . ' Str + ' . $it['loose_qty'] . ' Tab';
+                } else {
+                    $qtyUnitStr = ((int)$it['units_per_pack'] > 1) ? ($it['qty'] . ' Strip') : ($it['qty'] . ' ' . ($it['unit_pack'] ?: 'Unit'));
+                }
+
+                $rateStr = ($it['sell_unit'] === 'Tablet') ? ($curr($it['unit_price']) . '<span style="font-size:5.5pt;color:#64748b;">/tab</span>') : $curr($it['unit_mrp']);
+
+                $html .= '
+                <tr>
+                    <td style="text-align: center;">' . ($idx + 1) . '</td>
+                    <td>
+                        <strong style="color: #0f172a;">' . $esc($it['item_name']) . '</strong>';
+                if ((int)$it['units_per_pack'] > 1 && $it['sell_unit'] !== 'Tablet') {
+                    $html .= '<div style="font-size: 6pt; color: #64748b;">Pack: 1 Strip of ' . $esc($it['units_per_pack']) . ' Tabs</div>';
+                }
+                if (!empty($it['snomed_ct_code'])) {
+                    $html .= '<div style="font-size: 5.5pt; color: #0284c7;">SNOMED: ' . $esc($it['snomed_ct_code']) . '</div>';
+                }
+                $html .= '
+                    </td>
+                    <td style="text-align: center;">' . $esc($it['hsn_code'] ?: '3004') . '</td>
+                    <td style="text-align: center; font-weight: bold;">' . $esc($it['batch_no']) . '</td>
+                    <td style="text-align: center;">' . $esc(substr($it['expiry_date'] ?? '', 0, 7)) . '</td>
+                    <td style="text-align: center; font-weight: bold;">' . $esc($qtyUnitStr) . '</td>
+                    <td style="text-align: right;">' . $rateStr . '</td>
+                    <td style="text-align: right;">' . $curr($it['taxable_value']) . '</td>
+                    <td style="text-align: right;">' . $curr($it['cgst_amount']) . '</td>
+                    <td style="text-align: right;">' . $curr($it['sgst_amount']) . '</td>
+                    <td style="text-align: right; font-weight: bold;">' . $curr($it['total_amount']) . '</td>
+                </tr>';
+            }
+        }
+
+        $html .= '
+            </tbody>
+        </table>';
+
+        // 4. Returned / Exchanged Medicines Table (if any)
+        if (!empty($returnItems)) {
+            $html .= '
+            <div style="background-color: #ffe4e6; border: 0.2mm solid #e11d48; padding: 3px 5px; font-weight: bold; color: #9f1239; font-size: ' . ($isA5 ? '6.5pt' : '7.5pt') . ';">
+                RETURNED / EXCHANGED MEDICINES ' . ($creditNote ? '(Credit Note: ' . $esc($creditNote['credit_note_no']) . ')' : '') . '
+            </div>
+            <table class="items-table return-table" style="margin-top: -0.2mm;">
+                <thead>
+                    <tr>
+                        <th style="width: 3%; text-align: center;">#</th>
+                        <th style="width: 27%;">Returned Medicine</th>
+                        <th style="width: 8%; text-align: center;">HSN</th>
+                        <th style="width: 10%; text-align: center;">Batch</th>
+                        <th style="width: 10%; text-align: center;">Original Bill</th>
+                        <th style="width: 8%; text-align: center;">Condition</th>
+                        <th style="width: 10%; text-align: center;">Qty Returned</th>
+                        <th style="width: 8%; text-align: right;">Rate</th>
+                        <th style="width: 8%; text-align: right;">Taxable</th>
+                        <th style="width: 8%; text-align: right; color: #9f1239;">Credit Total</th>
+                    </tr>
+                </thead>
+                <tbody>';
+
+            foreach ($returnItems as $rIdx => $rit) {
+                $retQtyStr = '-' . (($rit['sell_unit'] === 'Tablet') ? ($rit['total_units'] . ' Tab') : ($rit['qty'] . ' ' . ($rit['unit_pack'] ?: 'Unit')));
+                $html .= '
+                    <tr>
+                        <td style="text-align: center;">' . ($rIdx + 1) . '</td>
+                        <td><strike>' . $esc($rit['item_name']) . '</strike></td>
+                        <td style="text-align: center;">' . $esc($rit['hsn_code'] ?: '3004') . '</td>
+                        <td style="text-align: center;">' . $esc($rit['batch_no']) . '</td>
+                        <td style="text-align: center;">' . $esc($rit['ref_invoice_no'] ?: 'N/A') . '</td>
+                        <td style="text-align: center;">' . $esc($rit['return_condition'] ?: 'GOOD') . '</td>
+                        <td style="text-align: center; font-weight: bold; color: #b91c1c;">' . $esc($retQtyStr) . '</td>
+                        <td style="text-align: right;">' . $curr($rit['unit_price']) . '</td>
+                        <td style="text-align: right;">-' . $curr(abs((float)$rit['taxable_value'])) . '</td>
+                        <td style="text-align: right; font-weight: bold; color: #b91c1c;">-' . $curr(abs((float)$rit['total_amount'])) . '</td>
+                    </tr>';
+            }
+
+            $html .= '
+                </tbody>
+            </table>';
+        }
+
+        // 5. GST Tax Breakdown Table (HSN Summary)
+        if (!empty($hsnSummary)) {
+            $html .= '
+            <div style="font-size: ' . ($isA5 ? '6pt' : '7pt') . '; font-weight: bold; color: #475569; margin-bottom: 2px;">
+                GST Tax Breakdown (Indian GST Standard):
+            </div>
+            <table class="hsn-table" style="margin-bottom: ' . ($isA5 ? '4px' : '6px') . ';">
+                <thead>
+                    <tr>
+                        <th style="width: 16%;">HSN Code</th>
+                        <th style="width: 16%;">GST Rate</th>
+                        <th style="width: 20%;">Taxable Value</th>
+                        <th style="width: 16%;">CGST</th>
+                        <th style="width: 16%;">SGST</th>
+                        <th style="width: 16%;">Total Tax</th>
+                    </tr>
+                </thead>
+                <tbody>';
+
+            foreach ($hsnSummary as $h) {
+                $html .= '
+                    <tr>
+                        <td>' . $esc($h['hsn_code']) . '</td>
+                        <td>' . $esc($h['gst_rate']) . '%</td>
+                        <td style="text-align: right;">' . $curr($h['taxable_value']) . '</td>
+                        <td style="text-align: right;">' . $curr($h['cgst_amount']) . '</td>
+                        <td style="text-align: right;">' . $curr($h['sgst_amount']) . '</td>
+                        <td style="text-align: right; font-weight: bold;">' . $curr($h['total_tax']) . '</td>
+                    </tr>';
+            }
+
+            $html .= '
+                </tbody>
+            </table>';
+        }
+
+        // 6. Summary Totals & Signatures
+        $html .= '
+        <table style="width: 100%; border-top: 0.3mm solid #94a3b8; padding-top: ' . ($isA5 ? '3px' : '5px') . ';">
+            <tr>
+                <td style="width: 58%; vertical-align: top; padding-right: 8px;">
+                    <div style="font-size: ' . ($isA5 ? '6pt' : '7pt') . '; color: #334155; margin-bottom: 3px;">
+                        <strong>Registered Pharmacist:</strong> ' . $esc($sale['registered_pharmacist_name'] ?: 'Pharmacist') . ' (Reg No: ' . $esc($sale['pharmacist_reg_no'] ?: 'N/A') . ')
+                        ' . ($sale['pharmacist_hpr_id'] ? '<br><strong>HPR ID:</strong> ' . $esc($sale['pharmacist_hpr_id']) : '') . '
+                    </div>
+
+                    <div style="background-color: #f8fafc; border: 0.2mm solid #cbd5e1; border-radius: 1mm; padding: 4px; font-size: ' . ($isA5 ? '6pt' : '7pt') . '; margin-bottom: 4px;">
+                        <strong>Payment Settlement:</strong> ' . $esc($sale['payment_mode']) . '<br>';
+
+        if ((float)$sale['cash_paid'] > 0) {
+            $html .= '&bull; Cash: ' . $curr($sale['cash_paid']) . ' ';
+        }
+        if ((float)$sale['upi_paid'] > 0) {
+            $html .= '&bull; UPI/Bank: ' . $curr($sale['upi_paid']) . ($sale['upi_ref_no'] ? ' [UTR: ' . $esc($sale['upi_ref_no']) . ']' : '') . ($sale['bank_name'] ? ' (' . $esc($sale['bank_name']) . ')' : '') . ' ';
+        }
+        if ((float)$sale['card_paid'] > 0) {
+            $html .= '&bull; Card: ' . $curr($sale['card_paid']) . ($sale['card_ref_no'] ? ' [Ref: ' . $esc($sale['card_ref_no']) . ']' : '') . ' ';
+        }
+        if ((float)$sale['credit_amount'] > 0) {
+            $html .= '&bull; IPD Credit: ' . $curr($sale['credit_amount']) . ' ';
+        }
+
+        $html .= '<br>' . ($sale['is_bank_reconciled'] == 1 ? '<span style="color:#16a34a;font-weight:bold;">&#10003; Bank Statement Audited</span>' : '<span style="color:#d97706;">Bank Statement: Pending Audit</span>');
+
+        $html .= '
+                    </div>
+
+                    <div style="font-size: 5.5pt; color: #64748b; line-height: 1.2;">
+                        ' . nl2br($esc($sale['terms_conditions'] ?: "1. Goods once sold are returnable only as per Drug Rules within 7 days.\n2. Keep medicines stored in cool & dry place below 25°C away from direct sunlight.")) . '
+                    </div>
+                </td>
+
+                <td style="width: 42%; vertical-align: top;">
+                    <table style="font-size: ' . ($isA5 ? '6.5pt' : '7.5pt') . '; line-height: 1.35;">
+                        <tr>
+                            <td>Gross Items Total:</td>
+                            <td class="text-right">' . $curr($sale['gross_amount']) . '</td>
+                        </tr>';
+
+        if ((float)$sale['discount_amount'] > 0) {
+            $html .= '
+                        <tr>
+                            <td class="text-danger">Total Discount Allowed:</td>
+                            <td class="text-right text-danger">-' . $curr($sale['discount_amount']) . '</td>
+                        </tr>';
+        }
+
+        if ((float)$sale['return_amount'] > 0) {
+            $html .= '
+                        <tr>
+                            <td class="text-danger fw-bold">Less Return Credit:</td>
+                            <td class="text-right text-danger fw-bold">-' . $curr($sale['return_amount']) . '</td>
+                        </tr>';
+        }
+
+        $html .= '
+                        <tr>
+                            <td>Taxable Amount:</td>
+                            <td class="text-right">' . $curr($sale['taxable_amount']) . '</td>
+                        </tr>
+                        <tr>
+                            <td>CGST Amount:</td>
+                            <td class="text-right">' . $curr($sale['cgst_amount']) . '</td>
+                        </tr>
+                        <tr>
+                            <td>SGST Amount:</td>
+                            <td class="text-right">' . $curr($sale['sgst_amount']) . '</td>
+                        </tr>';
+
+        if ((float)$sale['round_off'] != 0) {
+            $html .= '
+                        <tr>
+                            <td>Round Off:</td>
+                            <td class="text-right">' . $curr($sale['round_off']) . '</td>
+                        </tr>';
+        }
+
+        $html .= '
+                        <tr>
+                            <td colspan="2" style="padding-top: 3px;">
+                                <div class="total-box">
+                                    <table style="width: 100%; font-size: ' . ($isA5 ? '8pt' : '10pt') . '; font-weight: bold;">
+                                        <tr>
+                                            <td>NET PAYABLE:</td>
+                                            <td style="text-align: right;">' . $curr($sale['net_amount']) . '</td>
+                                        </tr>
+                                    </table>
+                                </div>
+                            </td>
+                        </tr>';
+
+        if ((float)$sale['refund_amount'] > 0) {
+            $html .= '
+                        <tr>
+                            <td colspan="2" style="padding-top: 3px;">
+                                <div style="background-color: #ffe4e6; border: 0.3mm solid #e11d48; padding: 3px 5px; border-radius: 1mm; color: #9f1239; font-weight: bold; font-size: ' . ($isA5 ? '7pt' : '8pt') . ';">
+                                    REFUND PAID TO CUSTOMER: ' . $curr($sale['refund_amount']) . ' (' . $esc($sale['refund_mode']) . ')
+                                </div>
+                            </td>
+                        </tr>';
+        }
+
+        $html .= '
+                    </table>
+                </td>
+            </tr>
+        </table>
+
+        </body>
+        </html>';
+
+        return $html;
+    }
+
 
     public function recentSales()
     {
