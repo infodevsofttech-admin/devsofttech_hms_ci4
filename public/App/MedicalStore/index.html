@@ -296,7 +296,7 @@
 <div id="root"></div>
 
 <script type="text/babel">
-const { useState, useEffect, useRef } = React;
+const { useState, useEffect, useRef, useMemo, useCallback } = React;
 
 const API_BASE = '/api/v1/medical-store/';
 
@@ -4063,9 +4063,291 @@ function PurchaseView({ store, notify }) {
     });
     const searchTimerRef = useRef(null);
 
-    const [rows, setRows] = useState([
-        { item_id: 0, item_name: '', generic_name: '', category: 'Tablet', batch_no: '', expiry_date: '', qty_packs: 1, free_qty_packs: 0, units_per_pack: 10, mrp: 0, ptr: 0, discount_pct: 0, gst_rate: 12, hsn_code: '3004' }
-    ]);
+    const [rows, setRows] = useState([]);
+
+    // --- Delivery Challans & Product History States ---
+    const [isChallan, setIsChallan] = useState(false);
+    const [supplierChallans, setSupplierChallans] = useState([]);
+    const [isLoadingChallans, setIsLoadingChallans] = useState(false);
+    const [convertedChallanId, setConvertedChallanId] = useState(null);
+    const [productHistory, setProductHistory] = useState([]);
+    const [isLoadingProductHistory, setIsLoadingProductHistory] = useState(false);
+    const [historyTargetItemName, setHistoryTargetItemName] = useState('');
+
+    // --- Active Item Form State (Pharma Purchase Input - Image 2) ---
+    const initialItemForm = {
+        item_id: 0,
+        product_master_id: 0,
+        item_name: '',
+        generic_name: '',
+        category: 'Tablet',
+        units_per_pack: 10,
+        batch_no: '',
+        exp_month: String(new Date().getMonth() + 1).padStart(2, '0'),
+        exp_year: String(new Date().getFullYear() + 2).slice(-2),
+        mrp: '',
+        qty_packs: 1,
+        free_qty_packs: 0,
+        ptr: '',
+        amount: 0,
+        discount_pct: 0,
+        sch_disc_amount: 0,
+        sch_disc_pct: 0,
+        taxable_amount: 0,
+        cgst_pct: 6.0,
+        sgst_pct: 6.0,
+        net_amount: 0,
+        selling_price: '',
+        hsn_code: '3004',
+        storage_type: 'Normal',
+        shelf_no: '',
+        rack_no: '',
+        challan_item_ref_id: 0
+    };
+    const [itemForm, setItemForm] = useState(initialItemForm);
+    const [editingItemIndex, setEditingItemIndex] = useState(null);
+
+    const recomputeItemForm = (updated) => {
+        let ptr = parseFloat(updated.ptr) || 0;
+        const qty = parseFloat(updated.qty_packs) || 0;
+        const disc = parseFloat(updated.discount_pct) || 0;
+        const schAmt = parseFloat(updated.sch_disc_amount) || 0;
+        const schDisc = parseFloat(updated.sch_disc_pct) || 0;
+
+        if (schDisc > 0) {
+            ptr = ptr - (ptr * schDisc / 100);
+        }
+        let amount = ptr * qty;
+        if (schAmt > 0) {
+            amount = Math.max(0, amount - schAmt);
+        }
+
+        const taxable = amount - (amount * disc / 100);
+        const cgst = parseFloat(updated.cgst_pct) || 0;
+        const sgst = parseFloat(updated.sgst_pct) || 0;
+        const cgstAmt = taxable * (cgst / 100);
+        const sgstAmt = taxable * (sgst / 100);
+        const net = taxable + cgstAmt + sgstAmt;
+
+        let sellingPrice = updated.selling_price;
+        if (!sellingPrice && updated.mrp) {
+            sellingPrice = updated.mrp;
+        }
+
+        return {
+            ...updated,
+            amount: Number(amount.toFixed(2)),
+            taxable_amount: Number(taxable.toFixed(2)),
+            net_amount: Number(net.toFixed(2)),
+            selling_price: sellingPrice
+        };
+    };
+
+    const handleItemFormChange = (field, val) => {
+        setItemForm(prev => {
+            const next = { ...prev, [field]: val };
+            if (field === 'mrp' && (!prev.selling_price || prev.selling_price == prev.mrp)) {
+                next.selling_price = val;
+            }
+            return recomputeItemForm(next);
+        });
+    };
+
+    const resetItemForm = () => {
+        setItemForm(initialItemForm);
+        setEditingItemIndex(null);
+    };
+
+    const billTotals = useMemo(() => {
+        let totalTaxable = 0;
+        let totalCgst = 0;
+        let totalSgst = 0;
+        let totalNet = 0;
+
+        rows.forEach(r => {
+            const taxable = Number(r.taxable_amount) || 0;
+            const cgst = Number(r.cgst_amount) || (taxable * ((Number(r.cgst_pct) || ((Number(r.gst_rate) || 12) / 2)) / 100));
+            const sgst = Number(r.sgst_amount) || (taxable * ((Number(r.sgst_pct) || ((Number(r.gst_rate) || 12) / 2)) / 100));
+            const net = Number(r.net_amount) || (taxable + cgst + sgst);
+
+            totalTaxable += taxable;
+            totalCgst += cgst;
+            totalSgst += sgst;
+            totalNet += net;
+        });
+
+        return {
+            taxable: totalTaxable.toFixed(2),
+            cgst: totalCgst.toFixed(2),
+            sgst: totalSgst.toFixed(2),
+            net: totalNet.toFixed(2)
+        };
+    }, [rows]);
+
+    const fetchSupplierChallans = async (supplierId) => {
+        if (!supplierId) {
+            setSupplierChallans([]);
+            return;
+        }
+        setIsLoadingChallans(true);
+        try {
+            const res = await fetch(API_BASE + 'supplier-challans/' + supplierId);
+            const data = await res.json();
+            if (data.status && data.challans) {
+                setSupplierChallans(data.challans);
+            } else {
+                setSupplierChallans([]);
+            }
+        } catch (e) {
+            console.error('fetchSupplierChallans error:', e);
+            setSupplierChallans([]);
+        } finally {
+            setIsLoadingChallans(false);
+        }
+    };
+
+    const fetchProductPurchaseHistory = async (itemId, itemName = '') => {
+        if (!itemId) {
+            setProductHistory([]);
+            setHistoryTargetItemName('');
+            return;
+        }
+        setIsLoadingProductHistory(true);
+        setHistoryTargetItemName(itemName || 'Selected Product');
+        try {
+            const res = await fetch(API_BASE + 'product-purchase-history/' + itemId);
+            const data = await res.json();
+            if (data.status && data.history) {
+                setProductHistory(data.history);
+            } else {
+                setProductHistory([]);
+            }
+        } catch (e) {
+            console.error('fetchProductPurchaseHistory error:', e);
+            setProductHistory([]);
+        } finally {
+            setIsLoadingProductHistory(false);
+        }
+    };
+
+    const handleAddOrUpdateItem = () => {
+        if (!itemForm.item_name.trim()) {
+            notify('Please select or enter a medicine name.', 'error');
+            return;
+        }
+        if (!itemForm.batch_no.trim()) {
+            notify('Please enter a Batch Number.', 'error');
+            return;
+        }
+        if (Number(itemForm.qty_packs) <= 0) {
+            notify('Quantity in packs must be greater than 0.', 'error');
+            return;
+        }
+
+        const yy = String(itemForm.exp_year).length === 2 ? ('20' + itemForm.exp_year) : String(itemForm.exp_year);
+        const mm = String(itemForm.exp_month).padStart(2, '0');
+        const expiryDate = `${yy}-${mm}-01`;
+
+        const rowItem = recomputeItemForm({
+            ...itemForm,
+            expiry_date: expiryDate,
+            exp_month: mm,
+            exp_year: itemForm.exp_year,
+            gst_rate: (Number(itemForm.cgst_pct) || 0) + (Number(itemForm.sgst_pct) || 0)
+        });
+
+        if (editingItemIndex !== null && editingItemIndex >= 0 && editingItemIndex < rows.length) {
+            const nextRows = [...rows];
+            nextRows[editingItemIndex] = rowItem;
+            setRows(nextRows);
+            setEditingItemIndex(null);
+            notify(`Updated "${rowItem.item_name}" in invoice items list.`, 'success');
+        } else {
+            setRows(prev => [...prev, rowItem]);
+            notify(`Added "${rowItem.item_name}" to invoice items list.`, 'success');
+        }
+
+        resetItemForm();
+    };
+
+    const handleEditRow = (index) => {
+        const r = rows[index];
+        if (!r) return;
+        setEditingItemIndex(index);
+        let expMonth = r.exp_month;
+        let expYear = r.exp_year;
+        if (!expMonth && r.expiry_date) {
+            const parts = r.expiry_date.split('-');
+            if (parts.length >= 2) {
+                expYear = parts[0].slice(-2);
+                expMonth = parts[1];
+            }
+        }
+        setItemForm(recomputeItemForm({
+            ...initialItemForm,
+            ...r,
+            exp_month: expMonth || '12',
+            exp_year: expYear || '28',
+            cgst_pct: r.cgst_pct !== undefined ? r.cgst_pct : ((r.gst_rate || 12) / 2),
+            sgst_pct: r.sgst_pct !== undefined ? r.sgst_pct : ((r.gst_rate || 12) / 2)
+        }));
+        if (r.item_id > 0) {
+            fetchProductPurchaseHistory(r.item_id, r.item_name);
+        }
+    };
+
+    const includeChallanItem = (challan, cItem) => {
+        let expMonth = '12';
+        let expYear = '28';
+        if (cItem.expiry_date) {
+            const parts = cItem.expiry_date.split('-');
+            if (parts.length >= 2) {
+                expYear = parts[0].slice(-2);
+                expMonth = parts[1];
+            }
+        }
+        const cgst = (cItem.gst_rate || 12) / 2;
+        const sgst = (cItem.gst_rate || 12) / 2;
+
+        const rowItem = recomputeItemForm({
+            item_id: cItem.item_id || 0,
+            product_master_id: 0,
+            item_name: cItem.item_name,
+            generic_name: cItem.generic_name || '',
+            category: cItem.category || 'Tablet',
+            units_per_pack: Number(cItem.units_per_pack) || 10,
+            batch_no: cItem.batch_no || 'CHL-BATCH',
+            exp_month: expMonth,
+            exp_year: expYear,
+            expiry_date: cItem.expiry_date || `${'20' + expYear}-${expMonth}-01`,
+            mrp: Number(cItem.mrp) || 0,
+            qty_packs: Number(cItem.qty_packs) || 1,
+            free_qty_packs: Number(cItem.free_qty_packs) || 0,
+            ptr: Number(cItem.ptr) || 0,
+            discount_pct: Number(cItem.discount_pct) || 0,
+            sch_disc_amount: Number(cItem.sch_disc_amount) || 0,
+            sch_disc_pct: Number(cItem.sch_disc_pct) || 0,
+            cgst_pct: cgst,
+            sgst_pct: sgst,
+            gst_rate: cItem.gst_rate || 12,
+            selling_price: Number(cItem.selling_price) || Number(cItem.mrp) || 0,
+            hsn_code: cItem.hsn_code || '3004',
+            storage_type: cItem.storage_type || 'Normal',
+            shelf_no: cItem.shelf_no || '',
+            rack_no: cItem.rack_no || '',
+            challan_item_ref_id: cItem.challan_ref_id || challan.id
+        });
+
+        setConvertedChallanId(challan.id);
+        setRows(prev => [...prev, rowItem]);
+        notify(`Challan item "${cItem.item_name}" included into invoice!`, 'success');
+    };
+
+    const includeAllChallanItems = (challan) => {
+        if (!challan.items || challan.items.length === 0) return;
+        challan.items.forEach(cItem => includeChallanItem(challan, cItem));
+        notify(`All ${challan.items.length} items from Challan #${challan.challan_no} included into invoice!`, 'success');
+    };
 
     // --- Supplier Ledger & Payments States ---
     const [ledgerSummary, setLedgerSummary] = useState([]);
@@ -4160,30 +4442,56 @@ function PurchaseView({ store, notify }) {
             if (data.status && data.purchase) {
                 setEditingPurchaseId(Number(data.purchase.purchase_id));
                 setSelectedSupplierId(String(data.purchase.supplier_id));
+                setIsChallan(Number(data.purchase.is_challan || 0) === 1);
                 setInvoiceNo(data.purchase.supplier_invoice_no || '');
                 setInvoiceDate(data.purchase.invoice_date || new Date().toISOString().split('T')[0]);
                 setLoadedPoId(null);
                 setLoadedPoNumber('');
                 if (data.items && data.items.length > 0) {
-                    setRows(data.items.map(it => ({
-                        item_id: Number(it.item_id || 0),
-                        item_name: it.item_name || '',
-                        generic_name: it.generic_name || '',
-                        category: it.category || 'Tablet',
-                        batch_no: it.batch_no || '',
-                        expiry_date: it.expiry_date || '',
-                        qty_packs: Number(it.qty_packs || 1),
-                        free_qty_packs: Number(it.free_qty_packs || 0),
-                        units_per_pack: Number(it.units_per_pack || 10),
-                        mrp: Number(it.mrp || 0),
-                        ptr: Number(it.ptr || 0),
-                        discount_pct: Number(it.discount_pct || 0),
-                        gst_rate: Number(it.gst_rate || 12),
-                        hsn_code: it.hsn_code || '3004'
-                    })));
+                    setRows(data.items.map(it => {
+                        let expMonth = '12';
+                        let expYear = '28';
+                        if (it.expiry_date) {
+                            const parts = it.expiry_date.split('-');
+                            if (parts.length >= 2) {
+                                expYear = parts[0].slice(-2);
+                                expMonth = parts[1];
+                            }
+                        }
+                        const gst = Number(it.gst_rate) || 12;
+                        return recomputeItemForm({
+                            item_id: Number(it.item_id || 0),
+                            product_master_id: 0,
+                            item_name: it.item_name || '',
+                            generic_name: it.generic_name || '',
+                            category: it.category || 'Tablet',
+                            units_per_pack: Number(it.units_per_pack || 10),
+                            batch_no: it.batch_no || '',
+                            exp_month: expMonth,
+                            exp_year: expYear,
+                            expiry_date: it.expiry_date || '',
+                            mrp: Number(it.mrp || 0),
+                            qty_packs: Number(it.qty_packs || 1),
+                            free_qty_packs: Number(it.free_qty_packs || 0),
+                            ptr: Number(it.ptr || 0),
+                            discount_pct: Number(it.discount_pct || 0),
+                            sch_disc_amount: Number(it.sch_disc_amount || 0),
+                            sch_disc_pct: Number(it.sch_disc_pct || 0),
+                            cgst_pct: gst / 2,
+                            sgst_pct: gst / 2,
+                            gst_rate: gst,
+                            selling_price: Number(it.selling_price || it.mrp || 0),
+                            hsn_code: it.hsn_code || '3004',
+                            storage_type: it.storage_type || 'Normal',
+                            shelf_no: it.shelf_no || '',
+                            rack_no: it.rack_no || '',
+                            challan_item_ref_id: Number(it.challan_item_ref_id || 0)
+                        });
+                    }));
                 }
                 setSubTab('inward');
                 setShowPurchaseHistoryModal(false);
+                fetchSupplierChallans(data.purchase.supplier_id);
                 notify('Purchase Invoice #' + data.purchase.supplier_invoice_no + ' loaded for editing.', 'info');
             } else {
                 notify(data.message || 'Could not load purchase details.', 'error');
@@ -4195,10 +4503,13 @@ function PurchaseView({ store, notify }) {
 
     const cancelEditPurchase = () => {
         setEditingPurchaseId(null);
+        setIsChallan(false);
         setInvoiceNo('');
         setLoadedPoId(null);
         setLoadedPoNumber('');
-        setRows([{ item_id: 0, item_name: '', generic_name: '', category: 'Tablet', batch_no: '', expiry_date: '', qty_packs: 1, free_qty_packs: 0, units_per_pack: 10, mrp: 0, ptr: 0, discount_pct: 0, gst_rate: 12, hsn_code: '3004' }]);
+        setConvertedChallanId(null);
+        setRows([]);
+        resetItemForm();
         notify('Exited purchase edit mode. Ready for new inward entry.', 'info');
     };
 
@@ -4456,7 +4767,8 @@ function PurchaseView({ store, notify }) {
                 setInvoiceNo('INV-' + po.po_number);
 
                 if (poItems.length > 0) {
-                    setRows(poItems.map(it => ({
+                    setRows(poItems.map(it => recomputeItemForm({
+                        ...initialItemForm,
                         item_id: it.item_id || 0,
                         item_name: it.item_name,
                         generic_name: it.generic_name || '',
@@ -4470,6 +4782,8 @@ function PurchaseView({ store, notify }) {
                         ptr: Number(it.estimated_ptr) || 0,
                         discount_pct: 0,
                         gst_rate: Number(it.gst_rate) || 12,
+                        cgst_pct: (Number(it.gst_rate) || 12) / 2,
+                        sgst_pct: (Number(it.gst_rate) || 12) / 2,
                         hsn_code: '3004'
                     })));
                 }
@@ -4625,17 +4939,16 @@ function PurchaseView({ store, notify }) {
     };
 
     const removeRow = (idx) => {
-        if (rows.length <= 1) {
-            setRows([{ item_id: 0, item_name: '', generic_name: '', category: 'Tablet', batch_no: '', expiry_date: '', qty_packs: 1, free_qty_packs: 0, units_per_pack: 10, mrp: 0, ptr: 0, discount_pct: 0, gst_rate: 12, hsn_code: '3004' }]);
-            return;
+        setRows(prev => prev.filter((_, i) => i !== idx));
+        if (editingItemIndex === idx) {
+            resetItemForm();
         }
-        setRows(rows.filter((_, i) => i !== idx));
     };
 
-    // Autocomplete searching for Medicine Name
-    const handleMedicineInputChange = (rowIndex, value) => {
-        updateRow(rowIndex, 'item_name', value);
-        setActiveSearchRow(rowIndex);
+    // Autocomplete searching for Medicine Name in Product Search
+    const handleProductSearchChange = (value) => {
+        setItemForm(prev => ({ ...prev, item_name: value, item_id: 0, product_master_id: 0 }));
+        setActiveSearchRow(true);
 
         if (searchTimerRef.current) clearTimeout(searchTimerRef.current);
 
@@ -4660,35 +4973,38 @@ function PurchaseView({ store, notify }) {
         }, 200);
     };
 
-    const handleSelectMedicine = (rowIndex, item) => {
-        const updated = [...rows];
-        updated[rowIndex] = {
-            ...updated[rowIndex],
+    const handleSelectMedicine = (item) => {
+        const gstRate = Number(item.gst_rate) || 12;
+        const uPack = Number(item.units_per_pack) || 10;
+        const cgst = Number((gstRate / 2).toFixed(2));
+        const sgst = Number((gstRate / 2).toFixed(2));
+
+        setItemForm(prev => recomputeItemForm({
+            ...prev,
             item_id: item.item_id || 0,
+            product_master_id: item.product_master_id || item.item_id || 0,
             item_name: item.item_name,
             generic_name: item.generic_name || '',
             category: item.category || 'Tablet',
-            units_per_pack: Number(item.units_per_pack) > 0 ? Number(item.units_per_pack) : 10,
-            gst_rate: item.gst_rate !== undefined ? Number(item.gst_rate) : 12,
-            hsn_code: item.hsn_code || '3004'
-        };
-        setRows(updated);
-        setActiveSearchRow(null);
+            units_per_pack: uPack,
+            hsn_code: item.hsn_code || '3004',
+            cgst_pct: cgst,
+            sgst_pct: sgst,
+            gst_rate: gstRate,
+            mrp: item.mrp || prev.mrp,
+            ptr: item.ptr || prev.ptr
+        }));
+
+        setActiveSearchRow(false);
         setSuggestions([]);
 
-        // Focus Batch No field for this row
-        setTimeout(() => {
-            const batchInput = document.getElementById(`batch-input-${rowIndex}`);
-            if (batchInput) {
-                batchInput.focus();
-                batchInput.select();
-            }
-        }, 50);
+        if (item.item_id) {
+            fetchProductPurchaseHistory(item.item_id, item.item_name);
+        }
     };
 
-    const openAddMasterModal = (rowIndex = null, initialName = '') => {
-        const prefillName = initialName || (rowIndex !== null && rows[rowIndex] ? rows[rowIndex].item_name : '');
-        setMasterTargetRow(rowIndex);
+    const openAddMasterModal = (initialName = '') => {
+        const prefillName = initialName || itemForm.item_name || '';
         setMasterForm({
             item_name: prefillName,
             generic_name: '',
@@ -4701,7 +5017,7 @@ function PurchaseView({ store, notify }) {
             company_name: '',
             min_reorder_level: 10
         });
-        setActiveSearchRow(null);
+        setActiveSearchRow(false);
         setSuggestions([]);
         setShowMasterModal(true);
     };
@@ -4724,28 +5040,7 @@ function PurchaseView({ store, notify }) {
             if (data.status && data.item) {
                 notify(`"${data.item.item_name}" saved to Pharmacy Master & selected!`, 'success');
                 setShowMasterModal(false);
-
-                // Auto-select into the target row or create a new row
-                if (masterTargetRow !== null && masterTargetRow < rows.length) {
-                    handleSelectMedicine(masterTargetRow, data.item);
-                } else {
-                    setRows([...rows, {
-                        item_id: data.item.item_id || 0,
-                        item_name: data.item.item_name,
-                        generic_name: data.item.generic_name || '',
-                        category: data.item.category || 'Tablet',
-                        batch_no: '',
-                        expiry_date: '',
-                        qty_packs: 1,
-                        free_qty_packs: 0,
-                        units_per_pack: Number(data.item.units_per_pack) || 10,
-                        mrp: 0,
-                        ptr: 0,
-                        discount_pct: 0,
-                        gst_rate: Number(data.item.gst_rate) || 12,
-                        hsn_code: data.item.hsn_code || '3004'
-                    }]);
-                }
+                handleSelectMedicine(data.item);
             } else {
                 notify(data.message || 'Failed to save medicine to master.', 'error');
             }
@@ -4757,19 +5052,18 @@ function PurchaseView({ store, notify }) {
     };
 
     const savePurchaseBill = async () => {
-        if (!selectedSupplierId || !invoiceNo) {
-            notify('Please select supplier and enter invoice number.', 'error');
+        if (!selectedSupplierId || !invoiceNo.trim()) {
+            notify('Please select supplier and enter invoice / challan number.', 'error');
             return;
         }
 
-        const validItems = rows.filter(r => r.item_name && r.batch_no && r.expiry_date && Number(r.qty_packs) > 0);
-        if (validItems.length === 0) {
-            notify('Please fill at least one valid item line.', 'error');
+        if (rows.length === 0) {
+            notify('Please add at least one medicine item to this inward bill using the form.', 'error');
             return;
         }
 
         try {
-            const itemsPayload = validItems.map(r => ({
+            const itemsPayload = rows.map(r => ({
                 item_id: Number(r.item_id || 0),
                 item_name: r.item_name,
                 generic_name: r.generic_name || '',
@@ -4782,15 +5076,25 @@ function PurchaseView({ store, notify }) {
                 mrp: Number(r.mrp),
                 ptr: Number(r.ptr),
                 discount_pct: Number(r.discount_pct || 0),
+                sch_disc_amount: Number(r.sch_disc_amount || 0),
+                sch_disc_pct: Number(r.sch_disc_pct || 0),
                 gst_rate: Number(r.gst_rate || 12),
-                hsn_code: r.hsn_code || '3004'
+                hsn_code: r.hsn_code || '3004',
+                selling_price: Number(r.selling_price || r.mrp || 0),
+                storage_type: r.storage_type || 'Normal',
+                shelf_no: r.shelf_no || '',
+                rack_no: r.rack_no || '',
+                challan_item_ref_id: Number(r.challan_item_ref_id || 0)
             }));
 
             const endpoint = editingPurchaseId ? (API_BASE + 'purchase/update') : (API_BASE + 'purchase/save');
             const payload = {
                 store_id: store.store_id,
                 supplier_id: Number(selectedSupplierId),
-                supplier_invoice_no: invoiceNo,
+                supplier_invoice_no: invoiceNo.trim(),
+                is_challan: isChallan ? 1 : 0,
+                challan_no: isChallan ? invoiceNo.trim() : null,
+                converted_from_challan_id: convertedChallanId,
                 invoice_date: invoiceDate,
                 items: itemsPayload
             };
@@ -4809,15 +5113,23 @@ function PurchaseView({ store, notify }) {
             if (data.status) {
                 if (editingPurchaseId) {
                     notify('Purchase invoice #' + invoiceNo + ' updated successfully! Stock & supplier ledger adjusted.', 'success');
+                } else if (isChallan) {
+                    notify('Delivery Challan #' + invoiceNo + ' recorded! Stock replenished.', 'success');
                 } else {
                     notify('Purchase inward recorded! Stock & Supplier Ledger updated.' + (loadedPoNumber ? (' (PO ' + loadedPoNumber + ' marked as received)') : ''), 'success');
                 }
                 setEditingPurchaseId(null);
+                setIsChallan(false);
                 setInvoiceNo('');
                 setLoadedPoId(null);
                 setLoadedPoNumber('');
-                setRows([{ item_id: 0, item_name: '', generic_name: '', category: 'Tablet', batch_no: '', expiry_date: '', qty_packs: 1, free_qty_packs: 0, units_per_pack: 10, mrp: 0, ptr: 0, discount_pct: 0, gst_rate: 12, hsn_code: '3004' }]);
+                setConvertedChallanId(null);
+                setRows([]);
+                resetItemForm();
                 fetchRecentPurchases();
+                if (selectedSupplierId) {
+                    fetchSupplierChallans(selectedSupplierId);
+                }
                 if (activeLedgerSupplierId) fetchSupplierLedger(activeLedgerSupplierId);
                 fetchLedgerSummary();
             } else {
@@ -4854,14 +5166,24 @@ function PurchaseView({ store, notify }) {
 
             {subTab === 'inward' && (
                 <div className="counter-card">
+                    {/* Header Row */}
                     <div className="d-flex flex-wrap justify-content-between align-items-center mb-3 gap-2">
                         <div>
                             <h5 className="fw-bold mb-0">
-                                <i className="bi bi-receipt text-primary me-1"></i> 
-                                {editingPurchaseId ? 'Edit Distributor Purchase Inward' : 'Distributor Purchase Inward (Stock Entry)'}
+                                <i className={`bi ${isChallan ? 'bi-truck text-warning' : 'bi-receipt text-primary'} me-1.5`}></i> 
+                                {editingPurchaseId 
+                                    ? `Edit Purchase Invoice #${invoiceNo}` 
+                                    : (isChallan ? 'Distributor Delivery Challan (Stock Entry)' : 'Distributor Purchase Inward (Tax Invoice)')
+                                }
                             </h5>
                             <small className="text-muted">
-                                {editingPurchaseId ? `Modifying existing Bill #${invoiceNo} (Ref #${editingPurchaseId})` : 'Enter vendor delivery challan / tax invoice to replenish store stock'}
+                                {editingPurchaseId 
+                                    ? `Modifying existing Bill #${invoiceNo} (Ref #${editingPurchaseId}) - adjustments reflect in stock & ledger` 
+                                    : (isChallan 
+                                        ? 'Record inward stock under vendor delivery challan (can be converted to tax invoice later)' 
+                                        : 'Enter vendor tax invoice to replenish store inventory and post supplier ledger payable'
+                                    )
+                                }
                             </small>
                         </div>
                         <div className="d-flex align-items-center gap-2">
@@ -4897,6 +5219,7 @@ function PurchaseView({ store, notify }) {
                         </div>
                     </div>
 
+                    {/* Edit Mode Alert Banner */}
                     {editingPurchaseId && (
                         <div className="alert alert-warning border border-warning-subtle shadow-sm py-2 px-3 mb-3 d-flex justify-content-between align-items-center">
                             <div className="d-flex align-items-center gap-2">
@@ -4915,112 +5238,305 @@ function PurchaseView({ store, notify }) {
                             </button>
                         </div>
                     )}
-                    <div className="row g-2 mb-3">
-                        <div className="col-md-4">
-                            <div className="d-flex justify-content-between align-items-center mb-1">
-                                <label className="form-label small fw-bold mb-0">Supplier / Distributor</label>
-                                <button type="button" className="btn btn-link btn-sm p-0 text-decoration-none fw-semibold" style={{ fontSize: '11px' }} onClick={openAddSupplier}>
-                                    <i className="bi bi-plus-circle me-1"></i>+ Add New
-                                </button>
+
+                    {/* Step 1: Top Controls (Supplier, Entry Type, Invoice/Challan No, Date) */}
+                    <div className="card border-0 shadow-sm p-3 mb-3" style={{ background: '#f8fafc', borderRadius: '10px' }}>
+                        <div className="row g-2 align-items-center">
+                            {/* Supplier Select */}
+                            <div className="col-md-4">
+                                <div className="d-flex justify-content-between align-items-center mb-1">
+                                    <label className="form-label small fw-bold mb-0">Supplier / Distributor <span className="text-danger">*</span></label>
+                                    <button type="button" className="btn btn-link btn-sm p-0 text-decoration-none fw-semibold" style={{ fontSize: '11px' }} onClick={openAddSupplier}>
+                                        <i className="bi bi-plus-circle me-1"></i>+ Add New
+                                    </button>
+                                </div>
+                                <select 
+                                    className="form-select form-select-sm" 
+                                    value={selectedSupplierId} 
+                                    onChange={(e) => {
+                                        const sId = e.target.value;
+                                        setSelectedSupplierId(sId);
+                                        fetchSupplierChallans(sId);
+                                    }}
+                                >
+                                    <option value="">-- Select Supplier --</option>
+                                    {suppliers.map(s => (
+                                        <option key={s.supplier_id} value={s.supplier_id}>
+                                            {s.supplier_name} (GST: {s.gstin || 'N/A'})
+                                        </option>
+                                    ))}
+                                </select>
                             </div>
-                            <select className="form-select form-select-sm" value={selectedSupplierId} onChange={(e) => setSelectedSupplierId(e.target.value)}>
-                                <option value="">-- Select Supplier --</option>
-                                {suppliers.map(s => (
-                                    <option key={s.supplier_id} value={s.supplier_id}>
-                                        {s.supplier_name} (GST: {s.gstin || 'N/A'})
-                                    </option>
-                                ))}
-                            </select>
-                        </div>
-                        <div className="col-md-4">
-                            <label className="form-label small fw-bold">Supplier Bill / Invoice No.</label>
-                            <input type="text" className="form-control form-control-sm" placeholder="e.g. APX-9941" value={invoiceNo} onChange={(e) => setInvoiceNo(e.target.value)} />
-                        </div>
-                        <div className="col-md-4">
-                            <label className="form-label small fw-bold">Invoice Date</label>
-                            <input type="date" className="form-control form-control-sm" value={invoiceDate} onChange={(e) => setInvoiceDate(e.target.value)} />
+
+                            {/* Entry Type Toggle: Tax Invoice vs Delivery Challan */}
+                            <div className="col-md-3">
+                                <label className="form-label small fw-bold mb-1">Entry Type</label>
+                                <div className="btn-group btn-group-sm w-100" role="group">
+                                    <button 
+                                        type="button" 
+                                        className={`btn ${!isChallan ? 'btn-primary fw-bold' : 'btn-outline-secondary'}`}
+                                        onClick={() => setIsChallan(false)}
+                                    >
+                                        <i className="bi bi-receipt me-1"></i> Tax Invoice
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        className={`btn ${isChallan ? 'btn-warning text-dark fw-bold' : 'btn-outline-secondary'}`}
+                                        onClick={() => setIsChallan(true)}
+                                    >
+                                        <i className="bi bi-truck me-1"></i> Challan
+                                    </button>
+                                </div>
+                            </div>
+
+                            {/* Bill / Invoice / Challan No */}
+                            <div className="col-md-3">
+                                <label className="form-label small fw-bold mb-1">
+                                    {isChallan ? 'Challan Number' : 'Bill / Invoice No.'} <span className="text-danger">*</span>
+                                </label>
+                                <input 
+                                    type="text" 
+                                    className="form-control form-control-sm" 
+                                    placeholder={isChallan ? "e.g. CHL-2026-001" : "e.g. APX-9941"} 
+                                    value={invoiceNo} 
+                                    onChange={(e) => setInvoiceNo(e.target.value)} 
+                                />
+                            </div>
+
+                            {/* Date */}
+                            <div className="col-md-2">
+                                <label className="form-label small fw-bold mb-1">
+                                    {isChallan ? 'Challan Date' : 'Invoice Date'}
+                                </label>
+                                <input 
+                                    type="date" 
+                                    className="form-control form-control-sm" 
+                                    value={invoiceDate} 
+                                    onChange={(e) => setInvoiceDate(e.target.value)} 
+                                />
+                            </div>
+
+                            {/* Delivery Challan Note */}
+                            {isChallan && (
+                                <div className="col-12 mt-1">
+                                    <div className="badge bg-warning-subtle text-dark border border-warning px-2.5 py-1 d-inline-flex align-items-center gap-1">
+                                        <i className="bi bi-info-circle-fill text-warning"></i>
+                                        <span><strong>Challan Inward:</strong> Adds physical stock immediately without ledger debt. This challan can later be imported directly into a final Tax Invoice.</span>
+                                    </div>
+                                </div>
+                            )}
                         </div>
                     </div>
 
-                    <div className="table-responsive" style={{ overflow: 'visible' }}>
-                        <table className="table table-pos table-bordered">
-                            <thead>
-                                <tr>
-                                    <th style={{ minWidth: 280 }}>
-                                        <div className="d-flex justify-content-between align-items-center">
-                                            <span>Medicine Name (Master Auto-Search)</span>
-                                            <button 
-                                                type="button" 
-                                                className="btn btn-link btn-sm p-0 text-decoration-none fw-semibold" 
-                                                style={{ fontSize: '11px' }} 
-                                                onClick={() => openAddMasterModal(rows.length - 1, '')}
-                                            >
-                                                <i className="bi bi-plus-circle me-1"></i>+ Add to Master
-                                            </button>
+                    {/* Progressive Disclosure Check: Must select supplier and enter invoice/challan no */}
+                    {(!selectedSupplierId || !invoiceNo.trim()) && !editingPurchaseId ? (
+                        <div className="card border border-2 border-dashed bg-light text-center p-4 my-4" style={{ borderRadius: '12px' }}>
+                            <div className="mx-auto mb-2 text-primary" style={{ width: '48px', height: '48px', borderRadius: '50%', background: '#e0f2fe', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
+                                <i className="bi bi-arrow-up-circle fs-3"></i>
+                            </div>
+                            <h6 className="fw-bold text-dark mb-1">Step 1: Select Supplier &amp; Enter {isChallan ? 'Challan' : 'Invoice'} Details Above</h6>
+                            <p className="text-muted small mb-0" style={{ maxWidth: '560px', margin: '0 auto' }}>
+                                Please choose the <strong>Supplier / Distributor</strong> and provide the <strong>{isChallan ? 'Delivery Challan No.' : 'Supplier Bill / Invoice No.'}</strong> above to unlock the medicine entry form, historical rate lookup, and pending challan imports.
+                            </p>
+                        </div>
+                    ) : (
+                        /* Step 2: Main Pharma Entry Workstation (2-Column Grid) */
+                        <div className="row g-3">
+                            {/* Left Column (8 cols): Items Table + Totals + Pharma Entry Form + Primary Save */}
+                            <div className="col-xl-8 col-lg-7">
+                                {/* Top Items Table (Matching Image 2) */}
+                                <div className="card border shadow-sm mb-3">
+                                    <div className="card-header bg-white py-2 px-3 d-flex justify-content-between align-items-center">
+                                        <span className="fw-bold text-dark small">
+                                            <i className="bi bi-list-check me-1 text-primary"></i> 
+                                            Invoice Line Items ({rows.length})
+                                        </span>
+                                        {rows.length > 0 && (
+                                            <span className="badge bg-primary-subtle text-primary border">
+                                                Total Items: {rows.length}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className="table-responsive" style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                                        <table className="table table-sm table-hover table-bordered mb-0 align-middle" style={{ fontSize: '11.5px' }}>
+                                            <thead className="table-light sticky-top">
+                                                <tr>
+                                                    <th style={{ width: '30px' }} className="text-center">#</th>
+                                                    <th style={{ width: '50px' }} className="text-center">RecNo</th>
+                                                    <th style={{ minWidth: '130px', maxWidth: '160px' }}>Item Name</th>
+                                                    <th style={{ width: '80px' }}>Batch No</th>
+                                                    <th style={{ width: '65px' }} className="text-center">Exp.</th>
+                                                    <th style={{ width: '65px' }} className="text-end">MRP</th>
+                                                    <th style={{ width: '55px' }} className="text-center">Qty.</th>
+                                                    <th style={{ width: '65px' }} className="text-end">Rate</th>
+                                                    <th style={{ width: '75px' }} className="text-end">Amount</th>
+                                                    <th style={{ width: '50px' }} className="text-end">Disc.</th>
+                                                    <th style={{ width: '70px' }} className="text-end">Tax Amount</th>
+                                                    <th style={{ width: '60px' }} className="text-end">CGST</th>
+                                                    <th style={{ width: '60px' }} className="text-end">SGST</th>
+                                                    <th style={{ width: '80px' }} className="text-end">Net Amount</th>
+                                                    <th style={{ width: '60px' }} className="text-center">Action</th>
+                                                </tr>
+                                            </thead>
+                                            <tbody>
+                                                {rows.length === 0 ? (
+                                                    <tr>
+                                                        <td colSpan="15" className="text-center text-muted py-4">
+                                                            <i className="bi bi-inbox fs-4 d-block mb-1 text-secondary"></i>
+                                                            <span>No medicines added yet. Use the form below or include pending challans from the right.</span>
+                                                        </td>
+                                                    </tr>
+                                                ) : (
+                                                    rows.map((r, i) => {
+                                                        const expDisplay = r.exp_month && r.exp_year ? `${r.exp_month}/${r.exp_year}` : (r.expiry_date ? r.expiry_date.slice(2, 7) : '-');
+                                                        const taxAmt = ((Number(r.cgst_amount) || 0) + (Number(r.sgst_amount) || 0)).toFixed(2);
+                                                        return (
+                                                            <tr key={i} className={editingItemIndex === i ? 'table-warning' : ''}>
+                                                                <td className="text-center text-secondary">{i + 1}</td>
+                                                                <td className="text-center text-secondary">{r.item_id || r.product_master_id || (i + 1)}</td>
+                                                                <td style={{ maxWidth: '160px' }}>
+                                                                    <div className="fw-bold text-truncate text-dark" title={r.item_name}>{r.item_name}</div>
+                                                                    {r.generic_name && (
+                                                                        <div className="text-muted text-truncate" style={{ fontSize: '10px' }} title={r.generic_name}>{r.generic_name}</div>
+                                                                    )}
+                                                                </td>
+                                                                <td><span className="badge bg-light text-dark border font-monospace">{r.batch_no || '-'}</span></td>
+                                                                <td className="text-center">{expDisplay}</td>
+                                                                <td className="text-end">₹{Number(r.mrp || 0).toFixed(2)}</td>
+                                                                <td className="text-center">
+                                                                    <span className="fw-bold">{r.qty_packs}</span>
+                                                                    {Number(r.free_qty_packs) > 0 && <span className="text-success" style={{ fontSize: '10px' }}>+{r.free_qty_packs}F</span>}
+                                                                </td>
+                                                                <td className="text-end">₹{Number(r.ptr || 0).toFixed(2)}</td>
+                                                                <td className="text-end">₹{Number(r.amount || 0).toFixed(2)}</td>
+                                                                <td className="text-end">{Number(r.discount_pct || 0)}%</td>
+                                                                <td className="text-end">₹{taxAmt}</td>
+                                                                <td className="text-end">₹{Number(r.cgst_amount || (Number(r.taxable_amount || 0) * (Number(r.cgst_pct || 6) / 100))).toFixed(2)}</td>
+                                                                <td className="text-end">₹{Number(r.sgst_amount || (Number(r.taxable_amount || 0) * (Number(r.sgst_pct || 6) / 100))).toFixed(2)}</td>
+                                                                <td className="text-end fw-bold text-dark">₹{Number(r.net_amount || 0).toFixed(2)}</td>
+                                                                <td className="text-center">
+                                                                    <div className="btn-group btn-group-sm">
+                                                                        <button 
+                                                                            type="button" 
+                                                                            className="btn btn-outline-primary btn-sm py-0 px-1" 
+                                                                            onClick={() => handleEditRow(i)} 
+                                                                            title="Edit this row in form below"
+                                                                        >
+                                                                            <i className="bi bi-pencil"></i>
+                                                                        </button>
+                                                                        <button 
+                                                                            type="button" 
+                                                                            className="btn btn-outline-danger btn-sm py-0 px-1" 
+                                                                            onClick={() => removeRow(i)} 
+                                                                            title="Delete this row"
+                                                                        >
+                                                                            <i className="bi bi-trash"></i>
+                                                                        </button>
+                                                                    </div>
+                                                                </td>
+                                                            </tr>
+                                                        );
+                                                    })
+                                                )}
+                                            </tbody>
+                                        </table>
+                                    </div>
+
+                                    {/* Footer Totals (Matching Image 2: Total 5708.00 | 143.00 | 143.00 | 5994.00) */}
+                                    <div className="card-footer bg-light py-2 px-3 d-flex flex-wrap justify-content-end align-items-center gap-4 text-secondary small fw-semibold">
+                                        <div>
+                                            <span className="text-muted fw-normal">Total Taxable: </span> 
+                                            <strong className="text-dark fs-6">₹{billTotals.taxable}</strong>
                                         </div>
-                                    </th>
-                                    <th style={{ width: 130 }}>Batch No</th>
-                                    <th style={{ width: 140 }}>Expiry</th>
-                                    <th style={{ width: 75 }}>Packs</th>
-                                    <th style={{ width: 65 }}>Free</th>
-                                    <th style={{ width: 85 }}>Units/Pack</th>
-                                    <th style={{ width: 85 }}>PTR (₹)</th>
-                                    <th style={{ width: 85 }}>MRP (₹)</th>
-                                    <th style={{ width: 75 }}>GST%</th>
-                                    <th style={{ width: 40 }}></th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {rows.map((r, i) => (
-                                    <tr key={i}>
-                                        <td style={{ position: 'relative' }}>
+                                        <div>
+                                            <span className="text-muted fw-normal">CGST: </span> 
+                                            <strong className="text-dark">₹{billTotals.cgst}</strong>
+                                        </div>
+                                        <div>
+                                            <span className="text-muted fw-normal">SGST: </span> 
+                                            <strong className="text-dark">₹{billTotals.sgst}</strong>
+                                        </div>
+                                        <div>
+                                            <span className="text-muted fw-normal">Net Amount: </span> 
+                                            <strong className="text-primary fs-5">₹{billTotals.net}</strong>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Pharma Stock Entry Form (Matching Image 2) */}
+                                <div className="card border shadow-sm p-3 mb-3 bg-white" style={{ borderRadius: '10px' }}>
+                                    <div className="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom">
+                                        <h6 className="fw-bold mb-0 text-dark">
+                                            <i className="bi bi-plus-circle-dotted text-primary me-1"></i>
+                                            {editingItemIndex !== null ? `Modify Row #${editingItemIndex + 1}` : 'Add Medicine to Inward Bill'}
+                                        </h6>
+                                        {editingItemIndex !== null && (
+                                            <button type="button" className="btn btn-sm btn-link text-danger p-0 text-decoration-none" onClick={resetItemForm}>
+                                                <i className="bi bi-x-circle me-1"></i> Cancel Row Edit
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    {/* Row 1: Product Search & Product Code */}
+                                    <div className="row g-2 mb-2">
+                                        <div className="col-md-9 position-relative">
+                                            <label className="form-label small fw-bold mb-1 d-flex justify-content-between align-items-center">
+                                                <span>Product Search (Master Auto-Search) <span className="text-danger">*</span></span>
+                                                <button 
+                                                    type="button" 
+                                                    className="btn btn-link btn-sm p-0 text-decoration-none fw-semibold" 
+                                                    style={{ fontSize: '11px' }} 
+                                                    onClick={() => openAddMasterModal(itemForm.item_name)}
+                                                >
+                                                    <i className="bi bi-plus-circle me-1"></i>+ Add to Master
+                                                </button>
+                                            </label>
                                             <div className="input-group input-group-sm">
                                                 <input 
                                                     type="text" 
-                                                    id={`med-search-input-${i}`}
-                                                    className={`form-control form-control-sm fw-semibold ${r.item_id ? 'border-success' : ''}`} 
-                                                    placeholder="Type medicine name (e.g. Augmentin)..." 
-                                                    value={r.item_name} 
+                                                    id="pharma_product_search_input"
+                                                    className={`form-control form-control-sm fw-semibold ${itemForm.item_id ? 'border-success' : ''}`}
+                                                    placeholder="Type medicine name (e.g. ACEFE-P, Augmentin)..."
+                                                    value={itemForm.item_name}
                                                     autoComplete="off"
-                                                    onChange={(e) => handleMedicineInputChange(i, e.target.value)} 
-                                                    onFocus={(e) => {
-                                                        setActiveSearchRow(i);
-                                                        if (e.target.value.trim().length >= 1) {
-                                                            handleMedicineInputChange(i, e.target.value);
+                                                    onChange={(e) => handleProductSearchChange(e.target.value)}
+                                                    onFocus={() => {
+                                                        if (itemForm.item_name.trim().length >= 1) {
+                                                            handleProductSearchChange(itemForm.item_name);
                                                         }
                                                     }}
                                                 />
-                                                {r.item_id > 0 && (
-                                                    <span className="input-group-text bg-success text-white py-0 px-1.5" title="Item matched in Master Catalog">
+                                                {itemForm.item_id > 0 && (
+                                                    <span className="input-group-text bg-success text-white py-0 px-2" title="Matched in Master Catalog">
                                                         <i className="bi bi-check2"></i>
                                                     </span>
                                                 )}
                                             </div>
 
-                                            {/* Subtext with Generic and Category */}
-                                            {r.generic_name ? (
-                                                <div className="text-muted text-truncate mt-1 d-flex align-items-center gap-1" style={{ fontSize: '11px', maxWidth: '270px' }}>
-                                                    <span className="badge bg-light text-primary border" style={{ fontSize: '9.5px' }}>{r.category || 'Tablet'}</span>
-                                                    <span>{r.generic_name}</span>
+                                            {/* Generic Subtext */}
+                                            {itemForm.generic_name ? (
+                                                <div className="text-muted text-truncate mt-1 d-flex align-items-center gap-1" style={{ fontSize: '11px' }}>
+                                                    <span className="badge bg-light text-primary border" style={{ fontSize: '9.5px' }}>{itemForm.category || 'Tablet'}</span>
+                                                    <span>{itemForm.generic_name}</span>
                                                 </div>
                                             ) : null}
 
                                             {/* Autocomplete Dropdown */}
-                                            {activeSearchRow === i && (
+                                            {activeSearchRow && (
                                                 <div 
                                                     className="shadow-lg border rounded-2 bg-white"
                                                     style={{
                                                         position: 'absolute',
                                                         top: '100%',
                                                         left: 0,
-                                                        width: '380px',
+                                                        width: '100%',
                                                         maxHeight: '280px',
                                                         overflowY: 'auto',
                                                         zIndex: 1060,
                                                         marginTop: '2px'
                                                     }}
                                                 >
-                                                    {/* Dropdown Header */}
                                                     <div className="bg-light px-2.5 py-1.5 border-bottom d-flex justify-content-between align-items-center">
                                                         <span className="small fw-bold text-secondary" style={{ fontSize: '11px' }}>
                                                             {isSearchingMeds ? (
@@ -5033,40 +5549,35 @@ function PurchaseView({ store, notify }) {
                                                             type="button" 
                                                             className="btn-close" 
                                                             style={{ fontSize: '9px' }}
-                                                            onClick={() => setActiveSearchRow(null)}
+                                                            onClick={() => setActiveSearchRow(false)}
                                                         ></button>
                                                     </div>
 
-                                                    {/* Suggestions List */}
                                                     {suggestions.length > 0 ? (
-                                                        suggestions.map((item, sIdx) => (
+                                                        suggestions.map((sug, sIdx) => (
                                                             <div
                                                                 key={sIdx}
                                                                 className="p-2 border-bottom hover-bg-light"
                                                                 style={{ cursor: 'pointer', transition: 'background-color 0.15s' }}
                                                                 onMouseDown={(e) => {
                                                                     e.preventDefault();
-                                                                    handleSelectMedicine(i, item);
+                                                                    handleSelectMedicine(sug);
                                                                 }}
                                                             >
                                                                 <div className="d-flex justify-content-between align-items-center">
-                                                                    <span className="fw-bold text-dark" style={{ fontSize: '12.5px' }}>{item.item_name}</span>
+                                                                    <span className="fw-bold text-dark" style={{ fontSize: '12.5px' }}>{sug.item_name}</span>
                                                                     <span className="badge bg-primary-subtle text-primary border" style={{ fontSize: '10px' }}>
-                                                                        {item.category || 'Tablet'}
+                                                                        {sug.category || 'Tablet'}
                                                                     </span>
                                                                 </div>
-                                                                {item.generic_name && (
-                                                                    <div className="text-muted text-truncate small" style={{ fontSize: '11px' }}>
-                                                                        {item.generic_name}
-                                                                    </div>
+                                                                {sug.generic_name && (
+                                                                    <div className="text-muted text-truncate small" style={{ fontSize: '11px' }}>{sug.generic_name}</div>
                                                                 )}
                                                                 <div className="d-flex gap-2 mt-1 align-items-center" style={{ fontSize: '10.5px' }}>
-                                                                    <span className="text-secondary">Pack: <strong>{item.units_per_pack || 10}s</strong></span>
-                                                                    <span className="text-secondary">GST: <strong>{item.gst_rate}%</strong></span>
-                                                                    <span className="text-secondary">HSN: <strong>{item.hsn_code || '3004'}</strong></span>
-                                                                    {item.drug_schedule && item.drug_schedule !== 'OTC' && (
-                                                                        <span className="badge bg-danger-subtle text-danger" style={{ fontSize: '9px' }}>{item.drug_schedule}</span>
-                                                                    )}
+                                                                    <span className="text-secondary">Pack: <strong>{sug.units_per_pack || 10}s</strong></span>
+                                                                    <span className="text-secondary">GST: <strong>{sug.gst_rate}%</strong></span>
+                                                                    <span className="text-secondary">HSN: <strong>{sug.hsn_code || '3004'}</strong></span>
+                                                                    {sug.mrp ? <span className="text-secondary">MRP: <strong>₹{sug.mrp}</strong></span> : null}
                                                                 </div>
                                                             </div>
                                                         ))
@@ -5074,13 +5585,12 @@ function PurchaseView({ store, notify }) {
                                                         !isSearchingMeds && (
                                                             <div className="p-3 text-center text-muted">
                                                                 <i className="bi bi-search fs-4 d-block mb-1 text-secondary"></i>
-                                                                <div className="small fw-semibold">No medicine found matching "{r.item_name}"</div>
+                                                                <div className="small fw-semibold">No medicine found matching "{itemForm.item_name}"</div>
                                                                 <div className="text-muted" style={{ fontSize: '11px' }}>Click below to add it directly into Pharmacy Master</div>
                                                             </div>
                                                         )
                                                     )}
 
-                                                    {/* Pinned Add to Master Option */}
                                                     <div className="p-2 bg-light border-top text-center">
                                                         <button 
                                                             type="button" 
@@ -5088,87 +5598,492 @@ function PurchaseView({ store, notify }) {
                                                             style={{ fontSize: '12px' }}
                                                             onMouseDown={(e) => {
                                                                 e.preventDefault();
-                                                                openAddMasterModal(i, r.item_name);
+                                                                openAddMasterModal(itemForm.item_name);
                                                             }}
                                                         >
-                                                            <i className="bi bi-plus-circle-fill me-1"></i>+ Add "{r.item_name || 'New Medicine'}" in Master
+                                                            <i className="bi bi-plus-circle-fill me-1"></i>+ Add "{itemForm.item_name || 'New Medicine'}" in Master
                                                         </button>
                                                     </div>
                                                 </div>
                                             )}
-                                        </td>
-                                        <td>
+                                        </div>
+
+                                        {/* Product Code */}
+                                        <div className="col-md-3">
+                                            <label className="form-label small fw-bold mb-1">Product Code</label>
                                             <input 
                                                 type="text" 
-                                                id={`batch-input-${i}`}
-                                                className="form-control form-control-sm" 
-                                                placeholder="Batch No" 
-                                                value={r.batch_no} 
-                                                onChange={(e) => updateRow(i, 'batch_no', e.target.value)} 
+                                                className="form-control form-control-sm bg-light text-secondary font-monospace" 
+                                                value={itemForm.product_master_id || itemForm.item_id || 'AUTO'} 
+                                                readOnly 
                                             />
-                                        </td>
-                                        <td>
-                                            <input 
-                                                type="date" 
-                                                className="form-control form-control-sm" 
-                                                value={r.expiry_date} 
-                                                onChange={(e) => updateRow(i, 'expiry_date', e.target.value)} 
-                                            />
-                                        </td>
-                                        <td>
-                                            <input type="number" className="form-control form-control-sm" min="1" value={r.qty_packs} onChange={(e) => updateRow(i, 'qty_packs', e.target.value)} />
-                                        </td>
-                                        <td>
-                                            <input type="number" className="form-control form-control-sm" min="0" value={r.free_qty_packs} onChange={(e) => updateRow(i, 'free_qty_packs', e.target.value)} />
-                                        </td>
-                                        <td>
-                                            <input type="number" className="form-control form-control-sm" min="1" value={r.units_per_pack} onChange={(e) => updateRow(i, 'units_per_pack', e.target.value)} />
-                                        </td>
-                                        <td>
-                                            <input type="number" className="form-control form-control-sm" placeholder="PTR" value={r.ptr} onChange={(e) => updateRow(i, 'ptr', e.target.value)} />
-                                        </td>
-                                        <td>
-                                            <input type="number" className="form-control form-control-sm" placeholder="MRP" value={r.mrp} onChange={(e) => updateRow(i, 'mrp', e.target.value)} />
-                                        </td>
-                                        <td>
-                                            <select className="form-select form-select-sm" value={r.gst_rate} onChange={(e) => updateRow(i, 'gst_rate', e.target.value)}>
-                                                <option value="0">0%</option>
-                                                <option value="5">5%</option>
-                                                <option value="12">12%</option>
-                                                <option value="18">18%</option>
-                                                <option value="28">28%</option>
-                                            </select>
-                                        </td>
-                                        <td>
-                                            <button className="btn btn-sm btn-outline-danger py-0 px-1" onClick={() => removeRow(i)} title="Remove row">
-                                                <i className="bi bi-x"></i>
-                                            </button>
-                                        </td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                        </table>
-                    </div>
+                                        </div>
+                                    </div>
 
-                    <div className="d-flex justify-content-between align-items-center mt-3">
-                        <button className="btn btn-sm btn-outline-primary" onClick={addRow}>
-                            <i className="bi bi-plus-circle me-1"></i> Add Another Item
-                        </button>
-                        <div className="d-flex gap-2">
-                            {editingPurchaseId && (
-                                <button type="button" className="btn btn-outline-secondary btn-sm px-3" onClick={cancelEditPurchase}>
-                                    <i className="bi bi-x-circle me-1"></i> Cancel Edit
-                                </button>
-                            )}
-                            <button 
-                                className={editingPurchaseId ? "btn btn-warning shadow-sm fw-bold px-3 py-2 text-dark" : "btn btn-success-custom shadow-sm"} 
-                                onClick={savePurchaseBill}
-                            >
-                                <i className={editingPurchaseId ? "bi bi-check2-all me-1" : "bi bi-check-circle me-1"}></i> 
-                                {editingPurchaseId ? `Update Purchase Invoice #${invoiceNo}` : 'Record Inward Bill & Update Inventory'}
-                            </button>
+                                    {/* Row 2: Packaging, Batch No, Exp Month, Exp Year, MRP, Qty */}
+                                    <div className="row g-2 mb-2">
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">Packaging</label>
+                                            <input 
+                                                type="number" 
+                                                className="form-control form-control-sm" 
+                                                placeholder="10" 
+                                                value={itemForm.units_per_pack} 
+                                                onChange={(e) => handleItemFormChange('units_per_pack', e.target.value)} 
+                                            />
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">Batch No. <span className="text-danger">*</span></label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm text-uppercase" 
+                                                placeholder="e.g. B-902" 
+                                                value={itemForm.batch_no} 
+                                                onChange={(e) => handleItemFormChange('batch_no', e.target.value)} 
+                                            />
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">Exp. Month</label>
+                                            <select 
+                                                className="form-select form-select-sm" 
+                                                value={itemForm.exp_month} 
+                                                onChange={(e) => handleItemFormChange('exp_month', e.target.value)}
+                                            >
+                                                {['01','02','03','04','05','06','07','08','09','10','11','12'].map(m => (
+                                                    <option key={m} value={m}>{m} ({['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'][parseInt(m)-1]})</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">Exp. Year</label>
+                                            <select 
+                                                className="form-select form-select-sm" 
+                                                value={itemForm.exp_year} 
+                                                onChange={(e) => handleItemFormChange('exp_year', e.target.value)}
+                                            >
+                                                {['24','25','26','27','28','29','30','31','32','33','34','35','36'].map(y => (
+                                                    <option key={y} value={y}>20{y}</option>
+                                                ))}
+                                            </select>
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">MRP (₹)</label>
+                                            <input 
+                                                type="number" 
+                                                step="0.01" 
+                                                className="form-control form-control-sm" 
+                                                placeholder="0.00" 
+                                                value={itemForm.mrp} 
+                                                onChange={(e) => handleItemFormChange('mrp', e.target.value)} 
+                                            />
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">Qty (Packs) <span className="text-danger">*</span></label>
+                                            <input 
+                                                type="number" 
+                                                min="1" 
+                                                className="form-control form-control-sm fw-bold" 
+                                                value={itemForm.qty_packs} 
+                                                onChange={(e) => handleItemFormChange('qty_packs', e.target.value)} 
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Row 3: Free Qty, Purchase Rate, Amount, Discount %, SCH Amount, SCH Discount % */}
+                                    <div className="row g-2 mb-2">
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">Free Qty</label>
+                                            <input 
+                                                type="number" 
+                                                min="0" 
+                                                className="form-control form-control-sm" 
+                                                value={itemForm.free_qty_packs} 
+                                                onChange={(e) => handleItemFormChange('free_qty_packs', e.target.value)} 
+                                            />
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">Purchase Rate (PTR)</label>
+                                            <input 
+                                                type="number" 
+                                                step="0.01" 
+                                                className="form-control form-control-sm" 
+                                                placeholder="0.00" 
+                                                value={itemForm.ptr} 
+                                                onChange={(e) => handleItemFormChange('ptr', e.target.value)} 
+                                            />
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">Amount</label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm bg-light text-secondary fw-semibold" 
+                                                value={'₹' + Number(itemForm.amount || 0).toFixed(2)} 
+                                                readOnly 
+                                            />
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">Discount %</label>
+                                            <input 
+                                                type="number" 
+                                                step="0.1" 
+                                                min="0" 
+                                                max="100" 
+                                                className="form-control form-control-sm" 
+                                                value={itemForm.discount_pct} 
+                                                onChange={(e) => handleItemFormChange('discount_pct', e.target.value)} 
+                                            />
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">SCH Amount</label>
+                                            <input 
+                                                type="number" 
+                                                step="0.01" 
+                                                min="0" 
+                                                className="form-control form-control-sm" 
+                                                value={itemForm.sch_disc_amount} 
+                                                onChange={(e) => handleItemFormChange('sch_disc_amount', e.target.value)} 
+                                            />
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">SCH Discount %</label>
+                                            <input 
+                                                type="number" 
+                                                step="0.1" 
+                                                min="0" 
+                                                max="100" 
+                                                className="form-control form-control-sm" 
+                                                value={itemForm.sch_disc_pct} 
+                                                onChange={(e) => handleItemFormChange('sch_disc_pct', e.target.value)} 
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Row 4: Taxable Amount, CGST %, SGST / IGST %, Net Amount, Selling Price, HSNCODE */}
+                                    <div className="row g-2 mb-2">
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">Taxable Amount</label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm bg-light text-secondary fw-semibold" 
+                                                value={'₹' + Number(itemForm.taxable_amount || 0).toFixed(2)} 
+                                                readOnly 
+                                            />
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">CGST %</label>
+                                            <select 
+                                                className="form-select form-select-sm" 
+                                                value={itemForm.cgst_pct} 
+                                                onChange={(e) => {
+                                                    const val = parseFloat(e.target.value) || 0;
+                                                    handleItemFormChange('cgst_pct', val);
+                                                    handleItemFormChange('sgst_pct', val);
+                                                }}
+                                            >
+                                                <option value="0">0%</option>
+                                                <option value="2.5">2.5%</option>
+                                                <option value="6">6.0%</option>
+                                                <option value="9">9.0%</option>
+                                                <option value="14">14.0%</option>
+                                            </select>
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">SGST / IGST %</label>
+                                            <select 
+                                                className="form-select form-select-sm" 
+                                                value={itemForm.sgst_pct} 
+                                                onChange={(e) => handleItemFormChange('sgst_pct', parseFloat(e.target.value) || 0)}
+                                            >
+                                                <option value="0">0%</option>
+                                                <option value="2.5">2.5%</option>
+                                                <option value="6">6.0%</option>
+                                                <option value="9">9.0%</option>
+                                                <option value="14">14.0%</option>
+                                            </select>
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">Net Amount</label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm bg-primary-subtle text-primary fw-bold" 
+                                                value={'₹' + Number(itemForm.net_amount || 0).toFixed(2)} 
+                                                readOnly 
+                                            />
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">Selling Price</label>
+                                            <input 
+                                                type="number" 
+                                                step="0.01" 
+                                                className="form-control form-control-sm" 
+                                                placeholder="MRP" 
+                                                value={itemForm.selling_price} 
+                                                onChange={(e) => handleItemFormChange('selling_price', e.target.value)} 
+                                            />
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">HSNCODE</label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm" 
+                                                value={itemForm.hsn_code} 
+                                                onChange={(e) => handleItemFormChange('hsn_code', e.target.value)} 
+                                            />
+                                        </div>
+                                    </div>
+
+                                    {/* Row 5: Storage, Shelf No., Rack No., Buttons */}
+                                    <div className="row g-2 align-items-end">
+                                        <div className="col-md-3 col-6">
+                                            <label className="form-label small fw-bold mb-1">Storage</label>
+                                            <select 
+                                                className="form-select form-select-sm" 
+                                                value={itemForm.storage_type} 
+                                                onChange={(e) => handleItemFormChange('storage_type', e.target.value)}
+                                            >
+                                                <option value="Normal">Normal</option>
+                                                <option value="Cold Storage">Cold Storage (2-8°C)</option>
+                                                <option value="Cool">Cool (8-15°C)</option>
+                                                <option value="Deep Freeze">Deep Freeze (-20°C)</option>
+                                            </select>
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">Shelf No.</label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm" 
+                                                placeholder="e.g. S-1" 
+                                                value={itemForm.shelf_no} 
+                                                onChange={(e) => handleItemFormChange('shelf_no', e.target.value)} 
+                                            />
+                                        </div>
+                                        <div className="col-md-2 col-6">
+                                            <label className="form-label small fw-bold mb-1">Rack No.</label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm" 
+                                                placeholder="e.g. R-10" 
+                                                value={itemForm.rack_no} 
+                                                onChange={(e) => handleItemFormChange('rack_no', e.target.value)} 
+                                            />
+                                        </div>
+                                        <div className="col-md-5 col-12 d-flex gap-2 justify-content-end mt-2 mt-md-0">
+                                            <button 
+                                                type="button" 
+                                                className="btn btn-outline-secondary btn-sm px-3" 
+                                                onClick={resetItemForm}
+                                            >
+                                                <i className="bi bi-arrow-counterclockwise me-1"></i> Clear
+                                            </button>
+                                            <button 
+                                                type="button" 
+                                                className={editingItemIndex !== null ? "btn btn-warning text-dark fw-bold btn-sm px-3 shadow-sm" : "btn btn-primary fw-bold btn-sm px-4 shadow-sm"}
+                                                onClick={handleAddOrUpdateItem}
+                                            >
+                                                <i className={editingItemIndex !== null ? "bi bi-check2-circle me-1" : "bi bi-plus-circle me-1"}></i>
+                                                {editingItemIndex !== null ? 'Update Stock Item' : 'Add Stock'}
+                                            </button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                {/* Primary Save Button Bar */}
+                                <div className="d-flex flex-wrap justify-content-between align-items-center p-3 bg-light rounded-3 border">
+                                    <div>
+                                        <span className="text-muted small">Ready to commit to inventory:</span>
+                                        <div className="fw-bold text-dark">
+                                            {rows.length} {rows.length === 1 ? 'medicine' : 'medicines'} | Net Payable: <span className="text-primary fs-6">₹{billTotals.net}</span>
+                                        </div>
+                                    </div>
+                                    <div className="d-flex gap-2">
+                                        {editingPurchaseId && (
+                                            <button type="button" className="btn btn-outline-secondary btn-sm px-3" onClick={cancelEditPurchase}>
+                                                <i className="bi bi-x-circle me-1"></i> Cancel Edit
+                                            </button>
+                                        )}
+                                        <button 
+                                            className={editingPurchaseId ? "btn btn-warning shadow-sm fw-bold px-3 py-2 text-dark" : (isChallan ? "btn btn-warning fw-bold text-dark shadow-sm px-4 py-2" : "btn btn-success-custom shadow-sm px-4 py-2")} 
+                                            onClick={savePurchaseBill}
+                                        >
+                                            <i className={editingPurchaseId ? "bi bi-check2-all me-1" : (isChallan ? "bi bi-truck me-1" : "bi bi-check-circle me-1")}></i> 
+                                            {editingPurchaseId 
+                                                ? `Update Purchase Invoice #${invoiceNo}` 
+                                                : (isChallan ? 'Record Delivery Challan & Update Stock' : 'Record Inward Bill & Update Inventory')
+                                            }
+                                        </button>
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* Right Column (4 cols): Pending Delivery Challans + Previous Purchase History */}
+                            <div className="col-xl-4 col-lg-5">
+                                {/* Panel 1: Pending Challans for Selected Supplier */}
+                                <div className="card border shadow-sm mb-3">
+                                    <div className="card-header bg-white py-2 px-3 d-flex justify-content-between align-items-center">
+                                        <span className="fw-bold text-dark small">
+                                            <i className="bi bi-truck text-warning me-1"></i>
+                                            Pending Delivery Challans
+                                        </span>
+                                        {selectedSupplierId && (
+                                            <button 
+                                                type="button" 
+                                                className="btn btn-sm btn-link p-0 text-decoration-none" 
+                                                onClick={() => fetchSupplierChallans(selectedSupplierId)}
+                                                title="Refresh supplier challans"
+                                            >
+                                                <i className={`bi bi-arrow-repeat ${isLoadingChallans ? 'spinner-border spinner-border-sm' : ''}`}></i>
+                                            </button>
+                                        )}
+                                    </div>
+
+                                    <div className="card-body p-2" style={{ maxHeight: '280px', overflowY: 'auto' }}>
+                                        {!selectedSupplierId ? (
+                                            <div className="text-muted small p-3 text-center bg-light rounded">
+                                                Select a supplier above to view pending challans.
+                                            </div>
+                                        ) : isLoadingChallans ? (
+                                            <div className="text-center py-3 text-muted small">
+                                                <div className="spinner-border spinner-border-sm text-primary me-2"></div>
+                                                Loading supplier challans...
+                                            </div>
+                                        ) : supplierChallans.length === 0 ? (
+                                            <div className="text-muted small p-3 text-center bg-light rounded">
+                                                No challan items available for this supplier.
+                                            </div>
+                                        ) : (
+                                            supplierChallans.map((ch, chIdx) => (
+                                                <div key={chIdx} className="border rounded-2 p-2 mb-2 bg-light">
+                                                    <div className="d-flex justify-content-between align-items-center mb-1.5 pb-1 border-bottom">
+                                                        <div>
+                                                            <strong className="text-dark" style={{ fontSize: '12px' }}>
+                                                                Challan #{ch.challan_no}
+                                                            </strong>
+                                                            <div className="text-muted" style={{ fontSize: '10.5px' }}>
+                                                                Date: {ch.date || 'N/A'} • {ch.items ? ch.items.length : 0} items
+                                                            </div>
+                                                        </div>
+                                                        <button 
+                                                            type="button" 
+                                                            className="btn btn-xs btn-outline-primary py-0.5 px-2"
+                                                            style={{ fontSize: '11px' }}
+                                                            onClick={() => includeAllChallanItems(ch)}
+                                                            title="Import all items from this challan into invoice"
+                                                        >
+                                                            <i className="bi bi-box-arrow-in-right me-1"></i> Include All
+                                                        </button>
+                                                    </div>
+
+                                                    {ch.items && ch.items.length > 0 ? (
+                                                        <div className="d-flex flex-column gap-1">
+                                                            {ch.items.map((ci, cItemIdx) => (
+                                                                <div key={cItemIdx} className="d-flex justify-content-between align-items-center bg-white p-1.5 rounded border" style={{ fontSize: '11px' }}>
+                                                                    <div className="text-truncate me-2" style={{ maxWidth: '170px' }}>
+                                                                        <div className="fw-semibold text-dark text-truncate">{ci.item_name}</div>
+                                                                        <span className="text-muted font-monospace" style={{ fontSize: '10px' }}>Batch: {ci.batch_no || '-'} | Qty: {ci.qty_packs}</span>
+                                                                    </div>
+                                                                    <button 
+                                                                        type="button" 
+                                                                        className="btn btn-xs btn-primary py-0 px-1.5 text-nowrap"
+                                                                        style={{ fontSize: '10.5px' }}
+                                                                        onClick={() => includeChallanItem(ch, ci)}
+                                                                        title="Import this item into invoice"
+                                                                    >
+                                                                        + Include
+                                                                    </button>
+                                                                </div>
+                                                            ))}
+                                                        </div>
+                                                    ) : (
+                                                        <div className="text-muted small" style={{ fontSize: '11px' }}>No items found in this challan.</div>
+                                                    )}
+                                                </div>
+                                            ))
+                                        )}
+                                    </div>
+                                </div>
+
+                                {/* Panel 2: Previous Purchase History for Selected Product */}
+                                <div className="card border shadow-sm">
+                                    <div className="card-header bg-white py-2 px-3 d-flex justify-content-between align-items-center">
+                                        <span className="fw-bold text-dark small">
+                                            <i className="bi bi-clock-history text-info me-1"></i>
+                                            Previous Purchase History
+                                        </span>
+                                        {historyTargetItemName && (
+                                            <span className="badge bg-info-subtle text-info border text-truncate" style={{ maxWidth: '140px', fontSize: '10.5px' }}>
+                                                {historyTargetItemName}
+                                            </span>
+                                        )}
+                                    </div>
+
+                                    <div className="card-body p-2" style={{ maxHeight: '310px', overflowY: 'auto' }}>
+                                        {isLoadingProductHistory ? (
+                                            <div className="text-center py-3 text-muted small">
+                                                <div className="spinner-border spinner-border-sm text-info me-2"></div>
+                                                Fetching purchase rate history...
+                                            </div>
+                                        ) : !historyTargetItemName && productHistory.length === 0 ? (
+                                            <div className="text-muted small p-3 text-center bg-light rounded">
+                                                <i className="bi bi-search d-block mb-1 fs-5 text-secondary"></i>
+                                                Type or select a product in <strong>Product Search</strong> to check previous purchase prices &amp; vendors.
+                                            </div>
+                                        ) : productHistory.length === 0 ? (
+                                            <div className="text-muted small p-3 text-center bg-light rounded">
+                                                No purchase history found for selected product.
+                                            </div>
+                                        ) : (
+                                            <div className="d-flex flex-column gap-2">
+                                                {productHistory.map((ph, phIdx) => (
+                                                    <div key={phIdx} className="p-2 border rounded-2 bg-light" style={{ fontSize: '11px' }}>
+                                                        <div className="d-flex justify-content-between align-items-center mb-1">
+                                                            <strong className="text-primary text-truncate" style={{ maxWidth: '160px' }}>
+                                                                {ph.supplier_name || 'Distributor'}
+                                                            </strong>
+                                                            <span className="text-muted" style={{ fontSize: '10px' }}>
+                                                                {ph.invoice_date || ph.created_at ? (ph.invoice_date || ph.created_at).slice(0, 10) : ''}
+                                                            </span>
+                                                        </div>
+                                                        <div className="d-flex justify-content-between text-secondary mb-1" style={{ fontSize: '10.5px' }}>
+                                                            <span>Inv: <strong>{ph.supplier_invoice_no || '-'}</strong></span>
+                                                            <span>Batch: <span className="font-monospace">{ph.batch_no || '-'}</span></span>
+                                                        </div>
+                                                        <div className="d-flex justify-content-between align-items-center pt-1 border-top mt-1">
+                                                            <div>
+                                                                <span className="text-muted">PTR: </span>
+                                                                <strong className="text-dark">₹{Number(ph.ptr || 0).toFixed(2)}</strong>
+                                                                {ph.mrp ? <span className="text-muted ms-2">MRP: ₹{Number(ph.mrp).toFixed(2)}</span> : null}
+                                                                {Number(ph.discount_pct) > 0 ? <span className="text-success ms-1">(-{ph.discount_pct}%)</span> : null}
+                                                            </div>
+                                                            <button 
+                                                                type="button" 
+                                                                className="btn btn-xs btn-outline-info py-0 px-1.5"
+                                                                style={{ fontSize: '10.5px' }}
+                                                                onClick={() => {
+                                                                    setItemForm(prev => recomputeItemForm({
+                                                                        ...prev,
+                                                                        ptr: ph.ptr || prev.ptr,
+                                                                        mrp: ph.mrp || prev.mrp,
+                                                                        discount_pct: ph.discount_pct !== undefined ? ph.discount_pct : prev.discount_pct,
+                                                                        gst_rate: ph.gst_rate !== undefined ? ph.gst_rate : prev.gst_rate,
+                                                                        cgst_pct: (Number(ph.gst_rate) || 12) / 2,
+                                                                        sgst_pct: (Number(ph.gst_rate) || 12) / 2
+                                                                    }));
+                                                                    notify(`Applied historical PTR ₹${ph.ptr} to entry form.`, 'info');
+                                                                }}
+                                                                title="Apply these purchase rates to current item form"
+                                                            >
+                                                                Use Rate
+                                                            </button>
+                                                        </div>
+                                                    </div>
+                                                ))}
+                                            </div>
+                                        )}
+                                    </div>
+                                </div>
+                            </div>
                         </div>
-                    </div>
+                    )}
                 </div>
             )}
 

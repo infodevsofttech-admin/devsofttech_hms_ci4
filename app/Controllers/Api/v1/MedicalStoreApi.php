@@ -2136,14 +2136,31 @@ class MedicalStoreApi extends BaseController
             $discPct = (float)($it['discount_pct'] ?? 0);
             $gstRate = (float)($it['gst_rate'] ?? 12.00);
 
-            $lineNetPtr = ($qtyPacks * $ptr) * (1 - ($discPct / 100));
+            $schDiscPct = (float)($it['sch_disc_pct'] ?? 0);
+            $schDiscAmt = (float)($it['sch_disc_amount'] ?? 0);
+            $sellingPrice = (float)($it['selling_price'] ?? $mrp);
+            $storageType = trim($it['storage_type'] ?? 'Normal');
+            $shelfNo = trim($it['shelf_no'] ?? '');
+            $rackNo = trim($it['rack_no'] ?? '');
+
+            // Calculate after scheme discount if present
+            $effectivePtr = $ptr;
+            if ($schDiscPct > 0) {
+                $effectivePtr = $effectivePtr * (1 - ($schDiscPct / 100));
+            }
+            $lineRawAmt = ($qtyPacks * $effectivePtr);
+            if ($schDiscAmt > 0) {
+                $lineRawAmt = max(0, $lineRawAmt - $schDiscAmt);
+            }
+
+            $lineNetPtr = $lineRawAmt * (1 - ($discPct / 100));
             $taxAmount = round($lineNetPtr * ($gstRate / 100), 2);
 
             $cgst = round($taxAmount / 2, 2);
             $sgst = round($taxAmount - $cgst, 2);
             $igst = 0;
             $lineTotal = round($lineNetPtr + $taxAmount, 2);
-            $netUnitLanding = round($lineTotal / $totalUnits, 2);
+            $netUnitLanding = $totalUnits > 0 ? round($lineTotal / $totalUnits, 2) : 0;
 
             $taxableTotal += $lineNetPtr;
             $cgstTotal += $cgst;
@@ -2160,6 +2177,9 @@ class MedicalStoreApi extends BaseController
                 'mrp'                   => $mrp,
                 'ptr'                   => $ptr,
                 'discount_pct'          => $discPct,
+                'sch_disc_pct'          => $schDiscPct,
+                'sch_disc_amount'       => $schDiscAmt,
+                'selling_price'         => $sellingPrice,
                 'hsn_code'              => $it['hsn_code'] ?? '3004',
                 'gst_rate'              => $gstRate,
                 'taxable_value'         => $lineNetPtr,
@@ -2167,7 +2187,11 @@ class MedicalStoreApi extends BaseController
                 'sgst_amount'           => $sgst,
                 'igst_amount'           => $igst,
                 'total_amount'          => $lineTotal,
-                'net_unit_landing_cost' => $netUnitLanding
+                'net_unit_landing_cost' => $netUnitLanding,
+                'storage_type'          => $storageType,
+                'shelf_no'              => $shelfNo,
+                'rack_no'               => $rackNo,
+                'challan_item_ref_id'   => (int)($it['challan_item_ref_id'] ?? 0)
             ];
 
             // Update/create batch in mst_batches
@@ -2185,7 +2209,10 @@ class MedicalStoreApi extends BaseController
                     'mrp'               => $mrp,
                     'ptr'               => $ptr,
                     'purchase_rate_net' => $netUnitLanding,
-                    'gst_rate'          => $gstRate
+                    'gst_rate'          => $gstRate,
+                    'shelf_no'          => $shelfNo ?: ($batchRow['shelf_no'] ?? null),
+                    'rack_no'           => $rackNo ?: ($batchRow['rack_no'] ?? null),
+                    'storage_type'      => $storageType ?: ($batchRow['storage_type'] ?? 'Normal')
                 ]);
             } else {
                 $this->db->table('mst_batches')->insert([
@@ -2196,7 +2223,10 @@ class MedicalStoreApi extends BaseController
                     'mrp'               => $mrp,
                     'ptr'               => $ptr,
                     'purchase_rate_net' => $netUnitLanding,
-                    'gst_rate'          => $gstRate
+                    'gst_rate'          => $gstRate,
+                    'shelf_no'          => $shelfNo ?: null,
+                    'rack_no'           => $rackNo ?: null,
+                    'storage_type'      => $storageType ?: 'Normal'
                 ]);
                 $batchId = $this->db->insertID();
             }
@@ -2225,11 +2255,16 @@ class MedicalStoreApi extends BaseController
 
         $grandTotal = round($taxableTotal + $cgstTotal + $sgstTotal + $igstTotal - $discountTotal);
 
+        $isChallan = !empty($json['is_challan']) ? 1 : 0;
+        $challanNo = trim($json['challan_no'] ?? '');
+
         // Insert Purchase Record
         $purchaseData = [
             'store_id'            => $storeId,
             'supplier_id'         => $supplierId,
-            'supplier_invoice_no' => trim($json['supplier_invoice_no'] ?? ('PUR-' . time())),
+            'supplier_invoice_no' => trim($json['supplier_invoice_no'] ?? (($isChallan ? 'CHL-' : 'PUR-') . time())),
+            'challan_no'          => $isChallan ? trim($json['supplier_invoice_no']) : ($challanNo ?: null),
+            'is_challan'          => $isChallan,
             'invoice_date'        => $json['invoice_date'] ?? date('Y-m-d'),
             'received_date'       => date('Y-m-d'),
             'due_date'            => date('Y-m-d', strtotime('+30 days')),
@@ -2244,6 +2279,21 @@ class MedicalStoreApi extends BaseController
         ];
         $this->db->table('mst_purchases')->insert($purchaseData);
         $purchaseId = $this->db->insertID();
+
+        // If converted from an existing challan, mark that challan as converted
+        $convertedChallanId = (int)($json['converted_from_challan_id'] ?? 0);
+        if ($convertedChallanId > 0) {
+            $this->db->table('mst_purchases')
+                ->where('purchase_id', $convertedChallanId)
+                ->update(['converted_to_invoice_id' => $purchaseId]);
+
+            // If legacy purchase_invoice
+            if ($this->db->tableExists('purchase_invoice')) {
+                $this->db->table('purchase_invoice')
+                    ->where('id', $convertedChallanId)
+                    ->update(['inv_status' => 1]);
+            }
+        }
 
         // If inward bill is created against a Purchase Order, mark PO as received
         $poId = (int)($json['po_id'] ?? 0);
@@ -2514,7 +2564,24 @@ class MedicalStoreApi extends BaseController
             $discPct = (float)($it['discount_pct'] ?? 0);
             $gstRate = (float)($it['gst_rate'] ?? 12.00);
 
-            $lineNetPtr = ($qtyPacks * $ptr) * (1 - ($discPct / 100));
+            $schDiscPct = (float)($it['sch_disc_pct'] ?? 0);
+            $schDiscAmt = (float)($it['sch_disc_amount'] ?? 0);
+            $sellingPrice = (float)($it['selling_price'] ?? $mrp);
+            $storageType = trim($it['storage_type'] ?? 'Normal');
+            $shelfNo = trim($it['shelf_no'] ?? '');
+            $rackNo = trim($it['rack_no'] ?? '');
+
+            // Calculate after scheme discount if present
+            $effectivePtr = $ptr;
+            if ($schDiscPct > 0) {
+                $effectivePtr = $effectivePtr * (1 - ($schDiscPct / 100));
+            }
+            $lineRawAmt = ($qtyPacks * $effectivePtr);
+            if ($schDiscAmt > 0) {
+                $lineRawAmt = max(0, $lineRawAmt - $schDiscAmt);
+            }
+
+            $lineNetPtr = $lineRawAmt * (1 - ($discPct / 100));
             $taxAmount = round($lineNetPtr * ($gstRate / 100), 2);
 
             $cgst = round($taxAmount / 2, 2);
@@ -2539,6 +2606,9 @@ class MedicalStoreApi extends BaseController
                 'mrp'                   => $mrp,
                 'ptr'                   => $ptr,
                 'discount_pct'          => $discPct,
+                'sch_disc_pct'          => $schDiscPct,
+                'sch_disc_amount'       => $schDiscAmt,
+                'selling_price'         => $sellingPrice,
                 'hsn_code'              => $it['hsn_code'] ?? '3004',
                 'gst_rate'              => $gstRate,
                 'taxable_value'         => $lineNetPtr,
@@ -2546,7 +2616,11 @@ class MedicalStoreApi extends BaseController
                 'sgst_amount'           => $sgst,
                 'igst_amount'           => $igst,
                 'total_amount'          => $lineTotal,
-                'net_unit_landing_cost' => $netUnitLanding
+                'net_unit_landing_cost' => $netUnitLanding,
+                'storage_type'          => $storageType,
+                'shelf_no'              => $shelfNo,
+                'rack_no'               => $rackNo,
+                'challan_item_ref_id'   => (int)($it['challan_item_ref_id'] ?? 0)
             ];
 
             // Update/create batch in mst_batches
@@ -2564,7 +2638,10 @@ class MedicalStoreApi extends BaseController
                     'mrp'               => $mrp,
                     'ptr'               => $ptr,
                     'purchase_rate_net' => $netUnitLanding,
-                    'gst_rate'          => $gstRate
+                    'gst_rate'          => $gstRate,
+                    'shelf_no'          => $shelfNo ?: ($batchRow['shelf_no'] ?? null),
+                    'rack_no'           => $rackNo ?: ($batchRow['rack_no'] ?? null),
+                    'storage_type'      => $storageType ?: ($batchRow['storage_type'] ?? 'Normal')
                 ]);
             } else {
                 $this->db->table('mst_batches')->insert([
@@ -2575,7 +2652,10 @@ class MedicalStoreApi extends BaseController
                     'mrp'               => $mrp,
                     'ptr'               => $ptr,
                     'purchase_rate_net' => $netUnitLanding,
-                    'gst_rate'          => $gstRate
+                    'gst_rate'          => $gstRate,
+                    'shelf_no'          => $shelfNo ?: null,
+                    'rack_no'           => $rackNo ?: null,
+                    'storage_type'      => $storageType ?: 'Normal'
                 ]);
                 $batchId = $this->db->insertID();
             }
@@ -2621,11 +2701,14 @@ class MedicalStoreApi extends BaseController
             $paymentStatus = 'partially_paid';
         }
 
+        $isChallan = isset($json['is_challan']) ? (!empty($json['is_challan']) ? 1 : 0) : ($existingPurchase['is_challan'] ?? 0);
+
         // Update purchase record
         $updateData = [
             'store_id'            => $storeId,
             'supplier_id'         => $supplierId,
             'supplier_invoice_no' => trim($json['supplier_invoice_no'] ?: $existingPurchase['supplier_invoice_no']),
+            'is_challan'          => $isChallan,
             'invoice_date'        => $json['invoice_date'] ?? $existingPurchase['invoice_date'],
             'taxable_amount'      => $taxableTotal,
             'cgst_amount'         => $cgstTotal,
@@ -2696,6 +2779,232 @@ class MedicalStoreApi extends BaseController
             'message' => 'Purchase invoice #' . $vNo . ' updated successfully! Stock and ledgers adjusted.',
             'purchase_id' => $purchaseId,
             'net_amount' => $grandTotal
+        ]);
+    }
+
+    /**
+     * Retrieves pending Delivery Challans for a specific supplier so they can be included into a Tax Invoice.
+     */
+    public function getSupplierChallans($supplierId)
+    {
+        $supplierId = (int)$supplierId;
+        if ($supplierId <= 0) {
+            return $this->response->setJSON(['status' => 1, 'challans' => []]);
+        }
+
+        $challans = [];
+
+        // 1. From mst_purchases where is_challan = 1 and not converted
+        $rows = $this->db->table('mst_purchases p')
+            ->select('p.purchase_id, p.supplier_invoice_no AS challan_no, p.invoice_date AS challan_date, p.net_amount, p.taxable_amount, p.cgst_amount, p.sgst_amount, p.supplier_id, s.supplier_name')
+            ->join('mst_suppliers s', 's.supplier_id = p.supplier_id', 'left')
+            ->where('p.supplier_id', $supplierId)
+            ->where('p.is_challan', 1)
+            ->where('(p.converted_to_invoice_id IS NULL OR p.converted_to_invoice_id = 0)')
+            ->orderBy('p.purchase_id', 'DESC')
+            ->get()
+            ->getResultArray();
+
+        foreach ($rows as $r) {
+            $items = $this->db->table('mst_purchase_items pi')
+                ->select('pi.*, i.item_name, i.generic_name, i.category, i.hsn_code, i.units_per_pack')
+                ->join('mst_items i', 'i.item_id = pi.item_id', 'left')
+                ->where('pi.purchase_id', (int)$r['purchase_id'])
+                ->get()
+                ->getResultArray();
+
+            $challans[] = [
+                'id'             => (int)$r['purchase_id'],
+                'challan_no'     => $r['challan_no'],
+                'challan_date'   => $r['challan_date'],
+                'str_date'       => date('d-m-Y', strtotime($r['challan_date'])),
+                'net_amount'     => (float)$r['net_amount'],
+                'taxable_amount' => (float)$r['taxable_amount'],
+                'cgst_amount'    => (float)$r['cgst_amount'],
+                'sgst_amount'    => (float)$r['sgst_amount'],
+                'source'         => 'mst',
+                'items'          => array_map(function($it) {
+                    return [
+                        'item_id'         => (int)$it['item_id'],
+                        'item_name'       => $it['item_name'],
+                        'generic_name'    => $it['generic_name'] ?? '',
+                        'category'        => $it['category'] ?? 'Tablet',
+                        'batch_no'        => $it['batch_no'],
+                        'expiry_date'     => $it['expiry_date'],
+                        'qty_packs'       => (int)$it['qty_packs'],
+                        'free_qty_packs'  => (int)($it['free_qty_packs'] ?? 0),
+                        'units_per_pack'  => (int)($it['units_per_pack'] ?? 10),
+                        'ptr'             => (float)$it['ptr'],
+                        'mrp'             => (float)$it['mrp'],
+                        'discount_pct'    => (float)($it['discount_pct'] ?? 0),
+                        'sch_disc_pct'    => (float)($it['sch_disc_pct'] ?? 0),
+                        'sch_disc_amount' => (float)($it['sch_disc_amount'] ?? 0),
+                        'gst_rate'        => (float)($it['gst_rate'] ?? 12.00),
+                        'hsn_code'        => $it['hsn_code'] ?? '3004',
+                        'selling_price'   => (float)($it['selling_price'] ?? $it['mrp']),
+                        'storage_type'    => $it['storage_type'] ?? 'Normal',
+                        'shelf_no'        => $it['shelf_no'] ?? '',
+                        'rack_no'         => $it['rack_no'] ?? '',
+                        'challan_ref_id'  => (int)$it['purchase_id'],
+                        'ss_no'           => (int)$it['purchase_item_id']
+                    ];
+                }, $items)
+            ];
+        }
+
+        // 2. Also check legacy purchase_invoice where ischallan = 1 and inv_status = 0
+        if ($this->db->tableExists('purchase_invoice') && $this->db->tableExists('purchase_invoice_item')) {
+            $legacyRows = $this->db->table('purchase_invoice p')
+                ->select("p.id, p.Invoice_no, p.date_of_invoice, DATE_FORMAT(p.date_of_invoice,'%d-%m-%Y') AS str_date, p.T_Net_Amount, p.Taxable_Amt, p.CGST_Amt, p.SGST_Amt")
+                ->where('p.sid', $supplierId)
+                ->where('p.ischallan', 1)
+                ->where('p.inv_status', 0)
+                ->orderBy('p.id', 'DESC')
+                ->get()
+                ->getResultArray();
+
+            foreach ($legacyRows as $lr) {
+                $lItems = $this->db->table('purchase_invoice_item')
+                    ->where('purchase_id', (int)$lr['id'])
+                    ->where('remove_item', 0)
+                    ->where('item_return', 0)
+                    ->get()
+                    ->getResultArray();
+
+                if (!empty($lItems)) {
+                    $challans[] = [
+                        'id'             => (int)$lr['id'],
+                        'challan_no'     => $lr['Invoice_no'],
+                        'challan_date'   => $lr['date_of_invoice'],
+                        'str_date'       => $lr['str_date'],
+                        'net_amount'     => (float)$lr['T_Net_Amount'],
+                        'taxable_amount' => (float)$lr['Taxable_Amt'],
+                        'cgst_amount'    => (float)$lr['CGST_Amt'],
+                        'sgst_amount'    => (float)$lr['SGST_Amt'],
+                        'source'         => 'legacy',
+                        'items'          => array_map(function($lit) {
+                            return [
+                                'item_id'         => (int)($lit['item_code'] ?? 0),
+                                'item_name'       => $lit['Item_name'],
+                                'batch_no'        => $lit['batch_no'],
+                                'expiry_date'     => $lit['expiry_date'],
+                                'qty_packs'       => (int)($lit['qty'] ?? 0),
+                                'free_qty_packs'  => (int)($lit['qty_free'] ?? 0),
+                                'units_per_pack'  => (int)($lit['packing'] ?? 10),
+                                'ptr'             => (float)($lit['purchase_price'] ?? 0),
+                                'mrp'             => (float)($lit['mrp'] ?? 0),
+                                'discount_pct'    => (float)($lit['discount'] ?? 0),
+                                'sch_disc_pct'    => (float)($lit['sch_disc_per'] ?? 0),
+                                'sch_disc_amount' => (float)($lit['sch_disc_amt'] ?? 0),
+                                'gst_rate'        => (float)(($lit['CGST_per'] ?? 6) + ($lit['SGST_per'] ?? 6)),
+                                'hsn_code'        => $lit['HSNCODE'] ?? '3004',
+                                'selling_price'   => (float)($lit['selling_price'] ?? $lit['mrp']),
+                                'storage_type'    => $lit['cold_storage'] ?? 'Normal',
+                                'shelf_no'        => $lit['shelf_no'] ?? '',
+                                'rack_no'         => $lit['rack_no'] ?? '',
+                                'challan_ref_id'  => (int)$lit['purchase_id'],
+                                'ss_no'           => (int)$lit['id']
+                            ];
+                        }, $lItems)
+                    ];
+                }
+            }
+        }
+
+        return $this->response->setJSON([
+            'status'   => 1,
+            'challans' => $challans
+        ]);
+    }
+
+    /**
+     * Retrieves the last 5 purchase history records for a selected product/medicine.
+     */
+    public function getProductPurchaseHistory($itemId)
+    {
+        $itemId = (int)$itemId;
+        if ($itemId <= 0) {
+            return $this->response->setJSON(['status' => 1, 'history' => []]);
+        }
+
+        $history = [];
+        $rows = $this->db->table('mst_purchase_items pi')
+            ->select('pi.batch_no, pi.expiry_date, pi.qty_packs, pi.free_qty_packs, pi.units_per_pack, pi.ptr, pi.mrp, pi.discount_pct, pi.gst_rate, pi.net_unit_landing_cost, p.supplier_invoice_no, p.invoice_date, s.supplier_name')
+            ->join('mst_purchases p', 'p.purchase_id = pi.purchase_id', 'inner')
+            ->join('mst_suppliers s', 's.supplier_id = p.supplier_id', 'left')
+            ->where('pi.item_id', $itemId)
+            ->orderBy('p.invoice_date', 'DESC')
+            ->orderBy('p.purchase_id', 'DESC')
+            ->limit(5)
+            ->get()
+            ->getResultArray();
+
+        foreach ($rows as $r) {
+            $history[] = [
+                'invoice_no'       => $r['supplier_invoice_no'],
+                'invoice_date'     => $r['invoice_date'],
+                'str_date'         => date('d-m-Y', strtotime($r['invoice_date'])),
+                'supplier_name'    => $r['supplier_name'] ?: 'Distributor',
+                'batch_no'         => $r['batch_no'],
+                'qty_packs'        => (int)$r['qty_packs'],
+                'free_packs'       => (int)$r['free_qty_packs'],
+                'ptr'              => (float)$r['ptr'],
+                'mrp'              => (float)$r['mrp'],
+                'discount_pct'     => (float)$r['discount_pct'],
+                'gst_rate'         => (float)$r['gst_rate'],
+                'unit_landing'     => (float)$r['net_unit_landing_cost']
+            ];
+        }
+
+        // If less than 5 rows, check legacy purchase_invoice_item
+        if (count($history) < 5 && $this->db->tableExists('purchase_invoice_item')) {
+            $mstItem = $this->db->table('mst_items')->where('item_id', $itemId)->get()->getRowArray();
+            if ($mstItem) {
+                $prodMasterId = (int)($mstItem['product_master_id'] ?? 0);
+                $itemName = trim($mstItem['item_name']);
+
+                $builder = $this->db->table('purchase_invoice_item pii')
+                    ->select("pii.batch_no, pii.expiry_date, pii.qty, pii.qty_free, pii.packing, pii.purchase_price, pii.mrp, pii.discount, (pii.CGST_per + pii.SGST_per) AS gst_rate, pi.Invoice_no, pi.date_of_invoice, DATE_FORMAT(pi.date_of_invoice,'%d-%m-%Y') AS str_date, IFNULL(s.name_supplier,'-') AS supplier_name", false)
+                    ->join('purchase_invoice pi', 'pi.id = pii.purchase_id', 'inner')
+                    ->join('med_supplier s', 's.sid = pi.sid', 'left');
+
+                if ($prodMasterId > 0) {
+                    $builder->groupStart()
+                        ->where('pii.item_code', $prodMasterId)
+                        ->orWhere('pii.Item_name', $itemName)
+                        ->groupEnd();
+                } else {
+                    $builder->where('pii.Item_name', $itemName);
+                }
+
+                $legacyRows = $builder
+                    ->orderBy('pi.date_of_invoice', 'DESC')
+                    ->limit(5 - count($history))
+                    ->get()
+                    ->getResultArray();
+
+                foreach ($legacyRows as $lr) {
+                    $history[] = [
+                        'invoice_no'    => $lr['Invoice_no'],
+                        'invoice_date'  => $lr['date_of_invoice'],
+                        'str_date'      => $lr['str_date'],
+                        'supplier_name' => $lr['supplier_name'],
+                        'batch_no'      => $lr['batch_no'],
+                        'qty_packs'     => (int)$lr['qty'],
+                        'free_packs'    => (int)$lr['qty_free'],
+                        'ptr'           => (float)$lr['purchase_price'],
+                        'mrp'           => (float)$lr['mrp'],
+                        'discount_pct'  => (float)$lr['discount'],
+                        'gst_rate'      => (float)$lr['gst_rate'],
+                        'unit_landing'  => round((float)$lr['purchase_price'] * (1 - ((float)$lr['discount'] / 100)), 2)
+                    ];
+                }
+            }
+        }
+
+        return $this->response->setJSON([
+            'status'  => 1,
+            'history' => $history
         ]);
     }
 

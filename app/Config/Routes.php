@@ -1689,6 +1689,8 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1'], static funct
     $routes->post('medical-store/purchase/save', 'MedicalStoreApi::savePurchase');
     $routes->post('medical-store/purchase/update', 'MedicalStoreApi::updatePurchase');
     $routes->post('medical-store/purchase/payment', 'MedicalStoreApi::saveSupplierPayment');
+    $routes->get('medical-store/supplier-challans/(:num)', 'MedicalStoreApi::getSupplierChallans/$1');
+    $routes->get('medical-store/product-purchase-history/(:num)', 'MedicalStoreApi::getProductPurchaseHistory/$1');
 
     // Short Items / Deficiency & Reorder Book
     $routes->get('medical-store/stock/short-items', 'MedicalStoreApi::getShortItems');
