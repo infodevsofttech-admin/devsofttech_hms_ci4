@@ -2689,6 +2689,161 @@ class MedicalStoreApi extends BaseController
         return $this->response->setJSON(['status' => 1, 'sales' => $sales]);
     }
 
+    public function salesList()
+    {
+        $storeId = (int)($this->request->getGet('store_id') ?? 0);
+        $search = trim($this->request->getGet('search') ?? '');
+        $fromDate = trim($this->request->getGet('from_date') ?? '');
+        $toDate = trim($this->request->getGet('to_date') ?? '');
+        $paymentMode = trim($this->request->getGet('payment_mode') ?? '');
+        $page = max(1, (int)($this->request->getGet('page') ?? 1));
+        $limit = max(5, min(100, (int)($this->request->getGet('limit') ?? 25)));
+        $offset = ($page - 1) * $limit;
+
+        $builder = $this->db->table('mst_sales s');
+        $builder->select('s.*, st.store_name, st.store_code');
+        $builder->join('mst_stores st', 'st.store_id = s.store_id', 'left');
+
+        if ($storeId > 0) {
+            $builder->where('s.store_id', $storeId);
+        }
+
+        if (!empty($search)) {
+            $builder->groupStart()
+                ->like('s.invoice_no', $search)
+                ->orLike('s.patient_name', $search)
+                ->orLike('s.uhid', $search)
+                ->orLike('s.patient_mobile', $search)
+                ->orLike('s.doctor_name', $search)
+                ->groupEnd();
+        }
+
+        if (!empty($fromDate)) {
+            $builder->where('DATE(s.sale_date) >=', $fromDate);
+        }
+        if (!empty($toDate)) {
+            $builder->where('DATE(s.sale_date) <=', $toDate);
+        }
+        if (!empty($paymentMode) && $paymentMode !== 'ALL') {
+            $builder->where('s.payment_mode', $paymentMode);
+        }
+
+        // Count total matching
+        $countBuilder = clone $builder;
+        $totalRecords = $countBuilder->countAllResults();
+
+        // Fetch paginated sales - STRICTLY ORDERED LATEST TO OLDEST
+        $builder->orderBy('s.sale_id', 'DESC');
+        $builder->limit($limit, $offset);
+        $sales = $builder->get()->getResultArray();
+
+        // For each sale, get a summary of items
+        $saleIds = array_column($sales, 'sale_id');
+        $itemsMap = [];
+        if (!empty($saleIds)) {
+            $items = $this->db->table('mst_sales_items si')
+                ->select('si.sale_id, si.item_id, si.batch_no, si.qty, si.sell_unit, si.total_amount, si.item_type, i.item_name')
+                ->join('mst_items i', 'i.item_id = si.item_id', 'left')
+                ->whereIn('si.sale_id', $saleIds)
+                ->get()
+                ->getResultArray();
+
+            foreach ($items as $it) {
+                $itemsMap[$it['sale_id']][] = $it;
+            }
+        }
+
+        foreach ($sales as &$s) {
+            $sItems = $itemsMap[$s['sale_id']] ?? [];
+            $s['items_count'] = count($sItems);
+            $s['items_summary'] = implode(', ', array_map(function($i) {
+                $prefix = ($i['item_type'] ?? 'SALE') === 'RETURN' ? 'Ret ' : '';
+                return ($i['item_name'] ?? 'Item') . ' (' . $prefix . $i['qty'] . ' ' . ($i['sell_unit'] ?? 'Strip') . ')';
+            }, array_slice($sItems, 0, 4)));
+            if (count($sItems) > 4) {
+                $s['items_summary'] .= ' +' . (count($sItems) - 4) . ' more';
+            }
+            $s['items'] = $sItems;
+        }
+
+        // Stats summary
+        $today = date('Y-m-d');
+        $statsBuilder = $this->db->table('mst_sales');
+        if ($storeId > 0) $statsBuilder->where('store_id', $storeId);
+
+        $todayStats = (clone $statsBuilder)->where('DATE(sale_date)', $today)
+            ->select('COUNT(*) as today_count, SUM(net_amount) as today_amount')
+            ->get()->getRowArray();
+
+        $allStats = (clone $statsBuilder)
+            ->select('COUNT(*) as total_count, SUM(net_amount) as total_amount, SUM(return_amount) as total_returns')
+            ->get()->getRowArray();
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'sales' => $sales,
+            'pagination' => [
+                'current_page' => $page,
+                'per_page' => $limit,
+                'total_records' => $totalRecords,
+                'total_pages' => ceil($totalRecords / max(1, $limit))
+            ],
+            'stats' => [
+                'today_count' => (int)($todayStats['today_count'] ?? 0),
+                'today_amount' => (float)($todayStats['today_amount'] ?? 0),
+                'total_count' => (int)($allStats['total_count'] ?? 0),
+                'total_amount' => (float)($allStats['total_amount'] ?? 0),
+                'total_returns' => (float)($allStats['total_returns'] ?? 0),
+            ]
+        ]);
+    }
+
+    public function updateSale()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $saleId = (int)($json['sale_id'] ?? 0);
+
+        if ($saleId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'status' => 0,
+                'message' => 'Valid sale ID is required.'
+            ]);
+        }
+
+        $sale = $this->db->table('mst_sales')->where('sale_id', $saleId)->get()->getRowArray();
+        if (!$sale) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'status' => 0,
+                'message' => 'Invoice not found.'
+            ]);
+        }
+
+        $updateData = [];
+        if (isset($json['patient_name'])) $updateData['patient_name'] = trim($json['patient_name']);
+        if (isset($json['patient_mobile'])) $updateData['patient_mobile'] = trim($json['patient_mobile']);
+        if (isset($json['patient_address'])) $updateData['patient_address'] = trim($json['patient_address']);
+        if (isset($json['age'])) $updateData['age'] = trim($json['age']);
+        if (isset($json['gender'])) $updateData['gender'] = trim($json['gender']);
+        if (isset($json['doctor_name'])) $updateData['doctor_name'] = trim($json['doctor_name']);
+        if (isset($json['doctor_reg_no'])) $updateData['doctor_reg_no'] = trim($json['doctor_reg_no']);
+        if (isset($json['payment_mode'])) $updateData['payment_mode'] = trim($json['payment_mode']);
+        if (isset($json['payment_reference'])) $updateData['payment_reference'] = trim($json['payment_reference']);
+        if (isset($json['bank_name'])) $updateData['bank_name'] = trim($json['bank_name']);
+        if (isset($json['upi_ref_no'])) $updateData['upi_ref_no'] = trim($json['upi_ref_no']);
+        if (isset($json['card_ref_no'])) $updateData['card_ref_no'] = trim($json['card_ref_no']);
+        if (isset($json['remarks'])) $updateData['reconciled_notes'] = trim($json['remarks']);
+
+        if (!empty($updateData)) {
+            $this->db->table('mst_sales')->where('sale_id', $saleId)->update($updateData);
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'message' => 'Invoice details updated successfully.',
+            'sale_id' => $saleId
+        ]);
+    }
+
     // =========================================================================
     // 5. SUPPLIERS & PURCHASES
     // =========================================================================

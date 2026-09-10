@@ -395,6 +395,55 @@
             100% { transform: rotate(360deg); }
         }
 
+        /* Invoices & Sales View Styles */
+        .invoices-stats-card {
+            border-radius: 10px;
+            padding: 14px 18px;
+            border: 1px solid #e2e8f0;
+            background: #ffffff;
+            box-shadow: 0 1px 4px rgba(0,0,0,0.03);
+            transition: transform 0.15s ease, box-shadow 0.15s ease;
+        }
+        .invoices-stats-card:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 4px 12px rgba(0,0,0,0.06);
+        }
+        .invoices-date-pill {
+            padding: 4px 12px;
+            border-radius: 20px;
+            font-size: 0.78rem;
+            font-weight: 600;
+            border: 1px solid #cbd5e1;
+            background: #f8fafc;
+            color: #475569;
+            cursor: pointer;
+            transition: all 0.15s ease;
+        }
+        .invoices-date-pill.active {
+            background: #0284c7;
+            color: #ffffff;
+            border-color: #0284c7;
+        }
+        .invoices-table th {
+            font-size: 0.75rem;
+            font-weight: 700;
+            text-transform: uppercase;
+            letter-spacing: 0.5px;
+            color: #475569;
+            background-color: #f8fafc;
+            border-bottom: 2px solid #e2e8f0;
+            padding: 10px 12px;
+        }
+        .invoices-table td {
+            font-size: 0.84rem;
+            vertical-align: middle;
+            padding: 10px 12px;
+            border-bottom: 1px solid #f1f5f9;
+        }
+        .invoices-table tbody tr:hover {
+            background-color: #f8fafc;
+        }
+
         .search-results-dropdown {
             position: absolute;
             top: 100%;
@@ -582,7 +631,8 @@ class ErrorBoundary extends React.Component {
 function App() {
     const [stores, setStores] = useState([]);
     const [activeStoreId, setActiveStoreId] = useState(null);
-    const [activeTab, setActiveTab] = useState('pos'); // pos, inventory, purchase, transfer, ledgers
+    const [activeTab, setActiveTab] = useState('pos'); // pos, invoices, inventory, purchase, transfer, ledgers
+    const [editInvoiceForPos, setEditInvoiceForPos] = useState(null);
     const [notification, setNotification] = useState(null);
     const [isLoadingStores, setIsLoadingStores] = useState(true);
 
@@ -907,6 +957,9 @@ function App() {
                 <button className={`nav-link ${activeTab === 'pos' ? 'active' : ''}`} onClick={() => setActiveTab('pos')}>
                     <i className="bi bi-cart3 me-1"></i> POS Counter Desk
                 </button>
+                <button className={`nav-link ${activeTab === 'invoices' ? 'active' : ''}`} onClick={() => setActiveTab('invoices')}>
+                    <i className="bi bi-receipt me-1"></i> All Invoices &amp; Sales
+                </button>
                 <button className={`nav-link ${activeTab === 'inventory' ? 'active' : ''}`} onClick={() => setActiveTab('inventory')}>
                     <i className="bi bi-boxes me-1"></i> Live Stock &amp; Batches
                 </button>
@@ -923,7 +976,24 @@ function App() {
 
             {/* Main View Container */}
             <main className="container-fluid py-3">
-                {activeTab === 'pos' && <PosCounter store={activeStore} notify={notify} />}
+                {activeTab === 'pos' && (
+                    <PosCounter 
+                        store={activeStore} 
+                        notify={notify} 
+                        initialEditInvoice={editInvoiceForPos} 
+                        onClearEditInvoice={() => setEditInvoiceForPos(null)} 
+                    />
+                )}
+                {activeTab === 'invoices' && (
+                    <InvoicesView 
+                        store={activeStore} 
+                        notify={notify} 
+                        onEditInPos={(invData) => {
+                            setEditInvoiceForPos(invData);
+                            setActiveTab('pos');
+                        }} 
+                    />
+                )}
                 {activeTab === 'inventory' && <InventoryView store={activeStore} notify={notify} />}
                 {activeTab === 'purchase' && <PurchaseView store={activeStore} notify={notify} />}
                 {activeTab === 'transfer' && <TransferView store={activeStore} stores={stores} notify={notify} />}
@@ -936,7 +1006,7 @@ function App() {
 // =========================================================================
 // 1. POS BILLING & DISPENSING COUNTER (MULTI-PRINT: A4, A5, 80mm THERMAL)
 // =========================================================================
-function PosCounter({ store, notify }) {
+function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice }) {
     if (!store) {
         return (
             <div className="text-center py-5 text-muted">
@@ -989,6 +1059,194 @@ function PosCounter({ store, notify }) {
     const [showHistoryPanel, setShowHistoryPanel] = useState(true);
     const [historyActiveTab, setHistoryActiveTab] = useState('last_given'); // 'last_given', 'all_bills', 'prescriptions', 'summary'
     const [expandedBillId, setExpandedBillId] = useState(null);
+
+    // POS Counter Persistent Draft Auto-Save & Recovery
+    const draftKey = `hms_pharmacy_pos_draft_${store?.store_id || 1}`;
+    const [draftStatus, setDraftStatus] = useState('idle'); // 'idle', 'saved', 'restored'
+    const [draftSavedAt, setDraftSavedAt] = useState(null);
+    const [isRestoredBannerVisible, setIsRestoredBannerVisible] = useState(false);
+    const [editingInvoiceBanner, setEditingInvoiceBanner] = useState(null);
+    const isRestoringRef = useRef(false);
+
+    // 1. Handle initialEditInvoice (from Invoices tab "Edit in POS")
+    useEffect(() => {
+        if (!initialEditInvoice || !initialEditInvoice.sale) return;
+        try {
+            isRestoringRef.current = true;
+            const sale = initialEditInvoice.sale;
+            const pt = {
+                id: sale.patient_id || 0,
+                patient_id: sale.patient_id || 0,
+                uhid: sale.uhid || '',
+                name: sale.patient_name || 'Walk-in Customer',
+                patient_name: sale.patient_name || 'Walk-in Customer',
+                mobile: sale.patient_mobile || '',
+                patient_mobile: sale.patient_mobile || '',
+                patient_type: sale.patient_type || 'Walk-in',
+                address: sale.patient_address || '',
+                age: sale.age || '',
+                gender: sale.gender || ''
+            };
+            setSelectedPatient(pt);
+            setPatientType(sale.patient_type || 'Walk-in');
+            setDoctorName(sale.doctor_name || '');
+            setDoctorRegNo(sale.doctor_reg_no || '');
+            if (sale.payment_mode) setPaymentMode(sale.payment_mode);
+            if (sale.bill_discount_type) setWholeDiscountType(sale.bill_discount_type);
+            if (sale.bill_discount_val) setWholeDiscountVal(Number(sale.bill_discount_val) || 0);
+
+            if (sale.patient_id || sale.uhid) {
+                fetchPatientHistory(sale.patient_id, sale.uhid, sale.patient_mobile);
+                setShowHistoryPanel(true);
+            }
+
+            const restoredItems = (initialEditInvoice.items || []).filter(it => (it.item_type || 'SALE') === 'SALE').map(it => {
+                const unitsPerPack = Math.max(1, Number(it.units_per_pack) || 1);
+                const sellUnit = it.sell_unit || 'Strip';
+                const qty = Number(it.qty) || 1;
+                return {
+                    item_id: Number(it.item_id),
+                    item_name: it.item_name || 'Medicine',
+                    generic_name: it.generic_name || '',
+                    drug_schedule: it.drug_schedule || '',
+                    unit_pack: it.unit_pack || '',
+                    units_per_pack: unitsPerPack,
+                    batch_id: Number(it.batch_id),
+                    batch_no: it.batch_no || '',
+                    expiry_date: it.expiry_date || '',
+                    qty: qty,
+                    strip_qty: sellUnit === 'Strip' ? qty : 0,
+                    loose_qty: sellUnit === 'Tablet' ? qty : 0,
+                    sell_unit: sellUnit,
+                    mrp: Number(it.unit_mrp) || Number(it.unit_price) || 0,
+                    rate: Number(it.unit_price) || 0,
+                    gst_rate: Number(it.gst_rate) || 0,
+                    discount_pct: Number(it.discount_pct) || 0,
+                    current_qty: 999
+                };
+            });
+            setCart(restoredItems);
+            setEditingInvoiceBanner(sale.invoice_no);
+            setIsRestoredBannerVisible(false);
+            notify(`Loaded invoice ${sale.invoice_no} into POS counter for editing.`, 'success');
+            setTimeout(() => { isRestoringRef.current = false; }, 400);
+        } catch (e) {
+            console.error('Error loading edit invoice:', e);
+            isRestoringRef.current = false;
+        }
+    }, [initialEditInvoice]);
+
+    // 2. Draft Auto-Recovery on Mount (Persistent across computer restart / crash / reload)
+    useEffect(() => {
+        if (initialEditInvoice) return;
+
+        try {
+            const rawDraft = localStorage.getItem(draftKey);
+            if (rawDraft) {
+                const draft = JSON.parse(rawDraft);
+                const hasItems = draft.cart && draft.cart.length > 0;
+                const hasPatient = !!draft.selectedPatient;
+                const hasReturns = draft.returnCart && draft.returnCart.length > 0;
+
+                if (hasItems || hasPatient || hasReturns) {
+                    isRestoringRef.current = true;
+                    if (draft.selectedPatient) {
+                        setSelectedPatient(draft.selectedPatient);
+                        if (draft.selectedPatient.patient_id || draft.selectedPatient.uhid) {
+                            fetchPatientHistory(draft.selectedPatient.patient_id, draft.selectedPatient.uhid, draft.selectedPatient.mobile || draft.selectedPatient.patient_mobile);
+                            setShowHistoryPanel(true);
+                        }
+                    }
+                    if (draft.patientType) setPatientType(draft.patientType);
+                    if (draft.doctorName) setDoctorName(draft.doctorName);
+                    if (draft.doctorRegNo) setDoctorRegNo(draft.doctorRegNo);
+                    if (draft.walkinAbhaId) setWalkinAbhaId(draft.walkinAbhaId);
+                    if (draft.walkinAbhaAddress) setWalkinAbhaAddress(draft.walkinAbhaAddress);
+                    if (hasItems) setCart(draft.cart);
+                    if (hasReturns) setReturnCart(draft.returnCart);
+                    if (draft.wholeDiscountType) setWholeDiscountType(draft.wholeDiscountType);
+                    if (draft.wholeDiscountVal) setWholeDiscountVal(draft.wholeDiscountVal);
+                    if (draft.paymentMode) setPaymentMode(draft.paymentMode);
+                    if (draft.splitCash) setSplitCash(draft.splitCash);
+                    if (draft.splitUpi) setSplitUpi(draft.splitUpi);
+                    if (draft.splitCard) setSplitCard(draft.splitCard);
+                    if (draft.editingInvoiceBanner) setEditingInvoiceBanner(draft.editingInvoiceBanner);
+
+                    setDraftStatus('restored');
+                    setDraftSavedAt(draft.timestamp ? new Date(draft.timestamp) : new Date());
+                    setIsRestoredBannerVisible(true);
+                    setTimeout(() => { isRestoringRef.current = false; }, 400);
+                }
+            }
+        } catch (e) {
+            console.error('Error recovering draft:', e);
+            isRestoringRef.current = false;
+        }
+    }, [store?.store_id]);
+
+    // 3. Debounced Auto-Save to localStorage on state change
+    useEffect(() => {
+        if (isRestoringRef.current) return;
+
+        const hasData = (cart && cart.length > 0) || selectedPatient || (returnCart && returnCart.length > 0) || (doctorName && doctorName.trim().length > 0);
+        
+        if (!hasData) {
+            if (!editingInvoiceBanner) {
+                try {
+                    localStorage.removeItem(draftKey);
+                } catch (e) {}
+                setDraftStatus('idle');
+            }
+            return;
+        }
+
+        const timer = setTimeout(() => {
+            try {
+                const draftData = {
+                    timestamp: Date.now(),
+                    selectedPatient,
+                    patientType,
+                    doctorName,
+                    doctorRegNo,
+                    walkinAbhaId,
+                    walkinAbhaAddress,
+                    cart,
+                    returnCart,
+                    wholeDiscountType,
+                    wholeDiscountVal,
+                    paymentMode,
+                    splitCash,
+                    splitUpi,
+                    splitCard,
+                    editingInvoiceBanner
+                };
+                localStorage.setItem(draftKey, JSON.stringify(draftData));
+                setDraftStatus('saved');
+                setDraftSavedAt(new Date());
+            } catch (e) {
+                console.error('Draft auto-save error:', e);
+            }
+        }, 300);
+
+        return () => clearTimeout(timer);
+    }, [cart, returnCart, selectedPatient, patientType, doctorName, doctorRegNo, walkinAbhaId, walkinAbhaAddress, wholeDiscountType, wholeDiscountVal, paymentMode, splitCash, splitUpi, splitCard, draftKey, editingInvoiceBanner]);
+
+    const clearDraftAndReset = () => {
+        try {
+            localStorage.removeItem(draftKey);
+        } catch (e) {}
+        setCart([]);
+        setReturnCart([]);
+        resetPatient();
+        setDoctorName('');
+        setDoctorRegNo('');
+        setWholeDiscountVal(0);
+        setEditingInvoiceBanner(null);
+        if (onClearEditInvoice) onClearEditInvoice();
+        setIsRestoredBannerVisible(false);
+        setDraftStatus('idle');
+        notify('Draft cleared. Counter reset to new blank bill.', 'info');
+    };
 
     // Automatically preload latest completed sale for this store so "Last Bill" is immediately available
     useEffect(() => {
@@ -1877,8 +2135,13 @@ function PosCounter({ store, notify }) {
                 setBankName('');
                 setCardRefNo('');
                 setPaymentRef('');
-                setRefundRefNo('');
                 resetPatient();
+                try {
+                    localStorage.removeItem(draftKey);
+                } catch (e) {}
+                setDraftStatus('idle');
+                setEditingInvoiceBanner(null);
+                if (onClearEditInvoice) onClearEditInvoice();
             } else {
                 notify(data.message || 'Failed to complete transaction.', 'error');
             }
@@ -2245,6 +2508,47 @@ function PosCounter({ store, notify }) {
             <div className="row g-3">
             {/* Workspace Column (col-lg-8 when patient history open, col-12 otherwise) */}
             <div className={selectedPatient && showHistoryPanel ? "col-12 col-lg-8 col-xl-8" : "col-12"}>
+                {/* Draft Restored Banner */}
+                {isRestoredBannerVisible && (
+                    <div className="alert alert-info py-2 px-3 d-flex flex-wrap justify-content-between align-items-center mb-2 shadow-sm border-info rounded-3">
+                        <div className="d-flex align-items-center gap-2">
+                            <i className="bi bi-arrow-clockwise text-info fs-5"></i>
+                            <div>
+                                <strong className="text-dark">Draft Auto-Restored:</strong>
+                                <span className="text-secondary ms-1">
+                                    Recovered <strong>{cart.length} medicine(s)</strong> {selectedPatient ? <>for <strong>{selectedPatient.name || selectedPatient.patient_name}</strong></> : ''} from your previous session {draftSavedAt ? `(${draftSavedAt.toLocaleTimeString()})` : ''}.
+                                </span>
+                            </div>
+                        </div>
+                        <div className="d-flex gap-2 mt-1 mt-md-0">
+                            <button type="button" className="btn btn-sm btn-primary py-0.5 px-2.5" onClick={() => setIsRestoredBannerVisible(false)}>
+                                <i className="bi bi-check-lg me-1"></i> Continue Working
+                            </button>
+                            <button type="button" className="btn btn-sm btn-outline-danger py-0.5 px-2.5" onClick={clearDraftAndReset}>
+                                <i className="bi bi-trash me-1"></i> Discard Draft
+                            </button>
+                        </div>
+                    </div>
+                )}
+
+                {/* Editing Invoice Banner */}
+                {editingInvoiceBanner && (
+                    <div className="alert alert-warning py-2 px-3 d-flex flex-wrap justify-content-between align-items-center mb-2 shadow-sm border-warning rounded-3">
+                        <div className="d-flex align-items-center gap-2">
+                            <i className="bi bi-pencil-square text-warning-emphasis fs-5"></i>
+                            <div>
+                                <strong className="text-dark">Editing Invoice #{editingInvoiceBanner}:</strong>
+                                <span className="text-secondary ms-1">
+                                    Patient and medicines loaded into POS Counter. You can adjust items, quantities, or re-dispense.
+                                </span>
+                            </div>
+                        </div>
+                        <button type="button" className="btn btn-sm btn-outline-dark py-0.5 px-2.5 mt-1 mt-md-0" onClick={clearDraftAndReset}>
+                            <i className="bi bi-x-circle me-1"></i> Cancel Edit &amp; New Bill
+                        </button>
+                    </div>
+                )}
+
                 {/* Patient Information Panel */}
                 <div className="counter-card position-relative">
                     <div className="d-flex flex-wrap align-items-center justify-content-between gap-2 mb-2">
@@ -2253,18 +2557,36 @@ function PosCounter({ store, notify }) {
                             <span className={`badge ${patientType === 'IPD' ? 'bg-danger' : (patientType === 'OPD' ? 'bg-primary' : 'bg-secondary')}`}>
                                 {patientType}
                             </span>
+                            {draftStatus === 'saved' && (
+                                <span className="badge bg-success-subtle text-success border border-success-subtle px-2 py-0.5 d-inline-flex align-items-center gap-1 shadow-sm" style={{ fontSize: '0.72rem' }} title={draftSavedAt ? `Auto-saved at ${draftSavedAt.toLocaleTimeString()}` : 'Auto-saved in local draft'}>
+                                    <i className="bi bi-cloud-check-fill"></i> Draft Auto-Saved ({cart.length} items)
+                                </span>
+                            )}
                         </div>
-                        {lastInvoice && (
-                            <button 
-                                type="button" 
-                                className="btn btn-sm btn-outline-success py-0.5 px-2.5 fw-semibold d-inline-flex align-items-center gap-1 shadow-sm" 
-                                onClick={() => setIsPrintOpen(true)} 
-                                title="View & Print Last Bill"
-                                style={{ fontSize: "0.75rem" }}
-                            >
-                                <i className="bi bi-printer"></i> Last Bill: <strong>{lastInvoice.sale.invoice_no}</strong>
-                            </button>
-                        )}
+                        <div className="d-flex align-items-center gap-1.5 flex-wrap">
+                            {(cart.length > 0 || selectedPatient) && (
+                                <button 
+                                    type="button" 
+                                    className="btn btn-sm btn-outline-secondary py-0.5 px-2 d-inline-flex align-items-center gap-1 shadow-sm"
+                                    onClick={clearDraftAndReset}
+                                    title="Discard draft and start new blank bill"
+                                    style={{ fontSize: "0.75rem" }}
+                                >
+                                    <i className="bi bi-plus-circle"></i> New Bill
+                                </button>
+                            )}
+                            {lastInvoice && (
+                                <button 
+                                    type="button" 
+                                    className="btn btn-sm btn-outline-success py-0.5 px-2.5 fw-semibold d-inline-flex align-items-center gap-1 shadow-sm" 
+                                    onClick={() => setIsPrintOpen(true)} 
+                                    title="View & Print Last Bill"
+                                    style={{ fontSize: "0.75rem" }}
+                                >
+                                    <i className="bi bi-printer"></i> Last Bill: <strong>{lastInvoice.sale.invoice_no}</strong>
+                                </button>
+                            )}
+                        </div>
                         {selectedPatient && (
                             <div className="d-flex gap-1.5 flex-wrap">
                                 <button 
@@ -5020,6 +5342,1067 @@ function PosCounter({ store, notify }) {
                         </div>
                     </div>
                 )}
+        </div>
+    );
+}
+
+// =========================================================================
+// 1.5. INVOICES & SALES REGISTER (ALL INVOICES, SEARCHABLE, EDIT & REPRINT)
+// =========================================================================
+function InvoicesView({ store, notify, onEditInPos }) {
+    if (!store) {
+        return (
+            <div className="text-center py-5 text-muted">
+                <div className="spinner-border spinner-border-sm text-primary me-2"></div>
+                Loading invoices register...
+            </div>
+        );
+    }
+
+    const [invoices, setInvoices] = useState([]);
+    const [stats, setStats] = useState({ today_count: 0, today_amount: 0, total_count: 0, total_amount: 0, total_returns: 0 });
+    const [pagination, setPagination] = useState({ current_page: 1, per_page: 25, total_records: 0, total_pages: 1 });
+    const [isLoading, setIsLoading] = useState(false);
+
+    // Filters
+    const [searchQuery, setSearchQuery] = useState('');
+    const [datePreset, setDatePreset] = useState('all'); // 'today', 'yesterday', 'last7', 'month', 'all'
+    const [fromDate, setFromDate] = useState('');
+    const [toDate, setToDate] = useState('');
+    const [paymentMode, setPaymentMode] = useState('ALL');
+    const [page, setPage] = useState(1);
+    const [limit, setLimit] = useState(25);
+
+    // Selected invoice for View/Print Drawer
+    const [viewInvoice, setViewInvoice] = useState(null);
+    const [isPrintOpen, setIsPrintOpen] = useState(false);
+    const [printFormat, setPrintFormat] = useState('thermal'); // 'thermal', 'a5', 'a4'
+    const [isLoadingView, setIsLoadingView] = useState(false);
+
+    // Quick Edit Details Modal state
+    const [editModalSale, setEditModalSale] = useState(null);
+    const [editForm, setEditForm] = useState({
+        patient_name: '',
+        patient_mobile: '',
+        patient_address: '',
+        age: '',
+        gender: '',
+        doctor_name: '',
+        doctor_reg_no: '',
+        payment_mode: 'Cash',
+        payment_reference: '',
+        bank_name: '',
+        upi_ref_no: '',
+        card_ref_no: '',
+        remarks: ''
+    });
+    const [isUpdating, setIsUpdating] = useState(false);
+
+    const loadInvoices = async (targetPage = page, customSearch = searchQuery) => {
+        setIsLoading(true);
+        try {
+            const params = new URLSearchParams({
+                store_id: store.store_id || 0,
+                search: customSearch !== undefined ? customSearch : searchQuery,
+                from_date: fromDate || '',
+                to_date: toDate || '',
+                payment_mode: paymentMode || 'ALL',
+                page: targetPage,
+                limit: limit
+            });
+            const res = await fetch(API_BASE + 'sales/list?' + params.toString());
+            const data = await res.json();
+            if (data.status) {
+                setInvoices(data.sales || []);
+                if (data.stats) setStats(data.stats);
+                if (data.pagination) setPagination(data.pagination);
+                setPage(targetPage);
+            } else {
+                notify(data.message || 'Failed to load invoices.', 'error');
+            }
+        } catch (e) {
+            notify('Error fetching sales list: ' + e.message, 'error');
+        } finally {
+            setIsLoading(false);
+        }
+    };
+
+    useEffect(() => {
+        loadInvoices(1);
+    }, [store?.store_id, fromDate, toDate, paymentMode, limit]);
+
+    const handleDatePreset = (preset) => {
+        setDatePreset(preset);
+        const today = new Date();
+        const formatDate = (d) => d.toISOString().split('T')[0];
+
+        if (preset === 'today') {
+            const todayStr = formatDate(today);
+            setFromDate(todayStr);
+            setToDate(todayStr);
+        } else if (preset === 'yesterday') {
+            const yest = new Date(today);
+            yest.setDate(yest.getDate() - 1);
+            const yestStr = formatDate(yest);
+            setFromDate(yestStr);
+            setToDate(yestStr);
+        } else if (preset === 'last7') {
+            const past7 = new Date(today);
+            past7.setDate(past7.getDate() - 7);
+            setFromDate(formatDate(past7));
+            setToDate(formatDate(today));
+        } else if (preset === 'month') {
+            const firstDay = new Date(today.getFullYear(), today.getMonth(), 1);
+            setFromDate(formatDate(firstDay));
+            setToDate(formatDate(today));
+        } else if (preset === 'all') {
+            setFromDate('');
+            setToDate('');
+        }
+    };
+
+    const handleSearchSubmit = (e) => {
+        if (e) e.preventDefault();
+        loadInvoices(1, searchQuery);
+    };
+
+    const clearSearch = () => {
+        setSearchQuery('');
+        loadInvoices(1, '');
+    };
+
+    // Open View / Print Drawer
+    const openPrintDrawer = async (saleId) => {
+        setIsLoadingView(true);
+        try {
+            const res = await fetch(API_BASE + 'sales/invoice/' + saleId);
+            const data = await res.json();
+            if (data.status) {
+                setViewInvoice(data);
+                setIsPrintOpen(true);
+            } else {
+                notify(data.message || 'Invoice details not found.', 'error');
+            }
+        } catch (e) {
+            notify('Error loading invoice: ' + e.message, 'error');
+        } finally {
+            setIsLoadingView(false);
+        }
+    };
+
+    // Open Edit Details Modal
+    const openEditModal = (sale) => {
+        setEditModalSale(sale);
+        setEditForm({
+            patient_name: sale.patient_name || '',
+            patient_mobile: sale.patient_mobile || '',
+            patient_address: sale.patient_address || '',
+            age: sale.age || '',
+            gender: sale.gender || '',
+            doctor_name: sale.doctor_name || '',
+            doctor_reg_no: sale.doctor_reg_no || '',
+            payment_mode: sale.payment_mode || 'Cash',
+            payment_reference: sale.payment_reference || '',
+            bank_name: sale.bank_name || '',
+            upi_ref_no: sale.upi_ref_no || '',
+            card_ref_no: sale.card_ref_no || '',
+            remarks: sale.reconciled_notes || ''
+        });
+    };
+
+    const handleSaveEdit = async (e) => {
+        e.preventDefault();
+        if (!editModalSale) return;
+        setIsUpdating(true);
+        try {
+            const res = await fetch(API_BASE + 'sales/update', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    sale_id: editModalSale.sale_id,
+                    ...editForm
+                })
+            });
+            const data = await res.json();
+            if (data.status) {
+                notify(`Invoice {editModalSale.invoice_no} updated successfully!`, 'success');
+                setEditModalSale(null);
+                loadInvoices(page);
+            } else {
+                notify(data.message || 'Failed to update invoice.', 'error');
+            }
+        } catch (err) {
+            notify('Error saving invoice update: ' + err.message, 'error');
+        } finally {
+            setIsUpdating(false);
+        }
+    };
+
+    // Load into POS Counter Desk for direct re-billing / line items editing
+    const handleEditInPos = async (saleId) => {
+        setIsLoadingView(true);
+        try {
+            const res = await fetch(API_BASE + 'sales/invoice/' + saleId);
+            const data = await res.json();
+            if (data.status && data.sale) {
+                if (onEditInPos) {
+                    onEditInPos(data);
+                }
+            } else {
+                notify(data.message || 'Failed to load invoice for POS edit.', 'error');
+            }
+        } catch (e) {
+            notify('Error: ' + e.message, 'error');
+        } finally {
+            setIsLoadingView(false);
+        }
+    };
+
+    const printThermalReceipt = () => {
+        if (!viewInvoice || !viewInvoice.sale) return;
+        const txt = generateThermalReceiptText(viewInvoice);
+        const win = window.open('', '_blank', 'width=420,height=650');
+        if (!win) {
+            notify('Pop-up blocked. Please allow pop-ups to print thermal receipt.', 'warning');
+            return;
+        }
+        try {
+            win.document.title = 'Thermal Receipt - ' + (viewInvoice.sale ? viewInvoice.sale.invoice_no : '');
+            const style = win.document.createElement('style');
+            style.textContent = '@page { size: 80mm auto; margin: 0; } html, body { margin: 0; padding: 0; background: #fff; } body { padding: 4mm 2mm; font-family: Courier, monospace; font-size: 11px; line-height: 1.25; color: #000; } pre { margin: 0; font-family: inherit; font-size: inherit; white-space: pre-wrap; word-break: break-all; }';
+            win.document.head.appendChild(style);
+            const pre = win.document.createElement('pre');
+            pre.textContent = txt;
+            win.document.body.appendChild(pre);
+            setTimeout(() => {
+                try {
+                    win.focus();
+                    win.print();
+                } catch (pe) {
+                    console.error('Print trigger error', pe);
+                }
+            }, 350);
+        } catch (e) {
+            console.error('Error writing thermal window:', e);
+        }
+    };
+
+    const printPdf = (format = 'a5') => {
+        if (!viewInvoice || !viewInvoice.sale) return;
+        const saleId = viewInvoice.sale.sale_id;
+        const url = `{API_BASE}sales/invoice-pdf/{saleId}?format={format}&view=1`;
+        const printWindow = window.open(url, '_blank');
+        if (!printWindow) {
+            notify('Popup was blocked by browser. Please allow popups for PDF printing.', 'error');
+        }
+    };
+
+    const downloadPdf = (format = 'a5') => {
+        if (!viewInvoice || !viewInvoice.sale) return;
+        const saleId = viewInvoice.sale.sale_id;
+        const url = `{API_BASE}sales/invoice-pdf/{saleId}?format={format}&download=1`;
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = `Invoice_{viewInvoice.sale.invoice_no.replace(/[^a-zA-Z0-9_-]/g, '_')}_{format.toUpperCase()}.pdf`;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+    };
+
+    const generateThermalReceiptText = (inv) => {
+        if (!inv || !inv.sale) return '';
+        const sale = inv.sale;
+        const items = inv.items || [];
+        const returnItems = inv.return_items || [];
+        const LINE_WIDTH = 48;
+        const padR = (str, len) => String(str || '').slice(0, len).padEnd(len, ' ');
+        const padL = (str, len) => String(str || '').slice(0, len).padStart(len, ' ');
+        const center = (str) => {
+            const s = String(str || '').trim();
+            if (s.length >= LINE_WIDTH) return s.slice(0, LINE_WIDTH);
+            const pad = Math.floor((LINE_WIDTH - s.length) / 2);
+            return ' '.repeat(pad) + s;
+        };
+        const rule = (char = '=') => char.repeat(LINE_WIDTH);
+
+        let lines = [];
+        lines.push(center(inv.store?.store_name || 'HOSPITAL PHARMACY'));
+        lines.push(center(`{inv.store?.building_name || 'Main Hospital'} - {inv.store?.floor_no || 'Ground Floor'}`));
+        if (inv.store?.phone) lines.push(center(`Ph: {inv.store.phone}`));
+        if (inv.store?.gstin) lines.push(center(`GSTIN: {inv.store.gstin}`));
+        if (inv.store?.drug_license_no_20b) lines.push(center(`DL: {inv.store.drug_license_no_20b} / {inv.store?.drug_license_no_21b || ''}`));
+        lines.push(rule('='));
+        lines.push(center('TAX INVOICE / CASH MEMO'));
+        lines.push(rule('-'));
+        lines.push(padR(`Inv No : {sale.invoice_no}`, 28) + padL(`Date: {String(sale.sale_date).slice(0, 10)}`, 20));
+        lines.push(padR(`Patient: {sale.patient_name || 'Walk-in Customer'}`, 32) + padL(sale.uhid ? `UHID: {sale.uhid}` : '', 16));
+        if (sale.doctor_name) lines.push(`Doctor : {sale.doctor_name}`);
+        lines.push(rule('-'));
+        lines.push(padR('ITEM', 22) + padR('BATCH', 8) + padL('QTY', 5) + padL('RATE', 6) + padL('TOTAL', 7));
+        lines.push(rule('-'));
+
+        items.forEach(it => {
+            const name = (it.item_name || 'Item').slice(0, 21);
+            const batch = (it.batch_no || '').slice(0, 7);
+            const qty = String(it.qty || 1);
+            const rate = Number(it.unit_price || it.effective_rate || 0).toFixed(2);
+            const total = Number(it.total_amount || 0).toFixed(2);
+            lines.push(padR(name, 22) + padR(batch, 8) + padL(qty, 5) + padL(rate, 6) + padL(total, 7));
+        });
+
+        if (returnItems.length > 0) {
+            lines.push(rule('-'));
+            lines.push(center('RETURNED / EXCHANGED ITEMS'));
+            returnItems.forEach(it => {
+                const name = ('RET: ' + (it.item_name || 'Item')).slice(0, 21);
+                const batch = (it.batch_no || '').slice(0, 7);
+                const qty = String(it.qty || 1);
+                const rate = Number(it.unit_price || 0).toFixed(2);
+                const total = ('-' + Number(it.total_amount || 0).toFixed(2));
+                lines.push(padR(name, 22) + padR(batch, 8) + padL(qty, 5) + padL(rate, 6) + padL(total, 7));
+            });
+        }
+
+        lines.push(rule('='));
+        lines.push(padR('Gross Total:', 36) + padL(`Rs. {Number(sale.gross_amount).toFixed(2)}`, 12));
+        if (Number(sale.discount_amount) > 0) {
+            lines.push(padR('Discount Allowed:', 36) + padL(`-Rs. {Number(sale.discount_amount).toFixed(2)}`, 12));
+        }
+        if (Number(sale.return_amount) > 0) {
+            lines.push(padR('Less Return Value:', 36) + padL(`-Rs. {Number(sale.return_amount).toFixed(2)}`, 12));
+        }
+        lines.push(padR('NET AMOUNT PAYABLE:', 34) + padL(`Rs. {Number(sale.net_amount).toFixed(2)}`, 14));
+        lines.push(rule('-'));
+        lines.push(padR(`Paid by: {sale.payment_mode || 'Cash'}`, 30) + padL(`Status: PAID`, 18));
+        lines.push(rule('='));
+        lines.push(center('Thank you for your visit! Get well soon!'));
+        lines.push(center('Medicines cannot be returned without original bill.'));
+        return lines.join('n');
+    };
+
+    return (
+        <div className="invoices-view-wrapper">
+            {/* Header and Control Bar */}
+            <div className="d-flex flex-wrap align-items-center justify-content-between gap-3 mb-3">
+                <div>
+                    <h5 className="mb-0 fw-bold text-dark d-flex align-items-center gap-2">
+                        <i className="bi bi-receipt-cutoff text-primary fs-4"></i>
+                        Invoices &amp; Sales Register
+                        <span className="badge bg-primary-subtle text-primary border border-primary-subtle fs-6 rounded-pill px-2.5 py-0.5">
+                            {pagination.total_records || 0} Bills
+                        </span>
+                    </h5>
+                    <small className="text-secondary">
+                        Showing all sales across pharmacy desk ordered <strong>Latest to Oldest</strong>. Search by bill #, patient, mobile, or doctor.
+                    </small>
+                </div>
+                <div className="d-flex align-items-center gap-2">
+                    <button 
+                        type="button" 
+                        className="btn btn-sm btn-outline-primary d-inline-flex align-items-center gap-1.5"
+                        onClick={() => loadInvoices(page)}
+                        disabled={isLoading}
+                    >
+                        <i className={`bi bi-arrow-clockwise {isLoading ? 'spin' : ''}`}></i>
+                        Refresh
+                    </button>
+                    {onEditInPos && (
+                        <button 
+                            type="button" 
+                            className="btn btn-sm btn-primary-custom d-inline-flex align-items-center gap-1.5"
+                            onClick={() => onEditInPos(null)}
+                        >
+                            <i className="bi bi-cart-plus-fill"></i>
+                            New POS Counter Bill
+                        </button>
+                    )}
+                </div>
+            </div>
+
+            {/* Quick Date Presets Bar */}
+            <div className="d-flex flex-wrap align-items-center gap-2 mb-3 bg-light p-2.5 rounded-3 border">
+                <span className="text-muted small fw-bold me-1"><i className="bi bi-calendar3 me-1"></i> Quick Filter:</span>
+                <button 
+                    type="button" 
+                    className={`invoices-date-pill {datePreset === 'today' ? 'active' : ''}`}
+                    onClick={() => handleDatePreset('today')}
+                >
+                    Today
+                </button>
+                <button 
+                    type="button" 
+                    className={`invoices-date-pill {datePreset === 'yesterday' ? 'active' : ''}`}
+                    onClick={() => handleDatePreset('yesterday')}
+                >
+                    Yesterday
+                </button>
+                <button 
+                    type="button" 
+                    className={`invoices-date-pill {datePreset === 'last7' ? 'active' : ''}`}
+                    onClick={() => handleDatePreset('last7')}
+                >
+                    Last 7 Days
+                </button>
+                <button 
+                    type="button" 
+                    className={`invoices-date-pill {datePreset === 'month' ? 'active' : ''}`}
+                    onClick={() => handleDatePreset('month')}
+                >
+                    This Month
+                </button>
+                <button 
+                    type="button" 
+                    className={`invoices-date-pill {datePreset === 'all' ? 'active' : ''}`}
+                    onClick={() => handleDatePreset('all')}
+                >
+                    All Records
+                </button>
+            </div>
+
+            {/* KPI Metrics Cards */}
+            <div className="row g-3 mb-3">
+                <div className="col-6 col-md-3">
+                    <div className="invoices-stats-card border-start border-primary border-4">
+                        <div className="d-flex justify-content-between align-items-center mb-1">
+                            <span className="text-secondary small fw-bold text-uppercase">Today's Bills</span>
+                            <i className="bi bi-calendar-check text-primary fs-5"></i>
+                        </div>
+                        <h4 className="fw-bold text-dark mb-0">{stats.today_count || 0}</h4>
+                        <small className="text-primary fw-semibold">₹{Number(stats.today_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</small>
+                    </div>
+                </div>
+                <div className="col-6 col-md-3">
+                    <div className="invoices-stats-card border-start border-success border-4">
+                        <div className="d-flex justify-content-between align-items-center mb-1">
+                            <span className="text-secondary small fw-bold text-uppercase">Total Invoices</span>
+                            <i className="bi bi-receipt text-success fs-5"></i>
+                        </div>
+                        <h4 className="fw-bold text-dark mb-0">{stats.total_count || 0}</h4>
+                        <small className="text-success fw-semibold">₹{Number(stats.total_amount || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</small>
+                    </div>
+                </div>
+                <div className="col-6 col-md-3">
+                    <div className="invoices-stats-card border-start border-warning border-4">
+                        <div className="d-flex justify-content-between align-items-center mb-1">
+                            <span className="text-secondary small fw-bold text-uppercase">Returns / Refunds</span>
+                            <i className="bi bi-arrow-return-left text-warning fs-5"></i>
+                        </div>
+                        <h4 className="fw-bold text-dark mb-0">₹{Number(stats.total_returns || 0).toLocaleString('en-IN', { minimumFractionDigits: 2 })}</h4>
+                        <small className="text-muted">Total customer returns</small>
+                    </div>
+                </div>
+                <div className="col-6 col-md-3">
+                    <div className="invoices-stats-card border-start border-info border-4">
+                        <div className="d-flex justify-content-between align-items-center mb-1">
+                            <span className="text-secondary small fw-bold text-uppercase">Net Realized</span>
+                            <i className="bi bi-cash-stack text-info fs-5"></i>
+                        </div>
+                        <h4 className="fw-bold text-dark mb-0">
+                            ₹{Number((stats.total_amount || 0) - (stats.total_returns || 0)).toLocaleString('en-IN', { minimumFractionDigits: 2 })}
+                        </h4>
+                        <small className="text-info fw-semibold">Net pharmacy collection</small>
+                    </div>
+                </div>
+            </div>
+
+            {/* Filters Row */}
+            <div className="card border shadow-sm mb-3">
+                <div className="card-body p-3">
+                    <form onSubmit={handleSearchSubmit} className="row g-2 align-items-center">
+                        <div className="col-12 col-md-4">
+                            <div className="input-group input-group-sm">
+                                <span className="input-group-text bg-white text-muted">
+                                    <i className="bi bi-search"></i>
+                                </span>
+                                <input 
+                                    type="text" 
+                                    className="form-control" 
+                                    placeholder="Search Bill #, Patient, Mobile, Doctor..."
+                                    value={searchQuery}
+                                    onChange={(e) => setSearchQuery(e.target.value)}
+                                />
+                                {searchQuery && (
+                                    <button type="button" className="btn btn-outline-secondary" onClick={clearSearch}>
+                                        <i className="bi bi-x"></i>
+                                    </button>
+                                )}
+                                <button type="submit" className="btn btn-primary px-3">
+                                    Search
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="col-6 col-md-2">
+                            <div className="input-group input-group-sm">
+                                <span className="input-group-text bg-light text-muted" style={{ fontSize: '0.72rem' }}>From</span>
+                                <input 
+                                    type="date" 
+                                    className="form-control"
+                                    value={fromDate}
+                                    onChange={(e) => { setFromDate(e.target.value); setDatePreset('custom'); }}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="col-6 col-md-2">
+                            <div className="input-group input-group-sm">
+                                <span className="input-group-text bg-light text-muted" style={{ fontSize: '0.72rem' }}>To</span>
+                                <input 
+                                    type="date" 
+                                    className="form-control"
+                                    value={toDate}
+                                    onChange={(e) => { setToDate(e.target.value); setDatePreset('custom'); }}
+                                />
+                            </div>
+                        </div>
+
+                        <div className="col-6 col-md-2">
+                            <select 
+                                className="form-select form-select-sm"
+                                value={paymentMode}
+                                onChange={(e) => setPaymentMode(e.target.value)}
+                            >
+                                <option value="ALL">All Payments</option>
+                                <option value="Cash">Cash</option>
+                                <option value="UPI">UPI / QR</option>
+                                <option value="Card">Card</option>
+                                <option value="Mixed">Split / Mixed</option>
+                                <option value="IPD_Credit">IPD Credit</option>
+                            </select>
+                        </div>
+
+                        <div className="col-6 col-md-2 d-flex justify-content-end align-items-center gap-2">
+                            <label className="text-muted small mb-0">Show:</label>
+                            <select 
+                                className="form-select form-select-sm" 
+                                style={{ width: 80 }}
+                                value={limit}
+                                onChange={(e) => setLimit(Number(e.target.value))}
+                            >
+                                <option value="15">15</option>
+                                <option value="25">25</option>
+                                <option value="50">50</option>
+                                <option value="100">100</option>
+                            </select>
+                        </div>
+                    </form>
+                </div>
+            </div>
+
+            {/* Invoices List Table */}
+            <div className="card border shadow-sm mb-3">
+                <div className="table-responsive">
+                    <table className="table table-hover align-middle mb-0 invoices-table">
+                        <thead>
+                            <tr>
+                                <th style={{ width: 140 }}>Invoice No</th>
+                                <th style={{ width: 130 }}>Date &amp; Time</th>
+                                <th>Patient Details</th>
+                                <th>Doctor</th>
+                                <th>Items Dispensed</th>
+                                <th style={{ width: 100 }}>Payment</th>
+                                <th className="text-end" style={{ width: 110 }}>Net Total</th>
+                                <th className="text-center" style={{ width: 90 }}>Status</th>
+                                <th className="text-center" style={{ width: 220 }}>Actions</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {isLoading ? (
+                                <tr>
+                                    <td colSpan="9" className="text-center py-5 text-muted">
+                                        <div className="spinner-border spinner-border-sm text-primary me-2"></div>
+                                        Loading invoices...
+                                    </td>
+                                </tr>
+                            ) : invoices.length === 0 ? (
+                                <tr>
+                                    <td colSpan="9" className="text-center py-5 text-muted">
+                                        <i className="bi bi-inbox fs-2 d-block mb-2 text-secondary"></i>
+                                        <h6>No invoices found</h6>
+                                        <p className="small mb-0">Try changing your search query or date range filters.</p>
+                                    </td>
+                                </tr>
+                            ) : (
+                                invoices.map((inv) => {
+                                    const hasReturns = Number(inv.return_amount) > 0;
+                                    return (
+                                        <tr key={inv.sale_id}>
+                                            <td>
+                                                <span 
+                                                    className="badge bg-dark-subtle text-dark border font-monospace px-2 py-1 fs-6 cursor-pointer"
+                                                    onClick={() => openPrintDrawer(inv.sale_id)}
+                                                    title="Click to View / Print Invoice"
+                                                    style={{ cursor: 'pointer' }}
+                                                >
+                                                    {inv.invoice_no}
+                                                </span>
+                                                {inv.abdm_care_context_ref && (
+                                                    <span className="d-block mt-1 text-success" style={{ fontSize: '0.68rem' }} title="ABDM Linked">
+                                                        <i className="bi bi-shield-fill-check me-0.5"></i> ABDM
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td>
+                                                <div className="fw-semibold text-dark" style={{ fontSize: '0.82rem' }}>
+                                                    {String(inv.sale_date).slice(0, 10)}
+                                                </div>
+                                                <small className="text-muted" style={{ fontSize: '0.72rem' }}>
+                                                    {String(inv.sale_date).slice(11, 16)}
+                                                </small>
+                                            </td>
+                                            <td>
+                                                <div className="fw-bold text-dark">
+                                                    {inv.patient_name || 'Walk-in Customer'}
+                                                </div>
+                                                <div className="d-flex align-items-center gap-1 flex-wrap mt-0.5">
+                                                    {inv.uhid && (
+                                                        <span className="badge bg-light text-primary border" style={{ fontSize: '0.68rem' }}>
+                                                            {inv.uhid}
+                                                        </span>
+                                                    )}
+                                                    {inv.patient_mobile && (
+                                                        <span className="text-muted" style={{ fontSize: '0.72rem' }}>
+                                                            <i className="bi bi-telephone me-0.5"></i> {inv.patient_mobile}
+                                                        </span>
+                                                    )}
+                                                    <span className={`badge {inv.patient_type === 'IPD' ? 'bg-danger-subtle text-danger' : (inv.patient_type === 'OPD' ? 'bg-primary-subtle text-primary' : 'bg-secondary-subtle text-secondary')}`} style={{ fontSize: '0.65rem' }}>
+                                                        {inv.patient_type || 'Walk-in'}
+                                                    </span>
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <div className="text-dark fw-medium" style={{ fontSize: '0.82rem' }}>
+                                                    {inv.doctor_name || 'Self / Walk-in'}
+                                                </div>
+                                                {inv.doctor_reg_no && (
+                                                    <small className="text-muted" style={{ fontSize: '0.7rem' }}>Reg: {inv.doctor_reg_no}</small>
+                                                )}
+                                            </td>
+                                            <td>
+                                                <div className="d-flex align-items-center gap-1 mb-0.5">
+                                                    <span className="badge bg-info-subtle text-info border border-info-subtle" style={{ fontSize: '0.7rem' }}>
+                                                        {inv.items_count || 0} items
+                                                    </span>
+                                                </div>
+                                                <div className="text-secondary text-truncate" style={{ maxWidth: 220, fontSize: '0.75rem' }} title={inv.items_summary}>
+                                                    {inv.items_summary || 'N/A'}
+                                                </div>
+                                            </td>
+                                            <td>
+                                                <span className={`badge {inv.payment_mode === 'Cash' ? 'bg-success-subtle text-success border border-success-subtle' : (inv.payment_mode === 'UPI' ? 'bg-info-subtle text-info border border-info-subtle' : (inv.payment_mode === 'Card' ? 'bg-primary-subtle text-primary border border-primary-subtle' : 'bg-warning-subtle text-warning-emphasis border border-warning-subtle'))}`}>
+                                                    {inv.payment_mode || 'Cash'}
+                                                </span>
+                                            </td>
+                                            <td className="text-end">
+                                                <div className="fw-bold text-dark fs-6">
+                                                    ₹{Number(inv.net_amount).toFixed(2)}
+                                                </div>
+                                                {Number(inv.discount_amount) > 0 && (
+                                                    <small className="text-danger d-block" style={{ fontSize: '0.7rem' }}>
+                                                        Disc: -₹{Number(inv.discount_amount).toFixed(2)}
+                                                    </small>
+                                                )}
+                                                {hasReturns && (
+                                                    <small className="text-warning-emphasis d-block" style={{ fontSize: '0.7rem' }}>
+                                                        Ret: -₹{Number(inv.return_amount).toFixed(2)}
+                                                    </small>
+                                                )}
+                                            </td>
+                                            <td className="text-center">
+                                                {hasReturns ? (
+                                                    <span className="badge bg-warning text-dark" style={{ fontSize: '0.7rem' }}>
+                                                        Exchange
+                                                    </span>
+                                                ) : (
+                                                    <span className="badge bg-success-subtle text-success border border-success-subtle" style={{ fontSize: '0.7rem' }}>
+                                                        Paid
+                                                    </span>
+                                                )}
+                                            </td>
+                                            <td className="text-center">
+                                                <div className="d-flex align-items-center justify-content-center gap-1">
+                                                    <button 
+                                                        type="button" 
+                                                        className="btn btn-xs btn-outline-primary py-1 px-2 d-inline-flex align-items-center gap-1"
+                                                        onClick={() => openPrintDrawer(inv.sale_id)}
+                                                        title="View &amp; Print Invoice (Thermal, A5 Landscape, A4)"
+                                                        style={{ fontSize: '0.72rem' }}
+                                                    >
+                                                        <i className="bi bi-printer"></i>
+                                                        <span>View</span>
+                                                    </button>
+                                                    <button 
+                                                        type="button" 
+                                                        className="btn btn-xs btn-outline-secondary py-1 px-2 d-inline-flex align-items-center gap-1"
+                                                        onClick={() => openEditModal(inv)}
+                                                        title="Quick Edit Patient Name, Mobile, Doctor, Payment Mode"
+                                                        style={{ fontSize: '0.72rem' }}
+                                                    >
+                                                        <i className="bi bi-pencil"></i>
+                                                        <span>Edit</span>
+                                                    </button>
+                                                    <button 
+                                                        type="button" 
+                                                        className="btn btn-xs btn-success py-1 px-2 d-inline-flex align-items-center gap-1"
+                                                        onClick={() => handleEditInPos(inv.sale_id)}
+                                                        title="Open in POS Counter Desk to edit medicines, quantities, or re-bill"
+                                                        style={{ fontSize: '0.72rem' }}
+                                                    >
+                                                        <i className="bi bi-cart3"></i>
+                                                        <span>Edit in POS</span>
+                                                    </button>
+                                                </div>
+                                            </td>
+                                        </tr>
+                                    );
+                                })
+                            )}
+                        </tbody>
+                    </table>
+                </div>
+
+                {/* Pagination Footer */}
+                {pagination.total_pages > 1 && (
+                    <div className="card-footer bg-white d-flex flex-wrap justify-content-between align-items-center py-2 px-3">
+                        <small className="text-muted">
+                            Showing page <strong>{pagination.current_page}</strong> of <strong>{pagination.total_pages}</strong> ({pagination.total_records} total invoices)
+                        </small>
+                        <div className="btn-group btn-group-sm">
+                            <button 
+                                className="btn btn-outline-secondary" 
+                                disabled={pagination.current_page <= 1 || isLoading}
+                                onClick={() => loadInvoices(pagination.current_page - 1)}
+                            >
+                                <i className="bi bi-chevron-left"></i> Prev
+                            </button>
+                            <span className="btn btn-outline-secondary disabled fw-bold text-dark px-3">
+                                {pagination.current_page} / {pagination.total_pages}
+                            </span>
+                            <button 
+                                className="btn btn-outline-secondary" 
+                                disabled={pagination.current_page >= pagination.total_pages || isLoading}
+                                onClick={() => loadInvoices(pagination.current_page + 1)}
+                            >
+                                Next <i className="bi bi-chevron-right"></i>
+                            </button>
+                        </div>
+                    </div>
+                )}
+            </div>
+
+            {/* Quick Edit Details Modal */}
+            {editModalSale && (
+                <div className="modal fade show d-block" style={{ backgroundColor: 'rgba(15, 23, 42, 0.65)', backdropFilter: 'blur(3px)', zIndex: 1060 }} tabIndex="-1">
+                    <div className="modal-dialog modal-dialog-centered modal-lg">
+                        <div className="modal-content border-0 shadow-lg rounded-3">
+                            <div className="modal-header bg-dark text-white py-2.5 px-3">
+                                <h6 className="modal-title mb-0 fw-bold d-flex align-items-center gap-2">
+                                    <i className="bi bi-pencil-square text-warning"></i>
+                                    Edit Invoice Details: <span className="text-info">{editModalSale.invoice_no}</span>
+                                </h6>
+                                <button type="button" className="btn-close btn-close-white" onClick={() => setEditModalSale(null)}></button>
+                            </div>
+                            <form onSubmit={handleSaveEdit}>
+                                <div className="modal-body p-3">
+                                    <div className="alert alert-info py-1.5 px-2.5 mb-3" style={{ fontSize: '0.78rem' }}>
+                                        <i className="bi bi-info-circle me-1"></i>
+                                        Use this to correct patient information, doctor name, or payment mode on this completed bill. To modify medicine quantities or items, click <strong>"Edit in POS"</strong> in the main table.
+                                    </div>
+
+                                    <div className="row g-2">
+                                        <div className="col-md-6">
+                                            <label className="form-label small fw-bold text-muted mb-1">Patient Name</label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm"
+                                                value={editForm.patient_name}
+                                                onChange={(e) => setEditForm({ ...editForm, patient_name: e.target.value })}
+                                                required
+                                            />
+                                        </div>
+                                        <div className="col-md-6">
+                                            <label className="form-label small fw-bold text-muted mb-1">Mobile Number</label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm"
+                                                value={editForm.patient_mobile}
+                                                onChange={(e) => setEditForm({ ...editForm, patient_mobile: e.target.value })}
+                                                placeholder="10-digit mobile"
+                                            />
+                                        </div>
+
+                                        <div className="col-md-4">
+                                            <label className="form-label small fw-bold text-muted mb-1">Age</label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm"
+                                                value={editForm.age}
+                                                onChange={(e) => setEditForm({ ...editForm, age: e.target.value })}
+                                                placeholder="e.g. 45 Y"
+                                            />
+                                        </div>
+                                        <div className="col-md-4">
+                                            <label className="form-label small fw-bold text-muted mb-1">Gender</label>
+                                            <select 
+                                                className="form-select form-select-sm"
+                                                value={editForm.gender}
+                                                onChange={(e) => setEditForm({ ...editForm, gender: e.target.value })}
+                                            >
+                                                <option value="">Select Gender</option>
+                                                <option value="Male">Male</option>
+                                                <option value="Female">Female</option>
+                                                <option value="Other">Other</option>
+                                            </select>
+                                        </div>
+                                        <div className="col-md-4">
+                                            <label className="form-label small fw-bold text-muted mb-1">Payment Mode</label>
+                                            <select 
+                                                className="form-select form-select-sm"
+                                                value={editForm.payment_mode}
+                                                onChange={(e) => setEditForm({ ...editForm, payment_mode: e.target.value })}
+                                            >
+                                                <option value="Cash">Cash</option>
+                                                <option value="UPI">UPI / QR</option>
+                                                <option value="Card">Card</option>
+                                                <option value="Mixed">Mixed / Split</option>
+                                                <option value="IPD_Credit">IPD Credit</option>
+                                            </select>
+                                        </div>
+
+                                        <div className="col-md-6">
+                                            <label className="form-label small fw-bold text-muted mb-1">Doctor Name</label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm"
+                                                value={editForm.doctor_name}
+                                                onChange={(e) => setEditForm({ ...editForm, doctor_name: e.target.value })}
+                                                placeholder="Prescribing doctor"
+                                            />
+                                        </div>
+                                        <div className="col-md-6">
+                                            <label className="form-label small fw-bold text-muted mb-1">Doctor Reg No</label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm"
+                                                value={editForm.doctor_reg_no}
+                                                onChange={(e) => setEditForm({ ...editForm, doctor_reg_no: e.target.value })}
+                                                placeholder="MCI / State Medical Council Reg No"
+                                            />
+                                        </div>
+
+                                        <div className="col-md-6">
+                                            <label className="form-label small fw-bold text-muted mb-1">Patient Address</label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm"
+                                                value={editForm.patient_address}
+                                                onChange={(e) => setEditForm({ ...editForm, patient_address: e.target.value })}
+                                                placeholder="Address / City"
+                                            />
+                                        </div>
+                                        <div className="col-md-6">
+                                            <label className="form-label small fw-bold text-muted mb-1">Payment Ref / UPI UTR / Bank</label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm"
+                                                value={editForm.payment_reference || editForm.upi_ref_no || editForm.card_ref_no}
+                                                onChange={(e) => setEditForm({ ...editForm, payment_reference: e.target.value, upi_ref_no: e.target.value })}
+                                                placeholder="Transaction reference ID"
+                                            />
+                                        </div>
+
+                                        <div className="col-12">
+                                            <label className="form-label small fw-bold text-muted mb-1">Audit Notes / Remarks</label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm"
+                                                value={editForm.remarks}
+                                                onChange={(e) => setEditForm({ ...editForm, remarks: e.target.value })}
+                                                placeholder="Reason for correction or cashier notes"
+                                            />
+                                        </div>
+                                    </div>
+                                </div>
+                                <div className="modal-footer bg-light py-2 px-3 d-flex justify-content-between">
+                                    <button type="button" className="btn btn-sm btn-outline-secondary" onClick={() => setEditModalSale(null)}>
+                                        Cancel
+                                    </button>
+                                    <button type="submit" className="btn btn-sm btn-primary px-3 fw-bold" disabled={isUpdating}>
+                                        {isUpdating ? (
+                                            <span><i className="bi bi-hourglass-split me-1"></i> Saving...</span>
+                                        ) : (
+                                            <span><i className="bi bi-check-circle me-1"></i> Save Changes</span>
+                                        )}
+                                    </button>
+                                </div>
+                            </form>
+                        </div>
+                    </div>
+                </div>
+            )}
+
+            {/* Slide-in Print Drawer for Invoices View */}
+            <div 
+                className={`print-drawer-overlay {isPrintOpen ? 'open' : ''}`}
+                onClick={() => setIsPrintOpen(false)}
+            />
+            <div className={`print-drawer {isPrintOpen ? 'open' : ''}`} id="invoices-print-drawer">
+                {viewInvoice && (
+                    <>
+                        <div className="print-drawer-header">
+                            <div className="d-flex align-items-center gap-2">
+                                <i className="bi bi-receipt text-warning fs-5"></i>
+                                <div>
+                                    <h6 className="mb-0 fw-bold text-white">Invoice &amp; Print Desk</h6>
+                                    <small className="text-secondary" style={{ fontSize: '0.72rem' }}>
+                                        Bill: <span className="text-info fw-bold">{viewInvoice.sale.invoice_no}</span>
+                                    </small>
+                                </div>
+                            </div>
+
+                            <div className="d-flex align-items-center gap-1.5 flex-wrap">
+                                <div className="btn-group btn-group-sm">
+                                    <button className={`btn btn-xs py-1 px-2 {printFormat === 'thermal' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light text-white'}`} style={{ fontSize: '0.72rem' }} onClick={() => setPrintFormat('thermal')}>
+                                        <i className="bi bi-receipt me-1"></i> Thermal (Text)
+                                    </button>
+                                    <button className={`btn btn-xs py-1 px-2 {printFormat === 'a5' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light text-white'}`} style={{ fontSize: '0.72rem' }} onClick={() => setPrintFormat('a5')}>
+                                        <i className="bi bi-file-earmark-pdf me-1"></i> A5 Landscape (PDF)
+                                    </button>
+                                    <button className={`btn btn-xs py-1 px-2 {printFormat === 'a4' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light text-white'}`} style={{ fontSize: '0.72rem' }} onClick={() => setPrintFormat('a4')}>
+                                        <i className="bi bi-file-earmark-pdf me-1"></i> A4 (PDF)
+                                    </button>
+                                </div>
+
+                                {printFormat === 'thermal' ? (
+                                    <button 
+                                        className="btn btn-sm btn-warning text-dark fw-bold py-1 px-2.5 ms-0.5" 
+                                        onClick={printThermalReceipt} 
+                                        title="Print on 80mm Thermal Receipt Printer"
+                                        style={{ fontSize: '0.75rem' }}
+                                    >
+                                        <i className="bi bi-printer-fill me-1"></i> Print Thermal
+                                    </button>
+                                ) : (
+                                    <>
+                                        <button 
+                                            className="btn btn-sm btn-outline-light py-1 px-2 text-white" 
+                                            onClick={() => downloadPdf(printFormat)} 
+                                            title="Download PDF Document"
+                                            style={{ fontSize: '0.75rem' }}
+                                        >
+                                            <i className="bi bi-download me-1 text-info"></i> PDF
+                                        </button>
+                                        <button 
+                                            className="btn btn-sm btn-primary py-1 px-2.5 ms-0.5 fw-bold" 
+                                            onClick={() => printPdf(printFormat)} 
+                                            title="Print Clean Vector PDF"
+                                            style={{ fontSize: '0.75rem' }}
+                                        >
+                                            <i className="bi bi-printer me-1"></i> Print PDF ({printFormat === 'a5' ? 'A5 LANDSCAPE' : printFormat.toUpperCase()})
+                                        </button>
+                                    </>
+                                )}
+
+                                <button 
+                                    type="button" 
+                                    className="btn btn-sm btn-outline-light rounded-pill px-2.5 py-1 ms-1 d-flex align-items-center gap-1"
+                                    onClick={() => setIsPrintOpen(false)}
+                                    title="Close Print Drawer (Esc)"
+                                >
+                                    <i className="bi bi-x-lg"></i>
+                                    <kbd style={{ background: '#334155', color: '#f8fafc', fontSize: '0.62rem', padding: '1px 3px', borderRadius: '3px' }}>Esc</kbd>
+                                </button>
+                            </div>
+                        </div>
+
+                        <div className="print-drawer-body">
+                            <div className="print-paper-card">
+                                <div id="printable-container">
+                                {printFormat === 'thermal' && (
+                                    <div className="p-2 text-center">
+                                        <div className="d-flex justify-content-between align-items-center mb-2 px-2 pb-2 border-bottom">
+                                            <span className="badge bg-secondary">Thermal 80mm ESC/POS Text</span>
+                                            <button className="btn btn-xs btn-warning text-dark fw-bold" onClick={printThermalReceipt}>
+                                                <i className="bi bi-printer-fill me-1"></i> Print Thermal Receipt
+                                            </button>
+                                        </div>
+                                        <pre style={{
+                                            fontFamily: '"Courier New", Courier, monospace',
+                                            fontSize: '12px',
+                                            lineHeight: '1.2',
+                                            color: '#000000',
+                                            backgroundColor: '#ffffff',
+                                            padding: '12px',
+                                            margin: '0 auto',
+                                            maxWidth: '380px',
+                                            textAlign: 'left',
+                                            whiteSpace: 'pre-wrap',
+                                            wordBreak: 'break-word',
+                                            border: '1px dashed #cbd5e1',
+                                            borderRadius: '6px'
+                                        }}>
+                                            {generateThermalReceiptText(viewInvoice)}
+                                        </pre>
+                                    </div>
+                                )}
+
+                                {printFormat === 'a5' && (
+                                    <div className="p-3 text-center print-a5-invoice" style={{ maxWidth: '820px', margin: '0 auto' }}>
+                                        <div className="alert alert-info py-1.5 px-3 mb-3 d-flex justify-content-between align-items-center shadow-sm" style={{ fontSize: '0.78rem' }}>
+                                            <span>
+                                                <i className="bi bi-file-earmark-pdf-fill me-1"></i>
+                                                <strong>A5 Landscape PDF (210mm × 148mm):</strong> Native vector document rendered by mPDF.
+                                            </span>
+                                            <div className="d-flex gap-1.5">
+                                                <button className="btn btn-xs btn-outline-primary py-1 px-2" onClick={() => downloadPdf('a5')}>
+                                                    <i className="bi bi-download me-1"></i> Download
+                                                </button>
+                                                <button className="btn btn-xs btn-primary py-1 px-2.5 fw-bold" onClick={() => printPdf('a5')}>
+                                                    <i className="bi bi-printer me-1"></i> Print PDF (A5 Landscape)
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="border rounded shadow-sm overflow-hidden" style={{ background: '#525659', padding: '12px' }}>
+                                            <iframe 
+                                                src={`{API_BASE}sales/invoice-pdf/{viewInvoice.sale.sale_id}?format=a5&view=1`}
+                                                title="A5 Landscape PDF Preview"
+                                                style={{ width: '100%', height: '540px', border: 'none', borderRadius: '4px', background: '#ffffff' }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+
+                                {printFormat === 'a4' && (
+                                    <div className="p-3 text-center print-a4-invoice" style={{ maxWidth: '780px', margin: '0 auto' }}>
+                                        <div className="alert alert-info py-1.5 px-3 mb-3 d-flex justify-content-between align-items-center shadow-sm" style={{ fontSize: '0.78rem' }}>
+                                            <span>
+                                                <i className="bi bi-file-earmark-pdf-fill me-1"></i>
+                                                <strong>A4 Vector PDF (210mm × 297mm):</strong> Native vector document rendered by mPDF.
+                                            </span>
+                                            <div className="d-flex gap-1.5">
+                                                <button className="btn btn-xs btn-outline-primary py-1 px-2" onClick={() => downloadPdf('a4')}>
+                                                    <i className="bi bi-download me-1"></i> Download
+                                                </button>
+                                                <button className="btn btn-xs btn-primary py-1 px-2.5 fw-bold" onClick={() => printPdf('a4')}>
+                                                    <i className="bi bi-printer me-1"></i> Print PDF (A4)
+                                                </button>
+                                            </div>
+                                        </div>
+                                        <div className="border rounded shadow-sm overflow-hidden" style={{ background: '#525659', padding: '12px' }}>
+                                            <iframe 
+                                                src={`{API_BASE}sales/invoice-pdf/{viewInvoice.sale.sale_id}?format=a4&view=1`}
+                                                title="A4 PDF Preview"
+                                                style={{ width: '100%', height: '620px', border: 'none', borderRadius: '4px', background: '#ffffff' }}
+                                            />
+                                        </div>
+                                    </div>
+                                )}
+                                </div>
+                            </div>
+                        </div>
+                    </>
+                )}
+            </div>
         </div>
     );
 }
