@@ -186,6 +186,75 @@
             border-radius: 4px;
         }
 
+        /* Slide-in Bill Print Drawer */
+        .print-drawer-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100vw;
+            height: 100vh;
+            background: rgba(15, 23, 42, 0.65);
+            backdrop-filter: blur(4px);
+            z-index: 1045;
+            opacity: 0;
+            pointer-events: none;
+            transition: opacity 0.25s ease;
+        }
+        .print-drawer-overlay.open {
+            opacity: 1;
+            pointer-events: auto;
+        }
+        .print-drawer {
+            position: fixed;
+            top: 0;
+            right: 0;
+            width: 720px;
+            max-width: 96vw;
+            height: 100vh;
+            background: #f1f5f9;
+            color: #1e293b;
+            z-index: 1050;
+            box-shadow: -12px 0 40px rgba(0, 0, 0, 0.55);
+            display: flex;
+            flex-direction: column;
+            transform: translateX(105%);
+            transition: transform 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+        }
+        .print-drawer.open {
+            transform: translateX(0);
+        }
+        .print-drawer-header {
+            padding: 14px 20px;
+            background: #0f172a;
+            color: #ffffff;
+            border-bottom: 1px solid rgba(255, 255, 255, 0.12);
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            flex-shrink: 0;
+        }
+        .print-drawer-body {
+            padding: 20px;
+            overflow-y: auto;
+            flex: 1;
+            background: #cbd5e1;
+        }
+        .print-drawer-body::-webkit-scrollbar {
+            width: 6px;
+        }
+        .print-drawer-body::-webkit-scrollbar-thumb {
+            background: rgba(100, 116, 139, 0.4);
+            border-radius: 4px;
+        }
+        .print-paper-card {
+            background: #ffffff;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.12);
+            padding: 24px;
+            margin: 0 auto;
+            max-width: 100%;
+        }
+
         .btn-primary-custom {
             background: linear-gradient(135deg, #0891b2 0%, #0284c7 100%);
             border: none;
@@ -806,6 +875,7 @@ function PosCounter({ store, notify }) {
     const [printFormat, setPrintFormat] = useState('thermal'); // 'thermal', 'a5', 'a4'
     const [isProcessing, setIsProcessing] = useState(false);
     const [isCheckoutOpen, setIsCheckoutOpen] = useState(false);
+    const [isPrintOpen, setIsPrintOpen] = useState(false);
 
     // B2C Sales Return & Same-Invoice Exchange State
     const [returnCart, setReturnCart] = useState([]);
@@ -1587,6 +1657,7 @@ function PosCounter({ store, notify }) {
             const data = await res.json();
             if (data.status) {
                 setLastInvoice(data);
+                setIsPrintOpen(true);
             }
         } catch (e) {
             console.error(e);
@@ -1596,13 +1667,14 @@ function PosCounter({ store, notify }) {
     // Global Keyboard Shortcuts (Desktop Pharmacy Standard)
     useEffect(() => {
         const handleGlobalKeyDown = (e) => {
-            // Dismiss Modals or Checkout Drawer on Escape
-            if (showFhirModal || showReturnModal || isCheckoutOpen) {
+            // Dismiss Modals or Drawers on Escape
+            if (showFhirModal || showReturnModal || isCheckoutOpen || isPrintOpen) {
                 if (e.key === 'Escape') {
                     e.preventDefault();
                     if (showFhirModal) setShowFhirModal(false);
                     else if (showReturnModal) setShowReturnModal(false);
                     else if (isCheckoutOpen) setIsCheckoutOpen(false);
+                    else if (isPrintOpen) setIsPrintOpen(false);
                 }
                 return;
             }
@@ -1675,7 +1747,7 @@ function PosCounter({ store, notify }) {
 
         window.addEventListener('keydown', handleGlobalKeyDown);
         return () => window.removeEventListener('keydown', handleGlobalKeyDown);
-    }, [showFhirModal, showReturnModal, isCheckoutOpen, paymentMode, selectedPatient, isProcessing, cart, returnCart, splitRemaining, splitCashNum, splitUpiNum, splitCardNum, refundPayable, refundMode]);
+    }, [showFhirModal, showReturnModal, isCheckoutOpen, isPrintOpen, paymentMode, selectedPatient, isProcessing, cart, returnCart, splitRemaining, splitCashNum, splitUpiNum, splitCardNum, refundPayable, refundMode]);
 
     return (
         <div className="pos-counter-wrapper position-relative">
@@ -1691,6 +1763,17 @@ function PosCounter({ store, notify }) {
                                 {patientType}
                             </span>
                         </div>
+                        {lastInvoice && (
+                            <button 
+                                type="button" 
+                                className="btn btn-sm btn-outline-success py-0.5 px-2.5 fw-semibold d-inline-flex align-items-center gap-1 shadow-sm" 
+                                onClick={() => setIsPrintOpen(true)} 
+                                title="View & Print Last Bill"
+                                style={{ fontSize: "0.75rem" }}
+                            >
+                                <i className="bi bi-printer"></i> Last Bill: <strong>{lastInvoice.sale.invoice_no}</strong>
+                            </button>
+                        )}
                         {selectedPatient && (
                             <div className="d-flex gap-2">
                                 {(selectedPatient.has_active_opd || selectedPatient.has_active_ipd) && (
@@ -2398,36 +2481,618 @@ function PosCounter({ store, notify }) {
                     </div>
                 </div>
 
-                {/* Print Preview Component for Thermal 80mm, A5, and A4 */}
-                {lastInvoice && (
-                    <div className="counter-card mt-3">
-                        <div className="d-flex flex-wrap justify-content-between align-items-center gap-2 mb-2">
-                            <div className="d-flex flex-wrap align-items-center gap-2">
-                                <span className="fw-bold text-success"><i className="bi bi-check-circle me-1"></i> Bill: {lastInvoice.sale.invoice_no}</span>
-                                {lastInvoice.sale.abdm_care_context_ref && (
-                                    <span className="badge bg-success-subtle text-success border border-success" title="Ayushman Bharat Digital Mission Care Context Reference">
-                                        <i className="bi bi-shield-fill-check me-1"></i> {lastInvoice.sale.abdm_care_context_ref}
-                                    </span>
-                                )}
-                            </div>
-                            <div className="d-flex gap-1">
+            </div>
+        </div>
+
+        {/* Slide-in Checkout Desk Drawer & Backdrop */}
+        <div 
+            className={`checkout-drawer-overlay ${isCheckoutOpen ? 'open' : ''}`}
+            onClick={() => setIsCheckoutOpen(false)}
+        />
+        <div className={`checkout-drawer ${isCheckoutOpen ? 'open' : ''}`} id="pos-checkout-drawer">
+            <div className="checkout-drawer-header">
+                <div className="d-flex align-items-center gap-2">
+                    <i className="bi bi-cash-coin text-warning fs-5"></i>
+                    <div>
+                        <h6 className="mb-0 fw-bold text-white">Checkout Desk</h6>
+                        <small className="text-secondary" style={{ fontSize: '0.72rem' }}>
+                            Counter: <span className="text-info fw-bold">{store?.store_code || ''}</span> • {store?.store_name}
+                        </small>
+                    </div>
+                </div>
+                <button 
+                    type="button" 
+                    className="btn btn-sm btn-outline-light rounded-pill px-3 py-1 d-flex align-items-center gap-1.5"
+                    onClick={() => setIsCheckoutOpen(false)}
+                    title="Close Checkout Drawer (Esc)"
+                >
+                    <i className="bi bi-x-lg"></i>
+                    <span>Close</span>
+                    <kbd className="ms-1" style={{ background: '#334155', color: '#f8fafc', fontSize: '0.65rem', padding: '1px 4px', borderRadius: '3px' }}>Esc</kbd>
+                </button>
+            </div>
+            <div className="checkout-drawer-body">
+                    <h5 className="fw-bold text-white mb-3 d-flex justify-content-between align-items-center">
+                        <span>Checkout Desk</span>
+                        <span className="fs-6 text-primary">{store?.store_code || ''}</span>
+                    </h5>
+
+                    {/* Whole Bill Discount Controller */}
+                    <div className="p-2.5 rounded-3 mb-3" style={{ background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.15)' }}>
+                        <div className="d-flex justify-content-between align-items-center mb-1.5">
+                            <label className="text-white small fw-bold mb-0 d-flex align-items-center gap-1">
+                                <i className="bi bi-tag-fill text-warning"></i> Whole Bill Discount
+                            </label>
+                            <div className="btn-group btn-group-sm">
                                 <button 
-                                    className="btn btn-sm btn-outline-success py-0 px-2" 
-                                    onClick={() => viewAbdmBundle(lastInvoice.sale.sale_id)} 
-                                    title="View official ABDM FHIR R4 MedicationDispense JSON Document Bundle"
+                                    type="button" 
+                                    className={`btn btn-xs py-0.5 px-2 ${wholeDiscountType === 'pct' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light text-white'}`}
+                                    style={{ fontSize: '0.72rem' }}
+                                    onClick={() => setWholeDiscountType('pct')}
                                 >
-                                    <i className="bi bi-filetype-json me-1"></i> FHIR R4 Bundle
+                                    % Percent
                                 </button>
-                                <button className={`btn btn-sm ${printFormat === 'thermal' ? 'btn-dark' : 'btn-outline-secondary'} py-0 px-2`} onClick={() => setPrintFormat('thermal')}>80mm</button>
-                                <button className={`btn btn-sm ${printFormat === 'a5' ? 'btn-dark' : 'btn-outline-secondary'} py-0 px-2`} onClick={() => setPrintFormat('a5')}>A5</button>
-                                <button className={`btn btn-sm ${printFormat === 'a4' ? 'btn-dark' : 'btn-outline-secondary'} py-0 px-2`} onClick={() => setPrintFormat('a4')}>A4</button>
-                                <button className="btn btn-sm btn-primary py-0 px-2" onClick={() => window.print()} title="Print Bill">
-                                    <i className="bi bi-printer"></i>
+                                <button 
+                                    type="button" 
+                                    className={`btn btn-xs py-0.5 px-2 ${wholeDiscountType === 'val' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light text-white'}`}
+                                    style={{ fontSize: '0.72rem' }}
+                                    onClick={() => setWholeDiscountType('val')}
+                                >
+                                    ₹ Fixed Value
                                 </button>
                             </div>
                         </div>
 
-                        <div id="printable-container">
+                        <div className="input-group input-group-sm mb-2">
+                            <span className="input-group-text bg-dark border-secondary text-warning fw-bold">
+                                {wholeDiscountType === 'pct' ? '%' : '₹'}
+                            </span>
+                            <input 
+                                type="number" 
+                                id="whole-discount-input"
+                                ref={wholeDiscountRef}
+                                className="form-control form-control-sm bg-dark text-white border-secondary fw-bold" 
+                                min="0"
+                                max={wholeDiscountType === 'pct' ? 100 : balanceAfterItemDisc}
+                                step={wholeDiscountType === 'pct' ? '0.5' : '1'}
+                                placeholder={wholeDiscountType === 'pct' ? 'Enter % (F7)' : 'Enter ₹ (F7)'}
+                                value={wholeDiscountVal || ''} 
+                                onChange={(e) => setWholeDiscountVal(e.target.value)}
+                                onKeyDown={(e) => {
+                                    if (e.key === 'Enter') {
+                                        e.preventDefault();
+                                        if (!isProcessing && cart.length > 0) {
+                                            processSale();
+                                        }
+                                    }
+                                }}
+                            />
+                            {Number(wholeDiscountVal) > 0 && (
+                                <button 
+                                    type="button" 
+                                    className="btn btn-sm btn-outline-danger" 
+                                    title="Reset Whole Bill Discount"
+                                    onClick={() => setWholeDiscountVal(0)}
+                                >
+                                    <i className="bi bi-x-lg"></i>
+                                </button>
+                            )}
+                        </div>
+
+                        {/* Quick Preset Buttons */}
+                        <div className="d-flex flex-wrap gap-1 align-items-center">
+                            <small className="text-slate-400 me-1" style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Presets:</small>
+                            {wholeDiscountType === 'pct' ? (
+                                [5, 10, 15, 20].map(p => (
+                                    <button 
+                                        key={p} 
+                                        type="button" 
+                                        className={`badge border ${Number(wholeDiscountVal) === p ? 'bg-warning text-dark border-warning' : 'bg-transparent text-white border-secondary'}`}
+                                        style={{ cursor: 'pointer', padding: '4px 8px', fontSize: '0.7rem' }}
+                                        onClick={() => setWholeDiscountVal(p)}
+                                    >
+                                        {p}%
+                                    </button>
+                                ))
+                            ) : (
+                                [20, 50, 100, 200].map(v => (
+                                    <button 
+                                        key={v} 
+                                        type="button" 
+                                        className={`badge border ${Number(wholeDiscountVal) === v ? 'bg-warning text-dark border-warning' : 'bg-transparent text-white border-secondary'}`}
+                                        style={{ cursor: 'pointer', padding: '4px 8px', fontSize: '0.7rem' }}
+                                        onClick={() => setWholeDiscountVal(v)}
+                                    >
+                                        ₹{v}
+                                    </button>
+                                ))
+                            )}
+                            {Number(wholeDiscountVal) > 0 && (
+                                <button 
+                                    type="button" 
+                                    className="badge bg-danger-subtle text-danger border border-danger ms-auto"
+                                    style={{ cursor: 'pointer', padding: '4px 6px', fontSize: '0.7rem' }}
+                                    onClick={() => setWholeDiscountVal(0)}
+                                >
+                                    Clear
+                                </button>
+                            )}
+                        </div>
+                    </div>
+
+                    {/* Breakdown */}
+                    <div className="d-flex justify-content-between mb-1.5 text-slate-300" style={{ color: '#cbd5e1' }}>
+                        <span>Gross Items Total:</span>
+                        <span className="fw-bold">₹{grossTotal.toFixed(2)}</span>
+                    </div>
+
+                    {itemDiscountTotal > 0 && (
+                        <div className="d-flex justify-content-between mb-1 text-slate-300" style={{ fontSize: '0.84rem', color: '#94a3b8' }}>
+                            <span>Item-Level Discounts:</span>
+                            <span className="text-danger">-₹{itemDiscountTotal.toFixed(2)}</span>
+                        </div>
+                    )}
+
+                    {wholeDiscountAmt > 0 && (
+                        <div className="d-flex justify-content-between mb-1 text-slate-300" style={{ fontSize: '0.84rem', color: '#94a3b8' }}>
+                            <span>Whole Bill Discount ({wholeDiscountType === 'pct' ? `${wholeDiscountVal}%` : `₹${wholeDiscountVal}`}):</span>
+                            <span className="text-danger">-₹{wholeDiscountAmt.toFixed(2)}</span>
+                        </div>
+                    )}
+
+                    {discountTotal > 0 && (
+                        <div className="d-flex justify-content-between mb-2 text-slate-300" style={{ color: '#cbd5e1' }}>
+                            <span>Total Discounts:</span>
+                            <span className="text-danger fw-bold">-₹{discountTotal.toFixed(2)}</span>
+                        </div>
+                    )}
+
+                    {returnTotal > 0 && (
+                        <div className="d-flex justify-content-between mb-2 text-danger fw-bold py-1 px-2 rounded" style={{ background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.3)' }}>
+                            <span><i className="bi bi-arrow-return-left me-1"></i> Less Return Credit:</span>
+                            <span>-₹{returnTotal.toFixed(2)}</span>
+                        </div>
+                    )}
+
+                    <div className="d-flex justify-content-between mb-2 text-slate-300" style={{ color: '#cbd5e1' }}>
+                        <span>Round Off:</span>
+                        <span>₹{roundOff}</span>
+                    </div>
+                    <hr style={{ borderColor: 'rgba(255,255,255,0.15)' }} />
+
+                    {refundPayable > 0 ? (
+                        <div className="p-3 rounded-3 mb-3 border border-warning" style={{ background: 'rgba(245, 158, 11, 0.15)' }}>
+                            <div className="d-flex justify-content-between align-items-center">
+                                <span className="fs-6 fw-bold text-white"><i className="bi bi-wallet2 text-warning me-1"></i> REFUND TO PATIENT:</span>
+                                <span className="fs-3 fw-bolder text-warning">₹{refundPayable.toLocaleString('en-IN')}</span>
+                            </div>
+                            <small className="text-white-50 d-block mt-1" style={{ fontSize: '0.72rem' }}>
+                                Return credit exceeds new items. Refund this net difference from counter cash drawer or UPI.
+                            </small>
+                            <div className="mt-2.5">
+                                <label className="form-label text-white small fw-bold mb-1">Refund Outflow Method</label>
+                                <div className="btn-group btn-group-sm w-100 mb-2">
+                                    <button 
+                                        type="button" 
+                                        className={`btn ${refundMode === 'Cash' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}
+                                        onClick={() => setRefundMode('Cash')}
+                                    >
+                                        <i className="bi bi-cash-stack me-1"></i> Cash Refund
+                                    </button>
+                                    <button 
+                                        type="button" 
+                                        className={`btn ${refundMode === 'UPI' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}
+                                        onClick={() => setRefundMode('UPI')}
+                                    >
+                                        <i className="bi bi-qr-code me-1"></i> UPI / Bank Refund
+                                    </button>
+                                </div>
+                                {refundMode === 'UPI' && (
+                                    <input 
+                                        type="text" 
+                                        className="form-control form-control-sm bg-dark text-white border-warning" 
+                                        placeholder="Patient UPI VPA or Bank Reference #" 
+                                        value={refundRefNo} 
+                                        onChange={(e) => setRefundRefNo(e.target.value)} 
+                                    />
+                                )}
+                            </div>
+                        </div>
+                    ) : (
+                        <div className="d-flex justify-content-between align-items-center mb-4">
+                            <span className="fs-5 fw-bold text-white">Net Payable:</span>
+                            <span className="fs-3 fw-bolder text-warning">₹{netPayable.toLocaleString('en-IN')}</span>
+                        </div>
+                    )}
+
+                    {/* Payment Mode Selection (Only when patient owes money) */}
+                    {refundPayable <= 0 && (
+                        <div>
+                            <div className="d-flex justify-content-between align-items-center mb-2">
+                                <label className="form-label text-white fw-bold mb-0">Payment Method</label>
+                        {paymentMode === 'Mixed' && (
+                            <span className="badge bg-warning text-dark"><i className="bi bi-pie-chart me-1"></i> Partial / Split Mode</span>
+                        )}
+                    </div>
+                    <div className="row g-2 mb-3">
+                        <div className="col-4">
+                            <button 
+                                className={`btn btn-sm w-100 ${paymentMode === 'Cash' ? 'btn-primary-custom' : 'btn-outline-light'}`}
+                                onClick={() => setPaymentMode('Cash')}
+                            >
+                                <i className="bi bi-cash-stack me-1"></i> Cash
+                            </button>
+                        </div>
+                        <div className="col-4">
+                            <button 
+                                className={`btn btn-sm w-100 ${paymentMode === 'UPI' ? 'btn-primary-custom' : 'btn-outline-light'}`}
+                                onClick={() => setPaymentMode('UPI')}
+                            >
+                                <i className="bi bi-qr-code-scan me-1"></i> UPI / QR
+                            </button>
+                        </div>
+                        <div className="col-4">
+                            <button 
+                                className={`btn btn-sm w-100 ${paymentMode === 'Mixed' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}
+                                onClick={() => {
+                                    setPaymentMode('Mixed');
+                                    if (!splitCash && !splitUpi) {
+                                        setSplitCash('');
+                                        setSplitUpi('');
+                                    }
+                                }}
+                                title="Partial payment by Cash and UPI/Bank"
+                            >
+                                <i className="bi bi-pie-chart-fill me-1"></i> Split / Mixed
+                            </button>
+                        </div>
+                        <div className="col-6">
+                            <button 
+                                className={`btn btn-sm w-100 ${paymentMode === 'Card' ? 'btn-primary-custom' : 'btn-outline-light'}`}
+                                onClick={() => setPaymentMode('Card')}
+                            >
+                                <i className="bi bi-credit-card me-1"></i> Card Swipe
+                            </button>
+                        </div>
+                        <div className="col-6">
+                            <button 
+                                className={`btn btn-sm w-100 ${paymentMode === 'IPD_Credit' ? 'btn-danger' : 'btn-outline-light'}`}
+                                onClick={() => setPaymentMode('IPD_Credit')}
+                                title="Charge to IPD Patient Bill"
+                            >
+                                <i className="bi bi-hospital me-1"></i> IPD Bill Post
+                            </button>
+                        </div>
+                    </div>
+
+                    {paymentMode === 'IPD_Credit' && (
+                        <div className="alert alert-warning py-2 mb-3" style={{ fontSize: '0.78rem' }}>
+                            <i className="bi bi-info-circle me-1"></i>
+                            Medicines will be charged directly to the patient's IPD Hospital Account and settled at discharge.
+                        </div>
+                    )}
+
+                    {/* Mixed / Split Payment Breakdown Panel */}
+                    {paymentMode === 'Mixed' && (
+                        <div className="card bg-dark border-warning mb-3 p-2.5 rounded-3 text-white" style={{ fontSize: '0.82rem' }}>
+                            <div className="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
+                                <span className="fw-bold text-warning"><i className="bi bi-receipt-cutoff me-1"></i> Split Payment Allocation</span>
+                                <span className="fw-bold">Total: ₹{netPayable}</span>
+                            </div>
+
+                            <div className="row g-2 mb-2">
+                                <div className="col-6">
+                                    <label className="form-label text-white-50 mb-1" style={{ fontSize: '0.75rem' }}>Cash Amount (₹)</label>
+                                    <div className="input-group input-group-sm">
+                                        <span className="input-group-text bg-secondary border-0 text-white">₹</span>
+                                        <input 
+                                            type="number" 
+                                            className="form-control form-control-sm bg-dark text-white border-secondary"
+                                            placeholder="e.g. 35"
+                                            value={splitCash}
+                                            onChange={(e) => setSplitCash(e.target.value)}
+                                            step="any"
+                                        />
+                                    </div>
+                                </div>
+                                <div className="col-6">
+                                    <label className="form-label text-white-50 mb-1" style={{ fontSize: '0.75rem' }}>UPI / Bank (₹)</label>
+                                    <div className="input-group input-group-sm">
+                                        <span className="input-group-text bg-secondary border-0 text-white">₹</span>
+                                        <input 
+                                            type="number" 
+                                            className="form-control form-control-sm bg-dark text-white border-secondary"
+                                            placeholder="e.g. 100"
+                                            value={splitUpi}
+                                            onChange={(e) => setSplitUpi(e.target.value)}
+                                            step="any"
+                                        />
+                                    </div>
+                                </div>
+                            </div>
+
+                            {/* UTR & Bank Details for the UPI portion */}
+                            {Number(splitUpi) > 0 && (
+                                <div className="p-2 rounded bg-black bg-opacity-25 border border-secondary mb-2">
+                                    <div className="row g-2">
+                                        <div className="col-7">
+                                            <label className="form-label text-warning mb-0" style={{ fontSize: '0.72rem' }}>
+                                                UPI UTR / Trans. Ref # <span className="text-danger">*</span>
+                                            </label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm bg-dark text-white border-warning"
+                                                placeholder="e.g. 425109876543 (12-digit)"
+                                                value={upiRefNo}
+                                                onChange={(e) => setUpiRefNo(e.target.value)}
+                                            />
+                                            <span style={{ fontSize: '0.65rem' }} className="text-white-50">Used by Accountant for statement audit</span>
+                                        </div>
+                                        <div className="col-5">
+                                            <label className="form-label text-white-50 mb-0" style={{ fontSize: '0.72rem' }}>Bank / QR</label>
+                                            <input 
+                                                type="text" 
+                                                className="form-control form-control-sm bg-dark text-white border-secondary"
+                                                placeholder="e.g. SBI, HDFC"
+                                                list="commonBankList"
+                                                value={bankName}
+                                                onChange={(e) => setBankName(e.target.value)}
+                                            />
+                                            <datalist id="commonBankList">
+                                                <option value="SBI" />
+                                                <option value="HDFC Bank" />
+                                                <option value="ICICI Bank" />
+                                                <option value="Axis Bank" />
+                                                <option value="Punjab National Bank" />
+                                                <option value="Bank of Baroda" />
+                                                <option value="Google Pay / PhonePe" />
+                                                <option value="Paytm" />
+                                            </datalist>
+                                        </div>
+                                    </div>
+                                </div>
+                            )}
+
+                            {/* Optional Card portion */}
+                            <div className="mb-2">
+                                <div className="d-flex justify-content-between align-items-center">
+                                    <span style={{ fontSize: '0.75rem' }} className="text-white-50">Card Swiped (if any):</span>
+                                    <div className="input-group input-group-sm" style={{ width: 140 }}>
+                                        <span className="input-group-text bg-secondary border-0 text-white" style={{ fontSize: '0.7rem' }}>₹</span>
+                                        <input 
+                                            type="number" 
+                                            className="form-control form-control-sm bg-dark text-white border-secondary"
+                                            placeholder="0"
+                                            value={splitCard}
+                                            onChange={(e) => setSplitCard(e.target.value)}
+                                            step="any"
+                                        />
+                                    </div>
+                                </div>
+                                {Number(splitCard) > 0 && (
+                                    <input 
+                                        type="text" 
+                                        className="form-control form-control-sm bg-dark text-white border-secondary mt-1"
+                                        placeholder="Card Slip Auth / Ref No"
+                                        value={cardRefNo}
+                                        onChange={(e) => setCardRefNo(e.target.value)}
+                                    />
+                                )}
+                            </div>
+
+                            {/* Live Balance Summary & Autofill helpers */}
+                            <div className="p-2 rounded bg-black bg-opacity-40 border border-secondary">
+                                <div className="d-flex justify-content-between mb-1" style={{ fontSize: '0.75rem' }}>
+                                    <span>Allocated: <strong>₹{totalSplitAllocated.toFixed(2)}</strong></span>
+                                    <span>Bill Net: <strong>₹{netPayable}</strong></span>
+                                </div>
+                                {Math.abs(splitRemaining) <= 0.01 ? (
+                                    <div className="text-success fw-bold d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
+                                        <i className="bi bi-check-circle-fill"></i> Balanced! Ready to print bill.
+                                    </div>
+                                ) : splitRemaining > 0 ? (
+                                    <div>
+                                        <div className="text-warning fw-bold mb-1.5" style={{ fontSize: '0.78rem' }}>
+                                            <i className="bi bi-exclamation-circle me-1"></i> Balance Remaining: ₹{splitRemaining.toFixed(2)}
+                                        </div>
+                                        <div className="d-flex gap-1">
+                                            <button 
+                                                type="button" 
+                                                className="btn btn-xs btn-outline-warning py-0"
+                                                style={{ fontSize: '0.7rem' }}
+                                                onClick={() => setSplitUpi(String(((Number(splitUpi) || 0) + splitRemaining).toFixed(2)))}
+                                            >
+                                                + ₹{splitRemaining.toFixed(2)} to UPI
+                                            </button>
+                                            <button 
+                                                type="button" 
+                                                className="btn btn-xs btn-outline-info py-0"
+                                                style={{ fontSize: '0.7rem' }}
+                                                onClick={() => setSplitCash(String(((Number(splitCash) || 0) + splitRemaining).toFixed(2)))}
+                                            >
+                                                + ₹{splitRemaining.toFixed(2)} to Cash
+                                            </button>
+                                        </div>
+                                    </div>
+                                ) : (
+                                    <div className="text-danger fw-bold" style={{ fontSize: '0.78rem' }}>
+                                        <i className="bi bi-x-circle-fill me-1"></i> Overallocated by ₹{Math.abs(splitRemaining).toFixed(2)}
+                                    </div>
+                                )}
+                            </div>
+                        </div>
+                    )}
+
+                    {/* Single UPI Mode Details */}
+                    {paymentMode === 'UPI' && (
+                        <div className="bg-dark p-2.5 rounded-3 mb-3 border border-secondary">
+                            {store?.upi_id && (
+                                <div className="text-center mb-2">
+                                    <small className="text-muted d-block" style={{ fontSize: '0.75rem' }}>Store UPI VPA: <span className="text-warning fw-bold">{store?.upi_id}</span></small>
+                                </div>
+                            )}
+                            <div className="row g-2">
+                                <div className="col-7">
+                                    <label className="form-label text-white-50 mb-1" style={{ fontSize: '0.72rem' }}>UPI UTR / Ref No <span className="text-danger">*</span></label>
+                                    <input 
+                                        type="text" 
+                                        className="form-control form-control-sm bg-dark text-white border-warning"
+                                        placeholder="12-digit UTR No"
+                                        value={upiRefNo}
+                                        onChange={(e) => setUpiRefNo(e.target.value)}
+                                    />
+                                </div>
+                                <div className="col-5">
+                                    <label className="form-label text-white-50 mb-1" style={{ fontSize: '0.72rem' }}>Bank Name</label>
+                                    <input 
+                                        type="text" 
+                                        className="form-control form-control-sm bg-dark text-white border-secondary"
+                                        placeholder="e.g. SBI, HDFC"
+                                        value={bankName}
+                                        onChange={(e) => setBankName(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                            <small className="text-white-50 d-block mt-1" style={{ fontSize: '0.68rem' }}>
+                                <i className="bi bi-shield-check me-1 text-success"></i> Accountant will match this UTR against the hospital bank statement.
+                            </small>
+                        </div>
+                    )}
+
+                    {/* Single Card Mode Details */}
+                    {paymentMode === 'Card' && (
+                        <div className="bg-dark p-2.5 rounded-3 mb-3 border border-secondary">
+                            <div className="row g-2">
+                                <div className="col-7">
+                                    <label className="form-label text-white-50 mb-1" style={{ fontSize: '0.72rem' }}>Card Slip / Auth Ref No</label>
+                                    <input 
+                                        type="text" 
+                                        className="form-control form-control-sm bg-dark text-white border-secondary"
+                                        placeholder="POS Machine Auth Code"
+                                        value={cardRefNo}
+                                        onChange={(e) => setCardRefNo(e.target.value)}
+                                    />
+                                </div>
+                                <div className="col-5">
+                                    <label className="form-label text-white-50 mb-1" style={{ fontSize: '0.72rem' }}>Bank / Terminal</label>
+                                    <input 
+                                        type="text" 
+                                        className="form-control form-control-sm bg-dark text-white border-secondary"
+                                        placeholder="e.g. HDFC EDC"
+                                        value={bankName}
+                                        onChange={(e) => setBankName(e.target.value)}
+                                    />
+                                </div>
+                            </div>
+                        </div>
+                    )}
+                        </div>
+                    )}
+
+                    {/* Print Format Selector */}
+                    <div className="mb-3">
+                        <label className="form-label text-white small fw-bold mb-1">Invoice Print Format</label>
+                        <div className="btn-group btn-group-sm w-100">
+                            <button 
+                                type="button" 
+                                className={`btn ${printFormat === 'thermal' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}
+                                onClick={() => setPrintFormat('thermal')}
+                            >
+                                Thermal 80mm (1-5 Items)
+                            </button>
+                            <button 
+                                type="button" 
+                                className={`btn ${printFormat === 'a5' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}
+                                onClick={() => setPrintFormat('a5')}
+                            >
+                                A5 Invoice (OPD)
+                            </button>
+                            <button 
+                                type="button" 
+                                className={`btn ${printFormat === 'a4' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}
+                                onClick={() => setPrintFormat('a4')}
+                            >
+                                A4 Tax Bill (IPD)
+                            </button>
+                        </div>
+                    </div>
+
+                    <button 
+                        className={`btn ${refundPayable > 0 ? 'btn-warning text-dark fw-bold' : 'btn-success-custom'} w-100 py-2.5 fs-6`}
+                        onClick={processSale}
+                        disabled={isProcessing || (cart.length === 0 && returnCart.length === 0) || (refundPayable === 0 && paymentMode === 'Mixed' && Math.abs(splitRemaining) > 0.01)}
+                    >
+                        {isProcessing ? (
+                            <span><i className="bi bi-hourglass-split me-2"></i> Generating Bill &amp; Credit Note...</span>
+                        ) : (refundPayable === 0 && paymentMode === 'Mixed' && Math.abs(splitRemaining) > 0.01) ? (
+                            <span><i className="bi bi-exclamation-triangle me-2"></i> Allocate Balance (₹{splitRemaining > 0 ? splitRemaining.toFixed(2) + ' left' : Math.abs(splitRemaining).toFixed(2) + ' over'})</span>
+                        ) : refundPayable > 0 ? (
+                            <span><i className="bi bi-arrow-return-left me-2"></i> Process Return &amp; Refund ₹{refundPayable}</span>
+                        ) : returnCart.length > 0 ? (
+                            <span><i className="bi bi-arrow-left-right me-2"></i> Complete Exchange Bill &amp; Print ({printFormat.toUpperCase()})</span>
+                        ) : (
+                            <span><i className="bi bi-printer me-2"></i> Complete Sale &amp; Print ({printFormat.toUpperCase()})</span>
+                        )}
+                    </button>
+            </div>
+        </div>
+
+        {/* Slide-in Bill Print Drawer & Backdrop */}
+        <div 
+            className={`print-drawer-overlay ${isPrintOpen ? 'open' : ''}`}
+            onClick={() => setIsPrintOpen(false)}
+        />
+        <div className={`print-drawer ${isPrintOpen ? 'open' : ''}`} id="pos-print-drawer">
+            {lastInvoice && (
+                <>
+                    <div className="print-drawer-header">
+                        <div className="d-flex align-items-center gap-2">
+                            <i className="bi bi-receipt text-warning fs-5"></i>
+                            <div>
+                                <h6 className="mb-0 fw-bold text-white">Invoice &amp; Print Desk</h6>
+                                <small className="text-secondary" style={{ fontSize: '0.72rem' }}>
+                                    Bill: <span className="text-info fw-bold">{lastInvoice.sale.invoice_no}</span>
+                                    {lastInvoice.sale.abdm_care_context_ref && (
+                                        <span className="ms-2 text-success">
+                                            <i className="bi bi-shield-fill-check me-0.5"></i> ABDM Linked
+                                        </span>
+                                    )}
+                                </small>
+                            </div>
+                        </div>
+
+                        <div className="d-flex align-items-center gap-1.5">
+                            <button 
+                                className="btn btn-xs btn-outline-success text-white py-1 px-2" 
+                                onClick={() => viewAbdmBundle(lastInvoice.sale.sale_id)} 
+                                title="View official ABDM FHIR R4 MedicationDispense JSON Document Bundle"
+                                style={{ fontSize: '0.72rem' }}
+                            >
+                                <i className="bi bi-filetype-json me-1"></i> FHIR R4
+                            </button>
+                            <div className="btn-group btn-group-sm">
+                                <button className={`btn btn-xs py-1 px-2 ${printFormat === 'thermal' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light text-white'}`} style={{ fontSize: '0.72rem' }} onClick={() => setPrintFormat('thermal')}>80mm</button>
+                                <button className={`btn btn-xs py-1 px-2 ${printFormat === 'a5' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light text-white'}`} style={{ fontSize: '0.72rem' }} onClick={() => setPrintFormat('a5')}>A5</button>
+                                <button className={`btn btn-xs py-1 px-2 ${printFormat === 'a4' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light text-white'}`} style={{ fontSize: '0.72rem' }} onClick={() => setPrintFormat('a4')}>A4</button>
+                            </div>
+                            <button className="btn btn-sm btn-primary py-1 px-2.5 ms-1 fw-bold" onClick={() => window.print()} title="Print Bill">
+                                <i className="bi bi-printer me-1"></i> Print
+                            </button>
+                            <button 
+                                type="button" 
+                                className="btn btn-sm btn-outline-light rounded-pill px-2.5 py-1 ms-1 d-flex align-items-center gap-1"
+                                onClick={() => setIsPrintOpen(false)}
+                                title="Close Print Drawer (Esc)"
+                            >
+                                <i className="bi bi-x-lg"></i>
+                                <kbd style={{ background: '#334155', color: '#f8fafc', fontSize: '0.62rem', padding: '1px 3px', borderRadius: '3px' }}>Esc</kbd>
+                            </button>
+                        </div>
+                    </div>
+
+                    <div className="print-drawer-body">
+                        <div className="print-paper-card">
+                            <div id="printable-container">
                             {/* Format 1: 80mm Thermal Slip (Single or 1-5 Items) */}
                             {printFormat === 'thermal' && (
                                 <div className="print-thermal-80mm">
@@ -3037,562 +3702,24 @@ function PosCounter({ store, notify }) {
                                 </div>
                             )}
                         </div>
-                    </div>
-                )}
-            </div>
-        </div>
-
-        {/* Slide-in Checkout Desk Drawer & Backdrop */}
-        <div 
-            className={`checkout-drawer-overlay ${isCheckoutOpen ? 'open' : ''}`}
-            onClick={() => setIsCheckoutOpen(false)}
-        />
-        <div className={`checkout-drawer ${isCheckoutOpen ? 'open' : ''}`} id="pos-checkout-drawer">
-            <div className="checkout-drawer-header">
-                <div className="d-flex align-items-center gap-2">
-                    <i className="bi bi-cash-coin text-warning fs-5"></i>
-                    <div>
-                        <h6 className="mb-0 fw-bold text-white">Checkout Desk</h6>
-                        <small className="text-secondary" style={{ fontSize: '0.72rem' }}>
-                            Counter: <span className="text-info fw-bold">{store?.store_code || ''}</span> • {store?.store_name}
-                        </small>
-                    </div>
-                </div>
-                <button 
-                    type="button" 
-                    className="btn btn-sm btn-outline-light rounded-pill px-3 py-1 d-flex align-items-center gap-1.5"
-                    onClick={() => setIsCheckoutOpen(false)}
-                    title="Close Checkout Drawer (Esc)"
-                >
-                    <i className="bi bi-x-lg"></i>
-                    <span>Close</span>
-                    <kbd className="ms-1" style={{ background: '#334155', color: '#f8fafc', fontSize: '0.65rem', padding: '1px 4px', borderRadius: '3px' }}>Esc</kbd>
-                </button>
-            </div>
-            <div className="checkout-drawer-body">
-                    <h5 className="fw-bold text-white mb-3 d-flex justify-content-between align-items-center">
-                        <span>Checkout Desk</span>
-                        <span className="fs-6 text-primary">{store?.store_code || ''}</span>
-                    </h5>
-
-                    {/* Whole Bill Discount Controller */}
-                    <div className="p-2.5 rounded-3 mb-3" style={{ background: 'rgba(255, 255, 255, 0.08)', border: '1px solid rgba(255, 255, 255, 0.15)' }}>
-                        <div className="d-flex justify-content-between align-items-center mb-1.5">
-                            <label className="text-white small fw-bold mb-0 d-flex align-items-center gap-1">
-                                <i className="bi bi-tag-fill text-warning"></i> Whole Bill Discount
-                            </label>
-                            <div className="btn-group btn-group-sm">
-                                <button 
-                                    type="button" 
-                                    className={`btn btn-xs py-0.5 px-2 ${wholeDiscountType === 'pct' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light text-white'}`}
-                                    style={{ fontSize: '0.72rem' }}
-                                    onClick={() => setWholeDiscountType('pct')}
-                                >
-                                    % Percent
-                                </button>
-                                <button 
-                                    type="button" 
-                                    className={`btn btn-xs py-0.5 px-2 ${wholeDiscountType === 'val' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light text-white'}`}
-                                    style={{ fontSize: '0.72rem' }}
-                                    onClick={() => setWholeDiscountType('val')}
-                                >
-                                    ₹ Fixed Value
-                                </button>
-                            </div>
-                        </div>
-
-                        <div className="input-group input-group-sm mb-2">
-                            <span className="input-group-text bg-dark border-secondary text-warning fw-bold">
-                                {wholeDiscountType === 'pct' ? '%' : '₹'}
-                            </span>
-                            <input 
-                                type="number" 
-                                id="whole-discount-input"
-                                ref={wholeDiscountRef}
-                                className="form-control form-control-sm bg-dark text-white border-secondary fw-bold" 
-                                min="0"
-                                max={wholeDiscountType === 'pct' ? 100 : balanceAfterItemDisc}
-                                step={wholeDiscountType === 'pct' ? '0.5' : '1'}
-                                placeholder={wholeDiscountType === 'pct' ? 'Enter % (F7)' : 'Enter ₹ (F7)'}
-                                value={wholeDiscountVal || ''} 
-                                onChange={(e) => setWholeDiscountVal(e.target.value)}
-                                onKeyDown={(e) => {
-                                    if (e.key === 'Enter') {
-                                        e.preventDefault();
-                                        if (!isProcessing && cart.length > 0) {
-                                            processSale();
-                                        }
-                                    }
-                                }}
-                            />
-                            {Number(wholeDiscountVal) > 0 && (
-                                <button 
-                                    type="button" 
-                                    className="btn btn-sm btn-outline-danger" 
-                                    title="Reset Whole Bill Discount"
-                                    onClick={() => setWholeDiscountVal(0)}
-                                >
-                                    <i className="bi bi-x-lg"></i>
-                                </button>
-                            )}
-                        </div>
-
-                        {/* Quick Preset Buttons */}
-                        <div className="d-flex flex-wrap gap-1 align-items-center">
-                            <small className="text-slate-400 me-1" style={{ fontSize: '0.7rem', color: '#94a3b8' }}>Presets:</small>
-                            {wholeDiscountType === 'pct' ? (
-                                [5, 10, 15, 20].map(p => (
-                                    <button 
-                                        key={p} 
-                                        type="button" 
-                                        className={`badge border ${Number(wholeDiscountVal) === p ? 'bg-warning text-dark border-warning' : 'bg-transparent text-white border-secondary'}`}
-                                        style={{ cursor: 'pointer', padding: '4px 8px', fontSize: '0.7rem' }}
-                                        onClick={() => setWholeDiscountVal(p)}
-                                    >
-                                        {p}%
-                                    </button>
-                                ))
-                            ) : (
-                                [20, 50, 100, 200].map(v => (
-                                    <button 
-                                        key={v} 
-                                        type="button" 
-                                        className={`badge border ${Number(wholeDiscountVal) === v ? 'bg-warning text-dark border-warning' : 'bg-transparent text-white border-secondary'}`}
-                                        style={{ cursor: 'pointer', padding: '4px 8px', fontSize: '0.7rem' }}
-                                        onClick={() => setWholeDiscountVal(v)}
-                                    >
-                                        ₹{v}
-                                    </button>
-                                ))
-                            )}
-                            {Number(wholeDiscountVal) > 0 && (
-                                <button 
-                                    type="button" 
-                                    className="badge bg-danger-subtle text-danger border border-danger ms-auto"
-                                    style={{ cursor: 'pointer', padding: '4px 6px', fontSize: '0.7rem' }}
-                                    onClick={() => setWholeDiscountVal(0)}
-                                >
-                                    Clear
-                                </button>
-                            )}
                         </div>
                     </div>
 
-                    {/* Breakdown */}
-                    <div className="d-flex justify-content-between mb-1.5 text-slate-300" style={{ color: '#cbd5e1' }}>
-                        <span>Gross Items Total:</span>
-                        <span className="fw-bold">₹{grossTotal.toFixed(2)}</span>
-                    </div>
-
-                    {itemDiscountTotal > 0 && (
-                        <div className="d-flex justify-content-between mb-1 text-slate-300" style={{ fontSize: '0.84rem', color: '#94a3b8' }}>
-                            <span>Item-Level Discounts:</span>
-                            <span className="text-danger">-₹{itemDiscountTotal.toFixed(2)}</span>
-                        </div>
-                    )}
-
-                    {wholeDiscountAmt > 0 && (
-                        <div className="d-flex justify-content-between mb-1 text-slate-300" style={{ fontSize: '0.84rem', color: '#94a3b8' }}>
-                            <span>Whole Bill Discount ({wholeDiscountType === 'pct' ? `${wholeDiscountVal}%` : `₹${wholeDiscountVal}`}):</span>
-                            <span className="text-danger">-₹{wholeDiscountAmt.toFixed(2)}</span>
-                        </div>
-                    )}
-
-                    {discountTotal > 0 && (
-                        <div className="d-flex justify-content-between mb-2 text-slate-300" style={{ color: '#cbd5e1' }}>
-                            <span>Total Discounts:</span>
-                            <span className="text-danger fw-bold">-₹{discountTotal.toFixed(2)}</span>
-                        </div>
-                    )}
-
-                    {returnTotal > 0 && (
-                        <div className="d-flex justify-content-between mb-2 text-danger fw-bold py-1 px-2 rounded" style={{ background: 'rgba(244, 63, 94, 0.15)', border: '1px solid rgba(244, 63, 94, 0.3)' }}>
-                            <span><i className="bi bi-arrow-return-left me-1"></i> Less Return Credit:</span>
-                            <span>-₹{returnTotal.toFixed(2)}</span>
-                        </div>
-                    )}
-
-                    <div className="d-flex justify-content-between mb-2 text-slate-300" style={{ color: '#cbd5e1' }}>
-                        <span>Round Off:</span>
-                        <span>₹{roundOff}</span>
-                    </div>
-                    <hr style={{ borderColor: 'rgba(255,255,255,0.15)' }} />
-
-                    {refundPayable > 0 ? (
-                        <div className="p-3 rounded-3 mb-3 border border-warning" style={{ background: 'rgba(245, 158, 11, 0.15)' }}>
-                            <div className="d-flex justify-content-between align-items-center">
-                                <span className="fs-6 fw-bold text-white"><i className="bi bi-wallet2 text-warning me-1"></i> REFUND TO PATIENT:</span>
-                                <span className="fs-3 fw-bolder text-warning">₹{refundPayable.toLocaleString('en-IN')}</span>
-                            </div>
-                            <small className="text-white-50 d-block mt-1" style={{ fontSize: '0.72rem' }}>
-                                Return credit exceeds new items. Refund this net difference from counter cash drawer or UPI.
-                            </small>
-                            <div className="mt-2.5">
-                                <label className="form-label text-white small fw-bold mb-1">Refund Outflow Method</label>
-                                <div className="btn-group btn-group-sm w-100 mb-2">
-                                    <button 
-                                        type="button" 
-                                        className={`btn ${refundMode === 'Cash' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}
-                                        onClick={() => setRefundMode('Cash')}
-                                    >
-                                        <i className="bi bi-cash-stack me-1"></i> Cash Refund
-                                    </button>
-                                    <button 
-                                        type="button" 
-                                        className={`btn ${refundMode === 'UPI' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}
-                                        onClick={() => setRefundMode('UPI')}
-                                    >
-                                        <i className="bi bi-qr-code me-1"></i> UPI / Bank Refund
-                                    </button>
-                                </div>
-                                {refundMode === 'UPI' && (
-                                    <input 
-                                        type="text" 
-                                        className="form-control form-control-sm bg-dark text-white border-warning" 
-                                        placeholder="Patient UPI VPA or Bank Reference #" 
-                                        value={refundRefNo} 
-                                        onChange={(e) => setRefundRefNo(e.target.value)} 
-                                    />
-                                )}
-                            </div>
-                        </div>
-                    ) : (
-                        <div className="d-flex justify-content-between align-items-center mb-4">
-                            <span className="fs-5 fw-bold text-white">Net Payable:</span>
-                            <span className="fs-3 fw-bolder text-warning">₹{netPayable.toLocaleString('en-IN')}</span>
-                        </div>
-                    )}
-
-                    {/* Payment Mode Selection (Only when patient owes money) */}
-                    {refundPayable <= 0 && (
-                        <div>
-                            <div className="d-flex justify-content-between align-items-center mb-2">
-                                <label className="form-label text-white fw-bold mb-0">Payment Method</label>
-                        {paymentMode === 'Mixed' && (
-                            <span className="badge bg-warning text-dark"><i className="bi bi-pie-chart me-1"></i> Partial / Split Mode</span>
-                        )}
-                    </div>
-                    <div className="row g-2 mb-3">
-                        <div className="col-4">
-                            <button 
-                                className={`btn btn-sm w-100 ${paymentMode === 'Cash' ? 'btn-primary-custom' : 'btn-outline-light'}`}
-                                onClick={() => setPaymentMode('Cash')}
-                            >
-                                <i className="bi bi-cash-stack me-1"></i> Cash
+                    <div className="p-2.5 bg-white border-top d-flex justify-content-between align-items-center flex-shrink-0 px-3">
+                        <span className="text-muted small">
+                            Format: <strong className="text-dark text-uppercase">{printFormat}</strong> • Bill No: <strong>{lastInvoice.sale.invoice_no}</strong>
+                        </span>
+                        <div className="d-flex gap-2">
+                            <button className="btn btn-sm btn-outline-secondary px-3" onClick={() => setIsPrintOpen(false)}>
+                                Done / Close (Esc)
                             </button>
-                        </div>
-                        <div className="col-4">
-                            <button 
-                                className={`btn btn-sm w-100 ${paymentMode === 'UPI' ? 'btn-primary-custom' : 'btn-outline-light'}`}
-                                onClick={() => setPaymentMode('UPI')}
-                            >
-                                <i className="bi bi-qr-code-scan me-1"></i> UPI / QR
-                            </button>
-                        </div>
-                        <div className="col-4">
-                            <button 
-                                className={`btn btn-sm w-100 ${paymentMode === 'Mixed' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}
-                                onClick={() => {
-                                    setPaymentMode('Mixed');
-                                    if (!splitCash && !splitUpi) {
-                                        setSplitCash('');
-                                        setSplitUpi('');
-                                    }
-                                }}
-                                title="Partial payment by Cash and UPI/Bank"
-                            >
-                                <i className="bi bi-pie-chart-fill me-1"></i> Split / Mixed
-                            </button>
-                        </div>
-                        <div className="col-6">
-                            <button 
-                                className={`btn btn-sm w-100 ${paymentMode === 'Card' ? 'btn-primary-custom' : 'btn-outline-light'}`}
-                                onClick={() => setPaymentMode('Card')}
-                            >
-                                <i className="bi bi-credit-card me-1"></i> Card Swipe
-                            </button>
-                        </div>
-                        <div className="col-6">
-                            <button 
-                                className={`btn btn-sm w-100 ${paymentMode === 'IPD_Credit' ? 'btn-danger' : 'btn-outline-light'}`}
-                                onClick={() => setPaymentMode('IPD_Credit')}
-                                title="Charge to IPD Patient Bill"
-                            >
-                                <i className="bi bi-hospital me-1"></i> IPD Bill Post
+                            <button className="btn btn-sm btn-primary px-3 fw-bold" onClick={() => window.print()}>
+                                <i className="bi bi-printer me-1"></i> Print Bill ({printFormat.toUpperCase()})
                             </button>
                         </div>
                     </div>
-
-                    {paymentMode === 'IPD_Credit' && (
-                        <div className="alert alert-warning py-2 mb-3" style={{ fontSize: '0.78rem' }}>
-                            <i className="bi bi-info-circle me-1"></i>
-                            Medicines will be charged directly to the patient's IPD Hospital Account and settled at discharge.
-                        </div>
-                    )}
-
-                    {/* Mixed / Split Payment Breakdown Panel */}
-                    {paymentMode === 'Mixed' && (
-                        <div className="card bg-dark border-warning mb-3 p-2.5 rounded-3 text-white" style={{ fontSize: '0.82rem' }}>
-                            <div className="d-flex justify-content-between align-items-center mb-2 pb-1 border-bottom border-secondary">
-                                <span className="fw-bold text-warning"><i className="bi bi-receipt-cutoff me-1"></i> Split Payment Allocation</span>
-                                <span className="fw-bold">Total: ₹{netPayable}</span>
-                            </div>
-
-                            <div className="row g-2 mb-2">
-                                <div className="col-6">
-                                    <label className="form-label text-white-50 mb-1" style={{ fontSize: '0.75rem' }}>Cash Amount (₹)</label>
-                                    <div className="input-group input-group-sm">
-                                        <span className="input-group-text bg-secondary border-0 text-white">₹</span>
-                                        <input 
-                                            type="number" 
-                                            className="form-control form-control-sm bg-dark text-white border-secondary"
-                                            placeholder="e.g. 35"
-                                            value={splitCash}
-                                            onChange={(e) => setSplitCash(e.target.value)}
-                                            step="any"
-                                        />
-                                    </div>
-                                </div>
-                                <div className="col-6">
-                                    <label className="form-label text-white-50 mb-1" style={{ fontSize: '0.75rem' }}>UPI / Bank (₹)</label>
-                                    <div className="input-group input-group-sm">
-                                        <span className="input-group-text bg-secondary border-0 text-white">₹</span>
-                                        <input 
-                                            type="number" 
-                                            className="form-control form-control-sm bg-dark text-white border-secondary"
-                                            placeholder="e.g. 100"
-                                            value={splitUpi}
-                                            onChange={(e) => setSplitUpi(e.target.value)}
-                                            step="any"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            {/* UTR & Bank Details for the UPI portion */}
-                            {Number(splitUpi) > 0 && (
-                                <div className="p-2 rounded bg-black bg-opacity-25 border border-secondary mb-2">
-                                    <div className="row g-2">
-                                        <div className="col-7">
-                                            <label className="form-label text-warning mb-0" style={{ fontSize: '0.72rem' }}>
-                                                UPI UTR / Trans. Ref # <span className="text-danger">*</span>
-                                            </label>
-                                            <input 
-                                                type="text" 
-                                                className="form-control form-control-sm bg-dark text-white border-warning"
-                                                placeholder="e.g. 425109876543 (12-digit)"
-                                                value={upiRefNo}
-                                                onChange={(e) => setUpiRefNo(e.target.value)}
-                                            />
-                                            <span style={{ fontSize: '0.65rem' }} className="text-white-50">Used by Accountant for statement audit</span>
-                                        </div>
-                                        <div className="col-5">
-                                            <label className="form-label text-white-50 mb-0" style={{ fontSize: '0.72rem' }}>Bank / QR</label>
-                                            <input 
-                                                type="text" 
-                                                className="form-control form-control-sm bg-dark text-white border-secondary"
-                                                placeholder="e.g. SBI, HDFC"
-                                                list="commonBankList"
-                                                value={bankName}
-                                                onChange={(e) => setBankName(e.target.value)}
-                                            />
-                                            <datalist id="commonBankList">
-                                                <option value="SBI" />
-                                                <option value="HDFC Bank" />
-                                                <option value="ICICI Bank" />
-                                                <option value="Axis Bank" />
-                                                <option value="Punjab National Bank" />
-                                                <option value="Bank of Baroda" />
-                                                <option value="Google Pay / PhonePe" />
-                                                <option value="Paytm" />
-                                            </datalist>
-                                        </div>
-                                    </div>
-                                </div>
-                            )}
-
-                            {/* Optional Card portion */}
-                            <div className="mb-2">
-                                <div className="d-flex justify-content-between align-items-center">
-                                    <span style={{ fontSize: '0.75rem' }} className="text-white-50">Card Swiped (if any):</span>
-                                    <div className="input-group input-group-sm" style={{ width: 140 }}>
-                                        <span className="input-group-text bg-secondary border-0 text-white" style={{ fontSize: '0.7rem' }}>₹</span>
-                                        <input 
-                                            type="number" 
-                                            className="form-control form-control-sm bg-dark text-white border-secondary"
-                                            placeholder="0"
-                                            value={splitCard}
-                                            onChange={(e) => setSplitCard(e.target.value)}
-                                            step="any"
-                                        />
-                                    </div>
-                                </div>
-                                {Number(splitCard) > 0 && (
-                                    <input 
-                                        type="text" 
-                                        className="form-control form-control-sm bg-dark text-white border-secondary mt-1"
-                                        placeholder="Card Slip Auth / Ref No"
-                                        value={cardRefNo}
-                                        onChange={(e) => setCardRefNo(e.target.value)}
-                                    />
-                                )}
-                            </div>
-
-                            {/* Live Balance Summary & Autofill helpers */}
-                            <div className="p-2 rounded bg-black bg-opacity-40 border border-secondary">
-                                <div className="d-flex justify-content-between mb-1" style={{ fontSize: '0.75rem' }}>
-                                    <span>Allocated: <strong>₹{totalSplitAllocated.toFixed(2)}</strong></span>
-                                    <span>Bill Net: <strong>₹{netPayable}</strong></span>
-                                </div>
-                                {Math.abs(splitRemaining) <= 0.01 ? (
-                                    <div className="text-success fw-bold d-flex align-items-center gap-1" style={{ fontSize: '0.78rem' }}>
-                                        <i className="bi bi-check-circle-fill"></i> Balanced! Ready to print bill.
-                                    </div>
-                                ) : splitRemaining > 0 ? (
-                                    <div>
-                                        <div className="text-warning fw-bold mb-1.5" style={{ fontSize: '0.78rem' }}>
-                                            <i className="bi bi-exclamation-circle me-1"></i> Balance Remaining: ₹{splitRemaining.toFixed(2)}
-                                        </div>
-                                        <div className="d-flex gap-1">
-                                            <button 
-                                                type="button" 
-                                                className="btn btn-xs btn-outline-warning py-0"
-                                                style={{ fontSize: '0.7rem' }}
-                                                onClick={() => setSplitUpi(String(((Number(splitUpi) || 0) + splitRemaining).toFixed(2)))}
-                                            >
-                                                + ₹{splitRemaining.toFixed(2)} to UPI
-                                            </button>
-                                            <button 
-                                                type="button" 
-                                                className="btn btn-xs btn-outline-info py-0"
-                                                style={{ fontSize: '0.7rem' }}
-                                                onClick={() => setSplitCash(String(((Number(splitCash) || 0) + splitRemaining).toFixed(2)))}
-                                            >
-                                                + ₹{splitRemaining.toFixed(2)} to Cash
-                                            </button>
-                                        </div>
-                                    </div>
-                                ) : (
-                                    <div className="text-danger fw-bold" style={{ fontSize: '0.78rem' }}>
-                                        <i className="bi bi-x-circle-fill me-1"></i> Overallocated by ₹{Math.abs(splitRemaining).toFixed(2)}
-                                    </div>
-                                )}
-                            </div>
-                        </div>
-                    )}
-
-                    {/* Single UPI Mode Details */}
-                    {paymentMode === 'UPI' && (
-                        <div className="bg-dark p-2.5 rounded-3 mb-3 border border-secondary">
-                            {store?.upi_id && (
-                                <div className="text-center mb-2">
-                                    <small className="text-muted d-block" style={{ fontSize: '0.75rem' }}>Store UPI VPA: <span className="text-warning fw-bold">{store?.upi_id}</span></small>
-                                </div>
-                            )}
-                            <div className="row g-2">
-                                <div className="col-7">
-                                    <label className="form-label text-white-50 mb-1" style={{ fontSize: '0.72rem' }}>UPI UTR / Ref No <span className="text-danger">*</span></label>
-                                    <input 
-                                        type="text" 
-                                        className="form-control form-control-sm bg-dark text-white border-warning"
-                                        placeholder="12-digit UTR No"
-                                        value={upiRefNo}
-                                        onChange={(e) => setUpiRefNo(e.target.value)}
-                                    />
-                                </div>
-                                <div className="col-5">
-                                    <label className="form-label text-white-50 mb-1" style={{ fontSize: '0.72rem' }}>Bank Name</label>
-                                    <input 
-                                        type="text" 
-                                        className="form-control form-control-sm bg-dark text-white border-secondary"
-                                        placeholder="e.g. SBI, HDFC"
-                                        value={bankName}
-                                        onChange={(e) => setBankName(e.target.value)}
-                                    />
-                                </div>
-                            </div>
-                            <small className="text-white-50 d-block mt-1" style={{ fontSize: '0.68rem' }}>
-                                <i className="bi bi-shield-check me-1 text-success"></i> Accountant will match this UTR against the hospital bank statement.
-                            </small>
-                        </div>
-                    )}
-
-                    {/* Single Card Mode Details */}
-                    {paymentMode === 'Card' && (
-                        <div className="bg-dark p-2.5 rounded-3 mb-3 border border-secondary">
-                            <div className="row g-2">
-                                <div className="col-7">
-                                    <label className="form-label text-white-50 mb-1" style={{ fontSize: '0.72rem' }}>Card Slip / Auth Ref No</label>
-                                    <input 
-                                        type="text" 
-                                        className="form-control form-control-sm bg-dark text-white border-secondary"
-                                        placeholder="POS Machine Auth Code"
-                                        value={cardRefNo}
-                                        onChange={(e) => setCardRefNo(e.target.value)}
-                                    />
-                                </div>
-                                <div className="col-5">
-                                    <label className="form-label text-white-50 mb-1" style={{ fontSize: '0.72rem' }}>Bank / Terminal</label>
-                                    <input 
-                                        type="text" 
-                                        className="form-control form-control-sm bg-dark text-white border-secondary"
-                                        placeholder="e.g. HDFC EDC"
-                                        value={bankName}
-                                        onChange={(e) => setBankName(e.target.value)}
-                                    />
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                        </div>
-                    )}
-
-                    {/* Print Format Selector */}
-                    <div className="mb-3">
-                        <label className="form-label text-white small fw-bold mb-1">Invoice Print Format</label>
-                        <div className="btn-group btn-group-sm w-100">
-                            <button 
-                                type="button" 
-                                className={`btn ${printFormat === 'thermal' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}
-                                onClick={() => setPrintFormat('thermal')}
-                            >
-                                Thermal 80mm (1-5 Items)
-                            </button>
-                            <button 
-                                type="button" 
-                                className={`btn ${printFormat === 'a5' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}
-                                onClick={() => setPrintFormat('a5')}
-                            >
-                                A5 Invoice (OPD)
-                            </button>
-                            <button 
-                                type="button" 
-                                className={`btn ${printFormat === 'a4' ? 'btn-warning text-dark fw-bold' : 'btn-outline-light'}`}
-                                onClick={() => setPrintFormat('a4')}
-                            >
-                                A4 Tax Bill (IPD)
-                            </button>
-                        </div>
-                    </div>
-
-                    <button 
-                        className={`btn ${refundPayable > 0 ? 'btn-warning text-dark fw-bold' : 'btn-success-custom'} w-100 py-2.5 fs-6`}
-                        onClick={processSale}
-                        disabled={isProcessing || (cart.length === 0 && returnCart.length === 0) || (refundPayable === 0 && paymentMode === 'Mixed' && Math.abs(splitRemaining) > 0.01)}
-                    >
-                        {isProcessing ? (
-                            <span><i className="bi bi-hourglass-split me-2"></i> Generating Bill &amp; Credit Note...</span>
-                        ) : (refundPayable === 0 && paymentMode === 'Mixed' && Math.abs(splitRemaining) > 0.01) ? (
-                            <span><i className="bi bi-exclamation-triangle me-2"></i> Allocate Balance (₹{splitRemaining > 0 ? splitRemaining.toFixed(2) + ' left' : Math.abs(splitRemaining).toFixed(2) + ' over'})</span>
-                        ) : refundPayable > 0 ? (
-                            <span><i className="bi bi-arrow-return-left me-2"></i> Process Return &amp; Refund ₹{refundPayable}</span>
-                        ) : returnCart.length > 0 ? (
-                            <span><i className="bi bi-arrow-left-right me-2"></i> Complete Exchange Bill &amp; Print ({printFormat.toUpperCase()})</span>
-                        ) : (
-                            <span><i className="bi bi-printer me-2"></i> Complete Sale &amp; Print ({printFormat.toUpperCase()})</span>
-                        )}
-                    </button>
-            </div>
+                </>
+            )}
         </div>
 
         {/* ABDM FHIR R4 Bundle Modal */}
