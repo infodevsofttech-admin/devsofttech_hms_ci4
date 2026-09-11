@@ -2764,6 +2764,13 @@ class Abha extends BaseController
             ?? $account['phone']
             ?? ''
         ));
+        $aadhaarMaskedMobile = $this->maskAbhaMobile((string) (
+            $data['aadhaar_masked_mobile']
+            ?? $data['aadhaarMaskedMobile']
+            ?? $account['aadhaar_masked_mobile']
+            ?? $account['aadhaarMaskedMobile']
+            ?? ''
+        ));
         return $this->response->setJSON([
             'ok' => 1,
             'status' => $status,
@@ -2772,11 +2779,13 @@ class Abha extends BaseController
             'auth_methods' => array_values(array_unique(array_map(static fn($method): string => strtoupper(trim((string) $method)), $authMethods))),
             'blocked_auth_methods' => is_array($blockedMethods) ? array_values($blockedMethods) : [],
             'masked_mobile' => $maskedMobile,
+            'aadhaar_masked_mobile' => $aadhaarMaskedMobile,
             'account' => [
                 'name' => trim((string) ($account['name'] ?? $account['fullName'] ?? $account['full_name'] ?? $data['name'] ?? $data['fullName'] ?? $data['full_name'] ?? '')),
                 'abha_number' => trim((string) ($account['ABHANumber'] ?? $account['abhaNumber'] ?? $account['abha_id'] ?? $account['healthIdNumber'] ?? $data['ABHANumber'] ?? $data['healthIdNumber'] ?? $data['abha_id'] ?? '')),
                 'abha_address' => trim((string) ($account['abhaAddress'] ?? $account['preferredAddress'] ?? $account['preferredAbhaAddress'] ?? $account['abha_address'] ?? $data['abhaAddress'] ?? $data['preferredAddress'] ?? $data['preferredAbhaAddress'] ?? $data['abha_address'] ?? '')),
                 'masked_mobile' => $maskedMobile,
+                'aadhaar_masked_mobile' => $aadhaarMaskedMobile,
             ],
         ]);
     }
@@ -2784,7 +2793,11 @@ class Abha extends BaseController
     private function maskAbhaMobile(string $value): string
     {
         $value = trim($value);
-        if ($value === '' || preg_match('/\*/', $value) === 1) {
+        if ($value === '' || preg_match('/\d/', $value) !== 1) {
+            return '';
+        }
+
+        if (preg_match('/\*/', $value) === 1) {
             return $value;
         }
 
@@ -2833,8 +2846,22 @@ class Abha extends BaseController
         }
 
         $data = is_array($result['data'] ?? null) ? $result['data'] : [];
-        $maskedMobile = trim((string) ($data['masked_mobile'] ?? $data['maskedMobile'] ?? $data['mobile'] ?? ''));
-        $deliveryMessage = trim((string) ($result['message'] ?? $data['message'] ?? ''));
+        $maskedMobile = trim((string) (
+            $result['masked_mobile']
+            ?? $result['maskedMobile']
+            ?? $data['masked_mobile']
+            ?? $data['maskedMobile']
+            ?? $data['mobile']
+            ?? $data['mobile_number']
+            ?? ''
+        ));
+        $deliveryMessage = trim((string) (
+            $result['message']
+            ?? $data['message']
+            ?? $result['details']['message']
+            ?? $data['details']['message']
+            ?? ''
+        ));
         if ($maskedMobile === '' && preg_match('/(\d{4})(?!.*\d)/', $deliveryMessage, $mobileEnding) === 1) {
             $maskedMobile = '******' . $mobileEnding[1];
         }

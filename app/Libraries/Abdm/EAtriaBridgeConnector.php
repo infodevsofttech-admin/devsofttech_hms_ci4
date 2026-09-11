@@ -656,8 +656,19 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             ?? $firstAccount['masked_mobile'] ?? $firstAccount['maskedMobile'] ?? $firstAccount['mobile']
             ?? $firstAccount['mobile_number'] ?? $firstAccount['phone'] ?? $firstAccount['phone_number'] ?? ''
         ));
-        if ($maskedMobile !== '') {
+        if ($maskedMobile !== '' && preg_match('/\d/', $maskedMobile) === 1) {
             $result['masked_mobile'] = $maskedMobile;
+        } else {
+            unset($result['masked_mobile'], $result['maskedMobile']);
+        }
+
+        $aadhaarMaskedMobile = trim((string) (
+            $result['aadhaar_masked_mobile'] ?? $result['aadhaarMaskedMobile']
+            ?? $data['aadhaar_masked_mobile'] ?? $data['aadhaarMaskedMobile']
+            ?? $firstAccount['aadhaar_masked_mobile'] ?? $firstAccount['aadhaarMaskedMobile'] ?? ''
+        ));
+        if ($aadhaarMaskedMobile !== '' && preg_match('/\d/', $aadhaarMaskedMobile) === 1) {
+            $result['aadhaar_masked_mobile'] = $aadhaarMaskedMobile;
         }
 
         // HMS callers expect a status-like field; treat successful search as VALID when absent.

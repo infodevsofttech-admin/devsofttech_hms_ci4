@@ -47,6 +47,7 @@ Required success response:
     "authMethods": ["MOBILE_OTP", "AADHAAR_OTP"],
     "blockedAuthMethods": [],
     "maskedMobile": "******1369",
+    "aadhaar_masked_mobile": null,
     "accounts": [
       {
         "name": "Ashish Soni",
@@ -60,7 +61,11 @@ Required success response:
 }
 ```
 
-The search transaction must remain valid for the next OTP request. Do not replace it with a new mobile-search transaction.
+Rules:
+- When ABDM returns `mobile: "************"` (all asterisks), the Bridge sanitizes `mobile`, `masked_mobile`, and `maskedMobile` to `null`.
+- If the patient has a previously verified record with genuine digits, the Bridge returns `maskedMobile: "******XXXX"`. Genuine ABDM numbers (e.g. `78*****379`) are passed through.
+- `aadhaar_masked_mobile` is explicitly `null` during search (compliant with UIDAI/ABDM guidelines preventing harvesting). Aadhaar mobile is resolved only upon OTP dispatch.
+- The search transaction must remain valid for the next OTP request. Do not replace it with a new mobile-search transaction.
 
 ## 2. Request Account-Bound OTP
 

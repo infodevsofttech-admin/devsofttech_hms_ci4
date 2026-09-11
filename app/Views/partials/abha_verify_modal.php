@@ -161,8 +161,21 @@ window.AbhaVerifyModal = (function () {
             var label = authLabel(method);
             var disabled = blocked.indexOf(method) !== -1;
             var checked = availableMethods[0] === method;
-            var mobile = response.masked_mobile || (response.account && response.account.masked_mobile) || '';
-            var destination = mobile ? ' (' + escapeHtml(mobile) + ')' : '';
+            var targetMobile = '';
+            if (method === 'MOBILE_OTP') {
+                var m = response.masked_mobile || (response.account && response.account.masked_mobile) || '';
+                if (typeof m === 'string' && /\d/.test(m)) {
+                    targetMobile = m;
+                }
+            } else if (method === 'AADHAAR_OTP') {
+                // Aadhaar mobile is registered with UIDAI and not exposed by ABDM during search.
+                // Only show if the Bridge explicitly returned an Aadhaar-specific masked mobile.
+                var am = response.aadhaar_masked_mobile || (response.account && response.account.aadhaar_masked_mobile) || '';
+                if (typeof am === 'string' && /\d/.test(am)) {
+                    targetMobile = am;
+                }
+            }
+            var destination = targetMobile ? ' (' + escapeHtml(targetMobile) + ')' : '';
             html += '<label class="abha-auth-option' + (disabled ? ' opacity-50' : '') + '"><span class="d-flex align-items-center gap-3"><input class="form-check-input mt-0" type="radio" name="abhaVerifyAuth" value="' + method + '" ' + (checked ? 'checked' : '') + ' ' + (disabled ? 'disabled' : '') + '><i class="bi ' + label.icon + ' fs-4 text-primary"></i><span><strong>' + label.title + destination + '</strong><small class="d-block text-muted">' + label.detail + '</small></span></span></label>';
         });
         $('#abhaVerifyAuthOptions').html(html || '<div class="alert alert-warning mb-0">This ABHA account did not return a supported OTP method. The Bridge must return MOBILE_OTP or AADHAAR_OTP.</div>');
@@ -200,7 +213,10 @@ window.AbhaVerifyModal = (function () {
             lookupResponse.txn_id = response.txn_id || lookupResponse.txn_id;
             lookupResponse.auth_method = method;
             var label = authLabel(method);
-            $('#abhaVerifyOtpHint').text('OTP sent using ' + label.title + (response.masked_mobile ? ' (' + response.masked_mobile + ')' : '') + '.');
+            var otpDest = (response.masked_mobile && /\d/.test(response.masked_mobile))
+                ? ' (' + escapeHtml(response.masked_mobile) + ')'
+                : '';
+            $('#abhaVerifyOtpHint').text('OTP sent using ' + label.title + otpDest + '.');
             $('#abhaVerifyOtp').val('');
             showStep(3);
             startResendTimer(response.resend_after);
