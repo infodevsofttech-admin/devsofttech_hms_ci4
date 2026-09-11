@@ -24,9 +24,14 @@ class Abha extends BaseController
 
         $aadhaar = preg_replace('/\D/', '', trim((string) ($this->request->getPost('aadhaar') ?? '')));
         $authType = trim((string) ($this->request->getPost('auth_type') ?? 'aadhaar_otp'));
+        $consent = $this->request->getPost('consent');
 
-        if (strlen($aadhaar) !== 12) {
-            return $this->response->setJSON(['ok' => 0, 'error_text' => 'Valid 12-digit Aadhaar number is required']);
+        if (strlen($aadhaar) !== 12 || ! $this->validateVerhoeff($aadhaar)) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'Aadhaar Number is not valid. Valid 12-digit Aadhaar number is required.']);
+        }
+
+        if ($consent !== null && ! in_array($consent, ['1', 1, 'true', true], true)) {
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'Consent is mandatory. Please agree to the consent declarations before sending the OTP.']);
         }
 
         try {
@@ -52,9 +57,14 @@ class Abha extends BaseController
             ]);
         }
 
+        $errorMsg = $this->extractBridgeErrorText($result, 'Failed to send OTP');
+        if (stripos($errorMsg, 'loginId') !== false || stripos($errorMsg, 'Invalid LoginId') !== false) {
+            $errorMsg = 'Aadhaar Number is not valid. Valid 12-digit Aadhaar number is required.';
+        }
+
         return $this->response->setJSON([
             'ok'         => 0,
-            'error_text' => $this->extractBridgeErrorText($result, 'Failed to send OTP'),
+            'error_text' => $errorMsg,
             'request_id' => (string) ($result['request_id'] ?? ''),
         ]);
     }
@@ -167,17 +177,59 @@ class Abha extends BaseController
         $aadhaarForMatch = trim((string) (session()->get('abha_aadhaar_txn_' . $txnId) ?? ''));
         session()->remove('abha_aadhaar_txn_' . $txnId);
 
+        // Detect if ABHA already exists (VRFY_ABHA_404) or is a new enrolment (CRT_ABHA_101)
+        $isNewFromAbdm = null;
+        if (isset($payload['isNew'])) {
+            $isNewFromAbdm = (bool) $payload['isNew'];
+        } elseif (isset($profile['isNew'])) {
+            $isNewFromAbdm = (bool) $profile['isNew'];
+        } elseif (isset($payload['data']['isNew'])) {
+            $isNewFromAbdm = (bool) $payload['data']['isNew'];
+        }
+
+        $rawMessage = (string) ($payload['message'] ?? $result['message'] ?? '');
+        $hasAlreadyExistMsg = stripos($rawMessage, 'already exist') !== false;
+
+        $alreadyExists = false;
+        if ($isNewFromAbdm === false || $hasAlreadyExistMsg) {
+            $alreadyExists = true;
+        } elseif ($isNewFromAbdm === true) {
+            $alreadyExists = false;
+        } elseif (strlen($aadhaarVerifiedAbha) === 14 && $abhaAddress !== '') {
+            $alreadyExists = true;
+        }
+
+        // Compare communication mobile with Aadhaar-linked mobile (CRT_ABHA_108 vs CRT_ABHA_109)
+        $requestMobileClean = preg_replace('/\D/', '', $requestMobile);
+        $gatewayMobileClean = preg_replace('/\D/', '', $mobile);
+        $maskedMobileRaw    = (string) ($payload['masked_mobile'] ?? $payload['maskedMobile'] ?? $result['masked_mobile'] ?? $result['data']['masked_mobile'] ?? '');
+        $maskedDigits       = preg_replace('/\D/', '', $maskedMobileRaw);
+
+        $isCommMobileSame = false;
+        if ($gatewayMobileClean !== '' && strlen($gatewayMobileClean) === 10 && strlen($requestMobileClean) === 10) {
+            $isCommMobileSame = ($gatewayMobileClean === $requestMobileClean);
+        } elseif (strlen($requestMobileClean) === 10 && strlen($gatewayMobileClean) >= 4) {
+            $isCommMobileSame = (substr($requestMobileClean, -4) === substr($gatewayMobileClean, -4));
+        } elseif (strlen($requestMobileClean) === 10 && strlen($maskedDigits) >= 4) {
+            $isCommMobileSame = (substr($requestMobileClean, -4) === substr($maskedDigits, -4));
+        }
+
         $patientInfo = $this->tryAutoLinkByDirectMatch($abhaNum, $name, $mobile, $profileGender, $profileDob, $abhaMeta);
 
         $responseBase = [
-            'ok'                => 1,
-            'txn_id'            => $newTxnId,
-            'skip_mobile'       => true,
-            'abha_created'      => $abhaCreated,
-            'card_base64'       => $this->extractAbhaCardData($result),
-            'card_content_type' => $this->resolveAbhaCardContentType($result),
-            'card_source'       => $this->resolveAbhaCardSource($result),
-            'card_message'      => $this->resolveAbhaCardMessage($result),
+            'ok'                         => 1,
+            'txn_id'                     => $newTxnId,
+            'skip_mobile'                => true,
+            'abha_created'               => $abhaCreated,
+            'already_exists'             => $alreadyExists,
+            'is_new_abha'                => ! $alreadyExists,
+            'is_comm_mobile_same'        => $isCommMobileSame,
+            'comm_mobile'                => $requestMobileClean,
+            'aadhaar_mobile_masked'      => $maskedMobileRaw,
+            'card_base64'                => $this->extractAbhaCardData($result),
+            'card_content_type'          => $this->resolveAbhaCardContentType($result),
+            'card_source'                => $this->resolveAbhaCardSource($result),
+            'card_message'               => $this->resolveAbhaCardMessage($result),
             'abha_number'       => $abhaNum,
             'name'              => $name,
             'photo'             => $photo,
@@ -325,7 +377,7 @@ class Abha extends BaseController
         $abhaNum          = (string) ($profile['ABHANumber'] ?? $profile['abha_id'] ?? $payload['ABHANumber'] ?? $payload['abha_id'] ?? '');
         $expectedAbha     = preg_replace('/\D/', '', (string) (session()->get('abha_enrol_identity_' . $txnId) ?? ''));
         $returnedAbha     = preg_replace('/\D/', '', $abhaNum);
-        if (! $isMobileDiscovery && (strlen($expectedAbha) !== 14 || $returnedAbha !== $expectedAbha)) {
+        if (! $isMobileDiscovery && $expectedAbha !== '' && (strlen($expectedAbha) !== 14 || ($returnedAbha !== '' && $returnedAbha !== $expectedAbha))) {
             log_message('error', '[ABHA] Enrolment identity mismatch blocked for txn ' . $txnId);
             return $this->response->setStatusCode(409)->setJSON([
                 'ok' => 0,
@@ -1050,10 +1102,27 @@ class Abha extends BaseController
             return $this->response->setJSON(['ok' => 1, 'message' => 'ABHA created successfully.']);
         }
 
-        if (! preg_match('/^[a-zA-Z0-9._]{4,}$/', explode('@', $abhaAddress)[0])) {
+        $handle = explode('@', $abhaAddress)[0];
+        $len = strlen($handle);
+        $dotCount = substr_count($handle, '.');
+        $underCount = substr_count($handle, '_');
+
+        if ($len < 8 || $len > 18) {
             return $this->response->setJSON([
                 'ok'         => 0,
-                'error_text' => 'ABHA address must be at least 4 characters and may use only letters, numbers, dot or underscore.',
+                'error_text' => 'ABHA address must be between 8 and 18 characters.',
+            ]);
+        }
+        if (! preg_match('/^[a-zA-Z0-9]/', $handle) || ! preg_match('/[a-zA-Z0-9]$/', $handle)) {
+            return $this->response->setJSON([
+                'ok'         => 0,
+                'error_text' => 'Special character dot (.) and underscore (_) can only be in between, not at the beginning or end.',
+            ]);
+        }
+        if ($dotCount > 1 || $underCount > 1 || ! preg_match('/^[a-zA-Z0-9._]+$/', $handle)) {
+            return $this->response->setJSON([
+                'ok'         => 0,
+                'error_text' => 'Only letters, numbers, at most 1 dot (.) and/or 1 underscore (_) are allowed.',
             ]);
         }
 
@@ -1067,9 +1136,13 @@ class Abha extends BaseController
         }
 
         if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+            $errorMsg = $this->extractBridgeErrorText($result, 'Unable to set the ABHA address.');
+            if (stripos($errorMsg, 'already exist') !== false || stripos($errorMsg, 'already in use') !== false || stripos($errorMsg, 'taken') !== false) {
+                $errorMsg = 'ABHA Address is already exist';
+            }
             return $this->response->setJSON([
                 'ok'         => 0,
-                'error_text' => $this->extractBridgeErrorText($result, 'Unable to set the ABHA address.'),
+                'error_text' => $errorMsg,
                 'request_id' => (string) ($result['request_id'] ?? ''),
             ]);
         }
@@ -1570,7 +1643,12 @@ class Abha extends BaseController
                 if ($field === 'timestamp' || ! is_string($message) || trim($message) === '') {
                     continue;
                 }
-                $fieldErrors[] = $field . ': ' . trim($message);
+                $fieldMsg = trim($message);
+                if (strcasecmp($field, 'loginId') === 0 && stripos($fieldMsg, 'invalid') !== false) {
+                    $fieldErrors[] = 'Aadhaar Number is not valid. Valid 12-digit Aadhaar number is required.';
+                } else {
+                    $fieldErrors[] = $field . ': ' . $fieldMsg;
+                }
             }
         }
         if ($fieldErrors !== []) {
@@ -1599,11 +1677,55 @@ class Abha extends BaseController
 
         foreach ($candidates as $candidate) {
             if (is_string($candidate) && trim($candidate) !== '') {
-                return trim($candidate);
+                $trimmed = trim($candidate);
+                if (stripos($trimmed, 'loginId') !== false && stripos($trimmed, 'invalid') !== false) {
+                    return 'Aadhaar Number is not valid. Valid 12-digit Aadhaar number is required.';
+                }
+                return $trimmed;
             }
         }
 
         return $fallback;
+    }
+
+    /**
+     * UIDAI Verhoeff algorithm check for 12-digit Aadhaar number.
+     */
+    private function validateVerhoeff(string $num): bool
+    {
+        $num = preg_replace('/\D/', '', $num);
+        if (strlen($num) !== 12 || $num[0] === '0' || $num[0] === '1') {
+            return false;
+        }
+
+        $d = [
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+            [1, 2, 3, 4, 0, 6, 7, 8, 9, 5],
+            [2, 3, 4, 0, 1, 7, 8, 9, 5, 6],
+            [3, 4, 0, 1, 2, 8, 9, 5, 6, 7],
+            [4, 0, 1, 2, 3, 9, 5, 6, 7, 8],
+            [5, 9, 8, 7, 6, 0, 4, 3, 2, 1],
+            [6, 5, 9, 8, 7, 1, 0, 4, 3, 2],
+            [7, 6, 5, 9, 8, 2, 1, 0, 4, 3],
+            [8, 7, 6, 5, 9, 3, 2, 1, 0, 4],
+            [9, 8, 7, 6, 5, 4, 3, 2, 1, 0]
+        ];
+        $p = [
+            [0, 1, 2, 3, 4, 5, 6, 7, 8, 9],
+            [1, 5, 7, 6, 2, 8, 3, 0, 9, 4],
+            [5, 8, 0, 3, 7, 9, 6, 1, 4, 2],
+            [8, 9, 1, 6, 0, 4, 3, 5, 2, 7],
+            [9, 4, 5, 3, 1, 2, 6, 8, 7, 0],
+            [4, 2, 8, 6, 5, 7, 3, 9, 0, 1],
+            [2, 7, 9, 3, 8, 0, 6, 4, 1, 5],
+            [7, 0, 4, 6, 9, 1, 3, 2, 5, 8]
+        ];
+        $c = 0;
+        $invertedArray = array_reverse(str_split($num));
+        foreach ($invertedArray as $i => $digit) {
+            $c = $d[$c][$p[$i % 8][(int)$digit]];
+        }
+        return ($c === 0);
     }
 
     // -------------------------------------------------------------------------

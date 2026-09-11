@@ -413,15 +413,15 @@
                                         <div class="card-body d-flex flex-column">
                                             <div class="d-flex align-items-center gap-2 mb-2">
                                                 <i class="bi bi-person-plus-fill fs-3 text-primary"></i>
-                                                <h6 class="mb-0">Create ABHA</h6>
+                                                <h6 class="mb-0">Create / Find ABHA Record</h6>
                                             </div>
-                                            <p class="text-muted small mb-2">Register a new health account using the patient's Aadhaar number. OTP is sent to the Aadhaar-linked mobile.</p>
+                                            <p class="text-muted small mb-2">Create a new ABHA or find existing ABHA profile using Aadhaar. Supports Aadhaar & communication mobile verification.</p>
                                             <ul class="list-unstyled small text-muted mb-3">
-                                                <li><i class="bi bi-check-circle-fill text-success me-1"></i>Aadhaar-based identity verification</li>
-                                                <li><i class="bi bi-check-circle-fill text-success me-1"></i>Choose or customise the ABHA address</li>
-                                                <li><i class="bi bi-check-circle-fill text-success me-1"></i>Official ABHA card stored for printing</li>
+                                                <li><i class="bi bi-check-circle-fill text-success me-1"></i>Aadhaar OTP verification</li>
+                                                <li><i class="bi bi-check-circle-fill text-success me-1"></i>Aadhaar & Communication mobile matching</li>
+                                                <li><i class="bi bi-check-circle-fill text-success me-1"></i>Choose custom ABHA address or fetch profile</li>
                                             </ul>
-                                            <button type="button" class="btn btn-primary w-100 mt-auto" id="abha_open_create_modal_btn"><i class="bi bi-plus-lg me-1"></i>Create ABHA Record</button>
+                                            <button type="button" class="btn btn-primary w-100 mt-auto" id="abha_open_create_modal_btn"><i class="bi bi-person-vcard me-1"></i>Create / Find ABHA Record</button>
                                         </div>
                                     </div>
                                 </div>

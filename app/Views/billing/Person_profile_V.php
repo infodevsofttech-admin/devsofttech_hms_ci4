@@ -459,7 +459,7 @@
                                 <h5 class="card-title mb-1">ABHA Number Create and Verify</h5>
                                 <p class="text-muted small mb-3">Create a new ABHA or link an existing ABHA profile to this patient.</p>
                                 <button type="button" class="btn btn-primary" id="profile_open_abha_create_btn">
-                                    <i class="bi bi-person-plus-fill me-1"></i>Create ABHA
+                                    <i class="bi bi-person-vcard me-1"></i>Create / Find ABHA
                                 </button>
                             </div>
                             <?php endif; ?>
