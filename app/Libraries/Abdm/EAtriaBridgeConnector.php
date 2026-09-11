@@ -449,8 +449,31 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             return ['ok' => 0, 'error_text' => 'Non-JSON response', 'http_code' => $httpCode, 'raw' => (string) $raw, 'auth_debug' => $authDebug];
         }
 
-        $ok = ($httpCode >= 200 && $httpCode < 300) ? (int) ($decoded['ok'] ?? 1) : 0;
-        $logErr = $ok === 0 ? (string) ($decoded['message'] ?? $decoded['error_text'] ?? '') : '';
+        $authResult = strtolower(trim((string) ($decoded['authResult'] ?? $decoded['auth_result'] ?? $decoded['data']['authResult'] ?? $decoded['data']['auth_result'] ?? '')));
+        $statusVal  = strtolower(trim((string) ($decoded['status'] ?? $decoded['data']['status'] ?? '')));
+        $hasFailedAuth = ($authResult === 'failed' || in_array($statusVal, ['failed', 'failure', 'error', 'rejected'], true));
+        if (isset($decoded['success']) && ($decoded['success'] === false || $decoded['success'] === 0 || $decoded['success'] === 'false')) {
+            $hasFailedAuth = true;
+        }
+        if (isset($decoded['data']['success']) && ($decoded['data']['success'] === false || $decoded['data']['success'] === 0 || $decoded['data']['success'] === 'false')) {
+            $hasFailedAuth = true;
+        }
+
+        if ($hasFailedAuth) {
+            $ok = 0;
+        } elseif ($httpCode >= 200 && $httpCode < 300) {
+            $ok = (int) ($decoded['ok'] ?? 1);
+        } else {
+            $ok = 0;
+        }
+
+        if ($ok === 0 && empty($decoded['error_text'])) {
+            $errMsg = trim((string) ($decoded['message'] ?? $decoded['data']['message'] ?? $decoded['error']['message'] ?? (is_string($decoded['error'] ?? null) ? $decoded['error'] : '')));
+            if ($errMsg !== '') {
+                $decoded['error_text'] = $errMsg;
+            }
+        }
+        $logErr = $ok === 0 ? (string) ($decoded['error_text'] ?? $decoded['message'] ?? '') : '';
         if ($ok === 0) {
             $logErr .= ($logErr !== '' ? ' | ' : '') . 'auth=' . json_encode($authDebug);
         }
@@ -712,6 +735,16 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         }
 
         $result = $this->post('/v3/abha/login/verify-otp', $body);
+        $authResult = strtolower(trim((string) ($result['authResult'] ?? $result['data']['authResult'] ?? $result['auth_result'] ?? $result['data']['auth_result'] ?? '')));
+        $status = strtolower(trim((string) ($result['status'] ?? $result['data']['status'] ?? '')));
+        if ($authResult === 'failed' || in_array($status, ['failed', 'failure', 'error'], true)) {
+            $err = trim((string) ($result['message'] ?? $result['data']['message'] ?? $result['error_text'] ?? 'Please enter a valid OTP. Entered OTP is either expired or incorrect.'));
+            return array_merge($result, [
+                'ok' => 0,
+                'error_text' => $err !== '' ? $err : 'Please enter a valid OTP. Entered OTP is either expired or incorrect.',
+                'message' => $err !== '' ? $err : 'Please enter a valid OTP. Entered OTP is either expired or incorrect.',
+            ]);
+        }
         if (empty($result['ok']) || (int) $result['ok'] !== 1) {
             return $result;
         }
@@ -941,6 +974,16 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         }
 
         $result = $this->post('/v3/abha/aadhaar/verify-otp', $body);
+        $authResult = strtolower(trim((string) ($result['authResult'] ?? $result['data']['authResult'] ?? $result['auth_result'] ?? $result['data']['auth_result'] ?? '')));
+        $status = strtolower(trim((string) ($result['status'] ?? $result['data']['status'] ?? '')));
+        if ($authResult === 'failed' || in_array($status, ['failed', 'failure', 'error'], true)) {
+            $err = trim((string) ($result['message'] ?? $result['data']['message'] ?? $result['error_text'] ?? 'Please enter a valid OTP. Entered OTP is either expired or incorrect.'));
+            return array_merge($result, [
+                'ok' => 0,
+                'error_text' => $err !== '' ? $err : 'Please enter a valid OTP. Entered OTP is either expired or incorrect.',
+                'message' => $err !== '' ? $err : 'Please enter a valid OTP. Entered OTP is either expired or incorrect.',
+            ]);
+        }
         if (empty($result['ok']) || (int) $result['ok'] !== 1) {
             return $result;
         }
@@ -978,6 +1021,16 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         }
 
         $result = $this->post('/v3/abha/mobile/verify-otp', $body);
+        $authResult = strtolower(trim((string) ($result['authResult'] ?? $result['data']['authResult'] ?? $result['auth_result'] ?? $result['data']['auth_result'] ?? '')));
+        $status = strtolower(trim((string) ($result['status'] ?? $result['data']['status'] ?? '')));
+        if ($authResult === 'failed' || in_array($status, ['failed', 'failure', 'error'], true)) {
+            $err = trim((string) ($result['message'] ?? $result['data']['message'] ?? $result['error_text'] ?? 'Please enter a valid OTP. Entered OTP is either expired or incorrect.'));
+            return array_merge($result, [
+                'ok' => 0,
+                'error_text' => $err !== '' ? $err : 'Please enter a valid OTP. Entered OTP is either expired or incorrect.',
+                'message' => $err !== '' ? $err : 'Please enter a valid OTP. Entered OTP is either expired or incorrect.',
+            ]);
+        }
         if (empty($result['ok']) || (int) $result['ok'] !== 1) {
             return $result;
         }
@@ -1009,6 +1062,16 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         }
 
         $result = $this->post('/v3/abha/enrol/mobile/verify-otp', $body);
+        $authResult = strtolower(trim((string) ($result['authResult'] ?? $result['data']['authResult'] ?? $result['auth_result'] ?? $result['data']['auth_result'] ?? '')));
+        $status = strtolower(trim((string) ($result['status'] ?? $result['data']['status'] ?? '')));
+        if ($authResult === 'failed' || in_array($status, ['failed', 'failure', 'error'], true)) {
+            $err = trim((string) ($result['message'] ?? $result['data']['message'] ?? $result['error_text'] ?? 'Please enter a valid OTP. Entered OTP is either expired or incorrect.'));
+            return array_merge($result, [
+                'ok' => 0,
+                'error_text' => $err !== '' ? $err : 'Please enter a valid OTP. Entered OTP is either expired or incorrect.',
+                'message' => $err !== '' ? $err : 'Please enter a valid OTP. Entered OTP is either expired or incorrect.',
+            ]);
+        }
         if (empty($result['ok']) || (int) $result['ok'] !== 1) {
             return $result;
         }

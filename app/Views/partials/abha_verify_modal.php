@@ -262,12 +262,17 @@ window.AbhaVerifyModal = (function () {
         var button = $('#abhaVerifyOtpBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Verifying');
         $.post('<?= base_url('abha/register/login/verify-otp') ?>', { txn_id:lookupResponse.txn_id, auth_method:lookupResponse.auth_method, otp:otp, '<?= csrf_token() ?>':csrf() }, function (response) {
             button.prop('disabled', false).html('<i class="bi bi-patch-check me-1"></i>Verify OTP');
-            if (!response || response.ok != 1) { alertBox('danger', apiMessage(response, 'OTP verification failed.')); return; }
+            if (!response || response.ok != 1) {
+                alertBox('danger', apiMessage(response, 'Please enter a valid OTP. Entered OTP is either expired or incorrect.'));
+                $('#abhaVerifyOtp').val('').trigger('focus');
+                return;
+            }
             stopTimer();
             renderProfile(response);
         }, 'json').fail(function (xhr) {
             button.prop('disabled', false).html('<i class="bi bi-patch-check me-1"></i>Verify OTP');
-            alertBox('danger', apiMessage(xhr.responseJSON, 'OTP verification failed.'));
+            alertBox('danger', apiMessage(xhr.responseJSON, 'Please enter a valid OTP. Entered OTP is either expired or incorrect.'));
+            $('#abhaVerifyOtp').val('').trigger('focus');
         });
     }
     $(function () {

@@ -94,9 +94,15 @@ class Abha extends BaseController
             return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
         }
 
+        $authResult = strtolower(trim((string) ($result['authResult'] ?? $result['data']['authResult'] ?? $result['auth_result'] ?? $result['data']['auth_result'] ?? '')));
+        $status = strtolower(trim((string) ($result['status'] ?? $result['data']['status'] ?? '')));
+        if ($authResult === 'failed' || in_array($status, ['failed', 'failure', 'error'], true)) {
+            $result['ok'] = 0;
+        }
+
         if (empty($result['ok']) || $result['ok'] != 1) {
             $requestId = trim((string) ($result['request_id'] ?? ''));
-            $errorText = $this->extractBridgeErrorText($result, 'OTP verification failed');
+            $errorText = $this->extractBridgeErrorText($result, 'Please enter a valid OTP. Entered OTP is either expired or incorrect.');
             if ($requestId !== '') {
                 $errorText .= ' (Bridge Request ID: ' . $requestId . ')';
             }
@@ -1637,24 +1643,6 @@ class Abha extends BaseController
      */
     private function extractBridgeErrorText(array $result, string $fallback): string
     {
-        $fieldErrors = [];
-        if (is_array($result['data'] ?? null)) {
-            foreach ($result['data'] as $field => $message) {
-                if ($field === 'timestamp' || ! is_string($message) || trim($message) === '') {
-                    continue;
-                }
-                $fieldMsg = trim($message);
-                if (strcasecmp($field, 'loginId') === 0 && stripos($fieldMsg, 'invalid') !== false) {
-                    $fieldErrors[] = 'Aadhaar Number is not valid. Valid 12-digit Aadhaar number is required.';
-                } else {
-                    $fieldErrors[] = $field . ': ' . $fieldMsg;
-                }
-            }
-        }
-        if ($fieldErrors !== []) {
-            return implode('; ', $fieldErrors);
-        }
-
         $candidates = [
             $result['error_text'] ?? null,
             $result['message'] ?? null,
@@ -1683,6 +1671,33 @@ class Abha extends BaseController
                 }
                 return $trimmed;
             }
+        }
+
+        $ignoreFields = [
+            'timestamp', 'txnid', 'txn_id', 'authresult', 'auth_result',
+            'authmethod', 'auth_method', 'status', 'token', 'tokens',
+            'refreshtoken', 'refresh_token', 'expiresin', 'expires_in',
+            'refreshexpiresin', 'refresh_expires_in', 'request_id', 'requestid',
+            'scope', 'accounts', 'message', 'error', 'error_text', 'code',
+        ];
+
+        $fieldErrors = [];
+        if (is_array($result['data'] ?? null)) {
+            foreach ($result['data'] as $field => $message) {
+                $lowerField = strtolower(trim((string) $field));
+                if (in_array($lowerField, $ignoreFields, true) || ! is_string($message) || trim($message) === '') {
+                    continue;
+                }
+                $fieldMsg = trim($message);
+                if (strcasecmp($field, 'loginId') === 0 && stripos($fieldMsg, 'invalid') !== false) {
+                    $fieldErrors[] = 'Aadhaar Number is not valid. Valid 12-digit Aadhaar number is required.';
+                } else {
+                    $fieldErrors[] = $field . ': ' . $fieldMsg;
+                }
+            }
+        }
+        if ($fieldErrors !== []) {
+            return implode('; ', $fieldErrors);
         }
 
         return $fallback;
@@ -2897,14 +2912,20 @@ class Abha extends BaseController
             return $this->response->setStatusCode(502)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
         }
 
+        $authResult = strtolower(trim((string) ($result['authResult'] ?? $result['data']['authResult'] ?? $result['auth_result'] ?? $result['data']['auth_result'] ?? '')));
+        $status = strtolower(trim((string) ($result['status'] ?? $result['data']['status'] ?? '')));
+        if ($authResult === 'failed' || in_array($status, ['failed', 'failure', 'error'], true)) {
+            $result['ok'] = 0;
+        }
+
         if (empty($result['ok']) || (int) $result['ok'] !== 1) {
             $httpCode = (int) ($result['http_code'] ?? 0);
             if ($httpCode < 400 || $httpCode > 599) {
-                $httpCode = 502;
+                $httpCode = 422;
             }
             return $this->response->setStatusCode($httpCode)->setJSON([
                 'ok' => 0,
-                'error_text' => $this->extractBridgeErrorText($result, 'OTP verification failed.'),
+                'error_text' => $this->extractBridgeErrorText($result, 'Please enter a valid OTP. Entered OTP is either expired or incorrect.'),
                 'request_id' => (string) ($result['request_id'] ?? ''),
             ]);
         }
@@ -2928,6 +2949,15 @@ class Abha extends BaseController
         };
         $abhaNumber = preg_replace('/\D/', '', $firstNonEmpty([$profile['ABHANumber'] ?? null, $profile['abhaNumber'] ?? null, $profile['abha_number'] ?? null, $profile['abha_id'] ?? null, $payload['ABHANumber'] ?? null, $payload['abhaNumber'] ?? null, $payload['abha_id'] ?? null]));
         $abhaAddress = $firstNonEmpty([$profile['preferredAddress'] ?? null, $profile['preferredAbhaAddress'] ?? null, $profile['abhaAddress'] ?? null, $profile['abha_address'] ?? null, $payload['preferredAddress'] ?? null, $payload['abhaAddress'] ?? null, $payload['abha_address'] ?? null]);
+        $userToken = trim((string) ($payload['token'] ?? $payload['tokens']['token'] ?? $payload['auth_token'] ?? $payload['user_token'] ?? ''));
+
+        if ($abhaNumber === '' && $abhaAddress === '' && $userToken === '') {
+            return $this->response->setStatusCode(422)->setJSON([
+                'ok' => 0,
+                'error_text' => $this->extractBridgeErrorText($result, 'Please enter a valid OTP. Entered OTP is either expired or incorrect.'),
+                'request_id' => (string) ($result['request_id'] ?? ''),
+            ]);
+        }
         $name = $this->extractAbhaProfileName($profile, $payload);
         $mobile = $firstNonEmpty([$profile['mobile'] ?? null, $profile['mobileNumber'] ?? null, $profile['mobile_number'] ?? null, $payload['mobile'] ?? null, $payload['mobileNumber'] ?? null, $payload['mobile_number'] ?? null]);
         $gender = $firstNonEmpty([$profile['gender'] ?? null, $payload['gender'] ?? null]);
