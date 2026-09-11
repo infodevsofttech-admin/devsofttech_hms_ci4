@@ -70,6 +70,7 @@
                 </section>
 
                 <section id="abhaVerifyStep4" class="d-none">
+                    <div id="abhaVerifyStatusAlert"></div>
                     <div class="row g-4">
                         <div class="col-lg-6">
                             <div class="d-flex align-items-center gap-3 mb-3">
@@ -254,6 +255,28 @@ window.AbhaVerifyModal = (function () {
             $('#abhaVerifyCardWrap').html('<div class="text-center text-muted"><i class="bi bi-card-image fs-1 d-block mb-2"></i>' + reason + '</div>');
             $('#abhaVerifyDownloadCard').addClass('d-none');
         }
+
+        var isRegistered = !!(profile.already_registered && profile.conflict_patient);
+        if (isRegistered) {
+            var cp = profile.conflict_patient;
+            $('#abhaVerifyStatusAlert').html(
+                '<div class="alert alert-warning py-2 mb-3">' +
+                '  <i class="bi bi-shield-lock-fill me-2 fs-5 align-middle"></i>' +
+                '  <strong>Already Registered:</strong> This ABHA ID is already linked to HMS patient ' +
+                '  <strong>' + escapeHtml(cp.p_code || '') + ' (' + escapeHtml(cp.name || cp.p_fname || '') + ')</strong>.' +
+                '</div>'
+            );
+            $('#abhaVerifyCompareBtn').html('<i class="bi bi-person-check me-1"></i>View Linked Patient in HMS').removeClass('btn-success').addClass('btn-primary');
+        } else {
+            $('#abhaVerifyStatusAlert').empty();
+            var count = (profile.candidates || []).length;
+            if (count === 0) {
+                $('#abhaVerifyCompareBtn').html('<i class="bi bi-person-plus me-1"></i>Register as New Patient').removeClass('btn-primary').addClass('btn-success');
+            } else {
+                $('#abhaVerifyCompareBtn').html('<i class="bi bi-people me-1"></i>Compare with HMS Patients').removeClass('btn-primary').addClass('btn-success');
+            }
+        }
+
         showStep(4);
     }
     function verifyOtp() {
@@ -313,6 +336,7 @@ window.AbhaVerifyModal = (function () {
                 : 'Enter the patient\'s 14-digit ABHA Number or ID. A mobile number is not required for account lookup.');
             $('#abhaVerifyIdentifier').val(identifier || '');
             $('#abhaVerifyPhoto,#abhaVerifyDownloadCard').addClass('d-none');
+            $('#abhaVerifyStatusAlert').empty();
             showStep(1);
             modal.show();
             if (initialLookup && initialLookup.ok == 1) {

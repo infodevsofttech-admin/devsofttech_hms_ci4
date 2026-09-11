@@ -23,7 +23,11 @@
     <div class="modal-dialog modal-xl modal-dialog-centered">
         <div class="modal-content">
             <div class="modal-header">
-                <h5 class="modal-title"><i class="bi bi-people-fill me-2"></i>Patient Already Exists</h5>
+                <h5 class="modal-title d-flex align-items-center" id="abhaMatch_modal_title">
+                    <i class="bi bi-people-fill me-2" id="abhaMatch_modal_icon"></i>
+                    <span id="abhaMatch_modal_title_text">Matching Patients in HMS</span>
+                    <span id="abhaMatch_modal_title_badge" class="badge bg-danger ms-2 d-none">Already Exists</span>
+                </h5>
                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body">
@@ -69,10 +73,18 @@
                 </div>
             </div>
             <div class="modal-footer justify-content-between">
-                <button type="button" class="btn btn-outline-secondary" id="abhaMatch_create_new_btn">
-                    <i class="bi bi-person-plus me-1"></i>Create New Patient
-                </button>
-                <div class="d-flex gap-2">
+                <div class="d-flex align-items-center gap-2">
+                    <button type="button" class="btn btn-outline-secondary" id="abhaMatch_create_new_btn">
+                        <i class="bi bi-person-plus me-1"></i>Create New Patient
+                    </button>
+                    <span id="abhaMatch_duplicate_warning" class="small text-danger d-none">
+                        <i class="bi bi-shield-lock-fill me-1"></i>ABHA already registered. Cannot create duplicate.
+                    </span>
+                </div>
+                <div class="d-flex gap-2 align-items-center">
+                    <a href="#" target="_blank" class="btn btn-outline-danger d-none" id="abhaMatch_view_profile_btn">
+                        <i class="bi bi-box-arrow-up-right me-1"></i>Open Patient Profile
+                    </a>
                     <button type="button" class="btn btn-outline-primary" id="abhaMatch_keep_existing_btn" disabled><i class="bi bi-person-check me-1"></i>Keep Existing</button>
                     <button type="button" class="btn btn-primary" id="abhaMatch_update_existing_btn" disabled><i class="bi bi-arrow-repeat me-1"></i>Update Details</button>
                 </div>
@@ -174,23 +186,30 @@ window.AbhaPatientMatchModal = (function () {
             var conflictNote = c.abha_conflict
                 ? '<div class="small text-danger mt-1"><i class="bi bi-exclamation-triangle-fill me-1"></i>Already has a different ABHA linked (' + esc(c.abha) + ')</div>'
                 : '';
+            var exactAbhaNote = m.abha
+                ? '<div class="small text-danger fw-semibold mt-1"><i class="bi bi-shield-lock-fill me-1"></i>Already registered with this exact ABHA ID in HMS (' + esc(c.p_code || '') + ')</div>'
+                : '';
+            var cardCls = m.abha ? 'border-danger bg-danger-subtle' : (m.aadhaar ? 'border-warning bg-warning-subtle' : '');
             var html = ''
-                + '<div class="card mb-2 abhaMatch-candidate" data-id="' + c.id + '" style="cursor:pointer">'
+                + '<div class="card mb-2 abhaMatch-candidate ' + cardCls + '" data-id="' + c.id + '" style="cursor:pointer">'
                 + '  <div class="card-body py-2">'
                 + '    <div class="d-flex justify-content-between align-items-start">'
                 + '      <div>'
                 + (c.photo_url ? '        <img src="' + esc(c.photo_url) + '" alt="Patient photo" class="rounded-circle me-2" style="width:38px;height:38px;object-fit:cover;vertical-align:middle">' : '')
                 + '        <div class="fw-semibold d-inline-block">' + esc(c.name || '—') + ' <small class="text-muted">(' + esc(c.p_code || '') + ')</small></div>'
                 + '        <div class="mt-1">'
+                +            (m.abha ? '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-shield-lock-fill me-1"></i>Exact ABHA Match</span>' : '')
+                +            (m.aadhaar ? '<span class="badge bg-danger me-1 mb-1"><i class="bi bi-fingerprint me-1"></i>Exact Aadhaar Match</span>' : '')
                 +            badge(m.name, 'Name')
                 +            badge(m.age, 'Age ' + (c.age != null ? c.age : '?'))
                 +            badge(m.gender, genderText(c.gender))
                 +            badge(m.mobile, 'Mobile ' + maskMobile(c.mobile))
-                +            badge(m.aadhaar, 'Aadhaar')
+                +            (!m.aadhaar ? badge(m.aadhaar, 'Aadhaar') : '')
                 + '        </div>'
                 + '        <div class="small text-muted mt-1">DOB: ' + esc(c.dob || '—') + ' | Mobile: ' + esc(maskMobile(c.mobile) || '—') + '</div>'
                 + '        <div class="small text-muted mt-1">Address: ' + esc(c.address || '—') + '</div>'
                 +          conflictNote
+                +          exactAbhaNote
                 + '      </div>'
                 + '      <div class="form-check">'
                 + '        <input class="form-check-input abhaMatch-radio" type="radio" name="abhaMatchPick" value="' + c.id + '"' + (c.abha_conflict ? ' disabled' : '') + '>'
@@ -215,6 +234,17 @@ window.AbhaPatientMatchModal = (function () {
     function submitConfirm(action, patientId, updateMode, $btn) {
         $('#abhaMatch_alert').empty();
         var origHtml = $btn.html();
+
+        if (action === 'new') {
+            var exactConflict = (_profile && _profile.already_registered) || (window._abhaMatchCandidates || []).some(function(c) {
+                return c.match && (c.match.abha || c.match.aadhaar);
+            });
+            if (exactConflict) {
+                $('#abhaMatch_alert').html(alertHtml('danger', 'Cannot create duplicate patient: An ABHA ID or Aadhaar Number can only belong to one patient in HMS. Please select and update the existing patient record.'));
+                return;
+            }
+        }
+
         $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Saving…');
         $('#abhaMatch_create_new_btn,#abhaMatch_keep_existing_btn,#abhaMatch_update_existing_btn').prop('disabled', true);
 
@@ -296,13 +326,79 @@ window.AbhaPatientMatchModal = (function () {
             _onResolved = onResolved;
             $('#abhaMatch_alert').empty();
             $('#abhaMatch_keep_existing_btn,#abhaMatch_update_existing_btn').prop('disabled', true);
+            $('#abhaMatch_view_profile_btn').addClass('d-none');
+            $('#abhaMatch_duplicate_warning').addClass('d-none');
+
             renderProfile(_profile);
             renderCandidates(candidates || []);
             $('#abhaMatch_update_preview').addClass('d-none').empty();
-            if (Number(preferredPatientId || 0) > 0
-                && (candidates || []).some(function(candidate) { return Number(candidate.id) === Number(preferredPatientId); })) {
-                selectCandidate(Number(preferredPatientId));
+
+            // Detect exact ABHA or Aadhaar conflict
+            var exactAbhaCandidate = (candidates || []).find(function (c) {
+                return (c.match && c.match.abha) || (_profile.conflict_patient && Number(c.id) === Number(_profile.conflict_patient.id));
+            });
+            var exactAadhaarCandidate = (candidates || []).find(function (c) {
+                return c.match && c.match.aadhaar;
+            });
+            var isExactMatch = !!(exactAbhaCandidate || exactAadhaarCandidate || _profile.already_registered);
+            var conflictPatient = exactAbhaCandidate || exactAadhaarCandidate || _profile.conflict_patient || null;
+
+            if (isExactMatch && conflictPatient) {
+                // Case 1: Exact ABHA / Aadhaar Match already registered in HMS
+                $('#abhaMatch_modal_icon').attr('class', 'bi bi-shield-exclamation text-danger me-2');
+                $('#abhaMatch_modal_title_text').text('Patient Already Registered with this ABHA ID');
+                $('#abhaMatch_modal_title_badge').removeClass('d-none').text('Already Exists');
+
+                var profileLink = '<?= base_url('billing/patient/person_record/') ?>' + (conflictPatient.id || '');
+                $('#abhaMatch_alert').html(
+                    '<div class="alert alert-danger py-2 mb-3">' +
+                    '  <div class="d-flex align-items-center justify-content-between flex-wrap gap-2">' +
+                    '    <div>' +
+                    '      <i class="bi bi-shield-lock-fill me-2 fs-5 align-middle"></i>' +
+                    '      <strong>Unique ABHA ID Policy:</strong> This ABHA ID is already linked to patient ' +
+                    '      <strong>' + esc(conflictPatient.p_code || '') + ' (' + esc(conflictPatient.name || conflictPatient.p_fname || '') + ')</strong>. ' +
+                    '      Each patient in HMS must have a unique ABHA ID. Creating a duplicate patient is not allowed.' +
+                    '    </div>' +
+                    (conflictPatient.id ? '    <a href="' + profileLink + '" target="_blank" class="btn btn-sm btn-outline-danger text-nowrap"><i class="bi bi-box-arrow-up-right me-1"></i>View Profile</a>' : '') +
+                    '  </div>' +
+                    '</div>'
+                );
+
+                // Disable "Create New Patient" because of duplicate conflict
+                $('#abhaMatch_create_new_btn').prop('disabled', true).addClass('disabled opacity-50 btn-outline-secondary').removeClass('btn-primary').attr('title', 'Disabled: ABHA ID is already linked to patient ' + (conflictPatient.p_code || ''));
+                $('#abhaMatch_duplicate_warning').removeClass('d-none');
+                if (conflictPatient.id) {
+                    $('#abhaMatch_view_profile_btn').attr('href', profileLink).removeClass('d-none');
+                }
+
+                // Auto-select the matching existing patient
+                if (conflictPatient.id) {
+                    selectCandidate(Number(conflictPatient.id));
+                }
+            } else if ((candidates || []).length > 0) {
+                // Case 2: No exact conflict, but potential demographic matches found
+                $('#abhaMatch_modal_icon').attr('class', 'bi bi-people-fill text-primary me-2');
+                $('#abhaMatch_modal_title_text').text('Matching Patients in HMS');
+                $('#abhaMatch_modal_title_badge').addClass('d-none');
+
+                $('#abhaMatch_create_new_btn').prop('disabled', false).removeClass('disabled opacity-50 btn-primary').addClass('btn-outline-secondary').removeAttr('title');
+
+                if (Number(preferredPatientId || 0) > 0
+                    && (candidates || []).some(function (candidate) { return Number(candidate.id) === Number(preferredPatientId); })) {
+                    selectCandidate(Number(preferredPatientId));
+                }
+            } else {
+                // Case 3: 0 matches found in HMS (new person - e.g. Keshav Singh)
+                $('#abhaMatch_modal_icon').attr('class', 'bi bi-person-plus-fill text-success me-2');
+                $('#abhaMatch_modal_title_text').text('Register New Patient from ABHA');
+                $('#abhaMatch_modal_title_badge').addClass('d-none');
+
+                $('#abhaMatch_empty').text('No matching patient found in HMS by name, age or gender. You can register a new patient record with this verified ABHA profile.');
+
+                // Highlight "Create New Patient" as the primary action
+                $('#abhaMatch_create_new_btn').prop('disabled', false).removeClass('disabled opacity-50 btn-outline-secondary').addClass('btn-primary').removeAttr('title');
             }
+
             if (_bsModal) { _bsModal.show(); } else { $modalEl.modal('show'); }
         }
     };

@@ -2032,14 +2032,17 @@ class Abha extends BaseController
             return [];
         }
 
+        $candidateAbhaCols = array_values(array_intersect(['abha_id', 'abha_no', 'abha', 'abha_address'], $fields));
         $selectFields = array_values(array_intersect(
             ['id', 'p_code', 'p_fname', 'p_lname', 'gender', 'dob', 'age', 'mphone1', 'udai', 'add1', 'district', 'state', 'zip', 'profile_file_id', 'profile_picture', 'abha_profile_photo_base64'],
             $fields
         ));
-        $select = implode(',', $selectFields);
-        if ($abhaField !== null && ! in_array($abhaField, ['id', 'p_code', 'p_fname', 'p_lname', 'gender', 'dob', 'age', 'mphone1', 'udai'], true)) {
-            $select .= ',' . $abhaField;
+        foreach ($candidateAbhaCols as $cCol) {
+            if (! in_array($cCol, $selectFields, true)) {
+                $selectFields[] = $cCol;
+            }
         }
+        $select = implode(',', $selectFields);
 
         // Two targeted passes: exact identifiers can never be crowded out by a
         // common name, and gender alone is a filter (see scoring) not a selector.
@@ -2054,24 +2057,53 @@ class Abha extends BaseController
             }
         };
 
-        $exactMatches = [];
-        if ($abhaField !== null && $abhaNumClean !== '') {
-            $exactMatches[$abhaField] = $abhaNumClean;
-        }
-        if ($aadhaar !== '') {
-            $exactMatches['udai'] = $aadhaar;
-        }
-        if ($mobile !== '') {
-            $exactMatches['mphone1'] = $mobile;
-        }
+        $formattedAbha = (strlen($abhaNumClean) === 14)
+            ? substr($abhaNumClean, 0, 2) . '-' . substr($abhaNumClean, 2, 4) . '-' . substr($abhaNumClean, 6, 4) . '-' . substr($abhaNumClean, 10, 4)
+            : '';
+        $abhaVals = array_values(array_filter([$abhaNumClean, $formattedAbha]));
 
-        if ($exactMatches !== []) {
-            $collect(static function ($builder) use ($exactMatches): void {
-                foreach ($exactMatches as $column => $value) {
-                    $builder->orWhere($column, $value);
+        $collect(static function ($builder) use ($candidateAbhaCols, $abhaVals, $aadhaar, $mobile, $fields): void {
+            $hasAny = false;
+            if (! empty($abhaVals) && ! empty($candidateAbhaCols)) {
+                foreach ($candidateAbhaCols as $cCol) {
+                    if (! $hasAny) {
+                        $builder->whereIn($cCol, $abhaVals);
+                        $hasAny = true;
+                    } else {
+                        $builder->orWhereIn($cCol, $abhaVals);
+                    }
                 }
-            });
-        }
+            }
+            if ($aadhaar !== '' && in_array('udai', $fields, true)) {
+                $formattedAadhaar = substr($aadhaar, 0, 4) . ' ' . substr($aadhaar, 4, 4) . ' ' . substr($aadhaar, 8, 4);
+                if (! $hasAny) {
+                    $builder->whereIn('udai', [$aadhaar, $formattedAadhaar]);
+                    $hasAny = true;
+                } else {
+                    $builder->orWhereIn('udai', [$aadhaar, $formattedAadhaar]);
+                }
+            }
+            if ($aadhaar !== '' && in_array('udai_hash', $fields, true)) {
+                $vault = new \App\Libraries\AadhaarVaultService();
+                $hash = $vault->hash($aadhaar);
+                if ($hash !== '') {
+                    if (! $hasAny) {
+                        $builder->where('udai_hash', $hash);
+                        $hasAny = true;
+                    } else {
+                        $builder->orWhere('udai_hash', $hash);
+                    }
+                }
+            }
+            if ($mobile !== '' && in_array('mphone1', $fields, true)) {
+                if (! $hasAny) {
+                    $builder->where('mphone1', $mobile);
+                    $hasAny = true;
+                } else {
+                    $builder->orWhere('mphone1', $mobile);
+                }
+            }
+        });
 
         if ($nameTokens !== []) {
             $hasLastName = in_array('p_lname', $fields, true);
@@ -2115,17 +2147,32 @@ class Abha extends BaseController
             $mobileMatch    = $mobile !== '' && preg_replace('/\D/', '', (string) ($row['mphone1'] ?? '')) === $mobile;
             $aadhaarMatch   = $aadhaar !== '' && preg_replace('/\D/', '', (string) ($row['udai'] ?? '')) === $aadhaar;
 
-            $rowAbha      = $abhaField !== null ? trim((string) ($row[$abhaField] ?? '')) : '';
+            $rowAbha = '';
+            $abhaMatch = false;
+            foreach ($candidateAbhaCols as $cCol) {
+                $val = trim((string) ($row[$cCol] ?? ''));
+                if ($val !== '') {
+                    if ($rowAbha === '') {
+                        $rowAbha = $val;
+                    }
+                    $digitsVal = preg_replace('/\D/', '', $val);
+                    if ($abhaNumClean !== '' && $digitsVal === $abhaNumClean) {
+                        $abhaMatch = true;
+                        $rowAbha = $val;
+                        break;
+                    }
+                }
+            }
+
             $abhaConflict = $rowAbha !== '' && preg_replace('/\D/', '', $rowAbha) !== $abhaNumClean;
 
-            $abhaMatch = $abhaNumClean !== '' && $rowAbha !== ''
-                && preg_replace('/\D/', '', $rowAbha) === $abhaNumClean;
             $minimumDemographicMatch = $nameOverlap && $birthYearMatch && $genderMatch;
             if (! $abhaMatch && ! $aadhaarMatch && ! $minimumDemographicMatch) {
                 continue;
             }
 
-            $score = ($abhaMatch ? 12 : 0) + ($aadhaarMatch ? 10 : 0)
+            // Top score to exact ABHA (1000) and Aadhaar (500) matches
+            $score = ($abhaMatch ? 1000 : 0) + ($aadhaarMatch ? 500 : 0)
                 + ($minimumDemographicMatch ? 5 : 0) + ($nameOverlap ? 2 : 0)
                 + ($birthYearMatch ? 2 : 0) + ($genderMatch ? 1 : 0) + ($mobileMatch ? 4 : 0);
 
@@ -3001,9 +3048,65 @@ class Abha extends BaseController
         $abhaField = $this->resolveAbhaFieldName($fields);
         $candidates = $this->findMatchingCandidates($db, $fields, $name, $mobile, $gender, $dob, '', $abhaField, $abhaNumber);
 
+        $hasExactAbhaMatch = false;
+        $conflictPatient = null;
+        foreach ($candidates as $c) {
+            if (! empty($c['match']['abha'])) {
+                $hasExactAbhaMatch = true;
+                $conflictPatient = [
+                    'id' => (int) $c['id'],
+                    'p_code' => (string) ($c['p_code'] ?? ''),
+                    'p_fname' => (string) ($c['name'] ?? ''),
+                    'name' => (string) ($c['name'] ?? ''),
+                ];
+                break;
+            }
+        }
+
+        // Direct fallback safety check via findPatientByAbha
+        if (! $hasExactAbhaMatch && ($abhaNumber !== '' || $abhaAddress !== '')) {
+            $patientController = new Patient();
+            $direct = $patientController->findPatientByAbha($abhaNumber !== '' ? $abhaNumber : $abhaAddress);
+            if ($direct !== null) {
+                $hasExactAbhaMatch = true;
+                $conflictPatient = [
+                    'id' => (int) $direct['id'],
+                    'p_code' => (string) ($direct['p_code'] ?? ''),
+                    'p_fname' => (string) ($direct['p_fname'] ?? ''),
+                    'name' => (string) ($direct['p_fname'] ?? ''),
+                ];
+                array_unshift($candidates, [
+                    'id' => (int) $direct['id'],
+                    'p_code' => (string) ($direct['p_code'] ?? ''),
+                    'name' => (string) ($direct['p_fname'] ?? ''),
+                    'gender' => 0,
+                    'gender_label' => '',
+                    'dob' => '',
+                    'age' => null,
+                    'mobile' => (string) ($direct['mphone1'] ?? ''),
+                    'photo_url' => '',
+                    'address' => '',
+                    'aadhaar' => (string) ($direct['udai'] ?? ''),
+                    'abha' => (string) ($direct['abha_id'] ?? ''),
+                    'abha_conflict' => false,
+                    'match' => [
+                        'name' => false,
+                        'age' => false,
+                        'gender' => false,
+                        'mobile' => false,
+                        'aadhaar' => false,
+                        'abha' => true,
+                    ],
+                    'score' => 1000,
+                ]);
+            }
+        }
+
         return $this->response->setJSON([
             'ok' => 1,
             'need_confirmation' => true,
+            'already_registered' => $hasExactAbhaMatch,
+            'conflict_patient' => $conflictPatient,
             'abha_number' => $abhaNumber,
             'abha_address' => $abhaAddress,
             'name' => $name,
