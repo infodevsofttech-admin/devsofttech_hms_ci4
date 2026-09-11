@@ -549,6 +549,8 @@ $routes->group('billing', function($routes) {
     $routes->get('patient/search_ajax', 'Patient::search_ajax');
     $routes->post('patient/search_adv', 'Patient::search_adv');
     $routes->post('patient/abha_fetch_profile', 'Patient::abha_fetch_profile');
+    $routes->post('patient/check_abha_unique', 'Patient::check_abha_unique');
+    $routes->post('patient/check_aadhaar_unique', 'Patient::check_aadhaar_unique');
     $routes->post('patient/abha_aadhaar_generate_otp', 'Patient::abhaAadhaarGenerateOtp');
     $routes->post('patient/abha_aadhaar_verify_otp', 'Patient::abhaAadhaarVerifyOtp');
     $routes->post('patient/abha_mobile_generate_otp', 'Patient::abhaMobileGenerateOtp');
@@ -1300,6 +1302,8 @@ $routes->get('Patient/show_cards/(:num)/(:num)', 'Patient::show_cards/$1/$2');
 $routes->post('Patient/update_card', 'Patient::update_card');
 $routes->post('Patient/update_aadhar', 'Patient::update_aadhar');
 $routes->post('Patient/create', 'Patient::create');
+$routes->post('Patient/check_abha_unique', 'Patient::check_abha_unique');
+$routes->post('Patient/check_aadhaar_unique', 'Patient::check_aadhaar_unique');
 $routes->post('OcasePathLap/list_pathtest_bytype', 'OcasePathLap::list_pathtest_bytype');
 $routes->post('OcasePathLap/get_echs_id', 'OcasePathLap::get_echs_id');
 $routes->post('OcasePathLap/update_refer_doc', 'OcasePathLap::update_refer_doc');

@@ -133,6 +133,49 @@ class Patient extends BaseController
 				->with('error', $referByError);
 		}
 
+		// Enforce unique ABHA ID across patients
+		if ($abhaId !== '') {
+			$conflictAbha = $this->findPatientByAbha($abhaId);
+			if ($conflictAbha !== null) {
+				$msg = 'This ABHA ID is already linked to patient ' . ($conflictAbha['p_code'] ?? '') . ' (' . ($conflictAbha['p_fname'] ?? '') . '). ABHA ID must be unique to one person.';
+				if ($isAjax) {
+					return $this->response->setJSON([
+						'insertid' => 0,
+						'error_text' => $msg,
+					]);
+				}
+
+				return redirect()->to(base_url('billing/patient'))
+					->withInput()
+					->with('error', $msg);
+			}
+		}
+
+		// Enforce unique Aadhaar Number across patients
+		$rawAadhaar = trim((string) $this->request->getPost('input_udai'));
+		if ($rawAadhaar !== '') {
+			$vault = new \App\Libraries\AadhaarVaultService();
+			if (! $vault->isMasked($rawAadhaar)) {
+				$digits = $vault->normalize($rawAadhaar);
+				if ($digits !== '') {
+					$conflictAadhaar = $this->findPatientByAadhaar($digits);
+					if ($conflictAadhaar !== null) {
+						$msg = 'This Aadhaar Number is already linked to patient ' . ($conflictAadhaar['p_code'] ?? '') . ' (' . ($conflictAadhaar['p_fname'] ?? '') . '). Aadhaar Number must be unique to one person.';
+						if ($isAjax) {
+							return $this->response->setJSON([
+								'insertid' => 0,
+								'error_text' => $msg,
+							]);
+						}
+
+						return redirect()->to(base_url('billing/patient'))
+							->withInput()
+							->with('error', $msg);
+					}
+				}
+			}
+		}
+
 		$bloodGroup = trim((string) $this->request->getPost('input_blood_group'));
 		if ($bloodGroup === '') {
 			$bloodGroup = 'Not Define';
@@ -259,13 +302,39 @@ class Patient extends BaseController
 			}
 
 			if ($inputAadhar !== '') {
-				// Aadhaar is stored encrypted, so match on its deterministic hash.
-				$builder->orWhere('udai_hash', (new \App\Libraries\AadhaarVaultService())->hash($inputAadhar));
-				$hasCondition = true;
+				$cleanAadhaar = preg_replace('/\D/', '', $inputAadhar) ?? '';
+				if (strlen($cleanAadhaar) === 12) {
+					$vault = new \App\Libraries\AadhaarVaultService();
+					$aadhaarHash = $vault->hash($cleanAadhaar);
+					$formattedAadhaar = substr($cleanAadhaar, 0, 4) . ' ' . substr($cleanAadhaar, 4, 4) . ' ' . substr($cleanAadhaar, 8, 4);
+					$pmCols = $this->db->getFieldNames('patient_master') ?? [];
+
+					$builder->orGroupStart();
+					$hasAadhaarOr = false;
+					if (in_array('udai_hash', $pmCols, true) && $aadhaarHash !== '') {
+						$builder->where('udai_hash', $aadhaarHash);
+						$hasAadhaarOr = true;
+					}
+					if (in_array('udai', $pmCols, true)) {
+						if ($hasAadhaarOr) {
+							$builder->orWhereIn('udai', [$cleanAadhaar, $formattedAadhaar]);
+						} else {
+							$builder->whereIn('udai', [$cleanAadhaar, $formattedAadhaar]);
+						}
+					}
+					$builder->groupEnd();
+					$hasCondition = true;
+				}
 			}
 
 			if ($inputAbhaId !== '' && $abhaField !== null) {
-				$builder->orWhere($abhaField, $inputAbhaId);
+				$cleanAbha = preg_replace('/\D/', '', $inputAbhaId) ?? '';
+				if (strlen($cleanAbha) === 14) {
+					$formattedAbha = substr($cleanAbha, 0, 2) . '-' . substr($cleanAbha, 2, 4) . '-' . substr($cleanAbha, 6, 4) . '-' . substr($cleanAbha, 10, 4);
+					$builder->orWhereIn($abhaField, [$cleanAbha, $formattedAbha]);
+				} else {
+					$builder->orWhere($abhaField, $inputAbhaId);
+				}
 				$hasCondition = true;
 			}
 
@@ -308,27 +377,23 @@ class Patient extends BaseController
 			return $this->response->setJSON(['ok' => 0, 'error_text' => 'ABHA ID must be a 14-digit number']);
 		}
 
-		$profile = [];
-		$abhaField = $this->resolvePatientAbhaIdField();
-		if ($abhaField !== null) {
-			$row = $this->db->table('patient_master')
-				->select('id,p_fname,gender,dob,mphone1,city,state')
-				->where($abhaField, $abhaId)
-				->get(1)
-				->getRowArray();
-
-			if (! empty($row)) {
-				$profile = [
-					'name' => (string) ($row['p_fname'] ?? ''),
-					'gender' => (string) ($row['gender'] ?? ''),
-					'dob' => (string) ($row['dob'] ?? ''),
-					'mobile' => (string) ($row['mphone1'] ?? ''),
-					'city' => (string) ($row['city'] ?? ''),
-					'state' => (string) ($row['state'] ?? ''),
-				];
-			}
+		// Check if this ABHA is already registered to a patient in HMS
+		$conflict = $this->findPatientByAbha($abhaId);
+		if ($conflict !== null) {
+			return $this->response->setJSON([
+				'ok' => 1,
+				'already_registered' => true,
+				'conflict_patient' => [
+					'id' => (int) $conflict['id'],
+					'p_code' => (string) ($conflict['p_code'] ?? ''),
+					'p_fname' => (string) ($conflict['p_fname'] ?? ''),
+					'profile_url' => base_url('billing/patient/person_record/' . (int) $conflict['id']),
+				],
+				'message' => 'This ABHA ID is already registered to patient ' . ($conflict['p_code'] ?? '') . ' (' . ($conflict['p_fname'] ?? '') . '). ABHA ID must be unique to one person.',
+			]);
 		}
 
+		$profile = [];
 		$queueId = null;
 		try {
 			$bridge = new BridgeSyncService();
@@ -341,9 +406,94 @@ class Patient extends BaseController
 
 		return $this->response->setJSON([
 			'ok' => 1,
+			'already_registered' => false,
 			'queue_id' => $queueId,
 			'profile' => $profile,
-			'source' => ! empty($profile) ? 'local_cache' : 'abdm_queue',
+			'source' => 'abdm_queue',
+		]);
+	}
+
+	public function check_abha_unique()
+	{
+		if (! $this->request->isAJAX()) {
+			return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+		}
+
+		$abha = trim((string) ($this->request->getPost('input_abha_id') ?? $this->request->getPost('abha_id') ?? ''));
+		$excludeId = (int) ($this->request->getPost('patient_id') ?? 0);
+
+		if ($abha === '') {
+			return $this->response->setJSON(['ok' => 1, 'is_unique' => true, 'exists' => false]);
+		}
+
+		$conflict = $this->findPatientByAbha($abha, $excludeId > 0 ? $excludeId : null);
+		if ($conflict !== null) {
+			return $this->response->setJSON([
+				'ok' => 1,
+				'is_unique' => false,
+				'exists' => true,
+				'conflict_patient' => [
+					'id' => (int) $conflict['id'],
+					'p_code' => (string) ($conflict['p_code'] ?? ''),
+					'p_fname' => (string) ($conflict['p_fname'] ?? ''),
+					'profile_url' => base_url('billing/patient/person_record/' . (int) $conflict['id']),
+				],
+				'message' => 'ABHA ID is already registered to patient ' . ($conflict['p_code'] ?? '') . ' (' . ($conflict['p_fname'] ?? '') . '). ABHA ID must be unique to one person.',
+			]);
+		}
+
+		return $this->response->setJSON([
+			'ok' => 1,
+			'is_unique' => true,
+			'exists' => false,
+			'message' => 'ABHA ID is available.',
+		]);
+	}
+
+	public function check_aadhaar_unique()
+	{
+		if (! $this->request->isAJAX()) {
+			return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+		}
+
+		$aadhaar = trim((string) ($this->request->getPost('input_udai') ?? $this->request->getPost('udai') ?? ''));
+		$excludeId = (int) ($this->request->getPost('patient_id') ?? 0);
+
+		if ($aadhaar === '') {
+			return $this->response->setJSON(['ok' => 1, 'is_unique' => true, 'exists' => false]);
+		}
+
+		$vault = new \App\Libraries\AadhaarVaultService();
+		if ($vault->isMasked($aadhaar)) {
+			return $this->response->setJSON(['ok' => 1, 'is_unique' => true, 'exists' => false, 'masked' => true]);
+		}
+
+		$digits = $vault->normalize($aadhaar);
+		if ($digits === '') {
+			return $this->response->setJSON(['ok' => 0, 'error_text' => 'Aadhaar must be a 12-digit number']);
+		}
+
+		$conflict = $this->findPatientByAadhaar($digits, $excludeId > 0 ? $excludeId : null);
+		if ($conflict !== null) {
+			return $this->response->setJSON([
+				'ok' => 1,
+				'is_unique' => false,
+				'exists' => true,
+				'conflict_patient' => [
+					'id' => (int) $conflict['id'],
+					'p_code' => (string) ($conflict['p_code'] ?? ''),
+					'p_fname' => (string) ($conflict['p_fname'] ?? ''),
+					'profile_url' => base_url('billing/patient/person_record/' . (int) $conflict['id']),
+				],
+				'message' => 'Aadhaar Number is already registered to patient ' . ($conflict['p_code'] ?? '') . ' (' . ($conflict['p_fname'] ?? '') . '). Aadhaar Number must be unique to one person.',
+			]);
+		}
+
+		return $this->response->setJSON([
+			'ok' => 1,
+			'is_unique' => true,
+			'exists' => false,
+			'message' => 'Aadhaar Number is available.',
 		]);
 	}
 
@@ -995,6 +1145,33 @@ class Patient extends BaseController
 			]);
 		}
 
+		// Enforce unique ABHA ID across patients (excluding current patient)
+		if ($abhaId !== '') {
+			$conflictAbha = $this->findPatientByAbha($abhaId, $pid);
+			if ($conflictAbha !== null) {
+				return $this->response->setJSON([
+					'update' => 0,
+					'error_text' => 'This ABHA ID is already linked to patient ' . ($conflictAbha['p_code'] ?? '') . ' (' . ($conflictAbha['p_fname'] ?? '') . '). ABHA ID must be unique to one person.',
+				]);
+			}
+		}
+
+		// Enforce unique Aadhaar Number across patients (excluding current patient)
+		$aadhaarVault = new \App\Libraries\AadhaarVaultService();
+		$aadhaarInput = trim((string) $this->request->getPost('input_Aadhar'));
+		if ($aadhaarInput !== '' && ! $aadhaarVault->isMasked($aadhaarInput)) {
+			$digits = $aadhaarVault->normalize($aadhaarInput);
+			if ($digits !== '') {
+				$conflictAadhaar = $this->findPatientByAadhaar($digits, $pid);
+				if ($conflictAadhaar !== null) {
+					return $this->response->setJSON([
+						'update' => 0,
+						'error_text' => 'This Aadhaar Number is already linked to patient ' . ($conflictAadhaar['p_code'] ?? '') . ' (' . ($conflictAadhaar['p_fname'] ?? '') . '). Aadhaar Number must be unique to one person.',
+					]);
+				}
+			}
+		}
+
 		$data = [
 			'mphone1' => $this->request->getPost('input_mphone1'),
 			'p_fname' => strtoupper((string) $this->request->getPost('input_name')),
@@ -1011,8 +1188,6 @@ class Patient extends BaseController
 			'estimate_dob' => $estimate_dob,
 			'blood_group' => $this->request->getPost('input_blood_group'),
 		];
-		$aadhaarVault = new \App\Libraries\AadhaarVaultService();
-		$aadhaarInput = (string) $this->request->getPost('input_Aadhar');
 		if (! $aadhaarVault->isMasked($aadhaarInput)) {
 			$data += $aadhaarVault->buildColumns($aadhaarInput);
 		}
@@ -1122,8 +1297,19 @@ class Patient extends BaseController
 		if ($vault->isMasked($udai)) {
 			return $this->response->setJSON(['update' => 1, 'showcontent' => 'Aadhaar unchanged']);
 		}
-		if (trim($udai) !== '' && $vault->normalize($udai) === '') {
-			return $this->response->setJSON(['update' => 0, 'error_text' => 'Enter a valid 12-digit Aadhaar number']);
+		if (trim($udai) !== '') {
+			$digits = $vault->normalize($udai);
+			if ($digits === '') {
+				return $this->response->setJSON(['update' => 0, 'error_text' => 'Enter a valid 12-digit Aadhaar number']);
+			}
+
+			$conflictAadhaar = $this->findPatientByAadhaar($digits, $pid);
+			if ($conflictAadhaar !== null) {
+				return $this->response->setJSON([
+					'update' => 0,
+					'error_text' => 'This Aadhaar Number is already linked to patient ' . ($conflictAadhaar['p_code'] ?? '') . ' (' . ($conflictAadhaar['p_fname'] ?? '') . '). Aadhaar Number must be unique to one person.',
+				]);
+			}
 		}
 
 		$patientModel = new PatientModel();
@@ -1168,21 +1354,14 @@ class Patient extends BaseController
 		// ABHA number must be unique across patient_master — block if another
 		// patient already carries this exact ABHA id.
 		if ($abhaId !== '') {
-			$abhaField = $this->resolvePatientAbhaIdField();
-			if ($abhaField !== null) {
-				$conflict = $this->db->table('patient_master')
-					->select('id,p_code,p_fname')
-					->where($abhaField, $abhaId)
-					->where('id !=', $pid)
-					->get()->getRowArray();
-				if ($conflict) {
-					return $this->response->setJSON([
-						'update' => 0,
-						'error_text' => 'This ABHA number is already linked to patient '
-							. ($conflict['p_code'] ?? '') . ' (' . ($conflict['p_fname'] ?? '') . '). '
-							. 'An ABHA number can only be linked to one patient.',
-					]);
-				}
+			$conflict = $this->findPatientByAbha($abhaId, $pid);
+			if ($conflict !== null) {
+				return $this->response->setJSON([
+					'update' => 0,
+					'error_text' => 'This ABHA ID is already linked to patient '
+						. ($conflict['p_code'] ?? '') . ' (' . ($conflict['p_fname'] ?? '') . '). '
+						. 'An ABHA ID can only be linked to one patient.',
+				]);
 			}
 		}
 
@@ -4046,6 +4225,201 @@ class Patient extends BaseController
 	private function isValidAbhaId(string $value): bool
 	{
 		return preg_match('/^\d{14}$/', $value) === 1;
+	}
+
+	/**
+	 * Find an existing patient in patient_master by ABHA ID (14 digits) or ABHA Address.
+	 * Matches raw digits, formatted (XX-XXXX-XXXX-XXXX), or ABHA address across all existing ABHA columns.
+	 *
+	 * @return array{id:int,p_code:string,p_fname:string,mphone1:string,abha_id:string,udai:string}|null
+	 */
+	public function findPatientByAbha(string $abha, ?int $excludePatientId = null): ?array
+	{
+		$abha = trim($abha);
+		if ($abha === '') {
+			return null;
+		}
+
+		$db = $this->db ?? \Config\Database::connect();
+		if (! $db->tableExists('patient_master')) {
+			return null;
+		}
+
+		$fields = $db->getFieldNames('patient_master') ?? [];
+		$digits = preg_replace('/\D/', '', $abha) ?? '';
+		$is14Digits = strlen($digits) === 14;
+		$formatted14 = $is14Digits
+			? substr($digits, 0, 2) . '-' . substr($digits, 2, 4) . '-' . substr($digits, 6, 4) . '-' . substr($digits, 10, 4)
+			: '';
+
+		$builder = $db->table('patient_master');
+		$builder->select('id,p_code,p_fname,mphone1');
+
+		$selectAbhaField = null;
+		foreach (['abha_id', 'abha_no', 'abha'] as $f) {
+			if (in_array($f, $fields, true)) {
+				$selectAbhaField = $f;
+				break;
+			}
+		}
+		if ($selectAbhaField !== null) {
+			$builder->select($selectAbhaField . ' AS abha_id');
+		}
+		if (in_array('udai', $fields, true)) {
+			$builder->select('udai');
+		}
+
+		$matchedAnyCondition = false;
+		$builder->groupStart();
+
+		// Check all candidate numeric ABHA columns
+		foreach (['abha_id', 'abha_no', 'abha'] as $f) {
+			if (in_array($f, $fields, true)) {
+				if ($is14Digits) {
+					if (! $matchedAnyCondition) {
+						$builder->whereIn($f, [$digits, $formatted14]);
+						$matchedAnyCondition = true;
+					} else {
+						$builder->orWhereIn($f, [$digits, $formatted14]);
+					}
+				} else {
+					if (! $matchedAnyCondition) {
+						$builder->where($f, $abha);
+						$matchedAnyCondition = true;
+					} else {
+						$builder->orWhere($f, $abha);
+					}
+				}
+			}
+		}
+
+		// Check abha_address column if ABHA address provided (e.g. name@abdm)
+		if (in_array('abha_address', $fields, true) && strpos($abha, '@') !== false) {
+			if (! $matchedAnyCondition) {
+				$builder->where('abha_address', $abha);
+				$matchedAnyCondition = true;
+			} else {
+				$builder->orWhere('abha_address', $abha);
+			}
+		}
+
+		$builder->groupEnd();
+
+		if (! $matchedAnyCondition) {
+			return null;
+		}
+
+		if ($excludePatientId !== null && $excludePatientId > 0) {
+			$builder->where('id !=', $excludePatientId);
+		}
+
+		$row = $builder->orderBy('id', 'ASC')->get(1)->getRowArray();
+		if (! $row) {
+			return null;
+		}
+
+		return [
+			'id' => (int) ($row['id'] ?? 0),
+			'p_code' => (string) ($row['p_code'] ?? ''),
+			'p_fname' => (string) ($row['p_fname'] ?? ''),
+			'mphone1' => (string) ($row['mphone1'] ?? ''),
+			'abha_id' => (string) ($row['abha_id'] ?? ''),
+			'udai' => (string) ($row['udai'] ?? ''),
+		];
+	}
+
+	/**
+	 * Find an existing patient in patient_master by Aadhaar number (12 digits).
+	 * Matches deterministic hash in udai_hash and unmasked digits in udai.
+	 *
+	 * @return array{id:int,p_code:string,p_fname:string,mphone1:string,abha_id:string,udai:string}|null
+	 */
+	public function findPatientByAadhaar(string $aadhaar, ?int $excludePatientId = null): ?array
+	{
+		$aadhaar = trim($aadhaar);
+		if ($aadhaar === '') {
+			return null;
+		}
+
+		$vault = new \App\Libraries\AadhaarVaultService();
+		if ($vault->isMasked($aadhaar)) {
+			return null;
+		}
+
+		$digits = $vault->normalize($aadhaar);
+		if ($digits === '') {
+			return null;
+		}
+
+		$db = $this->db ?? \Config\Database::connect();
+		if (! $db->tableExists('patient_master')) {
+			return null;
+		}
+
+		$fields = $db->getFieldNames('patient_master') ?? [];
+		$hash = $vault->hash($digits);
+		$formattedWithSpaces = substr($digits, 0, 4) . ' ' . substr($digits, 4, 4) . ' ' . substr($digits, 8, 4);
+
+		$builder = $db->table('patient_master');
+		$builder->select('id,p_code,p_fname,mphone1');
+
+		$selectAbhaField = null;
+		foreach (['abha_id', 'abha_no', 'abha'] as $f) {
+			if (in_array($f, $fields, true)) {
+				$selectAbhaField = $f;
+				break;
+			}
+		}
+		if ($selectAbhaField !== null) {
+			$builder->select($selectAbhaField . ' AS abha_id');
+		}
+		if (in_array('udai', $fields, true)) {
+			$builder->select('udai');
+		}
+
+		$hasHashField = in_array('udai_hash', $fields, true);
+		$hasUdaiField = in_array('udai', $fields, true);
+
+		if (! $hasHashField && ! $hasUdaiField) {
+			return null;
+		}
+
+		$builder->groupStart();
+		$hasCond = false;
+
+		if ($hasHashField && $hash !== '') {
+			$builder->where('udai_hash', $hash);
+			$hasCond = true;
+		}
+
+		if ($hasUdaiField) {
+			if (! $hasCond) {
+				$builder->whereIn('udai', [$digits, $formattedWithSpaces]);
+				$hasCond = true;
+			} else {
+				$builder->orWhereIn('udai', [$digits, $formattedWithSpaces]);
+			}
+		}
+
+		$builder->groupEnd();
+
+		if ($excludePatientId !== null && $excludePatientId > 0) {
+			$builder->where('id !=', $excludePatientId);
+		}
+
+		$row = $builder->orderBy('id', 'ASC')->get(1)->getRowArray();
+		if (! $row) {
+			return null;
+		}
+
+		return [
+			'id' => (int) ($row['id'] ?? 0),
+			'p_code' => (string) ($row['p_code'] ?? ''),
+			'p_fname' => (string) ($row['p_fname'] ?? ''),
+			'mphone1' => (string) ($row['mphone1'] ?? ''),
+			'abha_id' => (string) ($row['abha_id'] ?? ''),
+			'udai' => (string) ($row['udai'] ?? ''),
+		];
 	}
 
 	/**

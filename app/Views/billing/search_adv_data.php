@@ -51,24 +51,62 @@ $normalize = static function ($value): string {
 $filters = $filters ?? [];
 $filterPhone = trim((string) ($filters['input_mphone1'] ?? ''));
 $filterAadhaar = $normalize($filters['input_udai'] ?? '');
-// Aadhaar is stored masked/encrypted, so rows can only be compared on the last 4 digits.
-$filterAadhaarLast4 = substr(preg_replace('/\D/', '', (string) ($filters['input_udai'] ?? '')) ?? '', -4);
+$filterAadhaarDigits = preg_replace('/\D/', '', (string) ($filters['input_udai'] ?? '')) ?? '';
+$filterAadhaarLast4 = substr($filterAadhaarDigits, -4);
+
 $filterAbha = trim((string) ($filters['input_abha_id'] ?? ''));
+$filterAbhaDigits = preg_replace('/\D/', '', $filterAbha) ?? '';
+
 $filterName = $normalize($filters['input_name'] ?? '');
 $filterRelativeName = $normalize($filters['input_relative_name'] ?? '');
 
-$getMatchScore = static function ($row) use ($normalize, $filterPhone, $filterAadhaarLast4, $filterAbha, $filterName, $filterRelativeName): int {
+$isAbhaMatch = static function ($row) use ($filterAbha, $filterAbhaDigits): bool {
+    if ($filterAbha === '') {
+        return false;
+    }
+    $rowAbha = trim((string) ($row->abha_id ?? ''));
+    if ($rowAbha === '') {
+        return false;
+    }
+    if ($rowAbha === $filterAbha) {
+        return true;
+    }
+    $rowAbhaDigits = preg_replace('/\D/', '', $rowAbha) ?? '';
+    if ($filterAbhaDigits !== '' && strlen($filterAbhaDigits) === 14 && $rowAbhaDigits === $filterAbhaDigits) {
+        return true;
+    }
+    return false;
+};
+
+$isAadhaarMatch = static function ($row) use ($filterAadhaarDigits, $filterAadhaarLast4): bool {
+    if ($filterAadhaarDigits === '' || strlen($filterAadhaarDigits) !== 12) {
+        return false;
+    }
+    $rowUdai = trim((string) ($row->udai ?? ''));
+    $rowLast4 = trim((string) ($row->udai_last4 ?? ''));
+    if ($rowLast4 !== '' && $rowLast4 === $filterAadhaarLast4) {
+        return true;
+    }
+    $rowUdaiDigits = preg_replace('/\D/', '', $rowUdai) ?? '';
+    if ($rowUdaiDigits === $filterAadhaarDigits) {
+        return true;
+    }
+    return false;
+};
+
+$getMatchScore = static function ($row) use ($normalize, $filterPhone, $filterName, $filterRelativeName, $isAbhaMatch, $isAadhaarMatch): int {
     $score = 0;
 
+    // Direct identifier matches carry massive weight
+    if ($isAbhaMatch($row)) {
+        $score += 10;
+    }
+
+    if ($isAadhaarMatch($row)) {
+        $score += 10;
+    }
+
     if ($filterPhone !== '' && trim((string) ($row->mphone1 ?? '')) === $filterPhone) {
-        $score++;
-    }
-
-    if ($filterAadhaarLast4 !== '' && trim((string) ($row->udai_last4 ?? '')) === $filterAadhaarLast4) {
-        $score++;
-    }
-
-    if ($filterAbha !== '' && trim((string) ($row->abha_id ?? '')) === $filterAbha) {
         $score++;
     }
 
@@ -84,7 +122,11 @@ $getMatchScore = static function ($row) use ($normalize, $filterPhone, $filterAa
     return $score;
 };
 
-$getConfidence = static function (int $score): array {
+$getConfidence = static function (int $score, bool $isIdentifierConflict): array {
+    if ($isIdentifierConflict || $score >= 10) {
+        return ['High (Duplicate Conflict)', 'bg-danger text-white'];
+    }
+
     if ($score >= 3) {
         return ['High', 'bg-danger'];
     }
@@ -131,15 +173,19 @@ if (! empty($search_result) && is_array($search_result)) {
             $ageDisplay = $getAgeDisplay($row);
             $gender = $genderLabel($row->gender ?? '');
 
+            $hasAbhaConflict = $isAbhaMatch($row);
+            $hasAadhaarConflict = $isAadhaarMatch($row);
+            $isIdentifierConflict = $hasAbhaConflict || $hasAadhaarConflict;
+
             $matchReasons = [];
             if ($filterPhone !== '' && trim((string) ($row->mphone1 ?? '')) === $filterPhone) {
                 $matchReasons[] = 'Phone';
             }
-            if ($filterAadhaarLast4 !== '' && trim((string) ($row->udai_last4 ?? '')) === $filterAadhaarLast4) {
+            if ($hasAadhaarConflict) {
                 $matchReasons[] = 'Aadhaar';
             }
-            if ($filterAbha !== '' && trim((string) ($row->abha_id ?? '')) === $filterAbha) {
-                $matchReasons[] = 'ABHA';
+            if ($hasAbhaConflict) {
+                $matchReasons[] = 'ABHA ID';
             }
             if (
                 $filterName !== ''
@@ -150,19 +196,24 @@ if (! empty($search_result) && is_array($search_result)) {
                 $matchReasons[] = 'Name + Relative';
             }
 
-            $isStrongDuplicate = count($matchReasons) > 1;
-              $matchScore = $getMatchScore($row);
-              [$confidenceText, $confidenceClass] = $getConfidence($matchScore);
+            $isStrongDuplicate = count($matchReasons) > 1 || $isIdentifierConflict;
+            $matchScore = $getMatchScore($row);
+            [$confidenceText, $confidenceClass] = $getConfidence($matchScore, $isIdentifierConflict);
             ?>
-            <div class="list-group-item list-group-item-action <?= $isStrongDuplicate ? 'border border-warning' : '' ?>"
+            <div class="list-group-item list-group-item-action <?= $isIdentifierConflict ? 'border-2 border-danger shadow-sm' : ($isStrongDuplicate ? 'border border-warning' : '') ?>"
                  role="button"
                  tabindex="0"
                  onclick="load_form('<?= esc($profileUrl) ?>', 'Patient Record');"
                  onkeydown="if(event.key==='Enter' || event.key===' '){event.preventDefault();load_form('<?= esc($profileUrl) ?>', 'Patient Record');}">
                 <div class="d-flex justify-content-between align-items-start gap-2">
-                    <div class="fw-semibold"><?= esc($fullName !== '' ? $fullName : 'Unknown') ?></div>
+                    <div class="fw-semibold <?= $isIdentifierConflict ? 'text-danger' : '' ?>">
+                        <?= esc($fullName !== '' ? $fullName : 'Unknown') ?>
+                        <?php if ($isIdentifierConflict): ?>
+                            <span class="badge bg-danger ms-1"><i class="bi bi-exclamation-octagon-fill me-1"></i>ALREADY REGISTERED</span>
+                        <?php endif; ?>
+                    </div>
                     <button type="button"
-                            class="btn btn-sm btn-outline-primary"
+                            class="btn btn-sm <?= $isIdentifierConflict ? 'btn-danger' : 'btn-outline-primary' ?>"
                             onclick="event.stopPropagation(); load_form('<?= esc($profileUrl) ?>', 'Patient Record');">
                         View Profile
                     </button>
@@ -171,11 +222,27 @@ if (! empty($search_result) && is_array($search_result)) {
                     <div class="small fst-italic text-muted">Refer By: <?= esc(ucwords(strtolower($referBy))) ?></div>
                 <?php endif; ?>
                 <div class="small text-muted"><?= esc($relative !== '' ? $relative : 'Relative: NA') ?></div>
+
+                <?php if ($hasAbhaConflict): ?>
+                    <div class="alert alert-danger py-1 px-2 mb-1 mt-2 small">
+                        <i class="bi bi-shield-lock-fill me-1"></i><strong>ABHA Conflict:</strong> Already linked to this patient. Cannot register new person with same ABHA ID.
+                    </div>
+                <?php endif; ?>
+
+                <?php if ($hasAadhaarConflict): ?>
+                    <div class="alert alert-danger py-1 px-2 mb-1 mt-1 small">
+                        <i class="bi bi-person-vcard-fill me-1"></i><strong>Aadhaar Conflict:</strong> Already linked to this patient. Cannot register new person with same Aadhaar.
+                    </div>
+                <?php endif; ?>
+
                 <?php if (! empty($matchReasons)) : ?>
                     <div class="mt-1">
                         <span class="badge <?= esc($confidenceClass) ?> me-1">Confidence: <?= esc($confidenceText) ?></span>
                         <?php foreach ($matchReasons as $reason) : ?>
-                            <span class="badge <?= $isStrongDuplicate ? 'bg-warning text-dark' : 'bg-info text-dark' ?> me-1">Match: <?= esc($reason) ?></span>
+                            <?php $isCrit = ($reason === 'ABHA ID' || $reason === 'Aadhaar'); ?>
+                            <span class="badge <?= $isCrit ? 'bg-danger text-white' : ($isStrongDuplicate ? 'bg-warning text-dark' : 'bg-info text-dark') ?> me-1">
+                                <?= $isCrit ? '<i class="bi bi-exclamation-circle-fill me-1"></i>' : '' ?>Match: <?= esc($reason) ?>
+                            </span>
                         <?php endforeach; ?>
                     </div>
                 <?php endif; ?>

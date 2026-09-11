@@ -96,6 +96,7 @@
                                                         placeholder="Aadhaar Number" type="text" autocomplete="off"
                                                         data-inputmask='"mask": "999999999999"' data-mask
                                                         onchange="onchange_aadhar()">
+                                                    <div id="udai_feedback" class="mt-1" style="display:none;"></div>
                                                 </div>
                                             </div>
                                             <div class="col-md-3">
@@ -104,6 +105,7 @@
                                                     <input class="form-control" name="input_abha_id" id="input_abha_id"
                                                         placeholder="14-digit ABHA ID" type="text" autocomplete="off"
                                                         maxlength="14" data-inputmask='"mask": "99999999999999"' data-mask>
+                                                    <div id="abha_id_feedback" class="mt-1" style="display:none;"></div>
                                                 </div>
                                             </div>
                                             <div class="col-md-3">
@@ -982,6 +984,12 @@
         syncAdvancedSearchFields();
 
         $('form.form1').on('submit', function(form) {
+            if (isAbhaDuplicateConflict || isAadhaarDuplicateConflict) {
+                form.preventDefault();
+                notify('error', 'Duplicate Identifier', 'Cannot register patient: ABHA ID or Aadhaar Number is already registered in the system.');
+                return;
+            }
+
             if (!validateReferByAgainstMaster('#refer_by_name', 'refer_by_name_list')) {
                 form.preventDefault();
                 return;
@@ -1709,25 +1717,142 @@
         })();
         /* ===== END ABHA REGISTRATION WIZARD ===== */
 
-        $('#input_abha_id').on('change blur', function() {
-            var abhaId = ($(this).val() || '').toString().trim();
-            if (abhaId !== '') {
-                refreshAdvancedSearchResult({
-                    input_abha_id: abhaId
-                });
-            } else {
-                $('#search_result_update').html('');
-            }
+        var isAbhaDuplicateConflict = false;
+        var isAadhaarDuplicateConflict = false;
 
-            if (!/^\d{14}$/.test(abhaId)) {
+        function updateRegisterButtonState() {
+            if (isAbhaDuplicateConflict || isAadhaarDuplicateConflict) {
+                $('#RegisterPatient').prop('disabled', true);
+            } else {
+                $('#RegisterPatient').prop('disabled', false);
+            }
+        }
+
+        function validateAbhaUniqueness() {
+            var rawVal = ($('#input_abha_id').val() || '').toString().trim();
+            var digits = rawVal.replace(/\D/g, '');
+            var isAddress = rawVal.indexOf('@') !== -1;
+
+            if (rawVal === '') {
+                isAbhaDuplicateConflict = false;
+                $('#input_abha_id').removeClass('is-invalid is-valid');
+                $('#abha_id_feedback').hide().empty();
+                updateRegisterButtonState();
                 return;
             }
 
-            $.post('<?= base_url('patient/abha_fetch_profile') ?>', {
-                abha_id: abhaId,
-                '<?= csrf_token() ?>': $('input[name="<?= csrf_token() ?>"]').val()
-            }, function(resp) {
-                if (!resp || resp.ok != 1 || !resp.profile) {
+            if (digits.length !== 14 && !isAddress) {
+                isAbhaDuplicateConflict = false;
+                $('#input_abha_id').removeClass('is-invalid is-valid');
+                $('#abha_id_feedback').hide().empty();
+                updateRegisterButtonState();
+                return;
+            }
+
+            var csrf = getCsrfData();
+            var postData = {
+                input_abha_id: rawVal
+            };
+            postData[csrf.name] = csrf.value;
+
+            $.post('<?= base_url('billing/patient/check_abha_unique') ?>', postData, function(resp) {
+                if (resp && resp.is_unique === false) {
+                    isAbhaDuplicateConflict = true;
+                    $('#input_abha_id').addClass('is-invalid').removeClass('is-valid');
+                    var p = resp.conflict_patient || {};
+                    var conflictHtml = '<div class="alert alert-danger py-1 px-2 mb-0 small">' +
+                        '<i class="bi bi-shield-fill-exclamation me-1"></i><strong>ABHA ID Already Registered!</strong><br/>' +
+                        'Linked to: <strong>' + (p.p_fname || 'Existing Patient') + '</strong> (' + (p.p_code || '') + ')<br/>' +
+                        '<a href="' + (p.profile_url || '#') + '" class="btn btn-xs btn-outline-danger mt-1" onclick="event.preventDefault(); load_form(\'' + p.profile_url + '\', \'Patient Record\');">' +
+                        '<i class="bi bi-person-badge me-1"></i>View Existing Patient Profile</a>' +
+                        '</div>';
+                    $('#abha_id_feedback').html(conflictHtml).show();
+                    updateRegisterButtonState();
+                } else {
+                    isAbhaDuplicateConflict = false;
+                    $('#input_abha_id').removeClass('is-invalid').addClass('is-valid');
+                    $('#abha_id_feedback').hide().empty();
+                    updateRegisterButtonState();
+
+                    if (digits.length === 14) {
+                        fetchAbdmProfile(digits);
+                    }
+                }
+            }, 'json');
+        }
+
+        function validateAadhaarUniqueness() {
+            var rawVal = ($('#input_udai').val() || '').toString().trim();
+            var digits = rawVal.replace(/\D/g, '');
+
+            if (rawVal === '') {
+                isAadhaarDuplicateConflict = false;
+                $('#input_udai').removeClass('is-invalid is-valid');
+                $('#udai_feedback').hide().empty();
+                updateRegisterButtonState();
+                return;
+            }
+
+            if (digits.length !== 12) {
+                isAadhaarDuplicateConflict = false;
+                $('#input_udai').removeClass('is-invalid is-valid');
+                $('#udai_feedback').hide().empty();
+                updateRegisterButtonState();
+                return;
+            }
+
+            var csrf = getCsrfData();
+            var postData = {
+                input_udai: rawVal
+            };
+            postData[csrf.name] = csrf.value;
+
+            $.post('<?= base_url('billing/patient/check_aadhaar_unique') ?>', postData, function(resp) {
+                if (resp && resp.is_unique === false) {
+                    isAadhaarDuplicateConflict = true;
+                    $('#input_udai').addClass('is-invalid').removeClass('is-valid');
+                    var p = resp.conflict_patient || {};
+                    var conflictHtml = '<div class="alert alert-danger py-1 px-2 mb-0 small">' +
+                        '<i class="bi bi-person-vcard-fill me-1"></i><strong>Aadhaar Already Registered!</strong><br/>' +
+                        'Linked to: <strong>' + (p.p_fname || 'Existing Patient') + '</strong> (' + (p.p_code || '') + ')<br/>' +
+                        '<a href="' + (p.profile_url || '#') + '" class="btn btn-xs btn-outline-danger mt-1" onclick="event.preventDefault(); load_form(\'' + p.profile_url + '\', \'Patient Record\');">' +
+                        '<i class="bi bi-person-badge me-1"></i>View Existing Patient Profile</a>' +
+                        '</div>';
+                    $('#udai_feedback').html(conflictHtml).show();
+                    updateRegisterButtonState();
+                } else {
+                    isAadhaarDuplicateConflict = false;
+                    $('#input_udai').removeClass('is-invalid').addClass('is-valid');
+                    $('#udai_feedback').hide().empty();
+                    updateRegisterButtonState();
+                }
+            }, 'json');
+        }
+
+        function fetchAbdmProfile(abhaId) {
+            var csrf = getCsrfData();
+            var postData = {
+                abha_id: abhaId
+            };
+            postData[csrf.name] = csrf.value;
+
+            $.post('<?= base_url('billing/patient/abha_fetch_profile') ?>', postData, function(resp) {
+                if (!resp || resp.ok != 1) {
+                    return;
+                }
+
+                if (resp.already_registered && resp.conflict_patient) {
+                    isAbhaDuplicateConflict = true;
+                    $('#input_abha_id').addClass('is-invalid').removeClass('is-valid');
+                    var cp = resp.conflict_patient;
+                    var conflictHtml = '<div class="alert alert-danger py-1 px-2 mb-0 small">' +
+                        '<i class="bi bi-shield-fill-exclamation me-1"></i><strong>ABHA ID Already Registered!</strong><br/>' +
+                        'Linked to: <strong>' + (cp.p_fname || 'Existing Patient') + '</strong> (' + (cp.p_code || '') + ')<br/>' +
+                        '<a href="' + (cp.profile_url || '#') + '" class="btn btn-xs btn-outline-danger mt-1" onclick="event.preventDefault(); load_form(\'' + cp.profile_url + '\', \'Patient Record\');">' +
+                        '<i class="bi bi-person-badge me-1"></i>View Existing Patient Profile</a>' +
+                        '</div>';
+                    $('#abha_id_feedback').html(conflictHtml).show();
+                    updateRegisterButtonState();
                     return;
                 }
 
@@ -1742,7 +1867,6 @@
                     $('#input_city').val(p.city);
                 }
                 if (p.state && !$('#input_state').val()) {
-                    // Try to match existing option (case-insensitive); fall back to first partial match
                     var stateTarget = (p.state || '').trim().toUpperCase();
                     var $sel = $('#input_state');
                     var bestVal = '';
@@ -1769,6 +1893,22 @@
                     }
                 }
             }, 'json');
+        }
+
+        $('#input_abha_id').on('change blur input', function() {
+            var abhaId = ($(this).val() || '').toString().trim();
+            if (abhaId !== '') {
+                refreshAdvancedSearchResult({
+                    input_abha_id: abhaId
+                });
+            } else {
+                $('#search_result_update').html('');
+            }
+            validateAbhaUniqueness();
+        });
+
+        $('#input_udai').on('blur input', function() {
+            validateAadhaarUniqueness();
         });
 
         $("#input_city").autocomplete({
@@ -1960,6 +2100,9 @@
 
     function onchange_aadhar(control_button) {
         var input_udai = $('#input_udai').val();
+        if (typeof validateAadhaarUniqueness === 'function') {
+            validateAadhaarUniqueness();
+        }
         refreshAdvancedSearchResult({
             "input_udai": input_udai
         });

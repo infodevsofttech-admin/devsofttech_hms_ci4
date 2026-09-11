@@ -1797,22 +1797,41 @@ class Abha extends BaseController
 
         // ABHA number must be unique across patient_master — never let two
         // patient rows carry the same ABHA.
-        if ($abhaField && $abhaNumClean !== '') {
-            $conflict = $db->table('patient_master')
-                ->select('id,p_code,p_fname')
-                ->where($abhaField, $abhaNumClean)
-                ->get()->getRowArray();
-            if ($conflict) {
-                $conflictId = (int) ($conflict['id'] ?? 0);
-                if ($action === 'new' || $conflictId !== $patientId) {
-                    return $this->response->setJSON([
-                        'ok' => 0,
-                        'error_text' => 'This ABHA number is already linked to patient '
-                            . ($conflict['p_code'] ?? '') . ' (' . ($conflict['p_fname'] ?? '') . '). '
-                            . 'Please select that patient instead.',
-                        'conflict_patient_id' => $conflictId,
-                        'conflict_p_code' => (string) ($conflict['p_code'] ?? ''),
-                    ]);
+        if ($abhaNumClean !== '') {
+            $formattedAbha = (strlen($abhaNumClean) === 14)
+                ? substr($abhaNumClean, 0, 2) . '-' . substr($abhaNumClean, 2, 4) . '-' . substr($abhaNumClean, 6, 4) . '-' . substr($abhaNumClean, 10, 4)
+                : '';
+            $checkVals = array_values(array_filter([$abhaNumClean, $formattedAbha]));
+
+            $conflictBuilder = $db->table('patient_master')->select('id,p_code,p_fname');
+            $hasAbhaCheck = false;
+            $conflictBuilder->groupStart();
+            foreach (['abha_id', 'abha_no', 'abha'] as $cand) {
+                if (in_array($cand, $fields, true)) {
+                    if (! $hasAbhaCheck) {
+                        $conflictBuilder->whereIn($cand, $checkVals);
+                        $hasAbhaCheck = true;
+                    } else {
+                        $conflictBuilder->orWhereIn($cand, $checkVals);
+                    }
+                }
+            }
+            $conflictBuilder->groupEnd();
+
+            if ($hasAbhaCheck) {
+                $conflict = $conflictBuilder->get()->getRowArray();
+                if ($conflict) {
+                    $conflictId = (int) ($conflict['id'] ?? 0);
+                    if ($action === 'new' || $conflictId !== $patientId) {
+                        return $this->response->setJSON([
+                            'ok' => 0,
+                            'error_text' => 'This ABHA number is already linked to patient '
+                                . ($conflict['p_code'] ?? '') . ' (' . ($conflict['p_fname'] ?? '') . '). '
+                                . 'Please select that patient instead.',
+                            'conflict_patient_id' => $conflictId,
+                            'conflict_p_code' => (string) ($conflict['p_code'] ?? ''),
+                        ]);
+                    }
                 }
             }
         }
