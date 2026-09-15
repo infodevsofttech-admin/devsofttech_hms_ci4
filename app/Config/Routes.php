@@ -761,6 +761,9 @@ $routes->post('api/v1/abdm/gateway/link/confirm', 'AbdmGateway::m2LinkConfirm');
 $routes->post('v3/hip/patient/care-context/discover', 'AbdmGateway::recordsDiscover');
 $routes->post('v3/hip/link/patient/care-context/init', 'AbdmGateway::m2LinkInit');
 $routes->post('v3/hip/link/patient/care-context/confirm', 'AbdmGateway::m2LinkConfirm');
+// ABDM M3: On-Demand FHIR Health Record Fetch by Bridge
+$routes->post('records/fetch', 'AbdmGateway::recordsFetch');
+$routes->post('records/data', 'AbdmGateway::recordsFetch'); // Fallback alias
 $routes->get('records/fetch/(:any)', 'AbdmGateway::recordsFetch/$1');
 $routes->post('records/fetch/(:any)', 'AbdmGateway::recordsFetch/$1');
 $routes->post('AbdmGateway/share_prescription_bundle', 'AbdmGateway::sharePrescriptionBundle', ['filter' => $abdmPermFilter]);
@@ -809,6 +812,8 @@ $routes->post('AbdmGateway/hip_link_carecontext', 'AbdmGateway::hipLinkCareConte
 $routes->get('AbdmGateway/hip_patient_links', 'AbdmGateway::hipPatientLinks', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/hip_link_notify', 'AbdmGateway::hipLinkNotify', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/hip_sms_notify', 'AbdmGateway::hipSmsNotify', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmGateway/hip_patient_care_contexts', 'AbdmGateway::hipPatientCareContexts', ['filter' => $abdmPermFilter]);
+$routes->post('AbdmGateway/hip_patient_care_contexts', 'AbdmGateway::hipPatientCareContexts', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/nhcx_claim_create', 'AbdmGateway::nhcxClaimCreate', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/nhcx_claim_status_request', 'AbdmGateway::nhcxClaimStatusRequest', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmGateway/nhcx_claim_status_callback', 'AbdmGateway::nhcxClaimStatusCallback');
@@ -1105,11 +1110,11 @@ $routes->get('Report/report_opd_patient_list', 'Report::report_opd_patient_list'
 $routes->get('Report/opd_patient_list_data/(:segment)/(:segment)/(:segment)', 'Report::opd_patient_list_data/$1/$2/$3', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/opd_patient_list_data/(:segment)/(:segment)/(:segment)/(:num)', 'Report::opd_patient_list_data/$1/$2/$3/$4', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segment)', 'Report::report_total_payment_app_show/$1/$2/$3', ['filter' => $reportsCollectionFilter]);
-$routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segment)/(:num)', 'Report::report_total_payment_app_show/$1/$2/$3/$4', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segment)/(:segment)', 'Report::report_total_payment_app_show/$1/$2/$3/$4', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/report_total_payment_app_show/(:segment)/(:segment)/(:segment)/(:segment)/(:num)', 'Report::report_total_payment_app_show/$1/$2/$3/$4/$5', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/report_total_payment_total_amount_show/(:segment)/(:segment)/(:segment)', 'Report::report_total_payment_total_amount_show/$1/$2/$3', ['filter' => $reportsCollectionFilter]);
-$routes->get('Report/report_total_payment_total_amount_show/(:segment)/(:segment)/(:segment)/(:num)', 'Report::report_total_payment_total_amount_show/$1/$2/$3/$4', ['filter' => $reportsCollectionFilter]);
+$routes->get('Report/report_total_payment_total_amount_show/(:segment)/(:segment)/(:segment)/(:segment)', 'Report::report_total_payment_total_amount_show/$1/$2/$3/$4', ['filter' => $reportsCollectionFilter]);
+$routes->get('Report/report_total_payment_total_amount_show/(:segment)/(:segment)/(:segment)/(:segment)/(:num)', 'Report::report_total_payment_total_amount_show/$1/$2/$3/$4/$5', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/old_payment_received_report', 'Report::old_payment_received_report', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/old_payment_received_report_data', 'Report::old_payment_received_report_data', ['filter' => $reportsCollectionFilter]);
 $routes->get('Report/old_payment_received_report_data/(:segment)', 'Report::old_payment_received_report_data/$1', ['filter' => $reportsCollectionFilter]);

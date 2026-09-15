@@ -19,7 +19,15 @@
             <h4 class="mb-0">ABDM Work Task Board</h4>
             <div class="small text-muted">ABDM operational dashboard and work queues</div>
         </div>
-        <button type="button" class="btn btn-sm btn-outline-primary" id="btnRefresh">Refresh</button>
+        <div class="d-flex align-items-center gap-2">
+            <button type="button" class="btn btn-sm btn-outline-success fw-semibold" onclick="openAbdmHipLinkModal()">
+                <i class="bi bi-link-45deg"></i> Link Records to ABHA (HIP)
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-info fw-semibold" onclick="openAbdmHipSmsModal()">
+                <i class="bi bi-chat-dots"></i> Deep Link SMS (sms/notify2)
+            </button>
+            <button type="button" class="btn btn-sm btn-outline-primary" id="btnRefresh">Refresh</button>
+        </div>
     </div>
 
     <div class="d-flex flex-wrap gap-2 mb-3" id="taskFilters">
@@ -185,6 +193,7 @@
                                     <?php if ($showPreview): ?>
                                         <button type="button" class="btn btn-sm btn-outline-primary preview-fhir-btn">Preview FHIR</button>
                                     <?php endif; ?>
+                                    <button type="button" class="btn btn-sm btn-outline-success btn-row-hip-link" title="HIP-Initiated Care Context Linking"><i class="bi bi-link-45deg"></i> Link</button>
                                     <button type="button" class="btn btn-sm btn-outline-dark close-btn">Close</button>
                                 </div>
                             </td>
@@ -3459,7 +3468,23 @@
         }
         window.location.href = refreshUrl;
     });
+
+    document.querySelectorAll('.btn-row-hip-link').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var row = btn.closest('tr');
+            if (!row) return;
+            var patientId = parseInt(row.getAttribute('data-patient-id') || '0', 10);
+            var abhaInput = row.querySelector('.abha-input');
+            var abhaId = (abhaInput ? abhaInput.value : (row.getAttribute('data-abha-id') || '')).trim();
+            var patientCell = row.children[2];
+            var patientName = patientCell ? (patientCell.querySelector('strong') || patientCell.children[0] || {}).textContent || '' : '';
+            if (typeof window.openAbdmHipLinkModal === 'function') {
+                window.openAbdmHipLinkModal(patientId, abhaId, { patient_name: patientName.trim() });
+            }
+        });
+    });
 })();
 </script>
+<?= view('partials/abdm_hip_link_modal') ?>
 </body>
 </html>

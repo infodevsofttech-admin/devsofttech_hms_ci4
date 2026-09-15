@@ -34,8 +34,15 @@ class Report extends BaseController
         }
 
         $user = auth()->user();
+        if ($user === null) {
+            return false;
+        }
 
-        return $user !== null && method_exists($user, 'can') && $user->can($permission);
+        if (method_exists($user, 'inGroup') && $user->inGroup('superadmin', 'admin', 'developer')) {
+            return true;
+        }
+
+        return method_exists($user, 'can') && $user->can($permission);
     }
 
     private function requireReportPermission(string $permission)
@@ -165,11 +172,58 @@ class Report extends BaseController
             'summary' => $summary,
             'min_range' => $minRange,
             'max_range' => $maxRange,
+            'is_pdf' => ($output === 2),
         ]);
 
         if ($output === 1) {
             ExportExcel($content, 'IPD_Census_' . date('YmdHis'));
             return $this->response->setBody('');
+        }
+
+        if ($output === 2) {
+            $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+            if (! is_dir($mpdfTempDir)) {
+                mkdir($mpdfTempDir, 0755, true);
+            }
+
+            $mpdf = new Mpdf([
+                'tempDir' => $mpdfTempDir,
+                'format' => 'A4-L',
+                'margin_top' => 8,
+                'margin_bottom' => 8,
+                'margin_left' => 8,
+                'margin_right' => 8,
+            ]);
+
+            $hospitalName = defined('H_Name') ? (string) constant('H_Name') : 'Hospital';
+            $hospitalAddress = defined('H_address_1') ? (string) constant('H_address_1') : '';
+
+            $pdfHtml = '<style>'
+                . 'body{font-family:Arial,sans-serif;color:#111;font-size:11px;}'
+                . 'table{width:100%;border-collapse:collapse;}'
+                . 'th,td{border:1px solid #9aa4ad;padding:5px 6px;font-size:11px;}'
+                . 'th{text-align:left;background:#f5f6f7;font-weight:bold;}'
+                . '.text-end{text-align:right;}'
+                . '.text-center{text-align:center;}'
+                . '.summary-table td{border:1px solid #ccd0d4;padding:8px;text-align:center;}'
+                . '.badge{display:inline-block;padding:2px 6px;font-size:10px;font-weight:bold;border-radius:3px;}'
+                . '.badge-success{background:#198754;color:#fff;}'
+                . '.badge-warning{background:#ffc107;color:#000;}'
+                . '</style>'
+                . '<div style="text-align:center;margin-bottom:10px;border-bottom:1px solid #ccc;padding-bottom:6px;">'
+                . '<h2 style="margin:0;font-size:16px;">' . esc($hospitalName) . '</h2>'
+                . ($hospitalAddress !== '' ? '<div style="font-size:10px;color:#555;">' . esc($hospitalAddress) . '</div>' : '')
+                . '<h3 style="margin:4px 0 0 0;font-size:13px;color:#333;">IPD Census &amp; Discharge Report</h3>'
+                . '</div>'
+                . $content;
+
+            $mpdf->WriteHTML($pdfHtml);
+            $fileName = 'IPD_Census_' . date('Ymd_His') . '.pdf';
+
+            return $this->response
+                ->setHeader('Content-Type', 'application/pdf')
+                ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+                ->setBody($mpdf->Output($fileName, 'S'));
         }
 
         return $this->response->setBody($content);
@@ -569,10 +623,15 @@ class Report extends BaseController
         string $dateRange,
         string $employeeIds,
         string $payModeId,
-        string $orderFirst = '0',
+        string $payTypeId = '0',
         int $output = 0
     ) {
         [$minRange, $maxRange] = $this->parseDateRange($dateRange);
+
+        $getPayType = $this->request->getGet('pay_type') ?? $this->request->getGet('pay_type_id');
+        if ($getPayType !== null && $getPayType !== '') {
+            $payTypeId = (string) $getPayType;
+        }
 
         $builder = $this->db->table('payment_history p');
         $builder->select("p.id as pay_id, p.payment_date,")
@@ -607,13 +666,12 @@ class Report extends BaseController
             $builder->where('p.payment_mode', $payModeId);
         }
 
-        $builder->orderBy('p.id', 'ASC');
-        $orderFirst = (int) $orderFirst;
-        if ($orderFirst === 1) {
-            $builder->orderBy('p.update_by', 'ASC');
-        } elseif ($orderFirst === 2) {
-            $builder->orderBy('p.payment_mode', 'ASC');
+        $payType = (int) $payTypeId;
+        if ($payType > 0) {
+            $builder->where('p.payof_type', $payType);
         }
+
+        $builder->orderBy('p.id', 'ASC');
 
         $rows = $builder->get()->getResult();
 
@@ -624,6 +682,14 @@ class Report extends BaseController
             $totalDr += (float) ($row->dr_amount ?? 0);
         }
 
+        $payTypeMap = [
+            0 => 'All Payment Types',
+            1 => 'OPD',
+            2 => 'Charge',
+            3 => 'ORG',
+            4 => 'IPD',
+        ];
+
         $data = [
             'rows' => $rows,
             'min_range' => $minRange,
@@ -631,6 +697,8 @@ class Report extends BaseController
             'total_cr' => $totalCr,
             'total_dr' => $totalDr,
             'net_total' => $totalCr - $totalDr,
+            'pay_type_id' => $payType,
+            'pay_type_label' => $payTypeMap[$payType] ?? 'All Payment Types',
         ];
 
         $content = view('report/collection_report_table', $data);
@@ -768,9 +836,15 @@ class Report extends BaseController
         string $dateRange,
         string $employeeIds,
         string $payModeId,
+        string $payTypeId = '0',
         int $output = 0
     ) {
         [$minRange, $maxRange] = $this->parseDateRange($dateRange);
+
+        $getPayType = $this->request->getGet('pay_type') ?? $this->request->getGet('pay_type_id');
+        if ($getPayType !== null && $getPayType !== '') {
+            $payTypeId = (string) $getPayType;
+        }
 
         $builder = $this->db->table('payment_history p');
         $builder->select('p.update_by_id as user_id')
@@ -795,6 +869,11 @@ class Report extends BaseController
             $builder->whereIn('p.payment_mode', [1, 2]);
         } else {
             $builder->where('p.payment_mode', $payMode);
+        }
+
+        $payType = (int) $payTypeId;
+        if ($payType > 0) {
+            $builder->where('p.payof_type', $payType);
         }
 
         $rows = $builder
@@ -822,11 +901,21 @@ class Report extends BaseController
             $totals['total_amount'] += (float) ($row->total_amount ?? 0);
         }
 
+        $payTypeMap = [
+            0 => 'All Payment Types',
+            1 => 'OPD',
+            2 => 'Charge',
+            3 => 'ORG',
+            4 => 'IPD',
+        ];
+
         $content = view('report/collection_report_total_table', [
             'rows' => $rows,
             'totals' => $totals,
             'min_range' => $minRange,
             'max_range' => $maxRange,
+            'pay_type_id' => $payType,
+            'pay_type_label' => $payTypeMap[$payType] ?? 'All Payment Types',
         ]);
 
         if ($output === 1) {

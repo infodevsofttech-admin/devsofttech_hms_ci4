@@ -578,6 +578,9 @@
                             <button type="button" class="btn btn-outline-success btn-sm text-start" id="btn_local_clinical_assist" title="Local rule-based support using complaints + vitals">Clinical Assist (Local)</button>
                             <button type="button" class="btn btn-outline-primary btn-sm text-start" id="btn_ai_full_draft" title="Use complete OPD data to generate draft notes">AI Draft (Full Form)</button>
                             <button type="button" class="btn btn-outline-primary btn-sm text-start" id="btn_quick_preview_fhir">Preview FHIR JSON</button>
+                            <button type="button" class="btn btn-outline-success btn-sm text-start fw-semibold" onclick="openAbdmHipLinkModal(<?= (int)($patient_master[0]->id ?? 0) ?>, $('#abha_address').val(), { name: '<?= esc($patientName) ?>', gender: '<?= esc($patient_master[0]->gender == 1 ? 'M' : ($patient_master[0]->gender == 2 ? 'F' : 'O')) ?>', yob: '<?= !empty($patient_master[0]->dob) ? date('Y', strtotime($patient_master[0]->dob)) : '' ?>', phone: '<?= esc($patient_master[0]->mphone1 ?? '') ?>', abha_number: '<?= esc($patient_master[0]->abha_id ?? '') ?>' })">
+                                <i class="bi bi-link-45deg me-1"></i>Link Records to ABHA (HIP)
+                            </button>
                         </div>
                     </div>
                 </div>
@@ -636,7 +639,12 @@
                             <div class="rx-meta-line"><strong>Age:</strong> <?= esc($patient_master[0]->str_age ?? '') ?></div>
                             <div class="rx-meta-line"><strong>Gender:</strong> <?= esc($patient_master[0]->xgender ?? '') ?></div>
                             <?php if ($patientAbhaAddress !== '') : ?>
-                            <div class="rx-meta-line"><strong>ABHA Address:</strong> <?= esc($patientAbhaAddress) ?></div>
+                            <div class="rx-meta-line d-flex align-items-center justify-content-between">
+                                <span><strong>ABHA:</strong> <?= esc($patientAbhaAddress) ?></span>
+                                <button type="button" class="btn btn-outline-success btn-xs py-0 px-2" style="font-size:0.75rem;" title="Link Records to ABHA (Method 4)" onclick="openAbdmHipLinkModal(<?= (int)($patient_master[0]->id ?? 0) ?>, $('#abha_address').val(), { name: '<?= esc($patientName) ?>', gender: '<?= esc($patient_master[0]->gender == 1 ? 'M' : ($patient_master[0]->gender == 2 ? 'F' : 'O')) ?>', yob: '<?= !empty($patient_master[0]->dob) ? date('Y', strtotime($patient_master[0]->dob)) : '' ?>', phone: '<?= esc($patient_master[0]->mphone1 ?? '') ?>', abha_number: '<?= esc($patient_master[0]->abha_id ?? '') ?>' })">
+                                    <i class="bi bi-link-45deg"></i> Link
+                                </button>
+                            </div>
                             <?php endif; ?>
                             <input type="hidden" id="abha_address" value="<?= esc($patientAbhaAddress) ?>">
                             <div class="rx-meta-line"><strong>OPD:</strong> <?= esc($opd_master[0]->opd_code ?? '') ?></div>
@@ -9977,3 +9985,5 @@
         </div>
     </div>
 </div>
+
+<?= view('partials/abdm_hip_link_modal') ?>

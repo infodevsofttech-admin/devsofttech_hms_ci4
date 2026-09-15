@@ -24,7 +24,7 @@ $minRangeDisplay = $formatIndianDateTime($minRange);
 $maxRangeDisplay = $formatIndianDateTime($maxRange);
 ?>
 
-<p class="mb-2"><strong>Date Range:</strong> <?= esc($minRangeDisplay) ?> to <?= esc($maxRangeDisplay) ?></p>
+<p class="mb-2"><strong>Date Range:</strong> <?= esc($minRangeDisplay) ?> to <?= esc($maxRangeDisplay) ?><?php if (! empty($pay_type_label) && $pay_type_label !== 'All Payment Types') : ?> | <strong>Payment Type:</strong> <span class="badge bg-primary text-white"><?= esc($pay_type_label) ?></span><?php endif; ?></p>
 
 <?php if (empty($rows)) : ?>
     <div class="text-muted">No records found for the selected filters.</div>

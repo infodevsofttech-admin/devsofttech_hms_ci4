@@ -69,10 +69,15 @@ if ($patientPhotoPath === '') {
     <div class="card">
         <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
             <h3 class="card-title mb-0">OPD History</h3>
-            <button type="button" class="btn btn-outline-secondary btn-sm"
-                    onclick="load_form('<?= esc($backUrl, 'js') ?>','<?= esc($backTitle, 'js') ?>')">
-                Back
-            </button>
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-outline-primary btn-sm fw-semibold" onclick="openAbdmHipLinkModal(<?= (int)$patient->id ?>, '<?= esc($patientAbhaAddress ?? '') ?>', { name: '<?= esc($patient->p_fname . ' ' . ($patient->p_lname ?? '')) ?>', gender: '<?= $patient->gender == 1 ? 'M' : ($patient->gender == 2 ? 'F' : 'O') ?>', yob: '<?= !empty($patient->dob) ? date('Y', strtotime($patient->dob)) : '' ?>', phone: '<?= esc($patient->mphone1 ?? '') ?>', abha_number: '<?= esc($patient->abha_id ?? '') ?>' })">
+                    <i class="bi bi-link-45deg me-1"></i>Link to ABHA (HIP)
+                </button>
+                <button type="button" class="btn btn-outline-secondary btn-sm"
+                        onclick="load_form('<?= esc($backUrl, 'js') ?>','<?= esc($backTitle, 'js') ?>')">
+                    Back
+                </button>
+            </div>
         </div>
         <div class="card-body">
             <div class="opd-patient-meta-card" style="border:1px solid #dee2e6;border-radius:.5rem;padding:.75rem;margin-bottom:1rem;background:#fff;">
@@ -2086,4 +2091,5 @@ function generateWellnessFhir(patientId, opdId) {
     });
 }
 </script>
+<?= view('partials/abdm_hip_link_modal') ?>
 

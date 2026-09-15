@@ -9,14 +9,14 @@ $payModes = $pay_modes ?? [];
         </div>
         <div class="card-body">
             <div class="row g-3 align-items-end">
-                <div class="col-md-5">
+                <div class="col-lg-4 col-md-6">
                     <label class="form-label">Payment Date Range</label>
                     <div class="d-flex gap-2">
                         <input type="datetime-local" class="form-control" id="report_start">
                         <input type="datetime-local" class="form-control" id="report_end">
                     </div>
                 </div>
-                <div class="col-md-5">
+                <div class="col-lg-3 col-md-6">
                     <label class="form-label">Employee Name</label>
                     <select class="form-control select2" id="emp_name_id" name="emp_name_id" multiple data-placeholder="Select Employees">
                         <option value="0">All Employees</option>
@@ -25,13 +25,23 @@ $payModes = $pay_modes ?? [];
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-2">
+                <div class="col-lg-2 col-md-6">
                     <label class="form-label">Payment Mode</label>
                     <select class="form-control select2" id="paymode_id" name="paymode_id" data-placeholder="Select Payment Mode">
                         <option value="0">Cash &amp; Bank</option>
                         <?php foreach ($payModes as $row) : ?>
                             <option value="<?= esc($row->id ?? '') ?>"><?= esc($row->mode_desc ?? '') ?></option>
                         <?php endforeach; ?>
+                    </select>
+                </div>
+                <div class="col-lg-3 col-md-6">
+                    <label class="form-label">Payment Type</label>
+                    <select class="form-control select2" id="pay_type_id" name="pay_type_id" data-placeholder="Select Payment Type">
+                        <option value="0">All Payment Types</option>
+                        <option value="1">OPD</option>
+                        <option value="2">Charge</option>
+                        <option value="4">IPD</option>
+                        <option value="3">ORG</option>
                     </select>
                 </div>
             </div>
@@ -100,51 +110,63 @@ $payModes = $pay_modes ?? [];
 
             var empList = empValues.length ? empValues.join('S') : '0';
             var payMode = document.getElementById('paymode_id').value || '0';
+            var payType = document.getElementById('pay_type_id').value || '0';
 
             return {
                 dateRange: encodeURIComponent(dateRange),
                 empList: empList,
                 payMode: payMode,
+                payType: payType,
             };
         }
 
-        function buildDetailQuery() {
+        function buildDetailQuery(output) {
             var q = buildBaseQuery();
-            return '<?= base_url('Report/report_total_payment_app_show') ?>/' + q.dateRange + '/' + q.empList + '/' + q.payMode;
+            var url = '<?= base_url('Report/report_total_payment_app_show') ?>/'
+                + q.dateRange + '/' + q.empList + '/' + q.payMode + '/' + q.payType;
+            if (output) {
+                url += '/' + output;
+            }
+            return url;
         }
 
-        function buildTotalQuery() {
+        function buildTotalQuery(output) {
             var q = buildBaseQuery();
-            return '<?= base_url('Report/report_total_payment_total_amount_show') ?>/' + q.dateRange + '/' + q.empList + '/' + q.payMode;
+            var url = '<?= base_url('Report/report_total_payment_total_amount_show') ?>/'
+                + q.dateRange + '/' + q.empList + '/' + q.payMode + '/' + q.payType;
+            if (output) {
+                url += '/' + output;
+            }
+            return url;
         }
 
         document.getElementById('show_report').addEventListener('click', function() {
-            var url = buildDetailQuery();
+            var url = buildDetailQuery(0);
             load_form_div(url, 'report_result');
         });
 
         document.getElementById('show_total_amount').addEventListener('click', function() {
-            var totalUrl = buildTotalQuery();
+            var totalUrl = buildTotalQuery(0);
             load_form_div(totalUrl, 'report_result');
         });
 
         document.getElementById('export_report').addEventListener('click', function() {
-            var url = buildDetailQuery() + '/0/1';
+            var url = buildDetailQuery(1);
             window.open(url, '_blank');
         });
 
         document.getElementById('pdf_report').addEventListener('click', function() {
-            var url = buildDetailQuery() + '/0/2';
+            var url = buildDetailQuery(2);
             window.open(url, '_blank');
         });
 
         document.getElementById('total_export_report').addEventListener('click', function() {
-            var url = buildTotalQuery() + '/1';
+            var url = buildTotalQuery(1);
             window.open(url, '_blank');
         });
 
         document.getElementById('total_pdf_report').addEventListener('click', function() {
-            var url = buildTotalQuery() + '/2';
+            var url = buildTotalQuery(2);
             window.open(url, '_blank');
         });
 

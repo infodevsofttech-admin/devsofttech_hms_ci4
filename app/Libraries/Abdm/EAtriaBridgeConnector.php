@@ -1390,60 +1390,52 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             $queueId = $careContextReference;
         }
 
-        // Gateway requires BOTH record_type (lowercase alias) and hi_type (official ABDM name).
-        $body = [
-            'patient_id'   => (string) ($data['patient_id'] ?? ''),
-            'patient_name' => $patientName,
-            'record_type'  => $recordType,
-            'hi_type'      => $hiType,
-            'visit_date'   => (string) ($data['visit_date'] ?? date('Y-m-d')),
-            'record_data'  => $data['record_data'] ?? $data['bundle'] ?? (object) [],
-            'fhir_bundle'  => $data['record_data'] ?? $data['bundle'] ?? (object) [],
+        $effectiveAbha = $abhaAddress !== '' ? $abhaAddress : $abhaId;
+        $visitDate = (string) ($data['visit_date'] ?? date('Y-m-d'));
+
+        // Under M3 On-Demand Fetch architecture, full FHIR records are NOT sent to the Bridge.
+        // Instead, only Care Context metadata is registered with the ABDM Bridge (/v3/hip/link/notify).
+        // The complete FHIR Document Bundle stays securely inside HMS (health_records table)
+        // and is served on-demand when the Bridge calls POST /records/fetch upon patient consent.
+        $notifyPayload = [
+            'hfr_id'                 => $this->hfrId,
+            'hospital_id'            => $this->bridgeHospitalId,
+            'patient_id'             => (string) ($data['patient_id'] ?? ''),
+            'patient_name'           => $patientName,
+            'abha_address'           => $effectiveAbha,
             'care_context_reference' => $careContextReference,
-            'care_context_display' => $careContextDisplay,
-            'queue_id' => $queueId,
+            'care_context_display'   => $careContextDisplay,
+            'hi_type'                => $hiType,
+            'date_of_record'         => $visitDate,
         ];
 
         if ($this->bridgeHospitalId !== '') {
-            $body['hospital_id'] = $this->bridgeHospitalId;
-            $body['bridge_hospital_id'] = $this->bridgeHospitalId;
-        }
-
-        if ($abhaAddress !== '') {
-            $body['abha_address'] = $abhaAddress;
+            $notifyPayload['hospital_id'] = $this->bridgeHospitalId;
         }
         if ($abhaId !== '') {
-            $body['abha_id'] = $abhaId;
+            $notifyPayload['abha_id'] = $abhaId;
         }
 
-        // Also send ABDM-style careContexts wrapper so consent linkage remains explicit.
-        $body['careContexts'] = [[
-            'careContextReference' => $careContextReference,
-            'description'          => $careContextDisplay,
-        ]];
+        $res = $this->post('/v3/hip/link/notify', $notifyPayload);
 
-        // hfr_id is required in every push request alongside the Bearer token.
-        if ($this->hfrId !== '') {
-            $body['hfr_id'] = $this->hfrId;
+        $httpCode = (int) ($res['http_code'] ?? 0);
+        if (($res['ok'] ?? 0) === 1 || in_array($httpCode, [200, 201, 202], true)) {
+            return [
+                'ok'                     => 1,
+                'http_code'              => 201,
+                'status'                 => 'linked',
+                'queue_id'               => $res['request_id'] ?? ('NOTIFY-' . $careContextReference),
+                'record_id'              => null,
+                'care_context_reference' => $careContextReference,
+                'care_context_display'   => $careContextDisplay,
+                'hi_type'                => $hiType,
+                'mode'                   => 'care_context_only',
+                'message'                => 'Care context registered with ABDM Bridge (FHIR record retained in HMS for on-demand fetch)',
+                'response'               => $res,
+            ];
         }
 
-        foreach (['abha_id', 'doctor_name', 'department', 'notes', 'gender', 'year_of_birth'] as $optional) {
-            if (empty($data[$optional])) {
-                continue;
-            }
-
-            if ($optional === 'gender') {
-                $gender = $this->normalizeBridgeGender($data[$optional]);
-                if ($gender !== '') {
-                    $body['gender'] = $gender;
-                }
-                continue;
-            }
-
-            $body[$optional] = (string) $data[$optional];
-        }
-
-        return self::normalizePushRecordResponse($this->post('/v3/records/push', $body));
+        return self::normalizePushRecordResponse($res);
     }
 
     /**

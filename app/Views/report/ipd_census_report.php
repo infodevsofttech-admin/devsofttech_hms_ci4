@@ -54,6 +54,7 @@ $departments = $departments ?? [];
             <div class="d-flex flex-wrap gap-2 mt-3">
                 <button type="button" class="btn btn-primary" id="ipd_census_show"><i class="bi bi-search me-1"></i>Show report</button>
                 <button type="button" class="btn btn-outline-success" id="ipd_census_excel"><i class="bi bi-file-earmark-excel me-1"></i>Excel</button>
+                <button type="button" class="btn btn-outline-danger" id="ipd_census_pdf"><i class="bi bi-file-earmark-pdf me-1"></i>PDF</button>
                 <button type="button" class="btn btn-outline-secondary ipd-census-range" data-days="0">Today</button>
                 <button type="button" class="btn btn-outline-secondary ipd-census-range" data-days="6">7 days</button>
                 <button type="button" class="btn btn-outline-secondary ipd-census-range" data-days="29">30 days</button>
@@ -100,6 +101,7 @@ $departments = $departments ?? [];
 
     $('#ipd_census_show').off('click.ipdCensus').on('click.ipdCensus', showReport);
     $('#ipd_census_excel').off('click.ipdCensus').on('click.ipdCensus', function () { var url = reportUrl(1); if (url) window.open(url, '_blank'); });
+    $('#ipd_census_pdf').off('click.ipdCensus').on('click.ipdCensus', function () { var url = reportUrl(2); if (url) window.open(url, '_blank'); });
     $('.ipd-census-range').off('click.ipdCensus').on('click.ipdCensus', function () { var end = new Date(); var start = new Date(); start.setDate(start.getDate() - Number($(this).data('days') || 0)); from.value = ymd(start); to.value = ymd(end); showReport(); });
 })();
 </script>

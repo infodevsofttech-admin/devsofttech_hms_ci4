@@ -88,6 +88,8 @@ class App extends BaseConfig
      */
     public array $allowedHostnames = [
         'localhost',
+        '127.0.0.1',
+        '10.8.0.2',
         'hmskrishnaksp.dhms.in',
         'hmslocal.devsofttech.co.in',
         'khrc1.dhms.in',

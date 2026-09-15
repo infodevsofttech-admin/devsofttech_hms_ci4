@@ -71,6 +71,14 @@
                                         <i class="bi bi-upload me-1"></i>Upload
                                     </button>
                                 </div>
+                                <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2 fw-semibold" onclick="openAbdmHipLinkModal(<?= (int)$data[0]->id ?>, '<?= esc($abhaAddress) ?>', { name: '<?= esc($data[0]->p_fname . ' ' . ($data[0]->p_lname ?? '')) ?>', gender: '<?= $data[0]->gender == 1 ? 'M' : ($data[0]->gender == 2 ? 'F' : 'O') ?>', yob: '<?= !empty($data[0]->dob) ? date('Y', strtotime($data[0]->dob)) : '' ?>', phone: '<?= esc($data[0]->mphone1 ?? '') ?>', abha_number: '<?= esc($patientAbhaId) ?>' })">
+                                    <i class="bi bi-link-45deg me-1"></i>Link Records to ABHA (HIP)
+                                </button>
+                                <?php if (empty($abhaAddress) && !empty($data[0]->mphone1)) : ?>
+                                <button type="button" class="btn btn-outline-info btn-sm w-100 mt-1" onclick="openAbdmHipSmsModal('<?= esc($data[0]->mphone1) ?>')">
+                                    <i class="bi bi-chat-dots me-1"></i>Send Deep Link SMS (ABHA App)
+                                </button>
+                                <?php endif; ?>
                             </div>
                         </div>
                         <div class="mt-3 w-100">
@@ -842,3 +850,4 @@ function delete_invoice(inv_id) {
 </div>
 
 <?= view('partials/abha_otp_modal') ?>
+<?= view('partials/abdm_hip_link_modal') ?>
