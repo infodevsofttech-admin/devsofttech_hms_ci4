@@ -872,9 +872,17 @@ class Ipd extends BaseController
         $this->ipdEditModel->updateIpd($update, $ipdId);
         $this->ipdEditModel->calculateIPD($ipdId);
 
-        // Release bed when discharging patient
+        // Release bed and close org case when discharging patient
         if (isset($update['ipd_status']) && $update['ipd_status'] == 1) {
             $this->ipdEditModel->releaseBed($ipdId);
+            
+            $currentIpd = $this->ipdEditModel->find($ipdId);
+            $caseId = (int) ($currentIpd['case_id'] ?? 0);
+            if ($caseId > 0) {
+                \Config\Database::connect()->table('organization_case_master')
+                    ->where('id', $caseId)
+                    ->update(['status' => 1]);
+            }
         }
 
         return $this->buildDischargeProcessResponse($ipdId, 'Discharge status updated.');
@@ -921,9 +929,16 @@ class Ipd extends BaseController
         $update = ['ipd_status' => $newStatus];
         $this->ipdEditModel->updateIpd($update, $ipdId);
 
-        // Release bed when setting to discharged (status = 1)
+        // Release bed and close org case when setting to discharged (status = 1)
         if ($newStatus === 1 && $currentStatus === 0) {
             $this->ipdEditModel->releaseBed($ipdId);
+            
+            $caseId = (int) ($currentIpd['case_id'] ?? 0);
+            if ($caseId > 0) {
+                \Config\Database::connect()->table('organization_case_master')
+                    ->where('id', $caseId)
+                    ->update(['status' => 1]);
+            }
         }
 
         $statusText = $newStatus === 0 ? 'Active (Bills unlocked)' : 'Discharged (Bills locked)';
