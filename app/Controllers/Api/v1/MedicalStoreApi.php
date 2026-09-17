@@ -23,10 +23,11 @@ class MedicalStoreApi extends BaseController
             $html = file_get_contents($pwaPath);
             if ($slug !== null) {
                 $cleanSlug = htmlspecialchars($slug, ENT_QUOTES, 'UTF-8');
-                $html = str_replace(
-                    '<head>',
+                $html = preg_replace(
+                    '/<head>/i',
                     "<head>\n    <script>window.INITIAL_STORE_SLUG = \"{$cleanSlug}\";</script>",
-                    $html
+                    $html,
+                    1
                 );
             }
             return $this->response->setBody($html);
@@ -1425,6 +1426,7 @@ class MedicalStoreApi extends BaseController
                 'total_value'   => $lineNet,
                 'remarks'       => "Dispensed on Bill $invoiceNo",
                 'conducted_by'  => (int)($json['user_id'] ?? 1),
+                'conducted_by_name' => trim((string)($json['biller_name'] ?? ($json['operator_name'] ?? ''))),
                 'created_at'    => date('Y-m-d H:i:s')
             ]);
         }
@@ -1756,7 +1758,8 @@ class MedicalStoreApi extends BaseController
             'abdm_fhir_bundle_json'      => $fhirBundleJson,
             'abdm_sync_status'           => (!empty($abhaAddress) || !empty($abhaId)) ? 'PENDING' : 'NOT_APPLICABLE',
             'status'                     => 'completed',
-            'created_by'                 => (int)($json['user_id'] ?? 1)
+            'created_by'                 => (int)($json['user_id'] ?? 1),
+            'biller_name'                => trim((string)($json['biller_name'] ?? ($json['operator_name'] ?? '')))
         ];
 
         // If IPD Credit, link into ipd_invoice_item so hospital discharge handles it
@@ -1764,15 +1767,54 @@ class MedicalStoreApi extends BaseController
             $ipdId = (int)$json['ipd_id'];
             if ($this->db->tableExists('ipd_invoice_item')) {
                 $this->db->table('ipd_invoice_item')->insert([
-                    'ipd_id'        => $ipdId,
-                    'item_name'     => "Pharmacy Medicines ({$invoiceNo})",
-                    'item_desc'     => "Medicines dispensed from {$store['store_name']}",
-                    'item_qty'      => 1,
-                    'item_price'    => $finalNetPayable,
-                    'item_amount'   => $finalNetPayable,
-                    'insert_date'   => date('Y-m-d H:i:s'),
+                    'ipd_id'          => $ipdId,
+                    'item_type'       => 7, // Medical Items / Medicine
+                    'item_id'         => 0,
+                    'item_name'       => "Pharmacy Medicines ({$invoiceNo})",
+                    'comment'         => "[STORE: {$store['store_name']}] Bill {$invoiceNo}",
+                    'item_rate'       => $finalNetPayable,
+                    'item_qty'        => 1.00,
+                    'item_amount'     => $finalNetPayable,
+                    'doc_id'          => (int)($json['doctor_id'] ?? 0),
+                    'doc_name'        => trim($json['doctor_name'] ?? ($store['registered_pharmacist_name'] ?? 'Consultant')),
+                    'date_item'       => date('Y-m-d'),
+                    'item_added_date' => date('Y-m-d H:i:s'),
+                    'log'             => "Dispensed from Pharmacy by {$billerName}"
                 ]);
                 $saleData['ipd_charge_id'] = $this->db->insertID();
+            }
+        }
+
+        // If Staff / Customer Credit, link to credit account
+        $creditAccountId = !empty($json['credit_account_id']) ? (int)$json['credit_account_id'] : null;
+        if ($paymentMode === 'Staff_Credit' && $creditAccountId > 0) {
+            $saleData['credit_account_id'] = $creditAccountId;
+            $saleData['credit_amount'] = $finalNetPayable;
+
+            if ($this->db->tableExists('mst_credit_accounts')) {
+                $this->db->table('mst_credit_accounts')
+                    ->where('account_id', $creditAccountId)
+                    ->set('current_balance', 'current_balance + ' . $finalNetPayable, false)
+                    ->update();
+
+                $accRow = $this->db->table('mst_credit_accounts')->where('account_id', $creditAccountId)->get()->getRowArray();
+                $balAfter = $accRow ? (float)$accRow['current_balance'] : $finalNetPayable;
+
+                if ($this->db->tableExists('mst_credit_ledger')) {
+                    $this->db->table('mst_credit_ledger')->insert([
+                        'store_id'         => $storeId,
+                        'account_id'       => $creditAccountId,
+                        'entry_type'       => 'CREDIT_SALE',
+                        'invoice_no'       => $invoiceNo,
+                        'debit_amount'     => $finalNetPayable,
+                        'credit_amount'    => 0.00,
+                        'balance_after'    => $balAfter,
+                        'payment_mode'     => 'Staff_Credit',
+                        'remarks'          => "Medicine Credit Sale: Bill {$invoiceNo}",
+                        'recorded_by_name' => $billerName,
+                        'created_at'       => date('Y-m-d H:i:s')
+                    ]);
+                }
             }
         }
 
@@ -3134,7 +3176,8 @@ class MedicalStoreApi extends BaseController
             'discount_amount'     => $discountTotal,
             'net_amount'          => $grandTotal,
             'payment_status'      => 'unpaid',
-            'remarks'             => trim($json['remarks'] ?? '')
+            'remarks'             => trim($json['remarks'] ?? ''),
+            'received_by_name'    => trim((string)($json['received_by_name'] ?? ($json['operator_name'] ?? '')))
         ];
         $this->db->table('mst_purchases')->insert($purchaseData);
         $purchaseId = $this->db->insertID();
@@ -4706,11 +4749,13 @@ class MedicalStoreApi extends BaseController
     public function getDaybook()
     {
         $storeId = (int)($this->request->getGet('store_id') ?? 1);
-        $date = trim($this->request->getGet('date') ?? date('Y-m-d'));
+        $from = trim($this->request->getGet('from_date') ?? ($this->request->getGet('date') ?? date('Y-m-d')));
+        $to = trim($this->request->getGet('to_date') ?? $from);
 
         $sales = $this->db->table('mst_sales')
             ->where('store_id', $storeId)
-            ->where("DATE(sale_date)", $date)
+            ->where("DATE(sale_date) >=", $from)
+            ->where("DATE(sale_date) <=", $to)
             ->orderBy('sale_id', 'ASC')
             ->get()
             ->getResultArray();
@@ -4753,7 +4798,9 @@ class MedicalStoreApi extends BaseController
         return $this->response->setJSON([
             'status' => 1,
             'store_id' => $storeId,
-            'date' => $date,
+            'date' => $from,
+            'from_date' => $from,
+            'to_date' => $to,
             'summary' => [
                 'total_invoices' => count($sales),
                 'total_sales'    => round($totalSales, 2),
@@ -4773,8 +4820,14 @@ class MedicalStoreApi extends BaseController
     public function getGstReport()
     {
         $storeId = (int)($this->request->getGet('store_id') ?? 1);
-        $from = trim($this->request->getGet('from') ?? date('Y-m-01'));
-        $to = trim($this->request->getGet('to') ?? date('Y-m-t'));
+        $month = trim((string)$this->request->getGet('month'));
+        if (!empty($month) && preg_match('/^\d{4}-\d{2}$/', $month)) {
+            $from = "{$month}-01";
+            $to = date('Y-m-t', strtotime($from));
+        } else {
+            $from = trim($this->request->getGet('from') ?? date('Y-m-01'));
+            $to = trim($this->request->getGet('to') ?? date('Y-m-t'));
+        }
 
         // GSTR-1 Sales Breakdown
         $salesItems = $this->db->table('mst_sales_items si')
@@ -4895,7 +4948,8 @@ class MedicalStoreApi extends BaseController
                 'pending_count'     => $pendingCount,
                 'pending_amount'    => round($pendingAmount, 2),
             ],
-            'records' => $records
+            'records' => $records,
+            'transactions' => $records
         ]);
     }
 
@@ -5282,5 +5336,937 @@ class MedicalStoreApi extends BaseController
             'items'       => $items
         ]);
     }
-}
 
+    // =========================================================================
+    // 25. PHYSICAL STOCK RECONCILIATION & AUDIT LOGS
+    // =========================================================================
+
+    /**
+     * Reconciles a single batch's physical stock count against system stock
+     * Updates mst_stock and writes a detailed audit entry to mst_stock_audit
+     */
+    public function reconcileStock()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $storeId = (int)($json['store_id'] ?? 1);
+        $itemId = (int)($json['item_id'] ?? 0);
+        $batchId = (int)($json['batch_id'] ?? 0);
+        $physicalQty = isset($json['physical_qty']) ? (int)$json['physical_qty'] : null;
+        $auditType = trim((string)($json['audit_type'] ?? 'PHYSICAL_VARIATION'));
+        $remarks = trim((string)($json['remarks'] ?? ''));
+        $operatorId = (int)($json['operator_id'] ?? ($json['user_id'] ?? 1));
+        $operatorName = trim((string)($json['operator_name'] ?? ($json['biller_name'] ?? 'Store Staff')));
+
+        if ($itemId <= 0 || $batchId <= 0 || $physicalQty === null || $physicalQty < 0) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'status'  => 0,
+                'message' => 'Invalid parameters: item_id, batch_id, and physical_qty (>=0) are required.'
+            ]);
+        }
+
+        // Validate allowed audit types
+        $validTypes = ['PHYSICAL_VARIATION', 'DAMAGE', 'BREAKAGE', 'EXPIRY_DUMP', 'SURPLUS_FOUND', 'THEFT_LOSS', 'AUDIT_CORRECTION'];
+        if (!in_array($auditType, $validTypes)) {
+            $auditType = 'PHYSICAL_VARIATION';
+        }
+
+        // Fetch batch details
+        $batch = $this->db->table('mst_batches b')
+            ->select('b.*, i.item_name, i.unit_pack')
+            ->join('mst_items i', 'i.item_id = b.item_id')
+            ->where('b.batch_id', $batchId)
+            ->get()
+            ->getRowArray();
+
+        if (!$batch) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'status'  => 0,
+                'message' => 'Batch not found.'
+            ]);
+        }
+
+        $rate = (float)($batch['purchase_rate_net'] ?: ($batch['mrp'] ?: 0));
+
+        $this->db->transStart();
+
+        // Get current stock
+        $stkRow = $this->db->table('mst_stock')
+            ->where('store_id', $storeId)
+            ->where('item_id', $itemId)
+            ->where('batch_id', $batchId)
+            ->get()
+            ->getRowArray();
+
+        $systemQty = $stkRow ? (int)$stkRow['current_qty'] : 0;
+        $variationQty = $physicalQty - $systemQty;
+        $totalVal = round(abs($variationQty) * $rate, 2);
+
+        // Update or insert mst_stock
+        if ($stkRow) {
+            $this->db->table('mst_stock')
+                ->where('stock_id', $stkRow['stock_id'])
+                ->update(['current_qty' => $physicalQty]);
+        } else {
+            $this->db->table('mst_stock')->insert([
+                'store_id'     => $storeId,
+                'item_id'      => $itemId,
+                'batch_id'     => $batchId,
+                'current_qty'  => $physicalQty,
+                'reserved_qty' => 0
+            ]);
+        }
+
+        // Insert audit log
+        $this->db->table('mst_stock_audit')->insert([
+            'store_id'          => $storeId,
+            'item_id'           => $itemId,
+            'batch_id'          => $batchId,
+            'audit_type'        => $auditType,
+            'system_qty'        => $systemQty,
+            'physical_qty'      => $physicalQty,
+            'variation_qty'     => $variationQty,
+            'rate'              => $rate,
+            'total_value'       => $totalVal,
+            'remarks'           => $remarks ?: "Physical reconciliation: System {$systemQty} -> Physical {$physicalQty}",
+            'conducted_by'      => $operatorId,
+            'conducted_by_name' => $operatorName,
+            'created_at'        => date('Y-m-d H:i:s')
+        ]);
+        $auditId = $this->db->insertID();
+
+        $this->db->transComplete();
+
+        if ($this->db->transStatus() === false) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'status'  => 0,
+                'message' => 'Failed to reconcile stock due to database error.'
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'status'        => 1,
+            'message'       => 'Stock reconciled successfully.',
+            'audit_id'      => $auditId,
+            'system_qty'    => $systemQty,
+            'physical_qty'  => $physicalQty,
+            'variation_qty' => $variationQty,
+            'variation_val' => $totalVal
+        ]);
+    }
+
+    /**
+     * Batch reconciliation for multiple items during a shelf/rack cycle count
+     */
+    public function batchReconcileStock()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $storeId = (int)($json['store_id'] ?? 1);
+        $counts = $json['counts'] ?? [];
+        $operatorId = (int)($json['operator_id'] ?? ($json['user_id'] ?? 1));
+        $operatorName = trim((string)($json['operator_name'] ?? 'Auditor'));
+        $batchAuditType = trim((string)($json['audit_type'] ?? 'PHYSICAL_VARIATION'));
+        $defaultRemarks = trim((string)($json['remarks'] ?? 'Cycle Count Batch Audit'));
+
+        if (empty($counts) || !is_array($counts)) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'status'  => 0,
+                'message' => 'No counts provided for batch reconciliation.'
+            ]);
+        }
+
+        $this->db->transStart();
+        $processedCount = 0;
+        $totalDiscrepancyValue = 0;
+
+        foreach ($counts as $cnt) {
+            $itemId = (int)($cnt['item_id'] ?? 0);
+            $batchId = (int)($cnt['batch_id'] ?? 0);
+            if ($itemId <= 0 || $batchId <= 0 || !isset($cnt['physical_qty'])) {
+                continue;
+            }
+            $physicalQty = max(0, (int)$cnt['physical_qty']);
+            $itemRemarks = trim((string)($cnt['remarks'] ?? $defaultRemarks));
+            $itemAuditType = trim((string)($cnt['audit_type'] ?? $batchAuditType));
+
+            $batch = $this->db->table('mst_batches')
+                ->where('batch_id', $batchId)
+                ->get()
+                ->getRowArray();
+
+            if (!$batch) continue;
+
+            $rate = (float)($batch['purchase_rate_net'] ?: ($batch['mrp'] ?: 0));
+
+            $stkRow = $this->db->table('mst_stock')
+                ->where('store_id', $storeId)
+                ->where('item_id', $itemId)
+                ->where('batch_id', $batchId)
+                ->get()
+                ->getRowArray();
+
+            $systemQty = $stkRow ? (int)$stkRow['current_qty'] : 0;
+            $variationQty = $physicalQty - $systemQty;
+            $totalVal = round(abs($variationQty) * $rate, 2);
+
+            if ($variationQty !== 0 || !empty($cnt['force_log'])) {
+                if ($stkRow) {
+                    $this->db->table('mst_stock')
+                        ->where('stock_id', $stkRow['stock_id'])
+                        ->update(['current_qty' => $physicalQty]);
+                } else {
+                    $this->db->table('mst_stock')->insert([
+                        'store_id'     => $storeId,
+                        'item_id'      => $itemId,
+                        'batch_id'     => $batchId,
+                        'current_qty'  => $physicalQty,
+                        'reserved_qty' => 0
+                    ]);
+                }
+
+                $this->db->table('mst_stock_audit')->insert([
+                    'store_id'          => $storeId,
+                    'item_id'           => $itemId,
+                    'batch_id'          => $batchId,
+                    'audit_type'        => $itemAuditType,
+                    'system_qty'        => $systemQty,
+                    'physical_qty'      => $physicalQty,
+                    'variation_qty'     => $variationQty,
+                    'rate'              => $rate,
+                    'total_value'       => $totalVal,
+                    'remarks'           => $itemRemarks,
+                    'conducted_by'      => $operatorId,
+                    'conducted_by_name' => $operatorName,
+                    'created_at'        => date('Y-m-d H:i:s')
+                ]);
+
+                $processedCount++;
+                $totalDiscrepancyValue += $totalVal;
+            }
+        }
+
+        $this->db->transComplete();
+
+        if ($this->db->transStatus() === false) {
+            return $this->response->setStatusCode(500)->setJSON([
+                'status'  => 0,
+                'message' => 'Batch reconciliation failed.'
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'status'            => 1,
+            'message'           => "Batch audit complete: {$processedCount} batches reconciled.",
+            'reconciled_count'  => $processedCount,
+            'total_value'       => $totalDiscrepancyValue
+        ]);
+    }
+
+    /**
+     * Returns history of physical stock reconciliations and audit events
+     */
+    public function getStockAuditList()
+    {
+        $storeId = (int)($this->request->getGet('store_id') ?? 1);
+        $limit = max(10, min(500, (int)($this->request->getGet('limit') ?? 100)));
+        $offset = max(0, (int)($this->request->getGet('offset') ?? 0));
+        $auditType = trim((string)($this->request->getGet('audit_type') ?? ''));
+        $search = trim((string)($this->request->getGet('search') ?? ''));
+        $fromDate = trim((string)($this->request->getGet('from_date') ?? ''));
+        $toDate = trim((string)($this->request->getGet('to_date') ?? ''));
+
+        $builder = $this->db->table('mst_stock_audit sa')
+            ->select('sa.*, i.item_name, i.generic_name, i.unit_pack, b.batch_no, b.expiry_date, b.shelf_no, b.rack_no')
+            ->join('mst_items i', 'i.item_id = sa.item_id', 'left')
+            ->join('mst_batches b', 'b.batch_id = sa.batch_id', 'left')
+            ->where('sa.store_id', $storeId);
+
+        if ($auditType !== '') {
+            $builder->where('sa.audit_type', $auditType);
+        }
+
+        if ($fromDate !== '') {
+            $builder->where('DATE(sa.created_at) >=', $fromDate);
+        }
+        if ($toDate !== '') {
+            $builder->where('DATE(sa.created_at) <=', $toDate);
+        }
+
+        if ($search !== '') {
+            $builder->groupStart()
+                ->like('i.item_name', $search)
+                ->orLike('i.generic_name', $search)
+                ->orLike('b.batch_no', $search)
+                ->orLike('sa.conducted_by_name', $search)
+                ->orLike('sa.remarks', $search)
+                ->groupEnd();
+        }
+
+        $cloneBuilder = clone $builder;
+        $total = $cloneBuilder->countAllResults();
+
+        $logs = $builder->orderBy('sa.audit_id', 'DESC')
+            ->limit($limit, $offset)
+            ->get()
+            ->getResultArray();
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'total'  => $total,
+            'logs'   => $logs
+        ]);
+    }
+
+    // =========================================================================
+    // 26. MEDICAL STORE STAFF & USER MANAGEMENT
+    // =========================================================================
+
+    /**
+     * Lists staff assigned to this store (plus global store managers)
+     */
+    public function getStoreUsers()
+    {
+        $storeId = (int)($this->request->getGet('store_id') ?? 1);
+        $users = $this->db->table('mst_store_users')
+            ->where("store_id = {$storeId} OR store_id = 0", null, false)
+            ->where('is_active', 1)
+            ->orderBy('is_default', 'DESC')
+            ->orderBy('user_role', 'ASC')
+            ->orderBy('full_name', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        // Strip pin_code for security, return has_pin flag
+        $sanitized = array_map(function($u) {
+            $u['has_pin'] = !empty($u['pin_code']);
+            unset($u['pin_code']);
+            return $u;
+        }, $users);
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'users'  => $sanitized
+        ]);
+    }
+
+    /**
+     * Saves or updates a medical store user profile
+     */
+    public function saveStoreUser()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $userId = (int)($json['user_id'] ?? 0);
+        $storeId = (int)($json['store_id'] ?? 1);
+        $fullName = trim((string)($json['full_name'] ?? ''));
+        $username = trim((string)($json['username'] ?? ''));
+        $userRole = trim((string)($json['user_role'] ?? 'pharmacist'));
+        $pinCode = trim((string)($json['pin_code'] ?? ''));
+        $phone = trim((string)($json['phone'] ?? ''));
+        $regNo = trim((string)($json['pharmacist_reg_no'] ?? ''));
+        $hprId = trim((string)($json['pharmacist_hpr_id'] ?? ''));
+        $isActive = isset($json['is_active']) ? (int)$json['is_active'] : 1;
+        $isDefault = !empty($json['is_default']) ? 1 : 0;
+
+        if ($fullName === '' || $username === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'status'  => 0,
+                'message' => 'Full Name and Username are required.'
+            ]);
+        }
+
+        $validRoles = ['store_manager', 'pharmacist', 'cashier', 'auditor', 'staff'];
+        if (!in_array($userRole, $validRoles)) {
+            $userRole = 'pharmacist';
+        }
+
+        // If is_default is set, clear other defaults in this store
+        if ($isDefault === 1) {
+            $this->db->table('mst_store_users')
+                ->where('store_id', $storeId)
+                ->update(['is_default' => 0]);
+        }
+
+        $data = [
+            'store_id'          => $storeId,
+            'full_name'         => $fullName,
+            'username'          => $username,
+            'user_role'         => $userRole,
+            'phone'             => $phone,
+            'pharmacist_reg_no' => $regNo,
+            'pharmacist_hpr_id' => $hprId,
+            'is_active'         => $isActive,
+            'is_default'        => $isDefault,
+            'updated_at'        => date('Y-m-d H:i:s')
+        ];
+
+        if ($pinCode !== '') {
+            $data['pin_code'] = $pinCode;
+        }
+
+        if ($userId > 0) {
+            $this->db->table('mst_store_users')
+                ->where('user_id', $userId)
+                ->update($data);
+        } else {
+            if (empty($data['pin_code'])) {
+                $data['pin_code'] = '1234';
+            }
+            $data['created_at'] = date('Y-m-d H:i:s');
+            $this->db->table('mst_store_users')->insert($data);
+            $userId = $this->db->insertID();
+        }
+
+        return $this->response->setJSON([
+            'status'  => 1,
+            'message' => 'Staff profile saved successfully.',
+            'user_id' => $userId
+        ]);
+    }
+
+    /**
+     * Fast operator switch with 4-digit PIN verification
+     */
+    public function switchOperator()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $storeId = (int)($json['store_id'] ?? 1);
+        $userId = (int)($json['user_id'] ?? 0);
+        $pinCode = trim((string)($json['pin_code'] ?? ''));
+
+        if ($userId <= 0 || $pinCode === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'status'  => 0,
+                'message' => 'Operator selection and 4-digit PIN are required.'
+            ]);
+        }
+
+        $user = $this->db->table('mst_store_users')
+            ->where('user_id', $userId)
+            ->where('is_active', 1)
+            ->get()
+            ->getRowArray();
+
+        if (!$user) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'status'  => 0,
+                'message' => 'Operator not found or inactive.'
+            ]);
+        }
+
+        // Verify PIN (default 1234 if empty)
+        $userPin = trim((string)($user['pin_code'] ?? '1234'));
+        if ($userPin !== '' && $userPin !== $pinCode) {
+            return $this->response->setStatusCode(401)->setJSON([
+                'status'  => 0,
+                'message' => 'Incorrect PIN code for ' . $user['full_name'] . '.'
+            ]);
+        }
+
+        return $this->response->setJSON([
+            'status'   => 1,
+            'message'  => 'Operator authenticated successfully.',
+            'operator' => [
+                'user_id'           => (int)$user['user_id'],
+                'full_name'         => $user['full_name'],
+                'username'          => $user['username'],
+                'user_role'         => $user['user_role'],
+                'phone'             => $user['phone'],
+                'pharmacist_reg_no' => $user['pharmacist_reg_no'],
+                'pharmacist_hpr_id' => $user['pharmacist_hpr_id'],
+                'is_default'        => (int)$user['is_default'],
+                'store_id'          => (int)$user['store_id']
+            ]
+        ]);
+    }
+
+    // =========================================================================
+    // 27. STAFF & CUSTOMER CREDIT ACCOUNTS & LEDGERS
+    // =========================================================================
+
+    public function getCreditAccounts()
+    {
+        $storeId = (int)($this->request->getGet('store_id') ?? 1);
+        $search = trim((string)$this->request->getGet('search'));
+        $type = trim((string)$this->request->getGet('type'));
+
+        $builder = $this->db->table('mst_credit_accounts')
+            ->where('store_id', $storeId);
+
+        if ($type !== '' && $type !== 'all') {
+            $builder->where('account_type', $type);
+        }
+        if ($search !== '') {
+            $builder->groupStart()
+                ->like('account_name', $search)
+                ->orLike('phone', $search)
+                ->orLike('staff_id', $search)
+                ->orLike('department', $search)
+                ->groupEnd();
+        }
+
+        $accounts = $builder->orderBy('current_balance', 'DESC')
+            ->orderBy('account_name', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        return $this->response->setJSON([
+            'status'   => 1,
+            'accounts' => $accounts
+        ]);
+    }
+
+    public function saveCreditAccount()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $accountId = (int)($json['account_id'] ?? 0);
+        $storeId = (int)($json['store_id'] ?? 1);
+        $accountName = trim((string)($json['account_name'] ?? ''));
+        $accountType = trim((string)($json['account_type'] ?? 'STAFF'));
+        $phone = trim((string)($json['phone'] ?? ''));
+        $staffId = trim((string)($json['staff_id'] ?? ''));
+        $department = trim((string)($json['department'] ?? ''));
+        $creditLimit = (float)($json['credit_limit'] ?? 0);
+        $isActive = isset($json['is_active']) ? (int)$json['is_active'] : 1;
+        $remarks = trim((string)($json['remarks'] ?? ''));
+
+        if ($accountName === '') {
+            return $this->response->setStatusCode(400)->setJSON([
+                'status'  => 0,
+                'message' => 'Account Name is required.'
+            ]);
+        }
+
+        $data = [
+            'store_id'     => $storeId,
+            'account_type' => $accountType,
+            'account_name' => $accountName,
+            'phone'        => $phone,
+            'staff_id'     => $staffId,
+            'department'   => $department,
+            'credit_limit' => $creditLimit,
+            'is_active'    => $isActive,
+            'remarks'      => $remarks,
+            'updated_at'   => date('Y-m-d H:i:s')
+        ];
+
+        if ($accountId > 0) {
+            $this->db->table('mst_credit_accounts')->where('account_id', $accountId)->update($data);
+        } else {
+            $data['current_balance'] = 0.00;
+            $data['created_at'] = date('Y-m-d H:i:s');
+            $this->db->table('mst_credit_accounts')->insert($data);
+            $accountId = $this->db->insertID();
+        }
+
+        return $this->response->setJSON([
+            'status'     => 1,
+            'message'    => 'Credit account saved successfully.',
+            'account_id' => $accountId
+        ]);
+    }
+
+    public function getCreditLedger(int $accountId)
+    {
+        $account = $this->db->table('mst_credit_accounts')->where('account_id', $accountId)->get()->getRowArray();
+        if (!$account) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Credit account not found.']);
+        }
+
+        $entries = $this->db->table('mst_credit_ledger')
+            ->where('account_id', $accountId)
+            ->orderBy('ledger_id', 'DESC')
+            ->get()
+            ->getResultArray();
+
+        return $this->response->setJSON([
+            'status'  => 1,
+            'account' => $account,
+            'entries' => $entries
+        ]);
+    }
+
+    public function recordCreditPayment()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $accountId = (int)($json['account_id'] ?? 0);
+        $amount = (float)($json['amount'] ?? 0);
+        $paymentMode = trim((string)($json['payment_mode'] ?? 'Cash'));
+        $paymentRef = trim((string)($json['payment_ref'] ?? ''));
+        $remarks = trim((string)($json['remarks'] ?? ''));
+        $recordedByName = trim((string)($json['recorded_by_name'] ?? 'Cashier'));
+
+        if ($accountId <= 0 || $amount <= 0) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'status'  => 0,
+                'message' => 'Valid Account and payment amount (>0) are required.'
+            ]);
+        }
+
+        $account = $this->db->table('mst_credit_accounts')->where('account_id', $accountId)->get()->getRowArray();
+        if (!$account) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Account not found.']);
+        }
+
+        $this->db->transStart();
+
+        // Reduce balance
+        $newBalance = max(0.00, (float)$account['current_balance'] - $amount);
+        $this->db->table('mst_credit_accounts')
+            ->where('account_id', $accountId)
+            ->update([
+                'current_balance' => $newBalance,
+                'updated_at'      => date('Y-m-d H:i:s')
+            ]);
+
+        // Insert ledger payment entry
+        $this->db->table('mst_credit_ledger')->insert([
+            'store_id'         => (int)$account['store_id'],
+            'account_id'       => $accountId,
+            'entry_type'       => 'PAYMENT_RECEIVED',
+            'debit_amount'     => 0.00,
+            'credit_amount'    => $amount,
+            'balance_after'    => $newBalance,
+            'payment_mode'     => $paymentMode,
+            'payment_ref'      => $paymentRef,
+            'remarks'          => $remarks ?: "Payment settlement received via {$paymentMode}",
+            'recorded_by_name' => $recordedByName,
+            'created_at'       => date('Y-m-d H:i:s')
+        ]);
+        $ledgerId = $this->db->insertID();
+
+        $this->db->transComplete();
+
+        if ($this->db->transStatus() === false) {
+            return $this->response->setStatusCode(500)->setJSON(['status' => 0, 'message' => 'Failed to record payment.']);
+        }
+
+        return $this->response->setJSON([
+            'status'      => 1,
+            'message'     => "Payment of ₹{$amount} recorded successfully. New balance: ₹{$newBalance}",
+            'new_balance' => $newBalance,
+            'receipt_id'  => $ledgerId
+        ]);
+    }
+
+    // =========================================================================
+    // 28. MOBILE RACK COLLECTOR & DRAFT BILLS
+    // =========================================================================
+
+    public function saveDraftBill()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $storeId = (int)($json['store_id'] ?? 1);
+        $items = $json['items'] ?? [];
+        $patientName = trim((string)($json['patient_name'] ?? 'Walk-in Customer'));
+        $uhid = trim((string)($json['uhid'] ?? ''));
+        $mobile = trim((string)($json['patient_mobile'] ?? ''));
+        $bedNo = trim((string)($json['bed_no'] ?? ''));
+        $wardName = trim((string)($json['ward_name'] ?? ''));
+        $doctorName = trim((string)($json['doctor_name'] ?? ''));
+        $collectedBy = trim((string)($json['collected_by_name'] ?? 'Mobile Pharmacist'));
+
+        if (empty($items) || !is_array($items)) {
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Items are required for draft bill.']);
+        }
+
+        $draftCode = 'DRF-' . strtoupper(substr(uniqid(), -6));
+        $totalItems = count($items);
+        $estAmount = 0;
+        foreach ($items as $it) {
+            $qty = (float)($it['qty'] ?? 1);
+            $rate = (float)($it['effective_rate'] ?? ($it['unit_price'] ?? ($it['mrp'] ?? 0)));
+            $estAmount += ($qty * $rate);
+        }
+
+        $this->db->table('mst_draft_bills')->insert([
+            'store_id'          => $storeId,
+            'draft_code'        => $draftCode,
+            'patient_name'      => $patientName,
+            'uhid'              => $uhid,
+            'patient_mobile'    => $mobile,
+            'bed_no'            => $bedNo,
+            'ward_name'         => $wardName,
+            'doctor_name'       => $doctorName,
+            'total_items'       => $totalItems,
+            'estimated_amount'  => round($estAmount, 2),
+            'items_json'        => json_encode($items),
+            'status'            => 'DRAFT',
+            'collected_by_name' => $collectedBy,
+            'created_at'        => date('Y-m-d H:i:s')
+        ]);
+        $draftId = $this->db->insertID();
+
+        return $this->response->setJSON([
+            'status'     => 1,
+            'message'    => "Draft Bill #{$draftCode} created from rack collection.",
+            'draft_id'   => $draftId,
+            'draft_code' => $draftCode
+        ]);
+    }
+
+    public function getDraftBills()
+    {
+        $storeId = (int)($this->request->getGet('store_id') ?? 1);
+        $status = trim((string)($this->request->getGet('status') ?? 'DRAFT'));
+
+        $builder = $this->db->table('mst_draft_bills')
+            ->where('store_id', $storeId);
+
+        if ($status !== 'all') {
+            $builder->where('status', $status);
+        }
+
+        $drafts = $builder->orderBy('draft_id', 'DESC')
+            ->limit(30)
+            ->get()
+            ->getResultArray();
+
+        foreach ($drafts as &$d) {
+            $d['items'] = json_decode($d['items_json'], true) ?: [];
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'drafts' => $drafts
+        ]);
+    }
+
+    public function cancelDraftBill()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $draftId = (int)($json['draft_id'] ?? 0);
+
+        if ($draftId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Draft ID is required.']);
+        }
+
+        $this->db->table('mst_draft_bills')
+            ->where('draft_id', $draftId)
+            ->update([
+                'status'     => 'CANCELLED',
+                'updated_at' => date('Y-m-d H:i:s')
+            ]);
+
+        return $this->response->setJSON(['status' => 1, 'message' => 'Draft bill cancelled.']);
+    }
+
+    // =========================================================================
+    // 29. MOBILE ADMIN DASHBOARD & ADVANCED METRICS
+    // =========================================================================
+
+    public function getMobileDashboardData()
+    {
+        $storeId = (int)($this->request->getGet('store_id') ?? 1);
+
+        // 1. General Stock Status
+        $stockSummary = $this->db->table('mst_stock s')
+            ->select('COUNT(s.stock_id) as total_batches, SUM(s.current_qty) as total_units, SUM(s.current_qty * b.purchase_rate_net) as cost_valuation, SUM(s.current_qty * b.mrp) as mrp_valuation')
+            ->join('mst_batches b', 'b.batch_id = s.batch_id')
+            ->where('s.store_id', $storeId)
+            ->get()
+            ->getRowArray();
+
+        // 2. Nearest Expiry (< 90 days)
+        $today = date('Y-m-d');
+        $in90d = date('Y-m-d', strtotime('+90 days'));
+        $nearExpiry = $this->db->table('mst_stock s')
+            ->select('s.current_qty, b.batch_no, b.expiry_date, b.mrp, b.shelf_no, b.rack_no, i.item_name, i.generic_name')
+            ->join('mst_batches b', 'b.batch_id = s.batch_id')
+            ->join('mst_items i', 'i.item_id = s.item_id')
+            ->where('s.store_id', $storeId)
+            ->where('s.current_qty >', 0)
+            ->where('b.expiry_date <=', $in90d)
+            ->where('b.expiry_date >=', $today)
+            ->orderBy('b.expiry_date', 'ASC')
+            ->limit(10)
+            ->get()
+            ->getResultArray();
+
+        // 3. High Sale Products (Fast Moving)
+        $highSales = $this->db->table('mst_sales_items si')
+            ->select('si.item_id, i.item_name, i.generic_name, SUM(si.qty) as total_sold, SUM(si.total_amount) as total_revenue')
+            ->join('mst_sales s', 's.sale_id = si.sale_id')
+            ->join('mst_items i', 'i.item_id = si.item_id')
+            ->where('s.store_id', $storeId)
+            ->groupBy('si.item_id')
+            ->orderBy('total_sold', 'DESC')
+            ->limit(8)
+            ->get()
+            ->getResultArray();
+
+        // 4. Dump / Dead Stock (Items with current stock > 0 but no sales in last 60 days)
+        $in60dAgo = date('Y-m-d', strtotime('-60 days'));
+        $dumpStock = $this->db->table('mst_stock s')
+            ->select('s.current_qty, b.batch_no, b.expiry_date, b.mrp, i.item_name, i.generic_name')
+            ->join('mst_batches b', 'b.batch_id = s.batch_id')
+            ->join('mst_items i', 'i.item_id = s.item_id')
+            ->where('s.store_id', $storeId)
+            ->where('s.current_qty >', 10)
+            ->where("s.item_id NOT IN (SELECT DISTINCT si.item_id FROM mst_sales_items si JOIN mst_sales sa ON sa.sale_id = si.sale_id WHERE sa.store_id = {$storeId} AND DATE(sa.sale_date) >= '{$in60dAgo}')")
+            ->orderBy('s.current_qty', 'DESC')
+            ->limit(8)
+            ->get()
+            ->getResultArray();
+
+        // 5. New Inward Stock (Recently received batches)
+        $recentInwards = $this->db->table('mst_purchases p')
+            ->select('p.purchase_id, p.supplier_invoice_no, p.invoice_date, p.net_amount, p.received_by_name, p.invoice_photo, p.is_verified, sup.supplier_name')
+            ->join('mst_suppliers sup', 'sup.supplier_id = p.supplier_id', 'left')
+            ->where('p.store_id', $storeId)
+            ->orderBy('p.purchase_id', 'DESC')
+            ->limit(6)
+            ->get()
+            ->getResultArray();
+
+        // 6. Supplier Payments Pending
+        $supplierPending = $this->db->table('mst_purchases p')
+            ->select('p.purchase_id, p.supplier_invoice_no, p.due_date, p.net_amount, p.paid_amount, (p.net_amount - p.paid_amount) as pending_amount, sup.supplier_name, sup.phone')
+            ->join('mst_suppliers sup', 'sup.supplier_id = p.supplier_id', 'left')
+            ->where('p.store_id', $storeId)
+            ->where('p.payment_status !=', 'paid')
+            ->where('(p.net_amount - p.paid_amount) >', 0)
+            ->orderBy('p.due_date', 'ASC')
+            ->limit(8)
+            ->get()
+            ->getResultArray();
+
+        $totalPendingSupplier = 0;
+        foreach ($supplierPending as $sp) {
+            $totalPendingSupplier += (float)$sp['pending_amount'];
+        }
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'summary' => [
+                'total_batches'          => (int)($stockSummary['total_batches'] ?? 0),
+                'total_units'            => (int)($stockSummary['total_units'] ?? 0),
+                'cost_valuation'         => round((float)($stockSummary['cost_valuation'] ?? 0), 2),
+                'mrp_valuation'          => round((float)($stockSummary['mrp_valuation'] ?? 0), 2),
+                'near_expiry_count'      => count($nearExpiry),
+                'total_supplier_pending' => round($totalPendingSupplier, 2)
+            ],
+            'near_expiry'      => $nearExpiry,
+            'high_sales'       => $highSales,
+            'dump_stock'       => $dumpStock,
+            'recent_inwards'   => $recentInwards,
+            'supplier_pending' => $supplierPending
+        ]);
+    }
+
+    // =========================================================================
+    // 30. SERVER NETWORK INFO FOR QR CODE PAIRING
+    // =========================================================================
+
+    public function getServerNetworkInfo()
+    {
+        $port = $_SERVER['SERVER_PORT'] ?? '8080';
+        $host = $_SERVER['HTTP_HOST'] ?? 'localhost:8080';
+        $ips = [];
+
+        // Attempt to detect local LAN IP on Windows / Linux
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            $output = shell_exec('ipconfig');
+            if ($output) {
+                preg_match_all('/IPv4 Address[ .:]+([0-9.]+)/i', $output, $matches);
+                if (!empty($matches[1])) {
+                    $ips = array_unique($matches[1]);
+                }
+            }
+        } else {
+            $output = shell_exec("hostname -I 2>/dev/null");
+            if ($output) {
+                $parts = preg_split('/\s+/', trim($output));
+                if (!empty($parts)) $ips = array_unique($parts);
+            }
+        }
+
+        $lanIp = !empty($ips) ? $ips[0] : 'localhost';
+        $lanUrl = "http://{$lanIp}:{$port}/MedicalStore/";
+
+        return $this->response->setJSON([
+            'status'       => 1,
+            'detected_ips' => $ips,
+            'primary_ip'   => $lanIp,
+            'port'         => $port,
+            'current_host' => $host,
+            'mobile_base'  => $lanUrl
+        ]);
+    }
+
+    // =========================================================================
+    // 31. PURCHASE INVOICE PHOTO UPLOAD & VERIFICATION
+    // =========================================================================
+
+    public function uploadPurchasePhoto()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $purchaseId = (int)($json['purchase_id'] ?? 0);
+        $base64Image = $json['image_data'] ?? '';
+
+        if ($purchaseId <= 0 || empty($base64Image)) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'status'  => 0,
+                'message' => 'Purchase ID and image_data are required.'
+            ]);
+        }
+
+        // Save image to public/uploads/medical_store/purchases/
+        $uploadDir = FCPATH . 'uploads/medical_store/purchases/';
+        if (!is_dir($uploadDir)) {
+            mkdir($uploadDir, 0777, true);
+        }
+
+        // Extract base64
+        if (preg_match('/^data:image\/(\w+);base64,/', $base64Image, $type)) {
+            $data = substr($base64Image, strpos($base64Image, ',') + 1);
+            $type = strtolower($type[1]);
+            if (!in_array($type, ['jpg', 'jpeg', 'png', 'webp'])) {
+                $type = 'jpeg';
+            }
+            $data = base64_decode($data);
+        } else {
+            $data = base64_decode($base64Image);
+            $type = 'jpeg';
+        }
+
+        $filename = "pur_{$purchaseId}_" . time() . ".{$type}";
+        $filepath = $uploadDir . $filename;
+        file_put_contents($filepath, $data);
+
+        $relUrl = "/uploads/medical_store/purchases/{$filename}";
+        $this->db->table('mst_purchases')
+            ->where('purchase_id', $purchaseId)
+            ->update([
+                'invoice_photo' => $relUrl
+            ]);
+
+        return $this->response->setJSON([
+            'status'    => 1,
+            'message'   => 'Purchase invoice photo uploaded successfully.',
+            'photo_url' => $relUrl
+        ]);
+    }
+
+    public function verifyPurchase()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $purchaseId = (int)($json['purchase_id'] ?? 0);
+        $verifiedByName = trim((string)($json['verified_by_name'] ?? 'Store Manager'));
+
+        if ($purchaseId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Purchase ID is required.']);
+        }
+
+        $this->db->table('mst_purchases')
+            ->where('purchase_id', $purchaseId)
+            ->update([
+                'is_verified'      => 1,
+                'verified_by_name' => $verifiedByName,
+                'verified_at'      => date('Y-m-d H:i:s')
+            ]);
+
+        return $this->response->setJSON([
+            'status'  => 1,
+            'message' => "Inward Purchase #{$purchaseId} verified by {$verifiedByName}."
+        ]);
+    }
+}

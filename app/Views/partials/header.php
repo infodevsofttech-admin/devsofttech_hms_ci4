@@ -319,10 +319,10 @@
                         </div>
                     </div>
                     <div class="col-4">
-                        <div class="card p-2 text-center border-secondary bg-light text-muted opacity-75 h-100">
-                            <i class="bi bi-capsule fs-3 mb-1"></i>
-                            <div class="fw-bold small" style="font-size:12px;">Pharmacy App</div>
-                            <span class="badge bg-secondary mt-1" style="font-size:9px;">Coming Soon</span>
+                        <div class="card p-2 text-center border-secondary bg-light text-dark h-100 app-card-item" style="cursor: pointer;" id="app_card_pharmacy" data-app="pharmacy">
+                            <i class="bi bi-capsule fs-3 mb-1" style="color: #0891b2;"></i>
+                            <div class="fw-bold small" style="font-size:12px;">Pharmacy POS</div>
+                            <span class="badge text-white mt-1" style="font-size:9px; background: #0891b2;">Active PWA</span>
                         </div>
                     </div>
                 </div>
@@ -366,6 +366,9 @@
     var selectedApp = 'nursing';
 
     function getAppBaseUrl() {
+        if (selectedApp === 'pharmacy') {
+            return '<?= base_url('MedicalStore') ?>';
+        }
         return '<?= base_url('app') ?>/' + selectedApp;
     }
 
@@ -374,7 +377,7 @@
         var code = sel ? sel.value : '';
         var appBaseUrl = getAppBaseUrl();
         var paramKey = (selectedApp === 'doctor') ? 'doctor_id=' : 'nurse_code=';
-        var appUrl = appBaseUrl + (code ? '?' + paramKey + encodeURIComponent(code) : '');
+        var appUrl = (selectedApp === 'pharmacy') ? appBaseUrl : (appBaseUrl + (code ? '?' + paramKey + encodeURIComponent(code) : ''));
         var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' + encodeURIComponent(appUrl);
 
         var qrImg = document.getElementById('hdr_apps_qr_img');
@@ -387,7 +390,7 @@
         if (urlInput) urlInput.value = appUrl;
         if (launchLink) launchLink.href = appUrl;
 
-        var title = (selectedApp === 'doctor') ? 'DoctorCare EMR App' : 'Nursing Care App';
+        var title = (selectedApp === 'doctor') ? 'DoctorCare EMR App' : ((selectedApp === 'pharmacy') ? 'Medical Store & Pharmacy POS' : 'Nursing Care App');
 
         if (code && sel && sel.options[sel.selectedIndex]) {
             var text = sel.options[sel.selectedIndex].text;
@@ -395,7 +398,7 @@
             if (targetCode) targetCode.textContent = code;
         } else {
             if (targetName) targetName.textContent = title;
-            if (targetCode) targetCode.textContent = '/app/' + selectedApp;
+            if (targetCode) targetCode.textContent = (selectedApp === 'pharmacy') ? '/MedicalStore' : ('/app/' + selectedApp);
         }
     }
 
@@ -418,7 +421,12 @@
         var label = document.getElementById('hdr_apps_staff_label');
         if (!sel) return;
 
-        if (selectedApp === 'doctor') {
+        if (selectedApp === 'pharmacy') {
+            if (label) label.textContent = '2. PHARMACY COUNTER / STORE ACCESS';
+            sel.innerHTML = '<option value="">-- All Pharmacy Counters (Auto-detect) --</option>';
+            updateHdrAppDetails();
+            return;
+        } else if (selectedApp === 'doctor') {
             if (label) label.textContent = '2. SELECT DOCTOR PROFILE';
             fetch('<?= base_url('api/v1/doctor/list') ?>')
                 .then(function(r) { return r.json(); })

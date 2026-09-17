@@ -1726,6 +1726,37 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1'], static funct
     $routes->get('medical-store/returns/lookup-invoice', 'MedicalStoreApi::lookupInvoiceForReturn');
     $routes->get('medical-store/returns/recent', 'MedicalStoreApi::recentReturns');
     $routes->get('medical-store/returns/credit-note/(:num)', 'MedicalStoreApi::getCreditNoteInvoice/$1');
+
+    // Stock Audit & Physical Reconciliation
+    $routes->post('medical-store/stock/reconcile', 'MedicalStoreApi::reconcileStock');
+    $routes->get('medical-store/stock/audit-list', 'MedicalStoreApi::getStockAuditList');
+    $routes->post('medical-store/stock/batch-reconcile', 'MedicalStoreApi::batchReconcileStock');
+
+    // Dedicated Medical Store User Management & Operator Session
+    $routes->get('medical-store/users', 'MedicalStoreApi::getStoreUsers');
+    $routes->post('medical-store/users/save', 'MedicalStoreApi::saveStoreUser');
+    $routes->post('medical-store/users/switch-operator', 'MedicalStoreApi::switchOperator');
+
+    // Staff & Customer Credit Accounts & Ledgers
+    $routes->get('medical-store/credit/accounts', 'MedicalStoreApi::getCreditAccounts');
+    $routes->post('medical-store/credit/save-account', 'MedicalStoreApi::saveCreditAccount');
+    $routes->get('medical-store/credit/ledger/(:num)', 'MedicalStoreApi::getCreditLedger/$1');
+    $routes->post('medical-store/credit/record-payment', 'MedicalStoreApi::recordCreditPayment');
+
+    // Mobile Rack Collector & Draft Bills
+    $routes->post('medical-store/drafts/save', 'MedicalStoreApi::saveDraftBill');
+    $routes->get('medical-store/drafts/list', 'MedicalStoreApi::getDraftBills');
+    $routes->post('medical-store/drafts/cancel', 'MedicalStoreApi::cancelDraftBill');
+
+    // Mobile Dashboard & Analytics
+    $routes->get('medical-store/mobile/dashboard', 'MedicalStoreApi::getMobileDashboardData');
+
+    // Server Network Info & QR Pairing
+    $routes->get('medical-store/server-info', 'MedicalStoreApi::getServerNetworkInfo');
+
+    // Purchase Invoice Photo Upload & Verification
+    $routes->post('medical-store/purchase/upload-photo', 'MedicalStoreApi::uploadPurchasePhoto');
+    $routes->post('medical-store/purchase/verify', 'MedicalStoreApi::verifyPurchase');
 });
 
 // Dedicated Direct Store Links (e.g. /MedicalStore/storeA, /MedicalStore/storeB)
