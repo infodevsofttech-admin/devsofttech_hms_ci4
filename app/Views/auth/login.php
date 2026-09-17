@@ -114,12 +114,6 @@
                                             </div>
                                         <?php endif ?>
 
-                                        <?php if (setting('Auth.allowRegistration')) : ?>
-                                            <div class="col-12">
-                                                <p class="text-center"><?= lang('Auth.needAccount') ?> <a href="<?= url_to('register') ?>"><?= lang('Auth.register') ?></a></p>
-                                            </div>
-                                        <?php endif ?>
-
                                     </form>
 
                                 </div>
