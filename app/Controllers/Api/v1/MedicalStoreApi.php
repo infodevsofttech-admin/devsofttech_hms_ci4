@@ -5974,7 +5974,8 @@ class MedicalStoreApi extends BaseController
         foreach ($items as $it) {
             $qty = (float)($it['qty'] ?? 1);
             $rate = (float)($it['effective_rate'] ?? ($it['unit_price'] ?? ($it['mrp'] ?? 0)));
-            $estAmount += ($qty * $rate);
+            $lineGross = (float)($it['line_gross'] ?? ($qty * $rate));
+            $estAmount += $lineGross;
         }
 
         $this->db->table('mst_draft_bills')->insert([
@@ -6021,8 +6022,82 @@ class MedicalStoreApi extends BaseController
             ->getResultArray();
 
         foreach ($drafts as &$d) {
-            $d['items'] = json_decode($d['items_json'], true) ?: [];
+            $items = json_decode($d['items_json'], true) ?: [];
+
+            // Gather missing info from batches and items for draft lines
+            $batchIds = array_filter(array_column($items, 'batch_id'));
+            $itemIds = array_filter(array_column($items, 'item_id'));
+
+            $batchMap = [];
+            if (!empty($batchIds)) {
+                $bRows = $this->db->table('mst_batches')
+                    ->select('batch_id, item_id, batch_no, expiry_date, mrp, ptr, gst_rate')
+                    ->whereIn('batch_id', $batchIds)
+                    ->get()->getResultArray();
+                foreach ($bRows as $br) {
+                    $batchMap[$br['batch_id']] = $br;
+                }
+            }
+
+            $itemMap = [];
+            if (!empty($itemIds)) {
+                $iRows = $this->db->table('mst_items')
+                    ->select('item_id, item_name, generic_name, unit_pack, units_per_pack, drug_schedule, hsn_code, gst_rate')
+                    ->whereIn('item_id', $itemIds)
+                    ->get()->getResultArray();
+                foreach ($iRows as $ir) {
+                    $itemMap[$ir['item_id']] = $ir;
+                }
+            }
+
+            foreach ($items as &$it) {
+                $b = $batchMap[$it['batch_id'] ?? 0] ?? null;
+                $m = $itemMap[$it['item_id'] ?? 0] ?? null;
+
+                $upp = (int)($it['units_per_pack'] ?? ($m['units_per_pack'] ?? 1));
+                if ($upp < 1) $upp = 1;
+                $it['units_per_pack'] = $upp;
+
+                $stripMrp = (float)($it['unit_mrp'] ?? ($b['mrp'] ?? ($it['mrp'] ?? 0)));
+                if ($stripMrp <= 0 && isset($it['effective_rate']) && (float)$it['effective_rate'] > 0) {
+                    $stripMrp = ($it['sell_unit'] ?? '') === 'Tablet' ? round((float)$it['effective_rate'] * $upp, 2) : (float)$it['effective_rate'];
+                }
+                if ($stripMrp <= 0 && isset($it['line_gross']) && (float)$it['line_gross'] > 0) {
+                    $stripMrp = (float)$it['line_gross'];
+                }
+
+                $it['unit_mrp'] = $stripMrp;
+                $it['mrp'] = $stripMrp;
+
+                $sellUnit = $it['sell_unit'] ?? ($upp > 1 ? 'Tablet' : 'Unit');
+                $it['sell_unit'] = $sellUnit;
+                $q = max(1, (float)($it['qty'] ?? 1));
+                $it['qty'] = $q;
+                $it['strip_qty'] = $sellUnit === 'Strip' ? $q : (float)($it['strip_qty'] ?? 0);
+                $it['loose_qty'] = ($sellUnit === 'Tablet' || $sellUnit === 'Unit') ? $q : (float)($it['loose_qty'] ?? 0);
+
+                if (!isset($it['gst_rate']) || $it['gst_rate'] === null) {
+                    $it['gst_rate'] = (float)($b['gst_rate'] ?? ($m['gst_rate'] ?? 12.0));
+                }
+                if (empty($it['hsn_code'])) {
+                    $it['hsn_code'] = $m['hsn_code'] ?? '3004';
+                }
+                if (empty($it['unit_pack'])) {
+                    $it['unit_pack'] = $m['unit_pack'] ?? ($upp > 1 ? "Pack: {$upp} Tabs" : 'Unit');
+                }
+                if (empty($it['drug_schedule'])) {
+                    $it['drug_schedule'] = $m['drug_schedule'] ?? '';
+                }
+                if (empty($it['expiry_display']) && !empty($it['expiry_date'])) {
+                    $it['expiry_display'] = date('m/Y', strtotime($it['expiry_date']));
+                }
+            }
+            unset($it);
+
+            $d['items'] = $items;
+            $d['items_json'] = json_encode($items);
         }
+        unset($d);
 
         return $this->response->setJSON([
             'status' => 1,

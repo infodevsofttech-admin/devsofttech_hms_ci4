@@ -1543,18 +1543,56 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
 
     const handleLoadDraftBillIntoCart = (draft) => {
         try {
-            const items = typeof draft.items_json === 'string' ? JSON.parse(draft.items_json) : draft.items_json;
-            if (!Array.isArray(items) || items.length === 0) {
+            const rawItems = typeof draft.items_json === 'string' ? JSON.parse(draft.items_json) : (draft.items || draft.items_json);
+            if (!Array.isArray(rawItems) || rawItems.length === 0) {
                 notify('Draft contains no items.', 'warning');
                 return;
             }
 
-            const formattedCart = items.map((it, idx) => ({
-                ...it,
-                cart_item_id: Date.now() + '_' + idx,
-                discount_type: it.discount_type || 'NONE',
-                discount_val: Number(it.discount_val) || 0
-            }));
+            const formattedCart = rawItems.map((it, idx) => {
+                const upp = Number(it.units_per_pack) > 0 ? Number(it.units_per_pack) : 1;
+                const sellUnit = it.sell_unit || (upp > 1 ? 'Tablet' : 'Unit');
+                const q = Math.max(1, Number(it.qty) || 1);
+
+                // Resiliently resolve strip MRP (unit_mrp)
+                let unitMrp = Number(it.unit_mrp ?? it.mrp ?? 0);
+                if (unitMrp <= 0) {
+                    if (Number(it.effective_rate) > 0) {
+                        unitMrp = sellUnit === 'Tablet' ? Number((Number(it.effective_rate) * upp).toFixed(2)) : Number(it.effective_rate);
+                    } else if (Number(it.line_gross) > 0) {
+                        unitMrp = sellUnit === 'Tablet' ? Number(it.line_gross) : Number((Number(it.line_gross) / q).toFixed(2));
+                    }
+                }
+
+                const stripQty = sellUnit === 'Strip' ? q : (Number(it.strip_qty) || 0);
+                const looseQty = (sellUnit === 'Tablet' || sellUnit === 'Unit') ? q : (Number(it.loose_qty) || 0);
+
+                return {
+                    ...it,
+                    cart_item_id: Date.now() + '_' + idx + '_' + Math.random().toString(36).substr(2, 4),
+                    item_id: it.item_id,
+                    item_name: it.item_name,
+                    generic_name: it.generic_name || '',
+                    unit_pack: it.unit_pack || (upp > 1 ? `Pack: ${upp} Tabs` : 'Unit'),
+                    units_per_pack: upp,
+                    drug_schedule: it.drug_schedule || '',
+                    hsn_code: it.hsn_code || '3004',
+                    gst_rate: it.gst_rate !== undefined && it.gst_rate !== null ? Number(it.gst_rate) : 12.0,
+                    batch_id: it.batch_id,
+                    batch_no: it.batch_no,
+                    expiry_display: it.expiry_display || (it.expiry_date ? it.expiry_date.substring(0, 7) : ''),
+                    expiry_date: it.expiry_date || '',
+                    current_qty: Number(it.current_qty) || 9999,
+                    unit_mrp: unitMrp,
+                    mrp: unitMrp,
+                    sell_unit: sellUnit,
+                    strip_qty: stripQty,
+                    loose_qty: looseQty,
+                    qty: q,
+                    discount_type: it.discount_type || 'pct',
+                    discount_val: Number(it.discount_val) || 0
+                };
+            });
 
             setCart(formattedCart);
             if (draft.patient_name) setPatientQuery(draft.patient_name);
@@ -1563,7 +1601,7 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
             if (draft.doctor_name) setDoctorName(draft.doctor_name);
 
             setShowDraftModal(false);
-            notify(`Draft [${draft.draft_code}] with ${items.length} items loaded into billing cart!`, 'success');
+            notify(`Draft [${draft.draft_code}] with ${rawItems.length} items loaded into billing cart!`, 'success');
         } catch (err) {
             notify('Failed to load draft items: ' + err.message, 'error');
         }
@@ -14804,22 +14842,35 @@ function MobileAppView({ store, stores, notify, activeOperator, onSwitchOperator
         }
 
         const upp = Number(selectedItem.units_per_pack || selectedBatch.units_per_pack || 1);
+        const stripMrp = Number(selectedBatch.mrp || 0);
+        const perUnitMrp = upp > 0 ? (stripMrp / upp) : stripMrp;
         const totalUnits = collectUnit === 'Strip' ? (q * upp) : q;
-        const rate = Number(selectedBatch.mrp || 0) / (collectUnit === 'Strip' ? 1 : upp);
+        const rate = collectUnit === 'Strip' ? stripMrp : perUnitMrp;
+        const lineGross = collectUnit === 'Strip' ? (q * stripMrp) : (q * perUnitMrp);
 
         const newItem = {
             item_id: selectedItem.item_id,
             item_name: selectedItem.item_name,
             generic_name: selectedItem.generic_name || '',
+            unit_pack: selectedItem.unit_pack || (upp > 1 ? `Pack: ${upp} Tabs` : 'Unit'),
+            units_per_pack: upp,
+            drug_schedule: selectedItem.drug_schedule || '',
+            hsn_code: selectedItem.hsn_code || '3004',
+            gst_rate: Number(selectedBatch.gst_rate ?? selectedItem.gst_rate ?? 12.0),
             batch_id: selectedBatch.batch_id,
             batch_no: selectedBatch.batch_no,
+            expiry_display: selectedBatch.expiry_display || (selectedBatch.expiry_date ? selectedBatch.expiry_date.substring(0, 7) : ''),
             expiry_date: selectedBatch.expiry_date,
+            current_qty: selectedBatch.current_qty || 0,
+            unit_mrp: stripMrp,
+            mrp: stripMrp,
             qty: q,
             sell_unit: collectUnit,
-            units_per_pack: upp,
+            strip_qty: collectUnit === 'Strip' ? q : 0,
+            loose_qty: (collectUnit === 'Tablet' || collectUnit === 'Unit') ? q : 0,
             total_units: totalUnits,
-            effective_rate: rate,
-            line_gross: q * Number(selectedBatch.mrp || 0)
+            effective_rate: Number(rate.toFixed(2)),
+            line_gross: Number(lineGross.toFixed(2))
         };
 
         setCollectorItems(prev => [...prev, newItem]);
@@ -15330,7 +15381,7 @@ function MobileAppView({ store, stores, notify, activeOperator, onSwitchOperator
                                             <div>
                                                 <div className="fw-bold text-white">{it.item_name}</div>
                                                 <div className="text-slate-400" style={{ fontSize: '0.7rem' }}>
-                                                    Batch: {it.batch_no} • Qty: <strong className="text-cyan-300">{it.qty} {it.sell_unit}</strong> ({it.total_units} total units)
+                                                    Batch: {it.batch_no} • Qty: <strong className="text-cyan-300">{it.qty} {it.sell_unit}</strong> • Rate: <strong className="text-warning">₹{it.effective_rate}</strong> • Total: <strong className="text-success">₹{it.line_gross}</strong>
                                                 </div>
                                             </div>
                                             <button 
