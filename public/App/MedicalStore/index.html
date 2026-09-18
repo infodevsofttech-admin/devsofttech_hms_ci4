@@ -1485,6 +1485,8 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
 
     const [walkinAbhaId, setWalkinAbhaId] = useState('');
     const [walkinAbhaAddress, setWalkinAbhaAddress] = useState('');
+    const [walkinMobile, setWalkinMobile] = useState('');
+    const [walkinUhid, setWalkinUhid] = useState('');
     const [showFhirModal, setShowFhirModal] = useState(false);
     const [fhirBundleData, setFhirBundleData] = useState(null);
     const [isLoadingFhir, setIsLoadingFhir] = useState(false);
@@ -2130,6 +2132,8 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
         setPatientQuery(pt.full_name + ' (' + pt.uhid + ')');
         setWalkinAbhaId(pt.abha_id || '');
         setWalkinAbhaAddress(pt.abha_address || '');
+        setWalkinMobile(pt.mobile || '');
+        setWalkinUhid(pt.uhid || '');
 
         if (pt.has_active_ipd && pt.active_ipd) {
             setPatientType('IPD');
@@ -2158,6 +2162,8 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
         setDoctorRegNo('');
         setWalkinAbhaId('');
         setWalkinAbhaAddress('');
+        setWalkinMobile('');
+        setWalkinUhid('');
         setPrintFormat('thermal');
     };
 
@@ -2637,12 +2643,12 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
         const payload = {
             store_id: store.store_id,
             patient_type: patientType,
-            uhid: selectedPatient ? selectedPatient.uhid : null,
+            uhid: selectedPatient ? selectedPatient.uhid : (walkinUhid || null),
             patient_id: selectedPatient ? selectedPatient.patient_id : null,
             opd_id: selectedPatient && selectedPatient.active_opd ? selectedPatient.active_opd.opd_id : null,
             ipd_id: selectedPatient && selectedPatient.active_ipd ? selectedPatient.active_ipd.ipd_id : null,
             patient_name: selectedPatient ? selectedPatient.full_name : (patientQuery || 'Walk-in Customer'),
-            patient_mobile: selectedPatient ? selectedPatient.mobile : '',
+            patient_mobile: selectedPatient ? selectedPatient.mobile : (walkinMobile || ''),
             patient_address: selectedPatient ? selectedPatient.address : '',
             abha_id: selectedPatient?.abha_id || walkinAbhaId || null,
             abha_address: selectedPatient?.abha_address || walkinAbhaAddress || null,
@@ -3353,6 +3359,13 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
                                     OPD Dr. {selectedPatient.active_opd.doctor_name}
                                 </span>
                             )}
+                        </div>
+                    )}
+                    {!selectedPatient && (walkinMobile || walkinUhid) && (
+                        <div className="mt-2 p-2 bg-light rounded-2 d-flex flex-wrap gap-3 align-items-center" style={{ fontSize: '0.8rem' }}>
+                            <span><strong>Customer:</strong> {patientQuery || 'Walk-in'}</span>
+                            {walkinMobile && <span><strong>Mobile:</strong> <i className="bi bi-telephone me-1 text-primary"></i>{walkinMobile}</span>}
+                            {walkinUhid && <span><strong>UHID:</strong> <code className="text-primary">{walkinUhid}</code></span>}
                         </div>
                     )}
                 </div>
