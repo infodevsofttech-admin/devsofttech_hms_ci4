@@ -1821,6 +1821,31 @@ class MedicalStoreApi extends BaseController
         $this->db->table('mst_sales')->insert($saleData);
         $saleId = $this->db->insertID();
 
+        // If this sale originated from a Mobile Draft Bill, mark the draft as CONVERTED
+        $draftId = !empty($json['draft_id']) ? (int)$json['draft_id'] : 0;
+        $draftCode = trim((string)($json['draft_code'] ?? ''));
+        if ($this->db->tableExists('mst_draft_bills')) {
+            if ($draftId > 0) {
+                $this->db->table('mst_draft_bills')
+                    ->where('draft_id', $draftId)
+                    ->where('store_id', $storeId)
+                    ->update([
+                        'status'            => 'CONVERTED',
+                        'converted_sale_id' => $saleId,
+                        'updated_at'        => date('Y-m-d H:i:s')
+                    ]);
+            } elseif (!empty($draftCode)) {
+                $this->db->table('mst_draft_bills')
+                    ->where('draft_code', $draftCode)
+                    ->where('store_id', $storeId)
+                    ->update([
+                        'status'            => 'CONVERTED',
+                        'converted_sale_id' => $saleId,
+                        'updated_at'        => date('Y-m-d H:i:s')
+                    ]);
+            }
+        }
+
         // Queue in central ABDM Gateway Sync Outbox if applicable
         if ($fhirBundleJson && (!empty($abhaAddress) || !empty($patientId)) && $this->db->tableExists('abdm_sync_record')) {
             $this->db->table('abdm_sync_record')->insert([
@@ -6009,14 +6034,20 @@ class MedicalStoreApi extends BaseController
         $storeId = (int)($this->request->getGet('store_id') ?? 1);
         $status = trim((string)($this->request->getGet('status') ?? 'DRAFT'));
 
-        $builder = $this->db->table('mst_draft_bills')
-            ->where('store_id', $storeId);
+        $builder = $this->db->table('mst_draft_bills d')
+            ->select('d.*, s.invoice_no as converted_invoice_no')
+            ->join('mst_sales s', 's.sale_id = d.converted_sale_id', 'left')
+            ->where('d.store_id', $storeId);
 
         if ($status !== 'all') {
-            $builder->where('status', $status);
+            if ($status === 'CONVERTED') {
+                $builder->whereIn('d.status', ['CONVERTED', 'CONVERTED_TO_SALE']);
+            } else {
+                $builder->where('d.status', $status);
+            }
         }
 
-        $drafts = $builder->orderBy('draft_id', 'DESC')
+        $drafts = $builder->orderBy('d.draft_id', 'DESC')
             ->limit(30)
             ->get()
             ->getResultArray();
@@ -6122,6 +6153,27 @@ class MedicalStoreApi extends BaseController
             ]);
 
         return $this->response->setJSON(['status' => 1, 'message' => 'Draft bill cancelled.']);
+    }
+
+    public function convertDraftBill()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        $draftId = (int)($json['draft_id'] ?? 0);
+        $saleId = !empty($json['sale_id']) ? (int)$json['sale_id'] : null;
+
+        if ($draftId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Draft ID is required.']);
+        }
+
+        $this->db->table('mst_draft_bills')
+            ->where('draft_id', $draftId)
+            ->update([
+                'status'            => 'CONVERTED',
+                'converted_sale_id' => $saleId,
+                'updated_at'        => date('Y-m-d H:i:s')
+            ]);
+
+        return $this->response->setJSON(['status' => 1, 'message' => 'Draft bill marked as converted.']);
     }
 
     // =========================================================================

@@ -1747,6 +1747,7 @@ $routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1'], static funct
     $routes->post('medical-store/drafts/save', 'MedicalStoreApi::saveDraftBill');
     $routes->get('medical-store/drafts/list', 'MedicalStoreApi::getDraftBills');
     $routes->post('medical-store/drafts/cancel', 'MedicalStoreApi::cancelDraftBill');
+    $routes->post('medical-store/drafts/convert', 'MedicalStoreApi::convertDraftBill');
 
     // Mobile Dashboard & Analytics
     $routes->get('medical-store/mobile/dashboard', 'MedicalStoreApi::getMobileDashboardData');

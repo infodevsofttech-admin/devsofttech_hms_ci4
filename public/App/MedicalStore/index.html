@@ -1505,13 +1505,16 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
     const [paymentMode, setPaymentMode] = useState('Cash'); // Cash, UPI, Card, Mixed, IPD_Credit, Staff_Credit
     const [draftBillsList, setDraftBillsList] = useState([]);
     const [showDraftModal, setShowDraftModal] = useState(false);
+    const [draftModalTab, setDraftModalTab] = useState('DRAFT'); // 'DRAFT' or 'CONVERTED'
+    const [loadedDraft, setLoadedDraft] = useState(null);
     const [creditAccounts, setCreditAccounts] = useState([]);
     const [selectedCreditAccount, setSelectedCreditAccount] = useState(null);
 
-    const loadDraftBills = async () => {
+    const loadDraftBills = async (statusOverride) => {
         if (!store?.store_id) return;
         try {
-            const res = await fetch(`${API_BASE}drafts/list?store_id=${store.store_id}&status=DRAFT`);
+            const st = statusOverride !== undefined ? statusOverride : 'DRAFT';
+            const res = await fetch(`${API_BASE}drafts/list?store_id=${store.store_id}&status=${st}`);
             const data = await res.json();
             if (data.status) {
                 setDraftBillsList(data.drafts || []);
@@ -1597,6 +1600,7 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
             });
 
             setCart(formattedCart);
+            setLoadedDraft(draft);
             if (draft.patient_name) setPatientQuery(draft.patient_name);
             if (draft.uhid) setWalkinUhid(draft.uhid);
             if (draft.patient_mobile) setWalkinMobile(draft.patient_mobile);
@@ -1825,6 +1829,7 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
         setCart([]);
         setReturnCart([]);
         resetPatient();
+        setLoadedDraft(null);
         setDoctorName('');
         setDoctorRegNo('');
         setWholeDiscountVal(0);
@@ -2642,6 +2647,8 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
         setIsProcessing(true);
         const payload = {
             store_id: store.store_id,
+            draft_id: loadedDraft ? loadedDraft.draft_id : null,
+            draft_code: loadedDraft ? loadedDraft.draft_code : null,
             patient_type: patientType,
             uhid: selectedPatient ? selectedPatient.uhid : (walkinUhid || null),
             patient_id: selectedPatient ? selectedPatient.patient_id : null,
@@ -2739,6 +2746,8 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
                 setCardRefNo('');
                 setPaymentRef('');
                 resetPatient();
+                setLoadedDraft(null);
+                loadDraftBills('DRAFT');
                 try {
                     localStorage.removeItem(draftKey);
                 } catch (e) {}
@@ -3366,6 +3375,34 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
                             <span><strong>Customer:</strong> {patientQuery || 'Walk-in'}</span>
                             {walkinMobile && <span><strong>Mobile:</strong> <i className="bi bi-telephone me-1 text-primary"></i>{walkinMobile}</span>}
                             {walkinUhid && <span><strong>UHID:</strong> <code className="text-primary">{walkinUhid}</code></span>}
+                        </div>
+                    )}
+                    {loadedDraft && (
+                        <div className="mt-2 p-2 rounded-2 d-flex flex-wrap justify-content-between align-items-center gap-2" style={{ background: '#fef3c7', border: '1px solid #f59e0b', fontSize: '0.8rem' }}>
+                            <div className="d-flex flex-wrap align-items-center gap-2">
+                                <span className="badge bg-warning text-dark fw-bold">
+                                    <i className="bi bi-phone me-1"></i> Draft: {loadedDraft.draft_code}
+                                </span>
+                                <span className="text-dark">
+                                    Collector: <strong>{loadedDraft.collected_by_name || 'Staff'}</strong>
+                                    {loadedDraft.ward_name ? ` • Ward: ${loadedDraft.ward_name} (${loadedDraft.bed_no || ''})` : ''}
+                                </span>
+                                <span className="badge bg-light text-secondary border" style={{ fontSize: '0.7rem' }}>
+                                    <i className="bi bi-arrow-right-circle me-1 text-success"></i>Auto-converts to invoice on checkout
+                                </span>
+                            </div>
+                            <button 
+                                type="button" 
+                                className="btn btn-sm btn-outline-dark py-0 px-2"
+                                onClick={() => {
+                                    setLoadedDraft(null);
+                                    notify(`Draft [${loadedDraft.draft_code}] unlinked. Cart items kept.`, 'info');
+                                }}
+                                title="Unlink this draft without clearing the cart"
+                                style={{ fontSize: '0.72rem' }}
+                            >
+                                <i className="bi bi-link-45deg me-1"></i> Unlink Draft
+                            </button>
                         </div>
                     )}
                 </div>
@@ -6045,11 +6082,42 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
                                     <button type="button" className="btn-close btn-close-white" onClick={() => setShowDraftModal(false)}></button>
                                 </div>
                                 <div className="modal-body p-3">
+                                    {/* Tabs: Pending Queue vs Billed / Converted */}
+                                    <div className="d-flex align-items-center justify-content-between mb-3 pb-2 border-bottom">
+                                        <div className="btn-group btn-group-sm">
+                                            <button 
+                                                type="button" 
+                                                className={`btn btn-sm ${draftModalTab === 'DRAFT' ? 'btn-warning text-dark fw-bold' : 'btn-outline-secondary'}`}
+                                                onClick={() => { setDraftModalTab('DRAFT'); loadDraftBills('DRAFT'); }}
+                                            >
+                                                <i className="bi bi-hourglass-split me-1"></i> Pending Queue
+                                            </button>
+                                            <button 
+                                                type="button" 
+                                                className={`btn btn-sm ${draftModalTab === 'CONVERTED' ? 'btn-success text-white fw-bold' : 'btn-outline-secondary'}`}
+                                                onClick={() => { setDraftModalTab('CONVERTED'); loadDraftBills('CONVERTED'); }}
+                                            >
+                                                <i className="bi bi-check2-all me-1"></i> Billed / Converted
+                                            </button>
+                                        </div>
+                                        <button 
+                                            type="button" 
+                                            className="btn btn-sm btn-outline-primary py-0.5 px-2"
+                                            onClick={() => loadDraftBills(draftModalTab)}
+                                        >
+                                            <i className="bi bi-arrow-clockwise me-1"></i> Refresh
+                                        </button>
+                                    </div>
+
                                     {draftBillsList.length === 0 ? (
                                         <div className="text-center py-5 text-muted">
                                             <i className="bi bi-basket3 fs-1 d-block mb-2 text-secondary"></i>
-                                            <h5>No Pending Draft Bills</h5>
-                                            <p className="small mb-0">Medicines added by rack collectors from the mobile app will automatically show up here.</p>
+                                            <h5>{draftModalTab === 'CONVERTED' ? 'No Converted Draft Bills' : 'No Pending Draft Bills'}</h5>
+                                            <p className="small mb-0">
+                                                {draftModalTab === 'CONVERTED' 
+                                                    ? 'Draft bills will appear here once converted into pharmacy sales invoices.' 
+                                                    : 'Medicines added by rack collectors from the mobile app will automatically show up here.'}
+                                            </p>
                                         </div>
                                     ) : (
                                         <div className="table-responsive">
@@ -6069,7 +6137,9 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
                                                     {draftBillsList.map((d) => (
                                                         <tr key={d.draft_id}>
                                                             <td>
-                                                                <span className="badge bg-warning text-dark fw-bold">{d.draft_code}</span>
+                                                                <span className={`badge ${d.status === 'CONVERTED' ? 'bg-secondary' : 'bg-warning text-dark'} fw-bold`}>
+                                                                    {d.draft_code}
+                                                                </span>
                                                             </td>
                                                             <td>
                                                                 <div className="fw-bold">{d.patient_name || 'Walk-in'}</div>
@@ -6090,21 +6160,29 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
                                                                 <small className="text-muted">{d.created_at?.split(' ')[1] || d.created_at}</small>
                                                             </td>
                                                             <td className="text-end">
-                                                                <button 
-                                                                    type="button" 
-                                                                    className="btn btn-sm btn-success fw-bold px-2.5 py-1 me-1 shadow-sm"
-                                                                    onClick={() => handleLoadDraftBillIntoCart(d)}
-                                                                >
-                                                                    <i className="bi bi-cart-plus me-1"></i> Load Bill
-                                                                </button>
-                                                                <button 
-                                                                    type="button" 
-                                                                    className="btn btn-sm btn-outline-danger py-1 px-1.5"
-                                                                    onClick={() => handleCancelDraft(d.draft_id)}
-                                                                    title="Discard draft"
-                                                                >
-                                                                    <i className="bi bi-trash"></i>
-                                                                </button>
+                                                                {d.status === 'CONVERTED' ? (
+                                                                    <span className="badge bg-success-subtle text-success border border-success fw-bold px-2 py-1" style={{ fontSize: '0.75rem' }}>
+                                                                        <i className="bi bi-check-circle-fill me-1"></i> Billed: {d.converted_invoice_no || 'INV'}
+                                                                    </span>
+                                                                ) : (
+                                                                    <>
+                                                                        <button 
+                                                                            type="button" 
+                                                                            className="btn btn-sm btn-success fw-bold px-2.5 py-1 me-1 shadow-sm"
+                                                                            onClick={() => handleLoadDraftBillIntoCart(d)}
+                                                                        >
+                                                                            <i className="bi bi-cart-plus me-1"></i> Load Bill
+                                                                        </button>
+                                                                        <button 
+                                                                            type="button" 
+                                                                            className="btn btn-sm btn-outline-danger py-1 px-1.5"
+                                                                            onClick={() => handleCancelDraft(d.draft_id)}
+                                                                            title="Discard draft"
+                                                                        >
+                                                                            <i className="bi bi-trash"></i>
+                                                                        </button>
+                                                                    </>
+                                                                )}
                                                             </td>
                                                         </tr>
                                                     ))}
@@ -6114,14 +6192,14 @@ function PosCounter({ store, notify, initialEditInvoice, onClearEditInvoice, act
                                     )}
                                 </div>
                                 <div className="modal-footer py-2 px-3 bg-light d-flex justify-content-between">
+                                    <small className="text-muted">
+                                        {draftModalTab === 'DRAFT' ? `${draftBillsList.length} draft bill(s) pending` : `${draftBillsList.length} converted draft bill(s)`}
+                                    </small>
                                     <button 
                                         type="button" 
-                                        className="btn btn-sm btn-outline-primary"
-                                        onClick={loadDraftBills}
+                                        className="btn btn-sm btn-secondary"
+                                        onClick={() => setShowDraftModal(false)}
                                     >
-                                        <i className="bi bi-arrow-clockwise me-1"></i> Refresh Queue
-                                    </button>
-                                    <button type="button" className="btn btn-sm btn-secondary" onClick={() => setShowDraftModal(false)}>
                                         Close
                                     </button>
                                 </div>

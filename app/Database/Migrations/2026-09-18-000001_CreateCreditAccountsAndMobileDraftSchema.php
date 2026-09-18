@@ -68,7 +68,7 @@ class CreateCreditAccountsAndMobileDraftSchema extends Migration
                 `total_items` INT NOT NULL DEFAULT 0,
                 `estimated_amount` DECIMAL(10,2) NOT NULL DEFAULT 0.00,
                 `items_json` LONGTEXT NOT NULL,
-                `status` ENUM('DRAFT', 'CONVERTED_TO_SALE', 'CANCELLED') NOT NULL DEFAULT 'DRAFT',
+                `status` ENUM('DRAFT', 'CONVERTED', 'CONVERTED_TO_SALE', 'CANCELLED') NOT NULL DEFAULT 'DRAFT',
                 `converted_sale_id` INT DEFAULT NULL,
                 `collected_by_name` VARCHAR(100) DEFAULT 'Pharmacist',
                 `created_at` DATETIME DEFAULT CURRENT_TIMESTAMP,
