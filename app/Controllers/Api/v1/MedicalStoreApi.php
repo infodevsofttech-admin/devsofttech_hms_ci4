@@ -1180,6 +1180,11 @@ class MedicalStoreApi extends BaseController
         // Increment sequence in store
         $this->db->table('mst_stores')->where('store_id', $storeId)->update(['next_invoice_no' => $seq + 1]);
 
+        $billerName = trim((string)($json['biller_name'] ?? ($json['operator_name'] ?? ($store['registered_pharmacist_name'] ?? 'Pharmacist'))));
+        if ($billerName === '') {
+            $billerName = 'Pharmacist';
+        }
+
         $wholeDiscType = trim((string)($json['whole_discount_type'] ?? 'pct')); // 'pct' or 'val'
         $wholeDiscVal = (float)($json['whole_discount_val'] ?? 0);
 
@@ -1633,7 +1638,7 @@ class MedicalStoreApi extends BaseController
             $cashPaid = (float)($json['cash_paid'] ?? ($paymentMode === 'Cash' ? $finalNetPayable : 0));
             $upiPaid = (float)($json['upi_paid'] ?? ($paymentMode === 'UPI' ? $finalNetPayable : 0));
             $cardPaid = (float)($json['card_paid'] ?? ($paymentMode === 'Card' ? $finalNetPayable : 0));
-            $creditAmount = (float)($json['credit_amount'] ?? ($paymentMode === 'IPD_Credit' ? $finalNetPayable : 0));
+            $creditAmount = (float)($json['credit_amount'] ?? (($paymentMode === 'IPD_Credit' || $paymentMode === 'Staff_Credit') ? $finalNetPayable : 0));
         } else {
             // Net is negative: Pharmacy refunds difference to patient
             $finalNetPayable = 0.00;
@@ -1790,7 +1795,13 @@ class MedicalStoreApi extends BaseController
         if ($paymentMode === 'Staff_Credit' && $creditAccountId > 0) {
             $saleData['credit_account_id'] = $creditAccountId;
             $saleData['credit_amount'] = $finalNetPayable;
+        }
 
+        $this->db->table('mst_sales')->insert($saleData);
+        $saleId = $this->db->insertID();
+
+        // If Staff / Customer Credit, update balance and ledger
+        if ($paymentMode === 'Staff_Credit' && $creditAccountId > 0) {
             if ($this->db->tableExists('mst_credit_accounts')) {
                 $this->db->table('mst_credit_accounts')
                     ->where('account_id', $creditAccountId)
@@ -1805,6 +1816,7 @@ class MedicalStoreApi extends BaseController
                         'store_id'         => $storeId,
                         'account_id'       => $creditAccountId,
                         'entry_type'       => 'CREDIT_SALE',
+                        'sale_id'          => $saleId,
                         'invoice_no'       => $invoiceNo,
                         'debit_amount'     => $finalNetPayable,
                         'credit_amount'    => 0.00,
@@ -1817,9 +1829,6 @@ class MedicalStoreApi extends BaseController
                 }
             }
         }
-
-        $this->db->table('mst_sales')->insert($saleData);
-        $saleId = $this->db->insertID();
 
         // If this sale originated from a Mobile Draft Bill, mark the draft as CONVERTED
         $draftId = !empty($json['draft_id']) ? (int)$json['draft_id'] : 0;
