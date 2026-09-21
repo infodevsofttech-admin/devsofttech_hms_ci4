@@ -401,7 +401,7 @@ class DoctorDocument extends BaseController
         }
 
         $builder = $this->db->table('ipd_master')
-            ->select('ipd_master.*, patient_master.p_fname, patient_master.p_lname, patient_master.p_code, patient_master.age, patient_master.gender, patient_master.dob, patient_master.abha_id, patient_master.abha_address, patient_master.mphone1, doctor_master.p_fname as dr_fname, doctor_master.p_lname as dr_lname')
+            ->select('ipd_master.*, patient_master.p_fname, patient_master.p_code, patient_master.age, patient_master.gender, patient_master.dob, patient_master.abha_id, patient_master.abha_address, patient_master.mphone1, doctor_master.p_fname as dr_fname, doctor_master.p_lname as dr_lname')
             ->join('patient_master', 'patient_master.id = ipd_master.p_id', 'left')
             ->join('doctor_master', 'doctor_master.id = ipd_master.r_doc_id', 'left');
 
@@ -418,7 +418,6 @@ class DoctorDocument extends BaseController
                 ->orLike('ipd_master.P_name', $query)
                 ->orLike('patient_master.p_code', $query)
                 ->orLike('patient_master.p_fname', $query)
-                ->orLike('patient_master.p_lname', $query)
                 ->groupEnd();
         }
 
@@ -434,7 +433,7 @@ class DoctorDocument extends BaseController
         foreach ($ipdRecords as $row) {
             $ipdId = (int) $row['id'];
             $patientId = (int) $row['p_id'];
-            $patientName = trim(trim((string) ($row['p_fname'] ?? '')) . ' ' . trim((string) ($row['p_lname'] ?? '')));
+            $patientName = trim((string) ($row['p_fname'] ?? ''));
             if ($patientName === '') {
                 $patientName = (string) ($row['P_name'] ?? ('Patient #' . $patientId));
             }
@@ -777,7 +776,7 @@ class DoctorDocument extends BaseController
             $lifestyle[] = 'Diet & Lifestyle Advice: ' . $adviceStr;
         }
 
-        $patientName = trim(trim((string) ($patientRow['p_fname'] ?? '')) . ' ' . trim((string) ($patientRow['p_lname'] ?? '')));
+        $patientName = trim((string) ($patientRow['p_fname'] ?? ''));
         $abhaIdRaw = '';
         foreach (['abha_id', 'abha_no', 'abha'] as $field) {
             $candidate = trim((string) ($patientRow[$field] ?? ''));
@@ -2157,7 +2156,7 @@ class DoctorDocument extends BaseController
             $docTitle = 'Medical Certificate';
         }
 
-        $patientName = trim(trim((string) ($patientRow['p_fname'] ?? '')) . ' ' . trim((string) ($patientRow['p_lname'] ?? '')));
+        $patientName = trim((string) ($patientRow['p_fname'] ?? ''));
         $abhaIdRaw = '';
         foreach (['abha_id', 'abha_no', 'abha'] as $field) {
             $candidate = trim((string) ($patientRow[$field] ?? ''));
@@ -2437,7 +2436,7 @@ class DoctorDocument extends BaseController
             $mimeType = 'text/html';
         }
 
-        $patientName = trim(trim((string) ($patientRow['p_fname'] ?? '')) . ' ' . trim((string) ($patientRow['p_lname'] ?? '')));
+        $patientName = trim((string) ($patientRow['p_fname'] ?? ''));
         $abhaIdRaw = '';
         foreach (['abha_id', 'abha_no', 'abha'] as $field) {
             $candidate = trim((string) ($patientRow[$field] ?? ''));

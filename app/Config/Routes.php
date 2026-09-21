@@ -425,6 +425,7 @@ $routes->post('setting/template/report_ultrasound_insert/(:num)', 'Setting\Templ
 $routes->get('IpdNew/show_ipd_items/(:num)', 'Billing\\Ipd::panelTab/$1/ipd-charges');
 $routes->get('IpdNew/show_ipd_items/(:num)/(:num)', 'Billing\\Ipd::panelTab/$1/ipd-charges');
 // Legacy compatibility: patient profile still calls old new-IPD URL.
+$routes->get('IpdNew/admit', 'Billing\\Ipd::admit');
 $routes->get('IpdNew/addipd/(:num)', 'Billing\\Ipd::legacyAddIpd/$1');
 $routes->post('IpdNew/AddNew', 'Billing\\Ipd::legacyAddNew');
 $routes->post('IpdNew/addnew', 'Billing\\Ipd::legacyAddNew');
@@ -498,11 +499,15 @@ $routes->post('ot/cases/(:num)/postop', 'IpdOt::savePostop/$1', ['filter' => 'pe
 
 $routes->group('billing', function($routes) {
     $routes->get('ipd', 'Billing\\Ipd::index');
+    $routes->get('ipd/admit', 'Billing\\Ipd::admit');
+    $routes->match(['GET', 'POST'], 'ipd/search-patient-admit', 'Billing\\Ipd::searchPatientForAdmit');
     $routes->get('ipd/current-admission', 'Billing\\Ipd::currentAdmission');
     $routes->get('ipd/invoices', 'Billing\\Ipd::ipdInvoices');
     $routes->post('ipd/list', 'Billing\\Ipd::getIpdTable');
     $routes->get('ipd/panel/(:num)', 'Billing\\Ipd::panel/$1');
     $routes->get('ipd/panel/(:num)/tab/(:segment)', 'Billing\\Ipd::panelTab/$1/$2');
+    $routes->post('ipd/convert-to-ipd', 'Billing\\Ipd::convertToIpd');
+    $routes->get('ipd/available-ipd-beds', 'Billing\\Ipd::getAvailableIpdBeds');
     $routes->post('ipd/panel/(:num)/admission', 'Billing\Ipd::updateAdmission/$1');
     $routes->post('ipd/panel/(:num)/diagnosis/include/(:num)', 'Billing\\Ipd::updateDiagnosisChargeInclude/$1/$2');
     $routes->post('ipd/panel/(:num)/discharge/update', 'Billing\\Ipd::updateDischargeProcess/$1');

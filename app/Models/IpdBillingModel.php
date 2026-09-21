@@ -14,6 +14,8 @@ class IpdBillingModel extends Model
     {
         return "CASE "
             . "WHEN UPPER(" . $column . ") LIKE '%REGISTRATION%' THEN 10 "
+            . "WHEN UPPER(" . $column . ") LIKE '%EMERGENCY%' OR UPPER(" . $column . ") LIKE '%CASUALTY%' THEN 15 "
+            . "WHEN UPPER(" . $column . ") LIKE '%DAY CARE%' OR UPPER(" . $column . ") LIKE '%DAYCARE%' THEN 18 "
             . "WHEN UPPER(" . $column . ") LIKE '%ACCOMMOD%' OR UPPER(" . $column . ") LIKE '%ACCOMOD%' OR UPPER(" . $column . ") LIKE '%BEDSIDE%' THEN 20 "
             . "WHEN UPPER(" . $column . ") LIKE '%SURGERY%' OR UPPER(" . $column . ") LIKE '%OPERATION%' THEN 30 "
             . "WHEN UPPER(" . $column . ") LIKE '%PROCEDURE%' THEN 40 "
@@ -35,6 +37,7 @@ class IpdBillingModel extends Model
     {
         $builder = $this->baseIpdListQuery();
         $builder->select("i.id,i.ipd_code,p.p_code,p.p_fname,p.p_rname,")
+            ->select("i.admission_type,i.triage_level,i.is_mlc,i.converted_from_type,i.converted_from_code,i.daycare_procedure_name,")
             ->select("concat('Bed No :',b.bed_number,'[',w.ward_name,']') as Bed_Desc,")
             ->select("date_format(i.register_date,'%d-%m-%Y') as str_register_date,")
             ->select("if(i.ipd_status = 0,(to_days(sysdate()) - to_days(i.register_date)),(to_days(i.discharge_date) - to_days(i.register_date))) as no_days,")
@@ -90,6 +93,7 @@ class IpdBillingModel extends Model
         $rows = $dataBuilder
             ->select(
                 "i.ipd_code,p.p_code,p.p_fname,
+                i.admission_type, i.triage_level, i.is_mlc, i.converted_from_type, i.converted_from_code,
                 if((o.id is not null),in_master.short_name,'Direct') as admit_type,
                 o.insurance_no_1 as insurance_no_1,
                 ipd_doc_list.doc_name as doc_name,
@@ -115,6 +119,23 @@ class IpdBillingModel extends Model
                 $actionHtml = '<button class="btn btn-sm btn-primary" onclick="load_form_div(\'' . $panelUrl . '\',\'maindiv\',\'IPD Panel\');"><i class="bi bi-eye"></i> View</button>';
             }
             $row['action'] = $actionHtml;
+
+            $rawCode = (string) ($row['ipd_code'] ?? '');
+            $admType = (string) ($row['admission_type'] ?? 'ipd');
+            $codeBadge = esc($rawCode);
+            if ($admType === 'daycare') {
+                $codeBadge .= ' <span class="badge bg-warning text-dark">Day Care</span>';
+            } elseif ($admType === 'emergency') {
+                $triageLvl = (int) ($row['triage_level'] ?? 0);
+                $badgeColor = $triageLvl === 1 ? 'danger' : ($triageLvl === 2 ? 'warning' : ($triageLvl === 3 ? 'warning text-dark' : 'info text-dark'));
+                $codeBadge .= ' <span class="badge bg-' . $badgeColor . '">ER' . ($triageLvl > 0 ? ' ESI-' . $triageLvl : '') . '</span>';
+            } elseif (! empty($row['converted_from_type'])) {
+                $codeBadge .= ' <span class="badge bg-secondary" title="Converted from ' . esc($row['converted_from_type']) . ' (' . esc($row['converted_from_code'] ?? '') . ')"><i class="bi bi-arrow-repeat"></i> IPD (from ' . ucfirst(esc($row['converted_from_type'])) . ')</span>';
+            }
+            if (! empty($row['is_mlc'])) {
+                $codeBadge .= ' <span class="badge bg-danger">MLC</span>';
+            }
+            $row['ipd_code'] = $codeBadge;
 
             foreach ($columns as $column) {
                 $item[] = $row[$column] ?? '';

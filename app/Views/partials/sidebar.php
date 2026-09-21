@@ -235,7 +235,19 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
         <li class="nav-item">
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('/billing/ipd') ?>','IPD List')">
                 <i class="bi bi-hospital"></i>
-                <span>IPD Billing </span>
+                <span>IPD Billing</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('/billing/ipd/admit?type=emergency') ?>','Emergency / Casualty Admission')">
+                <i class="bi bi-ambulance text-danger"></i>
+                <span>Emergency / Casualty</span>
+            </a>
+        </li>
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('/billing/ipd/admit?type=daycare') ?>','Day Care Admission')">
+                <i class="bi bi-clock-history text-warning"></i>
+                <span>Day Care Unit</span>
             </a>
         </li>
     <li class="nav-item">
@@ -336,6 +348,12 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
     <?php if ($canIpdNursing || $canIpdDischarge || $canIpdOt) { ?>
         <li class="nav-heading">In-Patient & Nursing Care</li>
         <?php if ($canIpdNursing) { ?>
+        <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('billing/ipd/admit') ?>','Admit Patient Desk')">
+                <i class="bi bi-person-plus text-success"></i>
+                <span>Admit Patient Desk</span>
+            </a>
+        </li>
         <li class="nav-item">
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('/ipd/patient') ?>','IPD Patient List')">
                 <i class="bi bi-person-vcard"></i>

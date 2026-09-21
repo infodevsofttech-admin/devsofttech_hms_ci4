@@ -184,6 +184,85 @@ class Ipd extends BaseController
         return view('billing/ipd/panel', $panelData);
     }
 
+    public function admit()
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.access',
+            'billing.ipd.current-admission',
+            'ipd_nursing.view',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        $defaultType = strtolower(trim((string) ($this->request->getGet('type') ?? '')));
+        if (! in_array($defaultType, ['ipd', 'daycare', 'emergency'], true)) {
+            $defaultType = 'emergency';
+        }
+
+        return view('billing/ipd/admit_patient', [
+            'default_type' => $defaultType,
+        ]);
+    }
+
+    public function searchPatientForAdmit()
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.access',
+            'billing.ipd.current-admission',
+            'ipd_nursing.view',
+        ]);
+        if ($permission) {
+            return $this->response->setStatusCode(403)->setJSON(['error' => 'Permission denied']);
+        }
+
+        $term = trim((string) ($this->request->getGet('q') ?? $this->request->getPost('q') ?? ''));
+        if ($term === '') {
+            return $this->response->setJSON([]);
+        }
+
+        $termClean = preg_replace('/[^A-Za-z0-9 _.@\/-]/', '', $term);
+        if ($termClean === '') {
+            return $this->response->setJSON([]);
+        }
+
+        $builder = $this->db->table('patient_master p');
+        $builder->select('p.id, p.p_code, p.p_fname as patient_name, p.gender, p.age, p.dob, p.mphone1, p.mphone2');
+        $builder->groupStart()
+            ->like('p.p_fname', $termClean)
+            ->orLike('p.p_code', $termClean)
+            ->orLike('p.mphone1', $termClean)
+            ->orLike('p.mphone2', $termClean)
+            ->groupEnd();
+        $builder->limit(20);
+        $results = $builder->get()->getResultArray();
+
+        $patientIds = array_column($results, 'id');
+        $activeIpds = [];
+        if (! empty($patientIds)) {
+            $rows = $this->db->table('ipd_master')
+                ->select('id, p_id, coalesce(ipd_code, pid) as ipd_code, admission_type, ipd_status')
+                ->whereIn('p_id', $patientIds)
+                ->where('ipd_status', 0)
+                ->get()
+                ->getResultArray();
+            foreach ($rows as $r) {
+                $activeIpds[(int) $r['p_id']] = $r;
+            }
+        }
+
+        foreach ($results as &$pt) {
+            $genderVal = (int) ($pt['gender'] ?? 0);
+            $pt['gender_text'] = ($genderVal === 1) ? 'Male' : (($genderVal === 2) ? 'Female' : 'Other');
+            $pt['active_ipd'] = $activeIpds[(int) $pt['id']] ?? null;
+        }
+        unset($pt);
+
+        return $this->response->setJSON($results);
+    }
+
     public function legacyAddIpd(int $patientId)
     {
         $permission = $this->requireAnyPermission([
@@ -216,6 +295,12 @@ class Ipd extends BaseController
         if (empty($data['person_info'])) {
             return $this->response->setStatusCode(404)->setBody('Patient not found');
         }
+
+        $defaultType = strtolower(trim((string) ($this->request->getGet('type') ?? 'ipd')));
+        if (! in_array($defaultType, ['ipd', 'daycare', 'emergency'], true)) {
+            $defaultType = 'ipd';
+        }
+        $data['default_admission_type'] = $defaultType;
 
         return view('billing/ipd/legacy_registration', $data);
     }
@@ -252,6 +337,19 @@ class Ipd extends BaseController
         $registerDateInput = (string) ($this->request->getPost('res_date') ?? '');
         $registerDate = $registerDateInput !== '' ? str_to_MysqlDate($registerDateInput) : date('Y-m-d');
 
+        $admissionType = strtolower(trim((string) ($this->request->getPost('admission_type') ?? 'ipd')));
+        if (! in_array($admissionType, ['ipd', 'daycare', 'emergency'], true)) {
+            $admissionType = 'ipd';
+        }
+
+        $triageLevel = (int) ($this->request->getPost('triage_level') ?? 0);
+        $isMlc = (int) ($this->request->getPost('optionsRadios_mlc') ?? 0);
+        $mlcNumber = trim((string) ($this->request->getPost('mlc_number') ?? ''));
+        $policeStation = trim((string) ($this->request->getPost('police_station') ?? ''));
+        $policeConstable = trim((string) ($this->request->getPost('police_constable_details') ?? ''));
+        $broughtBy = trim((string) ($this->request->getPost('brought_by') ?? ''));
+        $daycareProcedure = trim((string) ($this->request->getPost('daycare_procedure_name') ?? ''));
+
         $master = [
             'p_id' => $patientId,
             'P_name' => (string) ($this->request->getPost('pname') ?? ''),
@@ -264,11 +362,20 @@ class Ipd extends BaseController
             'remark' => (string) ($this->request->getPost('remark') ?? ''),
             'P_mobile1' => (string) ($this->request->getPost('phone1') ?? ''),
             'P_mobile2' => (string) ($this->request->getPost('phone2') ?? ''),
-            'case_type' => (int) ($this->request->getPost('optionsRadios_mlc') ?? 0),
+            'case_type' => $isMlc,
             'case_id' => (int) ($this->request->getPost('optionsRadios_org') ?? 0),
             'reg_time' => (string) ($this->request->getPost('res_time') ?? date('H:i')),
             'refer_by' => (int) ($this->request->getPost('refer_by_list') ?? 0),
             'dept_id' => (int) ($this->request->getPost('dept_id') ?? 0),
+            'admission_type' => $admissionType,
+            'triage_level' => $triageLevel > 0 ? $triageLevel : null,
+            'triage_time' => $triageLevel > 0 ? date('Y-m-d H:i:s') : null,
+            'is_mlc' => $isMlc,
+            'mlc_number' => $mlcNumber !== '' ? $mlcNumber : null,
+            'police_station' => $policeStation !== '' ? $policeStation : null,
+            'police_constable_details' => $policeConstable !== '' ? $policeConstable : null,
+            'brought_by' => $broughtBy !== '' ? $broughtBy : null,
+            'daycare_procedure_name' => $daycareProcedure !== '' ? $daycareProcedure : null,
         ];
 
         $insertId = $this->ipdEditModel->insertIpd([
@@ -299,6 +406,83 @@ class Ipd extends BaseController
 
         return $this->response->setJSON([
             'insertid' => (int) $insertId,
+        ]);
+    }
+
+    public function convertToIpd()
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.invoice',
+            'ipd_nursing.view',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        $ipdId = (int) ($this->request->getPost('ipd_id') ?? 0);
+        $targetBedId = (int) ($this->request->getPost('target_bed_id') ?? 0);
+        $doctorId = (int) ($this->request->getPost('doctor_id') ?? 0);
+        $reason = trim((string) ($this->request->getPost('conversion_reason') ?? ''));
+
+        $sbarSituation = trim((string) ($this->request->getPost('sbar_situation') ?? ''));
+        $sbarBackground = trim((string) ($this->request->getPost('sbar_background') ?? ''));
+        $sbarAssessment = trim((string) ($this->request->getPost('sbar_assessment') ?? ''));
+        $sbarRecommendation = trim((string) ($this->request->getPost('sbar_recommendation') ?? ''));
+
+        $sbarNote = "S (Situation): " . $sbarSituation . "\n"
+            . "B (Background): " . $sbarBackground . "\n"
+            . "A (Assessment): " . $sbarAssessment . "\n"
+            . "R (Recommendation): " . $sbarRecommendation;
+
+        $result = $this->ipdEditModel->convertToIpd($ipdId, [
+            'target_bed_id'     => $targetBedId,
+            'doctor_id'         => $doctorId,
+            'conversion_reason' => $reason,
+            'sbar_handover'     => trim($sbarNote),
+        ]);
+
+        if (! empty($result['status'])) {
+            $this->enqueueIpdAdmissionSync($ipdId, 'ipd.admission.escalated');
+        }
+
+        return $this->response->setJSON($result);
+    }
+
+    public function getAvailableIpdBeds()
+    {
+        $permission = $this->requireAnyPermission([
+            'billing.access',
+            'billing.ipd.invoice',
+            'ipd_nursing.view',
+        ]);
+        if ($permission) {
+            return $permission;
+        }
+
+        $beds = $this->db->table('bed_master b')
+            ->select('b.id, b.bed_number, b.bed_code, w.ward_name, w.ward_type, w.floor_number')
+            ->join('ward_master w', 'w.id = b.ward_id', 'left')
+            ->where('b.bed_status', 'available')
+            ->where('b.status', 'active')
+            ->where('b.current_ipd_id IS NULL')
+            ->orderBy('w.ward_type', 'ASC')
+            ->orderBy('w.ward_name', 'ASC')
+            ->orderBy('b.bed_number', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        $doctors = $this->db->table('doctor_master')
+            ->select("id, concat_ws(' ', 'Dr.', p_fname, p_mname, p_lname) as doc_name")
+            ->where('status', '1')
+            ->orderBy('p_fname', 'ASC')
+            ->get()
+            ->getResultArray();
+
+        return $this->response->setJSON([
+            'status'  => true,
+            'beds'    => $beds,
+            'doctors' => $doctors,
         ]);
     }
 
@@ -333,11 +517,12 @@ class Ipd extends BaseController
         if ($this->db->tableExists('bed_master')) {
             $ipdBedList = $this->db->query(
                 "select b.id,
-                        concat('Bed No:', coalesce(b.bed_number, b.bed_code), '/', '[', coalesce(w.ward_name, ''), ']') as Bed_Desc
+                        w.ward_type,
+                        concat('Bed No:', coalesce(b.bed_number, b.bed_code), '/', '[', coalesce(w.ward_name, ''), ']', if(w.ward_type is not null and w.ward_type != '', concat(' (', w.ward_type, ')'), '')) as Bed_Desc
                  from bed_master b
                  left join ward_master w on w.id = b.ward_id
                  where b.bed_status = 'available'
-                 order by b.bed_number, b.id"
+                 order by w.ward_type, b.bed_number, b.id"
             )->getResult();
         } elseif ($this->db->tableExists('hc_bed_master')) {
             $ipdBedList = $this->db->query(

@@ -2034,7 +2034,7 @@ class Abha extends BaseController
 
         $candidateAbhaCols = array_values(array_intersect(['abha_id', 'abha_no', 'abha', 'abha_address'], $fields));
         $selectFields = array_values(array_intersect(
-            ['id', 'p_code', 'p_fname', 'p_lname', 'gender', 'dob', 'age', 'mphone1', 'udai', 'add1', 'district', 'state', 'zip', 'profile_file_id', 'profile_picture', 'abha_profile_photo_base64'],
+            ['id', 'p_code', 'p_fname', 'gender', 'dob', 'age', 'mphone1', 'udai', 'add1', 'district', 'state', 'zip', 'profile_file_id', 'profile_picture', 'abha_profile_photo_base64'],
             $fields
         ));
         foreach ($candidateAbhaCols as $cCol) {
@@ -2106,13 +2106,9 @@ class Abha extends BaseController
         });
 
         if ($nameTokens !== []) {
-            $hasLastName = in_array('p_lname', $fields, true);
-            $collect(static function ($builder) use ($nameTokens, $hasLastName): void {
+            $collect(static function ($builder) use ($nameTokens): void {
                 foreach ($nameTokens as $token) {
                     $builder->orLike('p_fname', $token);
-                    if ($hasLastName) {
-                        $builder->orLike('p_lname', $token);
-                    }
                 }
             });
         }
@@ -2123,7 +2119,7 @@ class Abha extends BaseController
 
         $candidates = [];
         foreach ($rows as $row) {
-            $rowName    = strtoupper(trim((string) ($row['p_fname'] ?? '') . ' ' . (string) ($row['p_lname'] ?? '')));
+            $rowName    = strtoupper(trim((string) ($row['p_fname'] ?? '')));
             $rowTokens  = array_values(array_filter(preg_split('/\s+/', $rowName) ?: [], fn ($t) => strlen($t) >= 3));
             $nameOverlap = $nameTokens !== [] && $rowTokens !== [] && $nameTokens[0] === $rowTokens[0];
 
@@ -2179,7 +2175,7 @@ class Abha extends BaseController
             $candidates[] = [
                 'id'            => (int) ($row['id'] ?? 0),
                 'p_code'        => (string) ($row['p_code'] ?? ''),
-                'name'          => trim((string) ($row['p_fname'] ?? '') . ' ' . (string) ($row['p_lname'] ?? '')),
+                'name'          => trim((string) ($row['p_fname'] ?? '')),
                 'gender'        => (int) ($row['gender'] ?? 0),
                 'gender_label'  => $this->genderLabel((int) ($row['gender'] ?? 0)),
                 'dob'           => $rowDob,

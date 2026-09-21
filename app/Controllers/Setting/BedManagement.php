@@ -362,7 +362,7 @@ class BedManagement extends BaseController
 
                 if ($this->db->tableExists('patient_master')) {
                     $builder
-                        ->select('p.p_code, p.p_fname, p.p_lname')
+                        ->select('p.p_code, p.p_fname')
                         ->join('patient_master p', 'p.id = i.p_id', 'left');
                 }
             }
@@ -392,7 +392,7 @@ class BedManagement extends BaseController
                     }
                 }
 
-                $patientName = trim(((string) ($row->p_fname ?? '')) . ' ' . ((string) ($row->p_lname ?? '')));
+                $patientName = trim((string) ($row->p_fname ?? ''));
 
                 // Initialise floor / ward buckets
                 if (! isset($floors[$floorNo])) {

@@ -671,7 +671,7 @@ class NursingApi extends BaseController
         $cleanAbha = str_replace('-', '', $q);
 
         $builder = $db->table('patient_master p');
-        $builder->select('p.id, p.p_code, p.p_fname, p.p_lname, p.title, p.gender, p.dob, p.age, p.mphone1, p.mphone2, p.email1, p.city, p.district, p.state, p.abha_id, p.abha_address, p.abha_verified_status, p.abha_kyc_verified, p.abha_mobile_verified, p.abha_profile_photo_base64');
+        $builder->select('p.id, p.p_code, p.p_fname, p.title, p.gender, p.dob, p.age, p.mphone1, p.mphone2, p.email1, p.city, p.district, p.state, p.abha_id, p.abha_address, p.abha_verified_status, p.abha_kyc_verified, p.abha_mobile_verified, p.abha_profile_photo_base64');
 
         $builder->groupStart();
         $builder->where('p.p_code', $q);
@@ -696,8 +696,6 @@ class NursingApi extends BaseController
 
         if (strlen($q) >= 2) {
             $builder->orLike('p.p_fname', $q);
-            $builder->orLike('p.p_lname', $q);
-            $builder->orLike("CONCAT(p.p_fname, ' ', p.p_lname)", $q);
             $builder->orLike('p.mphone1', $q);
             $builder->orLike('p.p_code', $q);
         }
@@ -709,7 +707,7 @@ class NursingApi extends BaseController
         $today = date('Y-m-d');
         foreach ($patients as &$pat) {
             $pId = (int) $pat['id'];
-            $pat['fullName'] = trim(($pat['title'] ? $pat['title'] . ' ' : '') . $pat['p_fname'] . ($pat['p_lname'] && $pat['p_lname'] !== '0' ? ' ' . $pat['p_lname'] : ''));
+            $pat['fullName'] = trim(($pat['title'] ? $pat['title'] . ' ' : '') . $pat['p_fname']);
 
             // Check IPD admission
             $ipdRow = $db->table('ipd_master i')

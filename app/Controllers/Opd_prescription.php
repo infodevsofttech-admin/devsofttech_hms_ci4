@@ -4879,8 +4879,7 @@ class Opd_prescription extends BaseController
             $abhaAddress = $abhaField !== null ? trim((string) ($patientRow[$abhaField] ?? '')) : '';
 
             $patFirstName = $this->sanitizePersonNamePart((string) ($patientRow['p_fname'] ?? ''));
-            $patLastName  = $this->sanitizePersonNamePart((string) ($patientRow['p_lname'] ?? ''));
-            $patFullName  = trim($patFirstName . ($patLastName !== '' ? ' ' . $patLastName : ''));
+            $patFullName  = $patFirstName;
             if ($patFullName === '') {
                 $patFullName = trim((string) ($opdRow['P_name'] ?? ''));
             }
@@ -5108,8 +5107,7 @@ class Opd_prescription extends BaseController
             $pRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray();
             if (! empty($pRow)) {
                 $fname = $this->sanitizePersonNamePart((string) ($pRow['p_fname'] ?? ''));
-                $lname = $this->sanitizePersonNamePart((string) ($pRow['p_lname'] ?? ''));
-                $patientName = trim($fname . ' ' . $lname);
+                $patientName = $fname;
                 foreach (['abha_number', 'abha_id', 'abha_address'] as $abhaField) {
                     if (in_array($abhaField, $pFields, true)) {
                         $val = trim((string) ($pRow[$abhaField] ?? ''));
@@ -5514,8 +5512,7 @@ class Opd_prescription extends BaseController
             $pRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray();
             if (! empty($pRow)) {
                 $fname = $this->sanitizePersonNamePart((string) ($pRow['p_fname'] ?? ''));
-                $lname = $this->sanitizePersonNamePart((string) ($pRow['p_lname'] ?? ''));
-                $patientName = trim($fname . ' ' . $lname);
+                $patientName = $fname;
                 foreach (['abha_number', 'abha_id', 'abha_address'] as $abhaField) {
                     if (in_array($abhaField, $pFields, true)) {
                         $val = trim((string) ($pRow[$abhaField] ?? ''));
@@ -11554,7 +11551,7 @@ class Opd_prescription extends BaseController
     {
         try {
             $escape = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
-            $patientName = trim($this->sanitizePersonNamePart((string) ($patientRow['p_fname'] ?? '')) . ' ' . $this->sanitizePersonNamePart((string) ($patientRow['p_lname'] ?? '')));
+            $patientName = trim($this->sanitizePersonNamePart((string) ($patientRow['p_fname'] ?? '')));
             $patientName = $patientName !== '' ? $patientName : 'Patient';
             $hospital = $this->getHospitalProfileForFhir();
             $hospitalName = trim((string) ($hospital['name'] ?? '')) ?: 'Healthcare Facility';
@@ -11697,8 +11694,7 @@ class Opd_prescription extends BaseController
         $abhaAddress = $abhaField !== null ? trim((string) ($patientRow[$abhaField] ?? '')) : '';
 
         $patFirstName = $this->sanitizePersonNamePart((string) ($patientRow['p_fname'] ?? ''));
-        $patLastName  = $this->sanitizePersonNamePart((string) ($patientRow['p_lname'] ?? ''));
-        $patFullName  = trim($patFirstName . ($patLastName !== '' ? ' ' . $patLastName : ''));
+        $patFullName  = $patFirstName;
         if ($patFullName === '') {
             $patFullName = trim((string) ($opdRow['P_name'] ?? ''));
         }

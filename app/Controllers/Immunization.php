@@ -250,7 +250,7 @@ class Immunization extends BaseController
     {
         $fields = $this->db->getFieldNames('patient_master') ?? [];
         $select = ['id'];
-        foreach (['p_code', 'p_fname', 'p_lname', 'gender', 'dob', 'age', 'age_in_month', 'mphone1', 'abha_id', 'abha_no', 'abha_address', 'abha'] as $field) {
+        foreach (['p_code', 'p_fname', 'gender', 'dob', 'age', 'age_in_month', 'mphone1', 'abha_id', 'abha_no', 'abha_address', 'abha'] as $field) {
             if (in_array($field, $fields, true)) {
                 $select[] = $field;
             }

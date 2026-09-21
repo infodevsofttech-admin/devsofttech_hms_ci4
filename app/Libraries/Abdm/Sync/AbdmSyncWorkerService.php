@@ -305,12 +305,7 @@ class AbdmSyncWorkerService
 
         $name = trim((string) ($payload['patient_name'] ?? ''));
         if ($name === '') {
-            $first = trim((string) ($row['p_fname'] ?? ''));
-            $last = trim((string) ($row['p_lname'] ?? ''));
-            if (in_array(strtolower($last), ['0', '00', 'na', 'n/a', 'null', 'nil', '-'], true)) {
-                $last = '';
-            }
-            $name = trim($first . ' ' . $last);
+            $name = trim((string) ($row['p_fname'] ?? ''));
         }
         $name = preg_replace('/\s0$/', '', $name) ?? $name;
         if ($name === '') {

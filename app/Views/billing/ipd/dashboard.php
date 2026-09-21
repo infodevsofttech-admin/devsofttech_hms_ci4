@@ -3,6 +3,15 @@
         <div class="d-flex flex-wrap align-items-center justify-content-between gap-2">
             <h1 class="mb-0">IPD Billing</h1>
             <div class="d-flex flex-wrap gap-2">
+                <button class="btn btn-sm btn-danger" onclick="javascript:load_form_div('<?= base_url('billing/ipd/admit?type=emergency') ?>','maindiv','Emergency Admission');">
+                    <i class="bi bi-ambulance"></i> Emergency Admission
+                </button>
+                <button class="btn btn-sm btn-warning text-dark" onclick="javascript:load_form_div('<?= base_url('billing/ipd/admit?type=daycare') ?>','maindiv','Day Care Admission');">
+                    <i class="bi bi-clock-history"></i> Day Care Admission
+                </button>
+                <button class="btn btn-sm btn-outline-primary" onclick="javascript:load_form_div('<?= base_url('billing/ipd/admit?type=ipd') ?>','maindiv','Inpatient Admission');">
+                    <i class="bi bi-person-plus"></i> Inpatient Admission
+                </button>
                 <button class="btn btn-sm btn-primary" onclick="javascript:load_form_div('<?= base_url('billing/ipd/current-admission') ?>','maindiv','Current Admission');">
                     <i class="bi bi-person-check"></i> Current Admission
                 </button>

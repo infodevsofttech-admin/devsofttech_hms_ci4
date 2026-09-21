@@ -296,7 +296,7 @@ $initialPatientId = (int) ($patient_id ?? 0);
 
     function renderPatient(data) {
         var patient = data.patient || {};
-        var name = $.trim([(patient.p_fname || ''), (patient.p_lname || '')].join(' ')) || ('Patient #' + currentPatientId);
+        var name = $.trim(patient.p_fname || '') || ('Patient #' + currentPatientId);
         $('#patientName').text(name);
         $('#patientMeta').html([
             patient.p_code ? 'UHID: ' + esc(patient.p_code) : '',

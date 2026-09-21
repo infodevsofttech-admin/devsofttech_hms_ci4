@@ -62,7 +62,11 @@
                                 <?php if ($canChargeEdit) : ?>
                                     <button type="button" class="btn btn-danger btn-sm" id="btn_lab">Add Charge</button>
                                 <?php endif; ?>
-                                <button type="button" class="btn btn-warning btn-sm" id="btn_ipd">IPD</button>
+                                <div class="btn-group w-100" role="group">
+                                    <button type="button" class="btn btn-danger btn-sm" id="btn_emergency" title="Emergency / Casualty Admission"><i class="bi bi-ambulance me-1"></i>Casualty</button>
+                                    <button type="button" class="btn btn-warning btn-sm text-dark" id="btn_daycare" title="Day Care Admission (&lt; 24 Hrs)"><i class="bi bi-clock-history me-1"></i>Day Care</button>
+                                    <button type="button" class="btn btn-primary btn-sm" id="btn_ipd" title="Regular Inpatient Admission"><i class="bi bi-hospital me-1"></i>IPD</button>
+                                </div>
                                 <div class="d-flex gap-2">
                                     <button type="button" class="btn btn-outline-primary btn-sm flex-fill" id="btn_patient_profile_scan" title="Scan document using camera/scanner">
                                         <i class="bi bi-camera me-1"></i>Scan
@@ -71,7 +75,7 @@
                                         <i class="bi bi-upload me-1"></i>Upload
                                     </button>
                                 </div>
-                                <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2 fw-semibold" onclick="openAbdmHipLinkModal(<?= (int)$data[0]->id ?>, '<?= esc($abhaAddress) ?>', { name: '<?= esc($data[0]->p_fname . ' ' . ($data[0]->p_lname ?? '')) ?>', gender: '<?= $data[0]->gender == 1 ? 'M' : ($data[0]->gender == 2 ? 'F' : 'O') ?>', yob: '<?= !empty($data[0]->dob) ? date('Y', strtotime($data[0]->dob)) : '' ?>', phone: '<?= esc($data[0]->mphone1 ?? '') ?>', abha_number: '<?= esc($patientAbhaId) ?>' })">
+                                <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2 fw-semibold" onclick="openAbdmHipLinkModal(<?= (int)$data[0]->id ?>, '<?= esc($abhaAddress) ?>', { name: '<?= esc($data[0]->p_fname ?? '') ?>', gender: '<?= $data[0]->gender == 1 ? 'M' : ($data[0]->gender == 2 ? 'F' : 'O') ?>', yob: '<?= !empty($data[0]->dob) ? date('Y', strtotime($data[0]->dob)) : '' ?>', phone: '<?= esc($data[0]->mphone1 ?? '') ?>', abha_number: '<?= esc($patientAbhaId) ?>' })">
                                     <i class="bi bi-link-45deg me-1"></i>Link Records to ABHA (HIP)
                                 </button>
                                 <?php if (empty($abhaAddress) && !empty($data[0]->mphone1)) : ?>
@@ -514,7 +518,7 @@ $(document).ready(function() {
                     candidates.unshift({
                         id: currentPatientId,
                         p_code: <?= json_encode((string) ($data[0]->p_code ?? '')) ?>,
-                        name: <?= json_encode(trim((string) ($data[0]->p_fname ?? '') . ' ' . (string) ($data[0]->p_lname ?? ''))) ?>,
+                        name: <?= json_encode(trim((string) ($data[0]->p_fname ?? ''))) ?>,
                         gender: <?= (int) ($data[0]->gender ?? 0) ?>,
                         gender_label: <?= json_encode((string) ($data[0]->xgender ?? '')) ?>,
                         dob: <?= json_encode((string) ($data[0]->dob ?? '')) ?>,
@@ -600,10 +604,22 @@ $(document).ready(function() {
         load_form('<?= base_url('Opdcase/addopd') ?>/' + p_id);
     });
 
+    $('#btn_emergency').off('click.personProfile').on('click.personProfile', function() {
+        var p_id = getPatientIdOrWarn();
+        if (p_id === null) return;
+        load_form('<?= base_url('IpdNew/addipd') ?>/' + p_id + '?type=emergency');
+    });
+
+    $('#btn_daycare').off('click.personProfile').on('click.personProfile', function() {
+        var p_id = getPatientIdOrWarn();
+        if (p_id === null) return;
+        load_form('<?= base_url('IpdNew/addipd') ?>/' + p_id + '?type=daycare');
+    });
+
     $('#btn_ipd').off('click.personProfile').on('click.personProfile', function() {
         var p_id = getPatientIdOrWarn();
         if (p_id === null) return;
-        load_form('<?= base_url('IpdNew/addipd') ?>/' + p_id);
+        load_form('<?= base_url('IpdNew/addipd') ?>/' + p_id + '?type=ipd');
     });
 
     $('#btn_lab').off('click.personProfile').on('click.personProfile', function() {

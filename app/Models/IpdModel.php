@@ -43,14 +43,25 @@ class IpdModel extends Model
 
         $times = (int) ($countRow->xtimes ?? 0);
 
+        $admissionType = strtolower(trim((string) ($master['admission_type'] ?? 'ipd')));
+        if ($admissionType === 'daycare') {
+            $prefix = 'DC';
+        } elseif ($admissionType === 'emergency') {
+            $prefix = 'ER';
+        } else {
+            $prefix = 'A';
+            $admissionType = 'ipd';
+        }
+
         $pid = str_pad(substr((string) $insertId, -7, 7), 7, '0', STR_PAD_LEFT);
-        $pid = 'A' . date('ym') . $pid;
+        $pid = $prefix . date('ym') . $pid;
 
         $this->db->table('ipd_master')
             ->where('id', $insertId)
             ->update([
-                'ipd_code' => $pid,
-                'ipd_times' => $times,
+                'ipd_code'       => $pid,
+                'ipd_times'      => $times,
+                'admission_type' => $admissionType,
             ]);
 
         $docList = $data['doc_list'] ?? [];
@@ -635,6 +646,103 @@ class IpdModel extends Model
             ->delete();
 
         return 1;
+    }
+
+    /**
+     * Converts a Day Care or Emergency admission to full Inpatient (IPD) status.
+     * Merges clinical notes, updates admission type, and transfers bed while keeping billing ledger unified.
+     *
+     * @param int $ipdId
+     * @param array $data
+     * @return array
+     */
+    public function convertToIpd(int $ipdId, array $data): array
+    {
+        $ipdId = (int) $ipdId;
+        if ($ipdId <= 0) {
+            return ['status' => false, 'message' => 'Invalid Admission ID'];
+        }
+
+        $ipd = $this->db->table('ipd_master')->where('id', $ipdId)->get()->getRowArray();
+        if (empty($ipd)) {
+            return ['status' => false, 'message' => 'Admission record not found'];
+        }
+
+        if ((int) ($ipd['ipd_status'] ?? 0) !== 0) {
+            return ['status' => false, 'message' => 'Cannot convert discharged admission'];
+        }
+
+        $currentType = (string) ($ipd['admission_type'] ?? 'ipd');
+        if ($currentType === 'ipd') {
+            return ['status' => false, 'message' => 'Patient is already admitted as Inpatient (IPD)'];
+        }
+
+        $targetBedId = (int) ($data['target_bed_id'] ?? 0);
+        $doctorId = (int) ($data['doctor_id'] ?? 0);
+        $reason = trim((string) ($data['conversion_reason'] ?? ''));
+        $sbar = trim((string) ($data['sbar_handover'] ?? ''));
+        $userId = (int) ($this->getUserIdentity()['id'] ?? 0);
+        $userSignature = $this->getUserSignature();
+
+        // 1. Update ipd_master to IPD
+        $updateMaster = [
+            'admission_type'      => 'ipd',
+            'converted_from_type' => $currentType,
+            'converted_from_code' => (string) ($ipd['ipd_code'] ?? ''),
+            'converted_at'        => date('Y-m-d H:i:s'),
+            'conversion_reason'   => $reason,
+            'converted_by'        => $userId > 0 ? $userId : null,
+            'sbar_handover'       => $sbar,
+        ];
+
+        if ($doctorId > 0) {
+            $updateMaster['r_doc_id'] = $doctorId;
+        }
+
+        $this->db->table('ipd_master')->where('id', $ipdId)->update($updateMaster);
+
+        // 2. Transfer Bed if target bed selected
+        if ($targetBedId > 0) {
+            $currBed = $this->db->table('bed_master')
+                ->select('id')
+                ->where('current_ipd_id', $ipdId)
+                ->get()
+                ->getRowArray();
+            $fromBedId = $currBed ? (int) $currBed['id'] : null;
+
+            $this->bedAssign([
+                'ipd_id'               => $ipdId,
+                'bed_id'               => $targetBedId,
+                'assignment_type'      => 'transfer',
+                'Fdate'                => date('Y-m-d H:i:s'),
+                'TDate'                => date('Y-m-d H:i:s'),
+                'transfer_reason'      => 'Escalation/Conversion from ' . ucfirst($currentType) . ' to IPD: ' . $reason,
+                'transfer_from_bed_id' => $fromBedId,
+                'remarks'              => $sbar,
+            ]);
+        }
+
+        // 3. Update doctor list if doctorId provided
+        if ($doctorId > 0) {
+            $docExists = $this->db->table('ipd_master_doc_list')
+                ->where('ipd_id', $ipdId)
+                ->where('doc_id', $doctorId)
+                ->countAllResults();
+
+            if ($docExists === 0) {
+                $this->addIpdDoc([
+                    'ipd_id' => $ipdId,
+                    'doc_id' => $doctorId,
+                    'log'    => 'Assigned on IPD Conversion by ' . $userSignature,
+                ]);
+            }
+        }
+
+        return [
+            'status'  => true,
+            'message' => 'Successfully converted patient from ' . ucfirst($currentType) . ' to Inpatient (IPD)',
+            'ipd_id'  => $ipdId,
+        ];
     }
 
     private function getUserIdentity(): array

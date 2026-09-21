@@ -194,7 +194,7 @@ class Payment extends BaseController
                 }
                 $patient = $this->db->table($patientTable)->where('id', $patientId)->get(1)->getRowArray();
                 if ($patient !== null) {
-                    $context['patient'] = trim((string) ($patient['p_fname'] ?? '') . ' ' . (string) ($patient['p_lname'] ?? ''));
+                    $context['patient'] = trim((string) ($patient['p_fname'] ?? ''));
                     break;
                 }
             }

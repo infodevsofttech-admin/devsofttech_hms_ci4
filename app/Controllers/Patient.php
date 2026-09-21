@@ -5914,7 +5914,7 @@ class Patient extends BaseController
 			$docTitle = 'Patient Scanned Document';
 		}
 
-		$patientName = trim(trim((string) ($patientRow['p_fname'] ?? '')) . ' ' . trim((string) ($patientRow['p_lname'] ?? '')));
+		$patientName = trim((string) ($patientRow['p_fname'] ?? ''));
 		$abhaIdRaw = '';
 		foreach (['abha_id', 'abha_no', 'abha'] as $field) {
 			$candidate = trim((string) ($patientRow[$field] ?? ''));

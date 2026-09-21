@@ -177,7 +177,7 @@ class ConsentSessionListService
             $idCol = $this->resolveExistingColumn($fields, ['id']);
             $uhidCol = $this->resolveExistingColumn($fields, ['p_code', 'uhid', 'uhid_no', 'patient_code', 'patient_id']);
             $nameCol = $this->resolveExistingColumn($fields, ['p_fname', 'patient_name', 'name']);
-            $lastNameCol = $this->resolveExistingColumn($fields, ['p_lname', 'last_name']);
+            $lastNameCol = $this->resolveExistingColumn($fields, ['last_name']);
             $mobileCol = $this->resolveExistingColumn($fields, ['mphone1', 'mphone2', 'p_mobile', 'mobile', 'phone', 'contact_no', 'phone1']);
             $abhaAddressCol = $this->resolveExistingColumn($fields, ['abha_address', 'abha_addr']);
 

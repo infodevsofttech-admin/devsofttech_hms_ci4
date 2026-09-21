@@ -665,7 +665,7 @@ class AbdmTaskBoard extends BaseController
 
         if ($this->db->tableExists('ipd_master')) {
             foreach ($this->db->table('ipd_master i')
-                ->select("i.id AS bill_id, i.ipd_code AS bill_code, i.p_id AS patient_id, COALESCE(NULLIF(NULLIF(TRIM(i.P_name), ''), '0'), TRIM(CONCAT_WS(' ', p.p_fname, p.p_lname))) AS patient_name, COALESCE(i.discharge_date, i.register_date) AS bill_date, i.net_amount AS amount", false)
+                ->select("i.id AS bill_id, i.ipd_code AS bill_code, i.p_id AS patient_id, COALESCE(NULLIF(NULLIF(TRIM(i.P_name), ''), '0'), NULLIF(TRIM(p.p_fname), '')) AS patient_name, COALESCE(i.discharge_date, i.register_date) AS bill_date, i.net_amount AS amount", false)
                 ->join('patient_master p', 'p.id = i.p_id', 'left')
                 ->orderBy('i.id', 'DESC')
                 ->limit(100)

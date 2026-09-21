@@ -62,6 +62,7 @@
                         <option value="ICCU">ICCU</option>
                         <option value="CCU">CCU</option>
                         <option value="Emergency">Emergency</option>
+                        <option value="Day Care">Day Care</option>
                     </select>
                 </div>
                 <div class="col-md-3">

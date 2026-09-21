@@ -762,7 +762,7 @@ class Report extends BaseController
         $builder = $this->db->table('payment_history p');
         $builder->select('p.id as payment_id, p.payment_date, inv.inv_date, inv.invoice_code, inv.net_amount')
             ->select('DATEDIFF(DATE(p.payment_date), DATE(inv.inv_date)) as delay_days', false)
-            ->select("CONCAT(IFNULL(pat.p_fname,''), ' ', IFNULL(pat.p_lname,'')) as patient_name", false)
+            ->select("IFNULL(pat.p_fname, '') as patient_name", false)
             ->select('pat.p_code as patient_code')
             ->select('p.amount as paid_amount, p.update_by')
             ->select("CASE p.payment_mode WHEN 1 THEN 'Cash' WHEN 2 THEN 'Bank' ELSE 'Other' END as pay_mode", false)

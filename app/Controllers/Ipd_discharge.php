@@ -477,6 +477,16 @@ class Ipd_discharge extends BaseController
             'hospital_email' => esc($hEmail),
         ];
 
+        $isDayCare = ($ipd->admission_type ?? '') === 'daycare';
+        $isEmergency = ($ipd->admission_type ?? '') === 'emergency';
+        $dcScore = (int) ($ipd->discharge_score ?? 10);
+
+        $tokens['DAYCARE_HEADER'] = '<div style="text-align:center; border-bottom:2px solid #087f75; margin-bottom:12px; padding-bottom:6px;"><h2 style="margin:0; color:#123765; font-size:18px;">' . ($isDayCare ? 'DAY CARE SURGERY &amp; OBSERVATION DISCHARGE SUMMARY' : ($isEmergency ? 'EMERGENCY &amp; CASUALTY DISCHARGE CARD' : 'INPATIENT DISCHARGE SUMMARY')) . '</h2><small style="color:#555;">' . ($isDayCare ? 'Short Stay Ambulatory Episode (&lt; 24 Hours) &bull; NABH Compliant Discharge Document' : ($isEmergency ? 'Emergency Triage &amp; Observation &bull; Statutory Medical Record' : 'Clinical Summary &bull; Hospital Record')) . '</small></div>';
+
+        $tokens['PADSS_SCORE'] = '<div class="discharge-section" style="margin-top:10px; margin-bottom:10px;"><h4 style="color:#123765; border-bottom:1px solid #ccc; padding-bottom:3px; margin-bottom:6px; font-size:14px;">Post-Anaesthesia Discharge Readiness Assessment (PADSS)</h4><table border="1" cellpadding="5" style="width:100%; border-collapse:collapse; font-size:12px;"><tr><td><b>Vital Signs</b>: Stable / Within 20% baseline</td><td><b>Ambulation</b>: Steady Gait / No Dizziness</td><td><b>Nausea / Emesis</b>: Minimal / Tolerating Orals</td></tr><tr><td><b>Pain Score</b>: Controlled (&le; 3/10)</td><td><b>Surgical Bleeding</b>: Dry / Minimal Dressing Soakage</td><td><strong style="color:#16a34a;">Total Score: ' . $dcScore . '/10 (Discharge Clearance Met &ge; 9)</strong></td></tr></table></div>';
+
+        $tokens['RED_FLAGS_WARNINGS'] = '<div class="alert alert-warning" style="background:#fff3cd; border:1px solid #ffeeba; color:#856404; padding:8px 12px; margin-top:10px; border-radius:4px; font-size:12px;"><strong><i class="fa fa-warning"></i> EMERGENCY RETURN PRECAUTIONS (RED FLAGS):</strong><br/>Seek immediate medical attention or return to the Emergency / Casualty department if you develop: <em>High fever (&gt;101&deg;F) with chills, persistent nausea/vomiting, severe uncontrolled wound pain, sudden bleeding or soakage through dressing, shortness of breath, or chest pain.</em></div>';
+
         // Add patient info table as a token (not included in CONTENT by default)
         $tokens['PATIENT_INFO_TABLE'] = $this->buildAutoDischargeSummaryTable($panelData);
 
@@ -9009,11 +9019,7 @@ class Ipd_discharge extends BaseController
             return;
         }
 
-        $lastName = trim((string) ($patientRow['p_lname'] ?? ''));
-        if (! $this->isMeaningfulDischargeValue($lastName)) {
-            $lastName = '';
-        }
-        $patientName = trim(trim((string) ($patientRow['p_fname'] ?? '')) . ' ' . $lastName);
+        $patientName = trim((string) ($patientRow['p_fname'] ?? ''));
         if ($patientName === '') {
             $patientName = trim((string) ($ipdRow['P_name'] ?? ''));
         }

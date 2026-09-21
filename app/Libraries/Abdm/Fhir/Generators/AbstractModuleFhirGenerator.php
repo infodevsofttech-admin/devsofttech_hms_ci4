@@ -286,9 +286,30 @@ abstract class AbstractModuleFhirGenerator
             || (isset($source['admission_date']))
             || (isset($enc['class_code']) && strtoupper((string) $enc['class_code']) === 'IMP');
 
-        $defaultClass = $isIpd ? 'IMP' : 'AMB';
+        $admissionType = strtolower(trim((string) ($enc['admission_type'] ?? $source['admission_type'] ?? '')));
+        if ($admissionType === 'emergency') {
+            $defaultClass = 'EMER';
+        } elseif ($admissionType === 'daycare') {
+            $defaultClass = 'SS';
+        } else {
+            $defaultClass = $isIpd ? 'IMP' : 'AMB';
+        }
+
         $classCode = strtoupper(trim((string) ($enc['class_code'] ?? $defaultClass)));
-        $classDisplay = $classCode === 'IMP' ? 'inpatient encounter' : 'ambulatory';
+        switch ($classCode) {
+            case 'EMER':
+                $classDisplay = 'emergency';
+                break;
+            case 'SS':
+                $classDisplay = 'short stay';
+                break;
+            case 'IMP':
+                $classDisplay = 'inpatient encounter';
+                break;
+            default:
+                $classDisplay = 'ambulatory';
+                break;
+        }
 
         $identifiers = [[
             'system' => 'https://hms.local/encounter-id',

@@ -52,7 +52,20 @@
         .search-hidden { display:none!important; }
         .no-results { display:none; background:var(--soft-amber); border:1px solid #eccb91; padding:18px; border-radius:6px; }
         .back-top { text-align:right; margin-top:18px; font-size:.85rem; }
-        footer { color:var(--muted); }
+        .flow-container { background:#f8fafc; border:1px solid var(--line); border-radius:8px; padding:18px; margin:20px 0; overflow-x:auto; }
+        .flow-svg { max-width:100%; min-width:680px; height:auto; display:block; margin:0 auto; }
+        .badge-esi { display:inline-block; padding:3px 8px; border-radius:4px; font-weight:700; font-size:.75rem; color:#fff; text-shadow:0 1px 1px rgba(0,0,0,0.25); }
+        .badge-esi-1 { background:#dc3545; }
+        .badge-esi-2 { background:#fd7e14; }
+        .badge-esi-3 { background:#ffc107; color:#212529; text-shadow:none; }
+        .badge-esi-4 { background:#0dcaf0; color:#212529; text-shadow:none; }
+        .badge-esi-5 { background:#198754; }
+        .sbar-card { border-left:4px solid var(--navy); background:var(--soft-blue); padding:12px 16px; margin-bottom:10px; border-radius:0 6px 6px 0; }
+        .sbar-letter { display:inline-block; width:26px; height:26px; line-height:26px; text-align:center; background:var(--navy); color:#fff; font-weight:800; border-radius:50%; margin-right:8px; font-size:.85rem; }
+        .prefix-badge { font-family:Consolas,monospace; font-weight:700; padding:2px 7px; border-radius:4px; font-size:.85rem; }
+        .prefix-er { background:#ffe5e7; color:#b43c47; border:1px solid #f5c2c7; }
+        .prefix-dc { background:#e0f7fa; color:#00796b; border:1px solid #b2dfdb; }
+        .prefix-ipd { background:#e8f0fe; color:#1a73e8; border:1px solid #c2d7fa; }
         @media (max-width:991.98px) { .layout{grid-template-columns:1fr}.toc-panel{position:static;max-height:none}.toc-links{columns:2}.quick-grid{grid-template-columns:1fr 1fr} }
         @media (max-width:575.98px) { .toc-links{columns:1}.quick-grid{grid-template-columns:1fr}.guide-section{border-radius:0;margin-left:-12px;margin-right:-12px}.guide-title{font-size:1.45rem} }
         @media print { body{background:#fff}.guide-header,.toc-panel,.back-top,.no-print{display:none!important}.layout{display:block}.guide-section{border:0;break-inside:avoid;padding:12px 0} }
@@ -75,7 +88,7 @@
         <aside class="toc-panel no-print" aria-label="Guide contents">
             <div class="p-3 border-bottom"><h2 class="mb-0">Contents</h2></div>
             <nav class="toc-links py-2">
-                <a href="#recent-updates">Recent Updates</a><a href="#getting-started">Getting Started</a><a href="#roles-access">Roles &amp; Access</a><a href="#patient-management">Patient Management</a><a href="#opd">OPD Workflow</a><a href="#ipd">IPD &amp; Nursing</a><a href="#ot-management">OT Management</a><a href="#diagnosis">Diagnosis &amp; Imaging</a><a href="#pharmacy">Pharmacy</a><a href="#billing">Billing &amp; Payments</a><a href="#finance">Finance</a><a href="#insurance">Insurance &amp; ORG Cases</a><a href="#abdm">ABDM &amp; ABHA</a><a href="#stock">Hospital Stock</a><a href="#reports">Reports &amp; Dashboards</a><a href="#admin">Admin &amp; System Operations</a><a href="#security">Security &amp; Compliance</a><a href="#backup">Backup &amp; Maintenance</a><a href="#troubleshooting">Troubleshooting</a>
+                <a href="#recent-updates">Recent Updates</a><a href="#getting-started">Getting Started</a><a href="#roles-access">Roles &amp; Access</a><a href="#patient-management">Patient Management</a><a href="#opd">OPD Workflow</a><a href="#ipd">IPD &amp; Nursing</a><a href="#daycare-emergency">Day Care &amp; Emergency</a><a href="#ot-management">OT Management</a><a href="#diagnosis">Diagnosis &amp; Imaging</a><a href="#pharmacy">Pharmacy</a><a href="#billing">Billing &amp; Payments</a><a href="#finance">Finance</a><a href="#insurance">Insurance &amp; ORG Cases</a><a href="#abdm">ABDM &amp; ABHA</a><a href="#stock">Hospital Stock</a><a href="#reports">Reports &amp; Dashboards</a><a href="#admin">Admin &amp; System Operations</a><a href="#security">Security &amp; Compliance</a><a href="#backup">Backup &amp; Maintenance</a><a href="#troubleshooting">Troubleshooting</a>
             </nav>
         </aside>
 
@@ -83,6 +96,7 @@
             <section id="recent-updates" class="guide-section searchable-section">
                 <h2><span class="section-number">01</span>Recent Updates</h2>
                 <p>These functions were added or strengthened after the previous help guide was published.</p>
+                <div class="update-item"><strong>Day Care &amp; Emergency (Casualty) Module <span class="status-chip ms-1">NEW</span></strong><div>Dedicated admission workflows for Day Care (<code>DC</code> prefix) and Emergency/Casualty (<code>ER</code> prefix), ESI Triage Levels 1–5, MLC registry, specialized wards (Day Care Unit &amp; Casualty Ward), clinical <strong>Convert to IPD</strong> escalation with SBAR handover notes, unified IPD billing merging ER/Day Care charges under distinct group sub-headers, and medical standard Day Care discharge summaries with PADSS criteria (&ge;9).</div></div>
                 <div class="update-item"><strong>OT Management Phase 1 <span class="status-chip ms-1">NEW</span></strong><div>Surgery requests, OT queue, scheduling, patient call status, pre-operative safety checks, WHO sign-in, operation progress, immutable event history, and signed post-operative assessment are now integrated with IPD Nursing.</div></div>
                 <div class="update-item"><strong>Department-specific pre-operative forms</strong><div>Specialty forms can appear according to the admitted patient's department. Ophthalmology pre-operative examination is available with completed-record edit reasons and audit history.</div></div>
                 <div class="update-item"><strong>IPD Nursing and discharge controls</strong><div>Dedicated nursing access, clinical workspace improvements, configurable discharge content, diagnosis masters, and more reliable HTML/PDF template rendering are available.</div></div>
@@ -149,15 +163,423 @@
                 <ul><li>Complete diagnosis, course, procedures, condition, medication, advice, diet, and follow-up.</li><li>Select and preview the approved discharge template.</li><li>Reconcile pending charges, returns, package adjustments, and balance.</li><li>Verify PDF page breaks, placeholders, dates, letterhead mode, and signatures.</li><li>Generate/share the ABDM discharge summary when requirements are met.</li></ul>
             </section>
 
+            <section id="daycare-emergency" class="guide-section searchable-section">
+                <h2><span class="section-number">07</span>Day Care &amp; Emergency (Casualty) Module</h2>
+                <p>Designed in compliance with <strong>NABH</strong>, <strong>HL7 FHIR R4</strong>, and <strong>ESI (Emergency Severity Index)</strong> triage standards. This module supports short-stay observation, planned day care surgical/medical procedures (&lt;24 hours), acute casualty resuscitation, and seamless clinical escalation to Inpatient (IPD) with unified billing and SBAR handover.</p>
+
+                <!-- Quick Access / Where to find links guide box -->
+                <div style="background:#f0f9ff; border:1px solid #bae6fd; border-left:5px solid #0284c7; border-radius:8px; padding:18px 22px; margin:20px 0;">
+                    <h4 style="margin:0 0 10px 0; color:#0369a1; font-size:16px; font-weight:700;">
+                        <i class="bi bi-compass" style="margin-right:6px;"></i>Quick Access: Where to Find Admission Links in the HMS
+                    </h4>
+                    <p style="margin:0 0 12px 0; font-size:13.5px; color:#334155;">
+                        You can register or admit patients for <strong>Emergency / Casualty</strong> or <strong>Day Care (&lt; 24 Hrs)</strong> from <strong>4 primary places</strong> across the application:
+                    </p>
+                    <div style="display:grid; grid-template-columns:repeat(auto-fit, minmax(280px, 1fr)); gap:14px; margin-top:10px;">
+                        <div style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:12px 14px;">
+                            <strong style="color:#0f172a; font-size:13px;"><span style="color:#dc2626;">&#9654;</span> 1. Left Navigation Sidebar:</strong>
+                            <div style="font-size:12.5px; color:#475569; margin-top:4px;">
+                                Under <strong>Billing &amp; Accounts</strong> in the left sidebar, click directly on:
+                                <ul style="margin:4px 0 0 18px; padding:0;">
+                                    <li><span style="color:#dc2626; font-weight:600;">Emergency / Casualty</span> (with red ambulance icon)</li>
+                                    <li><span style="color:#d97706; font-weight:600;">Day Care Unit</span> (with clock icon)</li>
+                                    <li>Or under <strong>In-Patient &amp; Nursing Care</strong>: click <strong>Admit Patient Desk</strong></li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:12px 14px;">
+                            <strong style="color:#0f172a; font-size:13px;"><span style="color:#0284c7;">&#9654;</span> 2. Patient Profile Screen:</strong>
+                            <div style="font-size:12.5px; color:#475569; margin-top:4px;">
+                                Search for any patient and open their profile. Under the action buttons, click:
+                                <div style="margin-top:6px; display:flex; gap:6px;">
+                                    <span style="background:#dc3545; color:#fff; border-radius:4px; font-size:11px; padding:3px 8px; font-weight:bold;">Casualty</span>
+                                    <span style="background:#ffc107; color:#212529; border-radius:4px; font-size:11px; padding:3px 8px; font-weight:bold;">Day Care</span>
+                                    <span style="background:#0d6efd; color:#fff; border-radius:4px; font-size:11px; padding:3px 8px; font-weight:bold;">IPD</span>
+                                </div>
+                                <span style="font-size:11.5px; color:#64748b; margin-top:4px; display:block;">Instantly pre-selects the admission type and displays triage or procedure fields.</span>
+                            </div>
+                        </div>
+                        <div style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:12px 14px;">
+                            <strong style="color:#0f172a; font-size:13px;"><span style="color:#16a34a;">&#9654;</span> 3. IPD Dashboard &amp; Admissions:</strong>
+                            <div style="font-size:12.5px; color:#475569; margin-top:4px;">
+                                Open <strong>IPD Billing</strong> from sidebar:
+                                <ul style="margin:4px 0 0 18px; padding:0;">
+                                    <li>Top right buttons: <strong>Emergency Admission</strong> &amp; <strong>Day Care Admission</strong></li>
+                                    <li>On <strong>Current Admissions</strong>: click the green <strong>+ New Admission</strong> dropdown</li>
+                                </ul>
+                            </div>
+                        </div>
+                        <div style="background:#fff; border:1px solid #e2e8f0; border-radius:6px; padding:12px 14px;">
+                            <strong style="color:#0f172a; font-size:13px;"><span style="color:#7c3aed;">&#9654;</span> 4. Patient Admission Desk:</strong>
+                            <div style="font-size:12.5px; color:#475569; margin-top:4px;">
+                                Search any patient by Name, UHID, or Phone number. Then click <strong>Casualty</strong>, <strong>Day Care</strong>, or <strong>IPD</strong>.
+                                <br><small style="color:#64748b;">If patient is brand new, click <em>+ New Patient Registration</em> first.</small>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Responsive Clinical Flowchart -->
+                <h3>Clinical &amp; Operational Flowchart</h3>
+                <p>The following flowchart illustrates the complete patient lifecycle: acute emergency triage or planned procedure admission, dedicated physical ward allocation, bedside service delivery, discharge disposition, and the audited escalation pathway to full Inpatient (IPD) admission.</p>
+
+                <div class="flow-container">
+                    <svg class="flow-svg" viewBox="0 0 960 550" xmlns="http://www.w3.org/2000/svg" role="img" aria-label="Day Care, Emergency, and IPD Conversion Clinical Flowchart">
+                        <defs>
+                            <linearGradient id="grad-er" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#b43c47"/>
+                                <stop offset="100%" stop-color="#dc3545"/>
+                            </linearGradient>
+                            <linearGradient id="grad-dc" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#00796b"/>
+                                <stop offset="100%" stop-color="#087f75"/>
+                            </linearGradient>
+                            <linearGradient id="grad-ipd" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#123765"/>
+                                <stop offset="100%" stop-color="#1e518f"/>
+                            </linearGradient>
+                            <linearGradient id="grad-conv" x1="0%" y1="0%" x2="100%" y2="100%">
+                                <stop offset="0%" stop-color="#b96710"/>
+                                <stop offset="100%" stop-color="#d97706"/>
+                            </linearGradient>
+                            <filter id="card-shadow" x="-5%" y="-5%" width="110%" height="115%">
+                                <feDropShadow dx="0" dy="2" stdDeviation="3" flood-opacity="0.08"/>
+                            </filter>
+                            <marker id="arrow-gray" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                <path d="M 0 1 L 8 5 L 0 9 z" fill="#617087"/>
+                            </marker>
+                            <marker id="arrow-gold" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                <path d="M 0 1 L 8 5 L 0 9 z" fill="#b96710"/>
+                            </marker>
+                            <marker id="arrow-red" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                <path d="M 0 1 L 8 5 L 0 9 z" fill="#b43c47"/>
+                            </marker>
+                            <marker id="arrow-teal" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                <path d="M 0 1 L 8 5 L 0 9 z" fill="#087f75"/>
+                            </marker>
+                            <marker id="arrow-navy" viewBox="0 0 10 10" refX="6" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse">
+                                <path d="M 0 1 L 8 5 L 0 9 z" fill="#123765"/>
+                            </marker>
+                        </defs>
+                        
+                        <!-- Column Background Tracks -->
+                        <rect x="20" y="20" width="280" height="510" rx="10" fill="#fff" stroke="#f2d6d8" stroke-width="1.5" filter="url(#card-shadow)"/>
+                        <rect x="340" y="20" width="280" height="510" rx="10" fill="#fff" stroke="#ccebe7" stroke-width="1.5" filter="url(#card-shadow)"/>
+                        <rect x="660" y="20" width="280" height="510" rx="10" fill="#fff" stroke="#d4e2f4" stroke-width="1.5" filter="url(#card-shadow)"/>
+
+                        <!-- Column Headers -->
+                        <path d="M 20 30 Q 20 20 30 20 L 290 20 Q 300 20 300 30 L 300 56 L 20 56 Z" fill="url(#grad-er)"/>
+                        <text x="160" y="44" text-anchor="middle" fill="#fff" font-family="'Segoe UI', sans-serif" font-weight="700" font-size="13.5" letter-spacing="0.5">1. EMERGENCY / CASUALTY</text>
+
+                        <path d="M 340 30 Q 340 20 350 20 L 610 20 Q 620 20 620 30 L 620 56 L 340 56 Z" fill="url(#grad-dc)"/>
+                        <text x="480" y="44" text-anchor="middle" fill="#fff" font-family="'Segoe UI', sans-serif" font-weight="700" font-size="13.5" letter-spacing="0.5">2. DAY CARE UNIT (&lt;24H)</text>
+
+                        <path d="M 660 30 Q 660 20 670 20 L 930 20 Q 940 20 940 30 L 940 56 L 660 56 Z" fill="url(#grad-ipd)"/>
+                        <text x="800" y="44" text-anchor="middle" fill="#fff" font-family="'Segoe UI', sans-serif" font-weight="700" font-size="13.5" letter-spacing="0.5">3. INPATIENT ADMISSION (IPD)</text>
+
+                        <!-- STAGE 1: ADMISSION & TRIAGE -->
+                        <rect x="35" y="70" width="250" height="75" rx="6" fill="#fff5f5" stroke="#f5c2c7" stroke-width="1"/>
+                        <text x="45" y="90" fill="#b43c47" font-family="'Segoe UI', sans-serif" font-weight="700" font-size="12">Registration &amp; Triage</text>
+                        <text x="45" y="107" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Auto Prefix: ER-YYYY-XXXXX</text>
+                        <text x="45" y="122" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; ESI Triage Level 1 to 5</text>
+                        <text x="45" y="137" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; MLC Case Record &amp; Police details</text>
+
+                        <rect x="355" y="70" width="250" height="75" rx="6" fill="#f0faf9" stroke="#b2dfdb" stroke-width="1"/>
+                        <text x="365" y="90" fill="#00796b" font-family="'Segoe UI', sans-serif" font-weight="700" font-size="12">Day Care Registration</text>
+                        <text x="365" y="107" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Auto Prefix: DC-YYYY-XXXXX</text>
+                        <text x="365" y="122" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Procedure Name specified</text>
+                        <text x="365" y="137" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Ward: Day Care Unit (DC-01)</text>
+
+                        <rect x="675" y="70" width="250" height="75" rx="6" fill="#f4f7fc" stroke="#c2d7fa" stroke-width="1"/>
+                        <text x="685" y="90" fill="#123765" font-family="'Segoe UI', sans-serif" font-weight="700" font-size="12">Standard IPD Registration</text>
+                        <text x="685" y="107" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Auto Prefix: A-YYYY-XXXXX</text>
+                        <text x="685" y="122" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Planned Inpatient Admission</text>
+                        <text x="685" y="137" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; General / Private / ICU Wards</text>
+
+                        <!-- Arrows Stage 1 to 2 -->
+                        <line x1="160" y1="145" x2="160" y2="168" stroke="#b43c47" stroke-width="1.5" marker-end="url(#arrow-red)"/>
+                        <line x1="480" y1="145" x2="480" y2="168" stroke="#087f75" stroke-width="1.5" marker-end="url(#arrow-teal)"/>
+                        <line x1="800" y1="145" x2="800" y2="168" stroke="#123765" stroke-width="1.5" marker-end="url(#arrow-navy)"/>
+
+                        <!-- STAGE 2: CLINICAL CARE & BILLING -->
+                        <rect x="35" y="170" width="250" height="75" rx="6" fill="#fff" stroke="#f5c2c7" stroke-width="1"/>
+                        <text x="45" y="190" fill="#b43c47" font-family="'Segoe UI', sans-serif" font-weight="700" font-size="12">Casualty Care &amp; Services</text>
+                        <text x="45" y="207" fill="#617087" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Rapid Resuscitation &amp; Vitals</text>
+                        <text x="45" y="222" fill="#617087" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Stat Diagnostics &amp; Bedside Rx</text>
+                        <text x="45" y="237" fill="#b43c47" font-family="'Segoe UI', sans-serif" font-size="10.5" font-weight="600">&#9658; Group: EMERGENCY CHARGES</text>
+
+                        <rect x="355" y="170" width="250" height="75" rx="6" fill="#fff" stroke="#b2dfdb" stroke-width="1"/>
+                        <text x="365" y="190" fill="#00796b" font-family="'Segoe UI', sans-serif" font-weight="700" font-size="12">Procedure &amp; Recovery</text>
+                        <text x="365" y="207" fill="#617087" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Short-Stay Intervention</text>
+                        <text x="365" y="222" fill="#617087" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Post-Anesthesia Recovery</text>
+                        <text x="365" y="237" fill="#00796b" font-family="'Segoe UI', sans-serif" font-size="10.5" font-weight="600">&#9658; Group: DAY CARE CHARGES</text>
+
+                        <rect x="675" y="170" width="250" height="75" rx="6" fill="#fff" stroke="#c2d7fa" stroke-width="1"/>
+                        <text x="685" y="190" fill="#123765" font-family="'Segoe UI', sans-serif" font-weight="700" font-size="12">Inpatient Clinical Care</text>
+                        <text x="685" y="207" fill="#617087" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Bedside Nursing &amp; Doctor Visits</text>
+                        <text x="685" y="222" fill="#617087" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; OT Surgery / Daily Ward Rounds</text>
+                        <text x="685" y="237" fill="#123765" font-family="'Segoe UI', sans-serif" font-size="10.5" font-weight="600">&#9658; Multi-Group Unified Billing</text>
+
+                        <!-- Arrows Stage 2 to Decision -->
+                        <line x1="160" y1="245" x2="160" y2="268" stroke="#617087" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+                        <line x1="480" y1="245" x2="480" y2="268" stroke="#617087" stroke-width="1.5" marker-end="url(#arrow-gray)"/>
+                        <line x1="800" y1="245" x2="800" y2="390" stroke="#123765" stroke-width="1.5" marker-end="url(#arrow-navy)"/>
+
+                        <!-- STAGE 3: DECISION / EVALUATION -->
+                        <rect x="45" y="270" width="230" height="48" rx="6" fill="#fdfdfe" stroke="#617087" stroke-dasharray="3,3"/>
+                        <text x="160" y="289" text-anchor="middle" fill="#172238" font-family="'Segoe UI', sans-serif" font-weight="600" font-size="11.5">Stabilized or Needs Admission?</text>
+                        <text x="160" y="306" text-anchor="middle" fill="#617087" font-family="'Segoe UI', sans-serif" font-size="10.5">Clinical trajectory review</text>
+
+                        <rect x="365" y="270" width="230" height="48" rx="6" fill="#fdfdfe" stroke="#617087" stroke-dasharray="3,3"/>
+                        <text x="480" y="289" text-anchor="middle" fill="#172238" font-family="'Segoe UI', sans-serif" font-weight="600" font-size="11.5">PADSS Score Evaluation</text>
+                        <text x="480" y="306" text-anchor="middle" fill="#617087" font-family="'Segoe UI', sans-serif" font-size="10.5">Score &ge; 9 required to discharge</text>
+
+                        <!-- CONVERSION TO IPD BRIDGE -->
+                        <path d="M 230 318 L 230 350 L 290 350" fill="none" stroke="#b96710" stroke-width="1.5" stroke-dasharray="4,2"/>
+                        <path d="M 410 318 L 410 350 L 350 350" fill="none" stroke="#b96710" stroke-width="1.5" stroke-dasharray="4,2"/>
+
+                        <rect x="180" y="335" width="460" height="66" rx="8" fill="#fff9ef" stroke="#b96710" stroke-width="1.5" filter="url(#card-shadow)"/>
+                        <text x="410" y="353" text-anchor="middle" fill="#b96710" font-family="'Segoe UI', sans-serif" font-weight="700" font-size="12">&#9889; CLINICAL ESCALATION: CONVERT TO IPD</text>
+                        <text x="410" y="369" text-anchor="middle" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; SBAR Handover (Situation, Background, Assessment, Recommendation)</text>
+                        <text x="410" y="384" text-anchor="middle" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Auto Bed Transfer (Free ER/DC bed &#8594; Assign Inpatient Bed)</text>
+                        <text x="410" y="396" text-anchor="middle" fill="#b96710" font-family="'Segoe UI', sans-serif" font-weight="600" font-size="10.5">&#8594; Charges automatically merge into Unified IPD Bill with distinct group headers</text>
+
+                        <!-- Arrow from Conversion to IPD Column -->
+                        <path d="M 640 368 L 675 368 L 750 368 L 750 245 L 790 245" fill="none" stroke="#b96710" stroke-width="2" marker-end="url(#arrow-gold)"/>
+
+                        <!-- Downward arrows to Discharge -->
+                        <line x1="120" y1="318" x2="120" y2="423" stroke="#b43c47" stroke-width="1.5" marker-end="url(#arrow-red)"/>
+                        <text x="125" y="375" fill="#b43c47" font-family="'Segoe UI', sans-serif" font-weight="600" font-size="10">Direct Discharge</text>
+
+                        <line x1="530" y1="318" x2="530" y2="423" stroke="#087f75" stroke-width="1.5" marker-end="url(#arrow-teal)"/>
+                        <text x="535" y="375" fill="#087f75" font-family="'Segoe UI', sans-serif" font-weight="600" font-size="10">PADSS &ge; 9</text>
+
+                        <!-- STAGE 4: DISCHARGES -->
+                        <rect x="35" y="425" width="250" height="90" rx="6" fill="#fff" stroke="#f5c2c7" stroke-width="1"/>
+                        <text x="45" y="444" fill="#b43c47" font-family="'Segoe UI', sans-serif" font-weight="700" font-size="12">Emergency Discharge</text>
+                        <text x="45" y="461" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Stabilized &amp; Sent Home / Transfer</text>
+                        <text x="45" y="476" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; LAMA / DAMA / Referral Out</text>
+                        <text x="45" y="491" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Casualty Bill Settlement</text>
+                        <text x="45" y="506" fill="#617087" font-family="'Segoe UI', sans-serif" font-size="10">&#8226; FHIR Class: EMER</text>
+
+                        <rect x="355" y="425" width="250" height="90" rx="6" fill="#fff" stroke="#b2dfdb" stroke-width="1"/>
+                        <text x="365" y="444" fill="#00796b" font-family="'Segoe UI', sans-serif" font-weight="700" font-size="12">Day Care Discharge</text>
+                        <text x="365" y="461" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Day Care Discharge Summary</text>
+                        <text x="365" y="476" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; PADSS Score recorded (&ge;9)</text>
+                        <text x="365" y="491" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Home Meds &amp; Red-Flag Warnings</text>
+                        <text x="365" y="506" fill="#617087" font-family="'Segoe UI', sans-serif" font-size="10">&#8226; FHIR Class: SS (Short Stay)</text>
+
+                        <rect x="675" y="425" width="250" height="90" rx="6" fill="#fff" stroke="#c2d7fa" stroke-width="1"/>
+                        <text x="685" y="444" fill="#123765" font-family="'Segoe UI', sans-serif" font-weight="700" font-size="12">Inpatient Final Discharge</text>
+                        <text x="685" y="461" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Complete Inpatient Discharge</text>
+                        <text x="685" y="476" fill="#123765" font-family="'Segoe UI', sans-serif" font-size="11" font-weight="600">&#8226; Unified IPD Bill (ER + DC + IPD)</text>
+                        <text x="685" y="491" fill="#172238" font-family="'Segoe UI', sans-serif" font-size="11">&#8226; Categorized Subtotal Headers</text>
+                        <text x="685" y="506" fill="#617087" font-family="'Segoe UI', sans-serif" font-size="10">&#8226; FHIR Class: IMP (Inpatient)</text>
+                    </svg>
+                </div>
+
+                <h3>1. Key Identifiers &amp; Dedicated Physical Wards</h3>
+                <p>To prevent clinical confusion, enhance patient tracking, and ensure strict auditability, distinct admission prefixes and dedicated physical wards are maintained:</p>
+                <div class="table-responsive">
+                    <table class="table table-bordered table-guide">
+                        <thead>
+                            <tr>
+                                <th>Admission Type</th>
+                                <th>Registration Prefix</th>
+                                <th>Default Physical Ward</th>
+                                <th>Billing Item Category</th>
+                                <th>HL7 FHIR Encounter</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            <tr>
+                                <td><strong>Casualty / Emergency</strong></td>
+                                <td><span class="prefix-badge prefix-er">ER-YYYY-XXXXX</span></td>
+                                <td>Casualty &amp; Emergency Ward (<code>ER-01</code>)</td>
+                                <td><code>EMERGENCY / CASUALTY CHARGES</code></td>
+                                <td><code>EMER</code> (Emergency)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Day Care (&lt;24 hrs)</strong></td>
+                                <td><span class="prefix-badge prefix-dc">DC-YYYY-XXXXX</span></td>
+                                <td>Day Care Unit (<code>DC-01</code>)</td>
+                                <td><code>DAY CARE CHARGES</code></td>
+                                <td><code>SS</code> (Short Stay)</td>
+                            </tr>
+                            <tr>
+                                <td><strong>Inpatient (IPD)</strong></td>
+                                <td><span class="prefix-badge prefix-ipd">A-YYYY-XXXXX</span></td>
+                                <td>General / Semi-Private / Deluxe / ICU / HDU</td>
+                                <td>Multi-Category IPD Billing</td>
+                                <td><code>IMP</code> (Inpatient)</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+
+                <h3>2. Emergency / Casualty Workflow</h3>
+                <ol class="workflow">
+                    <li><strong>Rapid Check-in &amp; ESI Triage:</strong> Immediate registration at the casualty reception. Clinical staff assign the Emergency Severity Index (ESI) Level based on clinical acuity:
+                        <div class="table-responsive my-2">
+                            <table class="table table-sm table-bordered">
+                                <thead class="table-light">
+                                    <tr>
+                                        <th>ESI Level</th>
+                                        <th>Clinical Triage Category</th>
+                                        <th>Target Door-to-Doctor Time</th>
+                                        <th>Clinical Examples</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    <tr>
+                                        <td><span class="badge-esi badge-esi-1">ESI 1</span></td>
+                                        <td><strong>Resuscitation (Immediate Life-Threat)</strong></td>
+                                        <td><strong>Immediate (0 min)</strong></td>
+                                        <td>Cardiac arrest, respiratory failure, severe trauma with shock, anaphylaxis.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge-esi badge-esi-2">ESI 2</span></td>
+                                        <td><strong>Emergent (High Risk / Severe Pain)</strong></td>
+                                        <td><strong>&le; 10 minutes</strong></td>
+                                        <td>Acute chest pain, severe dyspnea, suspected stroke, acute abdomen, danger vitals.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge-esi badge-esi-3">ESI 3</span></td>
+                                        <td><strong>Urgent (&ge;2 Resources Required)</strong></td>
+                                        <td><strong>&le; 30–60 minutes</strong></td>
+                                        <td>Stable vitals requiring IV access, laboratory investigations, and X-ray/USG.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge-esi badge-esi-4">ESI 4</span></td>
+                                        <td><strong>Less Urgent (1 Resource Required)</strong></td>
+                                        <td><strong>&le; 60–120 minutes</strong></td>
+                                        <td>Simple laceration needing suture, uncomplicated urinary tract infection, sprain.</td>
+                                    </tr>
+                                    <tr>
+                                        <td><span class="badge-esi badge-esi-5">ESI 5</span></td>
+                                        <td><strong>Non-Urgent (0 Resources Required)</strong></td>
+                                        <td><strong>&le; 120 minutes</strong></td>
+                                        <td>Medication refill, minor rash, suture removal, chronic mild symptom review.</td>
+                                    </tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </li>
+                    <li><strong>Medico-Legal Case (MLC) Registry:</strong> If the casualty case involves road traffic accidents (RTA), assault, burns, poisoning, industrial trauma, or suspected foul play, toggle <strong>"Is Medico-Legal Case (MLC)"</strong>. Record:
+                        <ul>
+                            <li><strong>MLC Number:</strong> Formal hospital police register number.</li>
+                            <li><strong>Police Station:</strong> Jurisdiction police station notified.</li>
+                            <li><strong>Police Constable Details:</strong> Name and badge number of intimating/recording officer.</li>
+                            <li><strong>Brought By:</strong> Ambulance (e.g. 108), Police, Relative, or Good Samaritan with contact number.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Casualty Bed &amp; Orders:</strong> Patient is assigned a bed in the <em>Casualty &amp; Emergency Ward</em>. Doctors post emergency orders (stat labs, ECG, imaging, IV fluids, emergency medicines). Consumables and nursing procedures automatically tag under <code>EMERGENCY / CASUALTY CHARGES</code>.</li>
+                    <li><strong>Emergency Disposition:</strong>
+                        <ul>
+                            <li><strong>Treated &amp; Discharged:</strong> Once stabilized, settle the emergency bill and generate a casualty discharge slip.</li>
+                            <li><strong>Escalation / Admission Needed:</strong> If the patient requires surgical intervention, specialized ICU/HDU monitoring, or inpatient observation, initiate the <strong>Convert to IPD</strong> action.</li>
+                        </ul>
+                    </li>
+                </ol>
+
+                <h3>3. Day Care Workflow (&lt;24 Hour Admissions)</h3>
+                <p>Designed for planned surgical, therapeutic, or diagnostic procedures that do not require an overnight bed stay.</p>
+                <ol class="workflow">
+                    <li><strong>Day Care Admission:</strong> In Registration, select <strong>Day Care</strong>. Enter the planned procedure name (e.g. <em>Cataract Extraction with Foldable IOL</em>, <em>Chemotherapy Session</em>, <em>Maintenance Hemodialysis</em>, <em>Upper GI Endoscopy / Colonoscopy</em>, or <em>Tympanoplasty</em>). System generates a <code>DC-YYYY-XXXXX</code> code and allocates a bed in the <strong>Day Care Unit (DC-01)</strong>.</li>
+                    <li><strong>Pre-Procedure &amp; Surgical Care:</strong> Pre-op nursing assessment, surgical safety checklist, and procedure delivery. Services, procedure fees, and medications are billed under <code>DAY CARE CHARGES</code>.</li>
+                    <li><strong>Recovery &amp; PADSS Scoring:</strong> Before clearing the patient for home discharge, the clinician or recovery nurse evaluates the patient against the <strong>Post-Anaesthetic Discharge Scoring System (PADSS)</strong>:
+                        <div class="table-responsive my-2">
+                            <table class="table table-sm table-bordered">
+                                <thead class="table-light"><tr><th>PADSS Criteria (2 pts each)</th><th>Score 2</th><th>Score 1</th><th>Score 0</th></tr></thead>
+                                <tbody>
+                                    <tr><td><strong>Vital Signs (BP/Pulse)</strong></td><td>Within 20% of pre-op baseline</td><td>20%–40% of baseline</td><td>&gt;40% of baseline</td></tr>
+                                    <tr><td><strong>Activity &amp; Ambulation</strong></td><td>Steady gait / no dizziness</td><td>Requires assistance</td><td>Unable to ambulate / vertigo</td></tr>
+                                    <tr><td><strong>Nausea &amp; Vomiting</strong></td><td>Minimal / none, drinks fluids</td><td>Moderate, managed with antiemetic</td><td>Severe / persistent vomiting</td></tr>
+                                    <tr><td><strong>Pain Control</strong></td><td>Acceptable / mild, oral analgesics</td><td>Moderate, requires parenteral meds</td><td>Severe, unmanaged pain</td></tr>
+                                    <tr><td><strong>Surgical Bleeding</strong></td><td>Minimal / dry dressing</td><td>Moderate, 1–2 dressing changes</td><td>Severe / active bleeding</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                        <div class="note"><strong>Discharge Threshold:</strong> Patient must achieve a total score of <strong>&ge; 9 out of 10</strong>, be accompanied by a responsible adult, and be oriented to time and place before home discharge.</div>
+                    </li>
+                    <li><strong>Day Care Discharge Summary:</strong> Select the <em>Day Care Discharge Summary</em> template. It automatically displays:
+                        <ul>
+                            <li>Procedure performed, anesthesia technique, and operating surgeon.</li>
+                            <li>Post-operative PADSS discharge score (&ge;9).</li>
+                            <li>Take-home medications with clear dosage, frequency, and duration.</li>
+                            <li>Dietary, wound dressing, and activity instructions.</li>
+                            <li><strong>Red-Flag Emergency Warnings:</strong> Explicit warnings regarding severe bleeding, sudden fever &gt;101&deg;F, persistent vomiting, wound discharge, or chest pain, with direct 24/7 hospital emergency telephone numbers.</li>
+                        </ul>
+                    </li>
+                </ol>
+
+                <h3>4. Clinical Escalation: Convert to IPD Workflow</h3>
+                <p>When an Emergency or Day Care patient deteriorates, suffers surgical complications, requires prolonged observation (&gt;24 hours), or must be shifted to an intensive care unit (ICU/HDU), the system provides an audited, one-click <strong>Convert to IPD</strong> escalation workflow.</p>
+
+                <div class="quick-grid mb-3">
+                    <div class="quick-item"><strong>1. Trigger Action</strong>Open patient panel (<code>billing/ipd/panel/{id}</code>) and click <strong>"Convert to IPD"</strong> in the top header.</div>
+                    <div class="quick-item"><strong>2. Bed &amp; Doctor Transfer</strong>Select the target Inpatient Ward (General, Private, ICU) and confirming doctor. Previous ER/DC bed is released immediately.</div>
+                    <div class="quick-item"><strong>3. SBAR Handover</strong>Document Situation, Background, Assessment, and Recommendation for safe nursing &amp; doctor handover.</div>
+                </div>
+
+                <h4>The SBAR Clinical Handover Framework</h4>
+                <p>NABH standards require structured clinical communication during patient transfers across care settings. The conversion modal enforces the SBAR format:</p>
+                <div class="sbar-card"><span class="sbar-letter">S</span><strong>Situation:</strong> Reason for conversion (e.g. <em>"Post-operative bleeding following day-care laparoscopic hernia repair requiring exploratory laparotomy and overnight monitoring"</em>).</div>
+                <div class="sbar-card"><span class="sbar-letter">B</span><strong>Background:</strong> Baseline clinical history, co-morbidities (e.g. hypertension, diabetes), and initial reason for presenting to ER or Day Care.</div>
+                <div class="sbar-card"><span class="sbar-letter">A</span><strong>Assessment:</strong> Current vital signs, Glasgow Coma Scale (GCS), stat lab results, imaging impressions, and interventions administered in Casualty or Day Care Unit.</div>
+                <div class="sbar-card"><span class="sbar-letter">R</span><strong>Recommendation:</strong> Inpatient monitoring orders, ICU/ward instructions, pending laboratory results, scheduled specialist consultations, and emergency escalation criteria.</div>
+
+                <div class="note"><strong>Preservation of Clinical History:</strong> The patient's record is updated with <code>converted_from_type</code> and <code>converted_from_code</code>. A permanent badge (e.g. <span class="badge bg-warning text-dark">Converted from ER (ER-2026-00012)</span>) is rendered across all clinical and billing screens for complete audit transparency.</div>
+
+                <h3>5. Unified IPD Billing with Distinct Group Headers</h3>
+                <p>A core financial requirement of hospital operations is that when a patient converts from Day Care or Casualty to full IPD, <strong>no billing charges are lost or split into fragmented invoices</strong>. The entire financial account is unified under the Inpatient admission.</p>
+                <ul>
+                    <li>All prior medications, dressings, doctor consultations, lab tests, and procedures delivered in the Emergency room remain intact under <code>EMERGENCY / CASUALTY CHARGES</code>.</li>
+                    <li>All surgical consumables, daycare room charges, and anesthesia charges delivered in the Day Care unit remain intact under <code>DAY CARE CHARGES</code>.</li>
+                    <li>Subsequent inpatient charges (Room Bed charges, ICU monitoring, Nursing care, Inpatient pharmacy) accumulate under standard IPD item types.</li>
+                    <li><strong>Final IPD Bill Print:</strong> The final discharge invoice organizes and prints these charges under clearly demarcated sub-headings with line-item rates, quantities, taxes, and category subtotals:
+                        <div class="table-responsive my-2">
+                            <table class="table table-sm table-bordered">
+                                <thead class="table-dark"><tr><th>Printed Section Header</th><th>Content &amp; Scope</th><th>Typical Line Items</th></tr></thead>
+                                <tbody>
+                                    <tr class="table-danger"><td><strong>EMERGENCY / CASUALTY CHARGES</strong></td><td>Services rendered during casualty stay</td><td>Casualty consultation, stat ECG, IV cannulation, oxygen, emergency trauma tray</td></tr>
+                                    <tr class="table-info"><td><strong>DAY CARE CHARGES</strong></td><td>Interventions during daycare stay</td><td>Daycare bed rent, endoscopy tray, daycare nursing observation, dialyzer pack</td></tr>
+                                    <tr class="table-primary"><td><strong>ROOM / BED CHARGES</strong></td><td>Inpatient ward/ICU charges post-conversion</td><td>General Ward Bed / Deluxe Room / ICU monitoring charges per diem</td></tr>
+                                    <tr class="table-light"><td><strong>INVESTIGATIONS &amp; LAB</strong></td><td>Pathology &amp; imaging investigations</td><td>CBC, Serum Creatinine, Chest X-Ray, CT Scan, Ultrasound</td></tr>
+                                    <tr class="table-light"><td><strong>SURGERY &amp; PROCEDURES</strong></td><td>Inpatient operative interventions</td><td>Major surgery charges, surgeon fees, OT anesthesia, recovery charges</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </li>
+                    <li><strong>TPA &amp; Mediclaim Compliance:</strong> Insurance third-party administrators (TPAs), Ayushman Bharat (PM-JAY), and corporate panels require clear demarcation of pre-admission casualty/daycare expenses from inpatient ward expenses. The unified bill provides 100% itemized transparency.</li>
+                </ul>
+
+                <h3>6. Bed Management &amp; Live Tracking</h3>
+                <ul>
+                    <li><strong>Dedicated Casualty &amp; Day Care Wards:</strong> Configured in <em>Settings &rarr; Bed Master</em>. Default wards <code>Casualty &amp; Emergency Ward</code> (ER-01) and <code>Day Care Unit</code> (DC-01) are active. Additional day care wards (e.g. Dialysis Unit, Chemo Daycare) can be defined with ward type <code>Day Care</code>.</li>
+                    <li><strong>Current Admissions Filtering:</strong> In <em>Billing &rarr; IPD Admissions</em>, users can switch views using live pill buttons:
+                        <ul>
+                            <li><code>All</code> &mdash; Combined hospital bed census.</li>
+                            <li><code>Inpatient IPD</code> &mdash; Standard admitted inpatients.</li>
+                            <li><code>Day Care</code> &mdash; Patients occupying Day Care short-stay beds.</li>
+                            <li><code>Emergency</code> &mdash; Patients actively under Casualty / Triage observation.</li>
+                        </ul>
+                    </li>
+                    <li><strong>Automatic Bed Release:</strong> When <strong>Convert to IPD</strong> is executed, the patient's Casualty or Day Care bed is automatically flagged available (<code>VACANT</code>) for new arrivals, eliminating ghost bed blocks.</li>
+                </ul>
+
+                <div class="safety"><strong>Clinical Safety Rule:</strong> Never overwrite a patient's admission code manually in the database. Always use the <strong>Convert to IPD</strong> modal so that SBAR handover notes, bed occupancy transfers, and HL7 FHIR encounter progressions are recorded in the audit trail.</div>
+            </section>
+
             <section id="ot-management" class="guide-section searchable-section">
-                <h2><span class="section-number">07</span>OT Management</h2>
+                <h2><span class="section-number">08</span>OT Management</h2>
                 <p>Available from IPD Nursing and OT Surgery Queue. Request, scheduling, examination, status, and post-operative actions have separate permissions.</p>
                 <ol class="workflow"><li><strong>Create request.</strong> Enter procedure, surgeon, priority, indication, and requested schedule.</li><li><strong>Complete pre-op examination.</strong> Use the department-specific form; revisions to completed forms require a reason.</li><li><strong>Schedule.</strong> Authorized OT staff assign date/time and coordination details.</li><li><strong>Call patient.</strong> Update the case when preparation begins.</li><li><strong>Complete safety gates.</strong> Confirm pre-op checks and WHO sign-in before starting.</li><li><strong>Record progress.</strong> Move through requested, scheduled, called, in progress, and completed; give reasons for cancellation or major changes.</li><li><strong>Sign post-op assessment.</strong> Record observations, outcome, instructions, and handover.</li></ol>
                 <div class="safety"><strong>Clinical integrity:</strong> OT actions create event history and use version checks. Refresh if another user changed the case.</div>
             </section>
 
             <section id="diagnosis" class="guide-section searchable-section">
-                <h2><span class="section-number">08</span>Diagnosis, Laboratory &amp; Imaging</h2>
+                <h2><span class="section-number">09</span>Diagnosis, Laboratory &amp; Imaging</h2>
                 <p>Supported workflows include Pathology, Biopsy, X-Ray, Ultrasound, MRI, CT, and Echo.</p>
                 <h3>Laboratory</h3><ol class="workflow"><li>Receive the OPD, IPD, or walk-in request and confirm patient/tests.</li><li>Record sample collection and lab number.</li><li>Enter values; review units, reference ranges, flags, and comments.</li><li>Save draft, then verify/sign according to policy.</li><li>Print individual or compiled reports using the correct template.</li></ol>
                 <h3>Imaging</h3><ul><li>Upload images, scans, or DICOM studies against the report.</li><li>Use the viewer/gallery and draft findings/impression.</li><li>Complete doctor verification; AI suggestions require radiologist review.</li></ul>
@@ -165,33 +587,33 @@
             </section>
 
             <section id="pharmacy" class="guide-section searchable-section">
-                <h2><span class="section-number">09</span>Pharmacy / Medical Store</h2>
+                <h2><span class="section-number">10</span>Pharmacy / Medical Store</h2>
                 <h3>Dispensing</h3><ul><li>Create counter, OPD, IPD, or organization-linked invoices in the correct context.</li><li>Confirm medicine, batch, expiry, stock, rate, tax, discount, and quantity.</li><li>Use <strong>Medicine Return</strong> or <strong>Medicine Return 2</strong> for the applicable return flow.</li><li>Use Org. Credit Invoice for corporate/insurance-linked medicine billing.</li><li>Finalize an IPD medicine account only after invoices, returns, discounts, and payments reconcile.</li></ul>
                 <h3>Inventory and purchase</h3><ul><li>Maintain drug, generic, formulation, category, company, supplier, batch, tax, and rate masters.</li><li>Create purchase orders, receive invoices/batches, and process purchase returns.</li><li>Monitor expiry, low stock, movement, and supplier ledger reports.</li></ul>
                 <h3>Credit payout request</h3><ol class="workflow"><li>Open Pharmacy → Credit Payout Request.</li><li>Review/filter the eligible pool.</li><li>Select valid lines, confirm amounts, add remarks, and submit.</li><li>Monitor status while Finance handles approval and payment.</li></ol>
             </section>
 
             <section id="billing" class="guide-section searchable-section">
-                <h2><span class="section-number">10</span>Billing, Invoices &amp; Payments</h2>
+                <h2><span class="section-number">11</span>Billing, Invoices &amp; Payments</h2>
                 <ul><li>Bill OPD consultation, procedures, diagnostics, IPD charges, packages, and pharmacy links.</li><li>Apply discounts only with authority and supporting remarks.</li><li>Use payment/refund request workflows instead of informal adjustments.</li><li>Confirm organization/insurance case before posting payer charges.</li><li>Print/export daily collection and balance reports for reconciliation.</li></ul>
                 <h3>Payment Edit</h3><p>Authorized users can correct payment mode, amount, or recorded user. Amount may be <strong>0.00</strong> for a valid correction but cannot be negative.</p>
                 <div class="safety"><strong>Do not use Payment Edit to hide a refund or cancellation.</strong> Use the approved reversal workflow and retain the reason.</div>
             </section>
 
             <section id="finance" class="guide-section searchable-section">
-                <h2><span class="section-number">11</span>Finance &amp; Accounting</h2>
+                <h2><span class="section-number">12</span>Finance &amp; Accounting</h2>
                 <div class="quick-grid"><div class="quick-item"><strong>Cash Book</strong>Daily department collections and opening/closing position.</div><div class="quick-item"><strong>Bank Deposits</strong>Deposit references, dates, amounts, and status.</div><div class="quick-item"><strong>Reconciliation</strong>Match statements to system transactions.</div><div class="quick-item"><strong>POS Settlement</strong>Track terminal settlements, charges, and differences.</div><div class="quick-item"><strong>Doctor Payouts</strong>Agreements, commission, approval, and disbursement.</div><div class="quick-item"><strong>Vendor Control</strong>PO, receipt, invoice, payment, and balance.</div></div>
                 <p class="mt-3">Review pharmacy payout line evidence, approve/reject according to policy, record payments, and retain remarks for each status change.</p>
             </section>
 
             <section id="insurance" class="guide-section searchable-section">
-                <h2><span class="section-number">12</span>Insurance &amp; Organization Cases</h2>
+                <h2><span class="section-number">13</span>Insurance &amp; Organization Cases</h2>
                 <ol class="workflow"><li>Create/select the case and verify patient, payer, policy, approval, and validity.</li><li>Link OPD, IPD, diagnosis, procedures, and pharmacy invoices.</li><li>Apply approved rates/packages, including Ayushman mappings.</li><li>Use contingent billing when liability depends on case outcome.</li><li>Prepare claim sheets and supporting documents.</li><li>Track submission, query, approval, deduction, payment, and balance.</li></ol>
                 <div class="warning"><strong>Case selection:</strong> Select a valid system case. Empty or placeholder identifiers are not payer cases.</div>
             </section>
 
             <section id="abdm" class="guide-section searchable-section">
-                <h2><span class="section-number">13</span>ABDM, ABHA &amp; Health Records</h2>
+                <h2><span class="section-number">14</span>ABDM, ABHA &amp; Health Records</h2>
                 <h3>ABHA identity</h3><ul><li>Create ABHA through supported Aadhaar/mobile OTP flows.</li><li>Verify/fetch profile before linking to the HMS patient.</li><li>Display/download ABHA card and use facility QR for Scan &amp; Share.</li></ul>
                 <h3>Care context and sharing</h3><ol class="workflow"><li>Confirm verified ABHA and correct visit/admission.</li><li>Discover/link the care context.</li><li>Select e-Prescription, Discharge Summary, Diagnostic Report, Immunization, Wellness, Health Document, or supported invoice.</li><li>Preview FHIR R4 data: identity, dates, practitioner, coding, and attachments.</li><li>Share and monitor gateway/bridge status.</li></ol>
                 <h3>Consent and HIU</h3><ul><li>Request consent only for a legitimate purpose and date range.</li><li>Track requested, granted, denied, expired, and revoked status.</li><li>Fetch health information only after grant; data may contain FHIR documents and attachments.</li></ul>
@@ -199,36 +621,36 @@
             </section>
 
             <section id="stock" class="guide-section searchable-section">
-                <h2><span class="section-number">14</span>Hospital Stock</h2>
+                <h2><span class="section-number">15</span>Hospital Stock</h2>
                 <ol class="workflow"><li>Configure category, item, units, conversion, location, min/reorder, and expiry control.</li><li>Departments raise indents with quantity and purpose.</li><li>Authorized users approve, reject, or revise.</li><li>Storekeepers issue approved quantities and batches.</li><li>Create purchase orders and goods receipts.</li><li>Review consumption, issues, expiry, low-stock, reorder, and daily-use reports.</li></ol>
                 <div class="note">Purchase and issue units may differ. Wrong conversion causes incorrect stock and reorder quantities.</div>
             </section>
 
             <section id="reports" class="guide-section searchable-section">
-                <h2><span class="section-number">15</span>Reports &amp; Dashboards</h2>
+                <h2><span class="section-number">16</span>Reports &amp; Dashboards</h2>
                 <div class="table-responsive"><table class="table table-bordered table-guide"><thead><tr><th>Area</th><th>Examples</th><th>Review focus</th></tr></thead><tbody><tr><td>Clinical</td><td>OPD, diagnosis workload/TAT, discharge, OT queue</td><td>Completeness and delays</td></tr><tr><td>Billing</td><td>Collections, balances, refunds, credit invoices</td><td>Mode/user totals and exceptions</td></tr><tr><td>Finance</td><td>Cash book, bank audit, POS, doctor payout</td><td>Unmatched/unapproved items</td></tr><tr><td>Pharmacy</td><td>Stock, expiry, movement, sales, returns, supplier ledger</td><td>Negative stock and expiry risk</td></tr><tr><td>Insurance</td><td>Organization dues, claims, deductions</td><td>Aging and documents</td></tr><tr><td>Audit</td><td>NABH edits, billing logs, user actions</td><td>Who changed what, when, and why</td></tr></tbody></table></div>
                 <p>Use drill-down links from totals to source records. Retain the same dates and filters while reconciling.</p>
             </section>
 
             <section id="admin" class="guide-section searchable-section">
-                <h2><span class="section-number">16</span>Administration &amp; System Operations</h2>
+                <h2><span class="section-number">17</span>Administration &amp; System Operations</h2>
                 <h3>Application administration</h3><ul><li>Manage users, groups, permissions, passwords, and active access.</li><li>Maintain doctor, referral, insurance, bank/payment, charge, diagnosis, medicine, and stock masters.</li><li>Configure OPD, diagnosis, and discharge print templates.</li><li>Configure AI, HealthPlix, ABDM HFR/gateway/bridge, and report-doctor mappings.</li></ul>
                 <h3>System Operations</h3><ul><li>Review OS/uptime, CPU, memory, disk, RAID, database, web, PHP-FPM, and SSH health.</li><li>Use Update HMS only during an approved window and review its log.</li><li>Restart services only when needed. Reboot/shutdown require confirmation and coordination.</li></ul>
                 <div class="safety"><strong>Production safety:</strong> Confirm backup and rollback readiness before migrations, updates, restarts, or environment changes.</div>
             </section>
 
             <section id="security" class="guide-section searchable-section">
-                <h2><span class="section-number">17</span>Security, Audit &amp; Compliance</h2>
+                <h2><span class="section-number">18</span>Security, Audit &amp; Compliance</h2>
                 <ul><li>Never disclose passwords, OTPs, API keys, or tokens.</li><li>Single-active-session protection may end an older login.</li><li>Grant the least permission required and review access after role changes.</li><li>Clinical verification, payment edits, refunds, cancellations, OT changes, and completed-form revisions require audit evidence.</li><li>Verify SNOMED CT/ICD-10 codes against documented clinical meaning.</li><li>Follow NABH, ABDM/FHIR, NHCX, privacy, retention, and hospital policies.</li></ul>
             </section>
 
             <section id="backup" class="guide-section searchable-section">
-                <h2><span class="section-number">18</span>Backup &amp; Maintenance</h2>
+                <h2><span class="section-number">19</span>Backup &amp; Maintenance</h2>
                 <ul><li>Schedule database and uploaded-document backups and test restoration.</li><li>Retain an off-server/off-site copy according to policy.</li><li>Apply code updates and migrations in a controlled sequence.</li><li>After deployment test login, dashboard, patient search, billing, PDF, uploads, jobs, and integrations.</li><li>Monitor storage, database growth, logs, failed queues, ABDM tasks, and large attachments.</li><li>Keep production error display disabled; use protected logs.</li></ul>
             </section>
 
             <section id="troubleshooting" class="guide-section searchable-section">
-                <h2><span class="section-number">19</span>Troubleshooting</h2>
+                <h2><span class="section-number">20</span>Troubleshooting</h2>
                 <div class="table-responsive"><table class="table table-bordered table-guide"><thead><tr><th>Problem</th><th>Check</th><th>Action</th></tr></thead><tbody>
                     <tr><td>Access denied</td><td>Role, permission, module</td><td>Ask Admin; do not borrow credentials.</td></tr>
                     <tr><td>Page/form does not load</td><td>Session, network, URL/status, console</td><td>Refresh dashboard, reopen, report exact URL/status.</td></tr>

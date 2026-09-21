@@ -148,11 +148,7 @@ class AbdmGateway extends BaseController
         if ($match !== null) {
             $patient = $match['patient'];
             $patientId = (int) $patient['id'];
-            $lName = trim((string) ($patient['p_lname'] ?? ''));
             $patientDisplay = trim((string) ($patient['p_fname'] ?? ''));
-            if ($lName !== '' && $lName !== '0') {
-                $patientDisplay .= ' ' . $lName;
-            }
             if ($patientDisplay === '') {
                 $patientDisplay = 'Patient ' . $patientRef;
             }
@@ -4627,11 +4623,7 @@ class AbdmGateway extends BaseController
             $patient = $match['patient'];
             $patientId = (int) $patient['id'];
             $patientRef = (string) ($patient['p_code'] ?: ('P-' . $patientId));
-            $lName = trim((string) ($patient['p_lname'] ?? ''));
             $patientDisplay = trim((string) ($patient['p_fname'] ?? ''));
-            if ($lName !== '' && $lName !== '0') {
-                $patientDisplay .= ' ' . $lName;
-            }
             if ($patientDisplay === '') {
                 $patientDisplay = 'Patient ' . $patientRef;
             }
@@ -4860,9 +4852,7 @@ class AbdmGateway extends BaseController
 
         $patientName = '';
         if (!empty($patient)) {
-            $lName = trim((string) ($patient['p_lname'] ?? ''));
-            $fName = trim((string) ($patient['p_fname'] ?? ''));
-            $patientName = trim($fName . ($lName !== '' && $lName !== '0' ? ' ' . $lName : ''));
+            $patientName = trim((string) ($patient['p_fname'] ?? ''));
         }
         if ($patientName === '') {
             $patientName = $patient['patient_name'] ?? 'Patient';
@@ -5285,11 +5275,7 @@ class AbdmGateway extends BaseController
         $this->db->transComplete();
 
         $patient = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
-        $lName = trim((string) ($patient['p_lname'] ?? ''));
         $patientDisplay = trim((string) ($patient['p_fname'] ?? ''));
-        if ($lName !== '' && $lName !== '0') {
-            $patientDisplay .= ' ' . $lName;
-        }
         $patientRef = (string) ($patient['p_code'] ?? $txn['patient_ref'] ?? $patientId);
 
         $confirmedContexts = [];
@@ -5625,11 +5611,7 @@ class AbdmGateway extends BaseController
 
             // 6. Name match
             if ($name !== '') {
-                $candLName = trim((string) ($cand['p_lname'] ?? ''));
                 $candName = trim((string) ($cand['p_fname'] ?? ''));
-                if ($candLName !== '' && $candLName !== '0') {
-                    $candName .= ' ' . $candLName;
-                }
                 $nameScore = $this->calculateNameMatchScore($name, $candName);
                 if ($nameScore > 0) {
                     $score += (int) ($nameScore * 25);
@@ -8462,14 +8444,7 @@ class AbdmGateway extends BaseController
     private function patientDisplayName(array $patientRow): string
     {
         $first = trim((string) ($patientRow['p_fname'] ?? ''));
-        $last = trim((string) ($patientRow['p_lname'] ?? ''));
-
-        if (in_array(strtolower($last), ['0', '00', 'na', 'n/a', 'null', 'nil', '-'], true)) {
-            $last = '';
-        }
-
-        $full = trim($first . ' ' . $last);
-        return $full !== '' ? $full : 'Patient';
+        return $first !== '' ? $first : 'Patient';
     }
 
     /**
@@ -10339,11 +10314,7 @@ class AbdmGateway extends BaseController
 
         $patientId   = (int) $patient['id'];
         $patientRef  = (string) ($patient['p_code'] ?: ('P-' . $patientId));
-        $lName       = trim((string) ($patient['p_lname'] ?? ''));
         $patientName = trim((string) ($patient['p_fname'] ?? ''));
-        if ($lName !== '' && $lName !== '0') {
-            $patientName .= ' ' . $lName;
-        }
         if ($patientName === '') {
             $patientName = 'Patient ' . $patientRef;
         }

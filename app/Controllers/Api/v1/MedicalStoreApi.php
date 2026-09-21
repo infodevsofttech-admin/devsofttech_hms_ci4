@@ -130,13 +130,11 @@ class MedicalStoreApi extends BaseController
 
         // Search patient_master by UHID, Mobile, Name, ABHA ID, ABHA Address
         $builder = $this->db->table('patient_master p');
-        $builder->select('p.id as patient_id, p.p_code as uhid, p.p_fname, p.p_lname, p.title, p.mphone1, p.gender, p.age, p.dob, p.add1, p.city, p.abha_id, p.abha_address, p.abha_verified_status, p.abha_kyc_verified');
+        $builder->select('p.id as patient_id, p.p_code as uhid, p.p_fname, p.title, p.mphone1, p.gender, p.age, p.dob, p.add1, p.city, p.abha_id, p.abha_address, p.abha_verified_status, p.abha_kyc_verified');
         $builder->groupStart()
             ->like('p.p_code', $q)
             ->orLike('p.mphone1', $q)
             ->orLike('p.p_fname', $q)
-            ->orLike('p.p_lname', $q)
-            ->orLike("CONCAT(p.p_fname, ' ', p.p_lname)", $q)
             ->orLike('p.abha_id', $q)
             ->orLike('p.abha_address', $q)
             ->groupEnd();
@@ -146,7 +144,7 @@ class MedicalStoreApi extends BaseController
         foreach ($patients as $pt) {
             $pId = (int)$pt['patient_id'];
             $genderStr = ((int)$pt['gender'] === 1) ? 'Male' : (((int)$pt['gender'] === 2) ? 'Female' : 'Other');
-            $fullName = trim(($pt['title'] ? $pt['title'] . ' ' : '') . $pt['p_fname'] . ' ' . ($pt['p_lname'] ?? ''));
+            $fullName = trim(($pt['title'] ? $pt['title'] . ' ' : '') . $pt['p_fname']);
 
             // Check Active OPD for today
             $opdRow = $this->db->table('opd_master')
