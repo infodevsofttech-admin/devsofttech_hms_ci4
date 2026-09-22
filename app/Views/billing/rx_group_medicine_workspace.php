@@ -53,9 +53,19 @@
 
                     <div class="row g-2 mb-2">
                         <div class="col-4">
-                            <select id="rx_dosage" class="form-select form-select-sm">
-                                <option value="">Dose</option>
-                            </select>
+                            <input type="text" id="rx_dosage" list="rx_dosage_suggestions" class="form-control form-control-sm" placeholder="Dose (e.g. 1 Tab)">
+                            <datalist id="rx_dosage_suggestions">
+                                <option value="1 Tab">
+                                <option value="2 Tab">
+                                <option value="1 Cap">
+                                <option value="500 mg">
+                                <option value="250 mg">
+                                <option value="650 mg">
+                                <option value="5 ml">
+                                <option value="10 ml">
+                                <option value="1 Puff">
+                                <option value="1 Sachet">
+                            </datalist>
                         </div>
                         <div class="col-4">
                             <select id="rx_dosage_when" class="form-select form-select-sm">
@@ -185,7 +195,6 @@
                 where: (data && data.where) ? data.where : []
             };
 
-            renderSelectOptions($('#rx_dosage'), doseMasterCache.dose, 'Dose');
             renderSelectOptions($('#rx_dosage_when'), doseMasterCache.when, 'When');
             renderSelectOptions($('#rx_dosage_freq'), doseMasterCache.freq, 'Frequency');
             renderSelectOptions($('#rx_dose_where'), doseMasterCache.where, 'Route');
@@ -216,11 +225,10 @@
         $('#rx_med_name').val(row.med_name || '');
         $('#rx_med_type').val(row.med_type || '');
         $('#rx_genericname').val(row.genericname || '');
-        ensureOption($('#rx_dosage'), row.dosage || '');
+        $('#rx_dosage').val((row.dosage || '').toString());
         ensureOption($('#rx_dosage_when'), row.dosage_when || '');
         ensureOption($('#rx_dosage_freq'), row.dosage_freq || '');
         ensureOption($('#rx_dose_where'), row.dosage_where || '');
-        $('#rx_dosage').val((row.dosage || '').toString());
         $('#rx_dosage_when').val((row.dosage_when || '').toString());
         $('#rx_dosage_freq').val((row.dosage_freq || '').toString());
         $('#rx_no_of_days').val(row.no_of_days || '');

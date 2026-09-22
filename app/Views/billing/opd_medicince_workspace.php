@@ -126,9 +126,20 @@
                     <div class="row g-1 mb-2">
                         <div class="col-6">
                             <label class="form-label form-label-sm mb-0">Dose</label>
-                            <select id="med_default_dosage" class="form-select form-select-sm">
-                                <option value="">Select dose</option>
-                            </select>
+                            <input type="text" id="med_default_dosage" list="med_dosage_suggestions" class="form-control form-control-sm" placeholder="e.g. 1 Tab / 500mg">
+                            <datalist id="med_dosage_suggestions">
+                                <option value="1 Tab">
+                                <option value="2 Tab">
+                                <option value="1 Cap">
+                                <option value="500 mg">
+                                <option value="250 mg">
+                                <option value="650 mg">
+                                <option value="5 ml">
+                                <option value="10 ml">
+                                <option value="1 Puff">
+                                <option value="1 Sachet">
+                                <option value="1 Application">
+                            </datalist>
                         </div>
                         <div class="col-6">
                             <label class="form-label form-label-sm mb-0">When</label>
@@ -367,7 +378,6 @@
                 where: (data && data.where) ? data.where : []
             };
 
-            renderDefaultMasterSelect($('#med_default_dosage'), defaultDoseMasterCache.dose, 'Select dose');
             renderDefaultMasterSelect($('#med_default_when'), defaultDoseMasterCache.when, 'Select when');
             renderDefaultMasterSelect($('#med_default_freq'), defaultDoseMasterCache.freq, 'Select frequency');
             renderDefaultMasterSelect($('#med_default_where'), defaultDoseMasterCache.where, 'Select route');
@@ -438,7 +448,7 @@
             $('#snomed_fsn_display').hide();
         }
         $('#med_atc_code').val(row.atc_code || row.who_atc_code || '');
-        setDefaultMasterValue($('#med_default_dosage'), row.dosage || '');
+        $('#med_default_dosage').val(row.dosage || '');
         setDefaultMasterValue($('#med_default_when'), row.dosage_when || '');
         setDefaultMasterValue($('#med_default_freq'), row.dosage_freq || '');
         setDefaultMasterValue($('#med_default_where'), row.dosage_where || '');
