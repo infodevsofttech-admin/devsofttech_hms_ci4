@@ -1321,24 +1321,52 @@ $historyFields = [
                                                 <label class="form-label fw-semibold mb-1 text-dark">Form / Type</label>
                                                 <select class="form-select shadow-sm" id="discharge_med_type">
                                                     <option value="">Select Type</option>
-                                                    <option value="TAB">TAB (Tablet)</option>
-                                                    <option value="CAP">CAP (Capsule)</option>
-                                                    <option value="SYP">SYP (Syrup)</option>
-                                                    <option value="INJ">INJ (Injection)</option>
-                                                    <option value="CREAM">CREAM (Cream)</option>
-                                                    <option value="OINT">OINT (Ointment)</option>
-                                                    <option value="GEL">GEL (Gel)</option>
-                                                    <option value="EYE DROP">EYE DROP</option>
-                                                    <option value="EAR DROP">EAR DROP</option>
-                                                    <option value="DROPS">DROPS</option>
-                                                    <option value="RESPULES">RESPULES</option>
-                                                    <option value="SACHET">SACHET</option>
-                                                    <option value="LOTION">LOTION</option>
-                                                    <option value="SPRAY">SPRAY</option>
-                                                    <option value="PATCH">PATCH</option>
-                                                    <option value="POWDER">POWDER</option>
-                                                    <option value="SUPPOSITORY">SUPPOSITORY</option>
-                                                    <option value="INFUSION">INFUSION</option>
+                                                    <optgroup label="Oral Solid">
+                                                        <option value="TAB">TAB (Tablet)</option>
+                                                        <option value="CAP">CAP (Capsule)</option>
+                                                        <option value="SACHET">SACHET (Granules / Powder)</option>
+                                                        <option value="POWDER">POWDER (Oral Powder)</option>
+                                                        <option value="LOZENGE">LOZENGE (Chewable / Troche)</option>
+                                                    </optgroup>
+                                                    <optgroup label="Oral Liquid">
+                                                        <option value="SYR">SYR (Syrup)</option>
+                                                        <option value="SUSP">SUSP (Suspension)</option>
+                                                        <option value="SOLN">SOLN (Oral Solution)</option>
+                                                        <option value="DROPS">DROPS (Oral Drops)</option>
+                                                    </optgroup>
+                                                    <optgroup label="Dermatology &amp; Topical">
+                                                        <option value="CREAM">CREAM (Cream)</option>
+                                                        <option value="OINT">OINT (Ointment)</option>
+                                                        <option value="GEL">GEL (Gel)</option>
+                                                        <option value="LOTION">LOTION (Lotion)</option>
+                                                        <option value="SHAMPOO">SHAMPOO (Medicated Shampoo)</option>
+                                                        <option value="SOAP">SOAP (Medicated Soap / Bar)</option>
+                                                        <option value="OIL">OIL (Medicated Oil)</option>
+                                                        <option value="SPRAY">SPRAY (Topical Spray)</option>
+                                                        <option value="DUSTING POWDER">DUSTING POWDER</option>
+                                                        <option value="PAINT">PAINT (Gum / Throat Paint)</option>
+                                                        <option value="PATCH">PATCH (Transdermal Patch)</option>
+                                                    </optgroup>
+                                                    <optgroup label="Respiratory &amp; ENT">
+                                                        <option value="RESPULES">RESPULES (Nebulizer)</option>
+                                                        <option value="INHALER">INHALER (MDI / Rotacaps)</option>
+                                                        <option value="NASAL SPRAY">NASAL SPRAY</option>
+                                                        <option value="NASAL DROP">NASAL DROP</option>
+                                                        <option value="EAR DROP">EAR DROP</option>
+                                                        <option value="GARGLE">GARGLE / MOUTHWASH</option>
+                                                    </optgroup>
+                                                    <optgroup label="Ophthalmic (Eye)">
+                                                        <option value="EYE DROP">EYE DROP</option>
+                                                        <option value="EYE OINT">EYE OINT (Eye Ointment)</option>
+                                                    </optgroup>
+                                                    <optgroup label="Parenteral (Injections &amp; Infusions)">
+                                                        <option value="INJ">INJ (Injection)</option>
+                                                        <option value="IV FLUID">IV FLUID (Infusion)</option>
+                                                    </optgroup>
+                                                    <optgroup label="Rectal &amp; Vaginal">
+                                                        <option value="SUPPOSITORY">SUPPOSITORY (Rectal)</option>
+                                                        <option value="PESSARY">PESSARY (Vaginal Tablet)</option>
+                                                    </optgroup>
                                                 </select>
                                             </div>
                                             <div class="col-md-3">
@@ -6128,6 +6156,75 @@ $historyFields = [
 
                 var isSelectingDischargeMed = false;
 
+                function setDischargeMedType(val) {
+                    var raw = String(val || '').trim().toUpperCase();
+                    if (raw === 'SYP' || raw === 'SYRUP' || raw === 'SYRUPS') raw = 'SYR';
+                    else if (raw === 'TABLETS' || raw === 'TABLET' || raw === 'TABS') raw = 'TAB';
+                    else if (raw === 'CAPSULES' || raw === 'CAPSULE' || raw === 'CAPS') raw = 'CAP';
+                    else if (raw === 'SUSPENSION' || raw === 'SUSPENSIONS') raw = 'SUSP';
+                    else if (raw === 'SOLUTION' || raw === 'SOLUTIONS') raw = 'SOLN';
+                    else if (raw === 'SHAMPOOS') raw = 'SHAMPOO';
+                    else if (raw === 'SOAPS' || raw === 'SOAP BAR') raw = 'SOAP';
+                    else if (raw === 'OILS') raw = 'OIL';
+                    else if (raw === 'INHALERS') raw = 'INHALER';
+                    else if (raw === 'MOUTHWASH' || raw === 'MOUTH WASH' || raw === 'GARGLES') raw = 'GARGLE';
+                    else if (raw === 'SUPPOSITORIES') raw = 'SUPPOSITORY';
+                    else if (raw === 'PESSARIES') raw = 'PESSARY';
+                    else if (raw === 'INFUSION' || raw === 'INFUSIONS') raw = 'IV FLUID';
+
+                    if (raw && !$('#discharge_med_type option[value="' + raw.replace(/"/g, '&quot;') + '"]').length) {
+                        $('#discharge_med_type').append('<option value="' + $('<div>').text(raw).html() + '">' + $('<div>').text(raw).html() + '</option>');
+                    }
+                    $('#discharge_med_type').val(raw);
+                    autoSelectDischargeRoute(raw);
+                }
+
+                function autoSelectDischargeRoute(type) {
+                    var $route = $('#discharge_dose_where');
+                    if (!$route.length || $route.val()) return;
+                    type = (type || '').toUpperCase();
+                    var targetText = 'ORAL';
+                    if (['INJ', 'INJECTION', 'IV', 'IM', 'INFUSION', 'IV FLUID'].indexOf(type) !== -1) {
+                        targetText = 'INJ';
+                    } else if (['CREAM', 'OINT', 'OINTMENT', 'GEL', 'LOTION', 'PATCH', 'SHAMPOO', 'SOAP', 'OIL', 'SPRAY', 'DUSTING POWDER', 'PAINT', 'EYE OINT', 'GARGLE'].indexOf(type) !== -1) {
+                        targetText = 'TOPICAL';
+                    } else if (['EYE DROP', 'EAR DROP', 'NASAL DROP', 'DROPS'].indexOf(type) !== -1) {
+                        targetText = 'DROP';
+                    } else if (['RESPULES', 'INHALER', 'NASAL SPRAY'].indexOf(type) !== -1) {
+                        targetText = 'INHAL';
+                    } else if (['SUPPOSITORY', 'PESSARY'].indexOf(type) !== -1) {
+                        targetText = 'RECT';
+                    }
+
+                    var matchedVal = '';
+                    $route.find('option').each(function() {
+                        var txt = ($(this).text() || '').toUpperCase();
+                        var val = ($(this).val() || '').toUpperCase();
+                        if (txt.indexOf(targetText) !== -1 || val.indexOf(targetText) !== -1) {
+                            matchedVal = $(this).val();
+                            return false;
+                        }
+                    });
+
+                    if (!matchedVal && targetText === 'ORAL') {
+                        $route.find('option').each(function() {
+                            var txt = ($(this).text() || '').toUpperCase();
+                            if (txt.indexOf('ORAL') !== -1 || txt.indexOf('MOUTH') !== -1 || txt.indexOf('PO') !== -1) {
+                                matchedVal = $(this).val();
+                                return false;
+                            }
+                        });
+                    }
+
+                    if (matchedVal) {
+                        $route.val(matchedVal);
+                    }
+                }
+
+                $('#discharge_med_type').on('change input', function() {
+                    autoSelectDischargeRoute($(this).val());
+                });
+
                 function applyDischargeMedicineMatch(matched) {
                     if (!matched || !dischargeMedInput) {
                         return;
@@ -6136,7 +6233,7 @@ $historyFields = [
                     isSelectingDischargeMed = true;
 
                     var medName = String(matched.med_name || '').trim();
-                    var medType = String(matched.med_type || '').trim();
+                    var medType = String(matched.med_type || matched.formulation || '').trim();
 
                     if (medName !== '') {
                         dischargeMedInput.value = medName;
@@ -6158,8 +6255,8 @@ $historyFields = [
                         section.querySelector('#discharge_med_salt').value = String(matched.med_salt || matched.genericname || '').trim();
                     }
 
-                    if (dischargeMedType && medType !== '') {
-                        dischargeMedType.value = medType;
+                    if (medType !== '') {
+                        setDischargeMedType(medType);
                     }
 
                     var fieldMap = [
@@ -6430,8 +6527,8 @@ $historyFields = [
 
                     $('#discharge_med_id').val(medId);
                     $('#discharge_med_name').val(medName);
-                    if (medType !== '' && $('#discharge_med_type').val().trim() === '') {
-                        $('#discharge_med_type').val(medType);
+                    if (medType !== '') {
+                        setDischargeMedType(medType);
                     }
 
                     $('#discharge_substitute_box').hide();
@@ -6660,7 +6757,7 @@ $historyFields = [
                     $('#discharge_med_item_source').val(rowSource);
                     $('#discharge_med_name').val(medName);
                     $('#discharge_med_salt').val(medSalt);
-                    $('#discharge_med_type').val(medType);
+                    setDischargeMedType(medType);
 
                     $('#discharge_dosage').val(doseLabel || doseId || '');
 
