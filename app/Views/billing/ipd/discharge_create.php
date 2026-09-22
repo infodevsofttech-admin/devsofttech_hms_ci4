@@ -2399,6 +2399,7 @@ $historyFields = [
                     updateBtn.title = 'Save / Update this complaint';
                     updateBtn.style.fontSize = '.78rem';
                     updateBtn.style.height = '26px';
+                    updateBtn.style.lineHeight = '24px';
                     updateBtn.setAttribute('data-idx', idx);
                     updateBtn.innerHTML = '<i class="fas fa-check me-1"></i>Update';
                     updateBtn.addEventListener('click', function() {
@@ -2410,16 +2411,18 @@ $historyFields = [
                     removeBtn.type = 'button';
                     removeBtn.className = 'btn btn-sm btn-outline-danger btn-remove-complaint p-0';
                     removeBtn.title = 'Remove this complaint';
-                    removeBtn.style.width = '24px';
+                    removeBtn.style.width = '26px';
                     removeBtn.style.height = '26px';
-                    removeBtn.style.lineHeight = '1';
-                    removeBtn.style.fontSize = '1rem';
+                    removeBtn.style.lineHeight = '24px';
+                    removeBtn.style.fontSize = '.85rem';
                     removeBtn.setAttribute('data-idx', idx);
-                    removeBtn.innerHTML = '×';
+                    removeBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
                     removeBtn.addEventListener('click', function() {
                         removeDischargeComplaintRow(idx, $(this));
                     });
                     td6.appendChild(removeBtn);
+
+                    tr.appendChild(td6);
 
                     tbody.appendChild(tr);
                 });
