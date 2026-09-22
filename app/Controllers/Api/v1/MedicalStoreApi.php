@@ -6297,19 +6297,21 @@ class MedicalStoreApi extends BaseController
         $ips = [];
 
         // Attempt to detect local LAN IP on Windows / Linux
-        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-            $output = shell_exec('ipconfig');
-            if ($output) {
-                preg_match_all('/IPv4 Address[ .:]+([0-9.]+)/i', $output, $matches);
-                if (!empty($matches[1])) {
-                    $ips = array_unique($matches[1]);
+        if (function_exists('shell_exec')) {
+            if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+                $output = @shell_exec('ipconfig');
+                if ($output) {
+                    preg_match_all('/IPv4 Address[ .:]+([0-9.]+)/i', $output, $matches);
+                    if (!empty($matches[1])) {
+                        $ips = array_unique($matches[1]);
+                    }
                 }
-            }
-        } else {
-            $output = shell_exec("hostname -I 2>/dev/null");
-            if ($output) {
-                $parts = preg_split('/\s+/', trim($output));
-                if (!empty($parts)) $ips = array_unique($parts);
+            } else {
+                $output = @shell_exec("hostname -I 2>/dev/null");
+                if ($output) {
+                    $parts = preg_split('/\s+/', trim($output));
+                    if (!empty($parts)) $ips = array_unique($parts);
+                }
             }
         }
 

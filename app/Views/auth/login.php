@@ -167,33 +167,35 @@
     <?php
     // Detect server network interfaces for LAN QR generation
     $detectedNetworkInterfaces = [];
-    if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
-        $netOutput = @shell_exec('ipconfig');
-        if ($netOutput) {
-            $netLines = explode("\n", $netOutput);
-            $curAdapter = '';
-            foreach ($netLines as $nLine) {
-                $nLine = trim($nLine);
-                if (preg_match('/^(adapter|Wireless LAN adapter|Ethernet adapter|Unknown adapter)\s+([^:]+):/i', $nLine, $adM)) {
-                    $curAdapter = trim($adM[2]);
-                }
-                if (preg_match('/IPv4 Address[ .:]+([0-9.]+)/i', $nLine, $ipM)) {
-                    $foundIp = trim($ipM[1]);
-                    if ($foundIp !== '127.0.0.1') {
-                        $label = $curAdapter ? ($foundIp . ' (' . $curAdapter . ')') : $foundIp;
-                        $detectedNetworkInterfaces[$foundIp] = $label;
+    if (function_exists('shell_exec')) {
+        if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
+            $netOutput = @shell_exec('ipconfig');
+            if ($netOutput) {
+                $netLines = explode("\n", $netOutput);
+                $curAdapter = '';
+                foreach ($netLines as $nLine) {
+                    $nLine = trim($nLine);
+                    if (preg_match('/^(adapter|Wireless LAN adapter|Ethernet adapter|Unknown adapter)\s+([^:]+):/i', $nLine, $adM)) {
+                        $curAdapter = trim($adM[2]);
+                    }
+                    if (preg_match('/IPv4 Address[ .:]+([0-9.]+)/i', $nLine, $ipM)) {
+                        $foundIp = trim($ipM[1]);
+                        if ($foundIp !== '127.0.0.1') {
+                            $label = $curAdapter ? ($foundIp . ' (' . $curAdapter . ')') : $foundIp;
+                            $detectedNetworkInterfaces[$foundIp] = $label;
+                        }
                     }
                 }
             }
-        }
-    } else {
-        $netOutput = @shell_exec("hostname -I 2>/dev/null");
-        if ($netOutput) {
-            $parts = preg_split('/\s+/', trim($netOutput));
-            foreach ($parts as $foundIp) {
-                $foundIp = trim($foundIp);
-                if ($foundIp && $foundIp !== '127.0.0.1') {
-                    $detectedNetworkInterfaces[$foundIp] = $foundIp . ' (LAN)';
+        } else {
+            $netOutput = @shell_exec("hostname -I 2>/dev/null");
+            if ($netOutput) {
+                $parts = preg_split('/\s+/', trim($netOutput));
+                foreach ($parts as $foundIp) {
+                    $foundIp = trim($foundIp);
+                    if ($foundIp && $foundIp !== '127.0.0.1') {
+                        $detectedNetworkInterfaces[$foundIp] = $foundIp . ' (LAN)';
+                    }
                 }
             }
         }
