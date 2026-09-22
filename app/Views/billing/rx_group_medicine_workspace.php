@@ -41,8 +41,27 @@
                     </div>
 
                     <div class="mb-2">
-                        <label class="form-label">Type</label>
-                        <input type="text" id="rx_med_type" class="form-control form-control-sm" placeholder="TAB/CAP/SYR/INJ">
+                        <label class="form-label">Form / Type</label>
+                        <select id="rx_med_type" class="form-select form-select-sm">
+                            <option value="">Select Type</option>
+                            <option value="TAB">TAB (Tablet)</option>
+                            <option value="CAP">CAP (Capsule)</option>
+                            <option value="SYR">SYR (Syrup)</option>
+                            <option value="INJ">INJ (Injection)</option>
+                            <option value="CREAM">CREAM (Cream)</option>
+                            <option value="OINT">OINT (Ointment)</option>
+                            <option value="GEL">GEL (Gel)</option>
+                            <option value="EYE DROP">EYE DROP</option>
+                            <option value="EAR DROP">EAR DROP</option>
+                            <option value="DROPS">DROPS</option>
+                            <option value="RESPULES">RESPULES</option>
+                            <option value="SACHET">SACHET</option>
+                            <option value="LOTION">LOTION</option>
+                            <option value="SPRAY">SPRAY</option>
+                            <option value="PATCH">PATCH</option>
+                            <option value="POWDER">POWDER</option>
+                            <option value="SUPPOSITORY">SUPPOSITORY</option>
+                        </select>
                     </div>
 
                     <div class="mb-2">
@@ -223,7 +242,40 @@
         $('#rx_med_item_id').val(row.id || 0);
         $('#rx_med_id').val(row.med_id || 0);
         $('#rx_med_name').val(row.med_name || '');
-        $('#rx_med_type').val(row.med_type || '');
+        var rawType = (row.med_type || '').toString().trim().toUpperCase();
+        if (rawType === 'TABLETS' || rawType === 'TABLET' || rawType === 'TABS') {
+            rawType = 'TAB';
+        } else if (rawType === 'CAPSULES' || rawType === 'CAPSULE' || rawType === 'CAPS') {
+            rawType = 'CAP';
+        } else if (rawType === 'SYRUP' || rawType === 'SYRUPS') {
+            rawType = 'SYR';
+        } else if (rawType === 'INJECTIONS' || rawType === 'INJECTION') {
+            rawType = 'INJ';
+        } else if (rawType === 'OINTMENT' || rawType === 'OINTMENTS') {
+            rawType = 'OINT';
+        } else if (rawType === 'CREAMS') {
+            rawType = 'CREAM';
+        } else if (rawType === 'GELS') {
+            rawType = 'GEL';
+        } else if (rawType === 'EYE DROPS') {
+            rawType = 'EYE DROP';
+        } else if (rawType === 'EAR DROPS') {
+            rawType = 'EAR DROP';
+        } else if (rawType === 'POWDERS') {
+            rawType = 'POWDER';
+        } else if (rawType === 'LOTIONS') {
+            rawType = 'LOTION';
+        } else if (rawType === 'SPRAYS') {
+            rawType = 'SPRAY';
+        } else if (rawType === 'PATCHES') {
+            rawType = 'PATCH';
+        } else if (rawType === 'SACHETS') {
+            rawType = 'SACHET';
+        }
+        if (rawType && !$('#rx_med_type option[value="' + rawType.replace(/"/g, '&quot;') + '"]').length) {
+            $('#rx_med_type').append('<option value="' + $('<div>').text(rawType).html() + '">' + $('<div>').text(rawType).html() + '</option>');
+        }
+        $('#rx_med_type').val(rawType);
         $('#rx_genericname').val(row.genericname || '');
         $('#rx_dosage').val((row.dosage || '').toString());
         ensureOption($('#rx_dosage_when'), row.dosage_when || '');

@@ -85,8 +85,27 @@
                         <input type="text" id="med_item_name" class="form-control form-control-sm" placeholder="Enter Medicine Name">
                     </div>
                     <div class="mb-2">
-                        <label class="form-label">Formulation</label>
-                        <input type="text" id="med_formulation" class="form-control form-control-sm" placeholder="Formulation">
+                        <label class="form-label">Formulation / Type</label>
+                        <select id="med_formulation" class="form-select form-select-sm">
+                            <option value="">Select Type</option>
+                            <option value="TAB">TAB (Tablet)</option>
+                            <option value="CAP">CAP (Capsule)</option>
+                            <option value="SYR">SYR (Syrup)</option>
+                            <option value="INJ">INJ (Injection)</option>
+                            <option value="CREAM">CREAM (Cream)</option>
+                            <option value="OINT">OINT (Ointment)</option>
+                            <option value="GEL">GEL (Gel)</option>
+                            <option value="EYE DROP">EYE DROP</option>
+                            <option value="EAR DROP">EAR DROP</option>
+                            <option value="DROPS">DROPS</option>
+                            <option value="RESPULES">RESPULES</option>
+                            <option value="SACHET">SACHET</option>
+                            <option value="LOTION">LOTION</option>
+                            <option value="SPRAY">SPRAY</option>
+                            <option value="PATCH">PATCH</option>
+                            <option value="POWDER">POWDER</option>
+                            <option value="SUPPOSITORY">SUPPOSITORY</option>
+                        </select>
                     </div>
                     <div class="mb-2">
                         <label class="form-label">Generic Name</label>
@@ -434,7 +453,40 @@
         row = row || {};
         $('#med_id').val(row.id || 0);
         $('#med_item_name').val(row.item_name || '');
-        $('#med_formulation').val(row.formulation || '');
+        var rawForm = (row.formulation || '').toString().trim().toUpperCase();
+        if (rawForm === 'TABLETS' || rawForm === 'TABLET' || rawForm === 'TABS') {
+            rawForm = 'TAB';
+        } else if (rawForm === 'CAPSULES' || rawForm === 'CAPSULE' || rawForm === 'CAPS') {
+            rawForm = 'CAP';
+        } else if (rawForm === 'SYRUP' || rawForm === 'SYRUPS') {
+            rawForm = 'SYR';
+        } else if (rawForm === 'INJECTIONS' || rawForm === 'INJECTION') {
+            rawForm = 'INJ';
+        } else if (rawForm === 'OINTMENT' || rawForm === 'OINTMENTS') {
+            rawForm = 'OINT';
+        } else if (rawForm === 'CREAMS') {
+            rawForm = 'CREAM';
+        } else if (rawForm === 'GELS') {
+            rawForm = 'GEL';
+        } else if (rawForm === 'EYE DROPS') {
+            rawForm = 'EYE DROP';
+        } else if (rawForm === 'EAR DROPS') {
+            rawForm = 'EAR DROP';
+        } else if (rawForm === 'POWDERS') {
+            rawForm = 'POWDER';
+        } else if (rawForm === 'LOTIONS') {
+            rawForm = 'LOTION';
+        } else if (rawForm === 'SPRAYS') {
+            rawForm = 'SPRAY';
+        } else if (rawForm === 'PATCHES') {
+            rawForm = 'PATCH';
+        } else if (rawForm === 'SACHETS') {
+            rawForm = 'SACHET';
+        }
+        if (rawForm && !$('#med_formulation option[value="' + rawForm.replace(/"/g, '&quot;') + '"]').length) {
+            $('#med_formulation').append('<option value="' + $('<div>').text(rawForm).html() + '">' + $('<div>').text(rawForm).html() + '</option>');
+        }
+        $('#med_formulation').val(rawForm);
         $('#med_genericname').val(row.genericname || '');
         $('#med_salt_name').val(row.salt_name || row.sal_name || row.salt || row.saltname || '');
         $('#med_dosage_restriction').val(row.dosage_restriction || row.dose_restriction || row.restriction_note || row.restriction || '');
