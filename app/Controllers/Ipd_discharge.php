@@ -2693,6 +2693,17 @@ class Ipd_discharge extends BaseController
                 continue;
             }
 
+            if ($rowRemark !== '' && ($rowRemark[0] === '{' || $rowRemark[0] === '[')) {
+                $decoded = json_decode($rowRemark, true);
+                if (is_array($decoded)) {
+                    $parts = [];
+                    if (! empty($decoded['duration'])) $parts[] = (string) $decoded['duration'];
+                    if (! empty($decoded['frequency'])) $parts[] = (string) $decoded['frequency'];
+                    if (! empty($decoded['severity'])) $parts[] = (string) $decoded['severity'];
+                    $rowRemark = implode(', ', $parts);
+                }
+            }
+
             if ($report !== '' && $rowRemark !== '') {
                 $lines[] = esc($report) . ' <i>' . esc($rowRemark) . '</i>';
             } elseif ($report !== '') {
@@ -2712,6 +2723,38 @@ class Ipd_discharge extends BaseController
         }
 
         return '<p><b>' . esc($title) . '</b> :<br /> ' . implode('<br /> ', $lines) . '</p>';
+    }
+
+    private function getDischargeComplaintRows(int $ipdId): array
+    {
+        $rawRows = $this->byIpdRows('ipd_discharge_complaint', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
+        $out = [];
+        foreach ($rawRows as $row) {
+            $id = (int) ($row['id'] ?? 0);
+            $term = (string) ($row['comp_report'] ?? '');
+            $rawRemark = (string) ($row['comp_remark'] ?? '');
+            $freq = '';
+            $sev = '';
+            $dur = $rawRemark;
+            if ($rawRemark !== '' && ($rawRemark[0] === '{' || $rawRemark[0] === '[')) {
+                $decoded = json_decode($rawRemark, true);
+                if (is_array($decoded)) {
+                    $dur = (string) ($decoded['duration'] ?? '');
+                    $freq = (string) ($decoded['frequency'] ?? '');
+                    $sev = (string) ($decoded['severity'] ?? '');
+                }
+            }
+            $out[] = [
+                'id' => $id,
+                'term' => $term,
+                'frequency' => $freq,
+                'severity' => $sev,
+                'duration' => $dur,
+                'date' => '',
+            ];
+        }
+
+        return $out;
     }
 
     private function sanitizeComplaintNarrativeRemark(string $remark): string
@@ -6276,7 +6319,7 @@ class Ipd_discharge extends BaseController
             && ($this->request->isAJAX() || $this->request->getPost('ajax_mode') === 'json')
             && in_array(
                 (string) ($this->request->getPost('action') ?? ''),
-                ['add_drug', 'remove_drug', 'remove_all_drugs', 'add_course', 'remove_course', 'apply_rx_group'],
+                ['add_drug', 'remove_drug', 'remove_all_drugs', 'add_course', 'remove_course', 'apply_rx_group', 'add_complaint', 'update_complaint', 'remove_complaint'],
                 true
             );
 
@@ -6382,8 +6425,22 @@ class Ipd_discharge extends BaseController
             }
 
             if ($action === 'add_complaint') {
-                $complaintName = trim((string) ($this->request->getPost('new_complaint_name') ?? ''));
+                $complaintName = trim((string) ($this->request->getPost('complaint_term') ?? $this->request->getPost('new_complaint_name') ?? ''));
+                $complaintDuration = trim((string) ($this->request->getPost('complaint_duration') ?? ''));
+                $complaintFreq = trim((string) ($this->request->getPost('complaint_frequency') ?? ''));
+                $complaintSev = trim((string) ($this->request->getPost('complaint_severity') ?? ''));
                 $complaintRemarkRow = trim((string) ($this->request->getPost('new_complaint_remark') ?? ''));
+
+                if ($complaintFreq !== '' || $complaintSev !== '') {
+                    $complaintRemarkRow = json_encode([
+                        'duration' => $complaintDuration,
+                        'frequency' => $complaintFreq,
+                        'severity' => $complaintSev,
+                    ], JSON_UNESCAPED_UNICODE) ?: $complaintDuration;
+                } elseif ($complaintDuration !== '') {
+                    $complaintRemarkRow = $complaintDuration;
+                }
+
                 $complaintRemarkText = trim((string) ($this->request->getPost('complaint_remark') ?? ''));
                 $painValue = trim((string) ($this->request->getPost('pain_value') ?? ''));
                 if (! in_array($painValue, ['0', '1', '2', '3', '4'], true)) {
@@ -6404,10 +6461,11 @@ class Ipd_discharge extends BaseController
                     }
 
                     $savedAny = (bool) $this->db->table('ipd_discharge_complaint')->insert($insert);
+                    $ajaxRowId = $savedAny ? (int) ($this->db->insertID() ?? 0) : 0;
                     $notice = $savedAny ? 'Complaint row added.' : 'Unable to add complaint row.';
                     $noticeType = $savedAny ? 'success' : 'warning';
 
-                    if ($this->tableHasColumns('ipd_discharge_complaint_remark', ['ipd_id'])) {
+                    if ($this->tableHasColumns('ipd_discharge_complaint_remark', ['ipd_id']) && $complaintRemarkText !== '') {
                         $savedAny = $this->upsertByIpd('ipd_discharge_complaint_remark', $ipdId, [
                             'comp_report' => $this->buildComplaintMetaPayload(['pain_value' => $painValue]),
                             'comp_remark' => $complaintRemarkText,
@@ -6416,6 +6474,41 @@ class Ipd_discharge extends BaseController
                     }
                 } else {
                     $notice = 'Enter complaint name before adding.';
+                    $noticeType = 'warning';
+                }
+            } elseif ($action === 'update_complaint') {
+                $complaintId = (int) ($this->request->getPost('complaint_row_id') ?? 0);
+                $complaintName = trim((string) ($this->request->getPost('complaint_term') ?? $this->request->getPost('new_complaint_name') ?? ''));
+                $complaintDuration = trim((string) ($this->request->getPost('complaint_duration') ?? ''));
+                $complaintFreq = trim((string) ($this->request->getPost('complaint_frequency') ?? ''));
+                $complaintSev = trim((string) ($this->request->getPost('complaint_severity') ?? ''));
+
+                if ($complaintFreq !== '' || $complaintSev !== '') {
+                    $remarkPayload = json_encode([
+                        'duration' => $complaintDuration,
+                        'frequency' => $complaintFreq,
+                        'severity' => $complaintSev,
+                    ], JSON_UNESCAPED_UNICODE) ?: $complaintDuration;
+                } else {
+                    $remarkPayload = $complaintDuration;
+                }
+
+                if ($complaintId > 0 && $complaintName !== '' && $this->tableHasColumns('ipd_discharge_complaint', ['id', 'ipd_id'])) {
+                    $updateData = [
+                        'comp_report' => $complaintName,
+                        'comp_remark' => $remarkPayload,
+                        'update_by' => $userLabel,
+                    ];
+                    $this->db->table('ipd_discharge_complaint')
+                        ->where('id', $complaintId)
+                        ->where('ipd_id', $ipdId)
+                        ->update($updateData);
+                    $savedAny = true;
+                    $ajaxRowId = $complaintId;
+                    $notice = 'Complaint updated successfully.';
+                    $noticeType = 'success';
+                } else {
+                    $notice = 'Unable to update complaint: invalid ID or missing name.';
                     $noticeType = 'warning';
                 }
             } elseif ($action === 'remove_complaint') {
@@ -6430,10 +6523,11 @@ class Ipd_discharge extends BaseController
                         ->where('id', $removeId)
                         ->where('ipd_id', $ipdId)
                         ->delete();
+                    $ajaxRowId = $removeId;
                     $notice = $savedAny ? 'Complaint row removed.' : 'Unable to remove complaint row.';
                     $noticeType = $savedAny ? 'success' : 'warning';
 
-                    if ($this->tableHasColumns('ipd_discharge_complaint_remark', ['ipd_id'])) {
+                    if ($this->tableHasColumns('ipd_discharge_complaint_remark', ['ipd_id']) && $complaintRemarkText !== '') {
                         $savedAny = $this->upsertByIpd('ipd_discharge_complaint_remark', $ipdId, [
                             'comp_report' => $this->buildComplaintMetaPayload(['pain_value' => $painValue]),
                             'comp_remark' => $complaintRemarkText,
@@ -6599,7 +6693,8 @@ class Ipd_discharge extends BaseController
                 }
             }
 
-            if (($this->request->isAJAX() || $this->request->getPost('ajax_mode') === 'json') && in_array($action, ['add_surgery', 'remove_surgery', 'add_procedure', 'remove_procedure', 'add_diagnosis', 'remove_diagnosis'], true)) {
+            if (($this->request->isAJAX() || $this->request->getPost('ajax_mode') === 'json') && in_array($action, ['add_complaint', 'update_complaint', 'remove_complaint', 'add_surgery', 'remove_surgery', 'add_procedure', 'remove_procedure', 'add_diagnosis', 'remove_diagnosis'], true)) {
+                $complaintRows = $this->getDischargeComplaintRows($ipdId);
                 $surgeryRows = $this->byIpdRows('ipd_discharge_surgery', ['id', 'surgery_name', 'surgery_date', 'surgery_remark'], 'id ASC', $ipdId);
                 $procedureRows = $this->byIpdRows('ipd_discharge_procedure', ['id', 'procedure_name', 'procedure_date', 'procedure_remark'], 'id ASC', $ipdId);
                 $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
@@ -6610,6 +6705,7 @@ class Ipd_discharge extends BaseController
                     'noticeType' => $noticeType ?? 'info',
                     'row_id' => $ajaxRowId ?? 0,
                     'row_source' => $ajaxRowSource ?? 'legacy',
+                    'complaintRows' => $complaintRows,
                     'surgeryRows' => $surgeryRows,
                     'procedureRows' => $procedureRows,
                     'diagnosisRows' => $diagnosisRows,
@@ -7187,11 +7283,23 @@ class Ipd_discharge extends BaseController
                             }
 
                             $duration = trim((string) ($row['duration'] ?? ''));
+                            $freq = trim((string) ($row['frequency'] ?? ''));
+                            $sev = trim((string) ($row['severity'] ?? ''));
                             $rowId = (int) ($row['id'] ?? 0);
+
+                            if ($freq !== '' || $sev !== '') {
+                                $remarkPayload = json_encode([
+                                    'duration' => $duration,
+                                    'frequency' => $freq,
+                                    'severity' => $sev,
+                                ], JSON_UNESCAPED_UNICODE) ?: $duration;
+                            } else {
+                                $remarkPayload = $duration;
+                            }
 
                             $commonData = [
                                 'comp_report' => $term,
-                                'comp_remark' => $duration,
+                                'comp_remark' => $remarkPayload,
                                 'update_by' => $userLabel,
                             ];
                             if ($this->db->fieldExists('order_id', 'ipd_discharge_complaint')) {
@@ -7752,6 +7860,7 @@ class Ipd_discharge extends BaseController
                     'row_id'     => $ajaxRowId,
                     'row_source' => $ajaxRowSource,
                     'drugRows'   => $drugRows,
+                    'complaintRows' => $this->getDischargeComplaintRows($ipdId),
                     'csrfName'   => csrf_token(),
                     'csrfHash'   => csrf_hash(),
                 ]);

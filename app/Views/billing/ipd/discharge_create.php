@@ -630,7 +630,7 @@ $historyFields = [
                                             <th style="width:130px">Frequency</th>
                                             <th style="width:120px">Severity</th>
                                             <th style="width:140px">Duration</th>
-                                            <th style="width:28px"></th>
+                                            <th style="width:115px;text-align:center;">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody id="discharge_complaint_tbody">
@@ -646,7 +646,7 @@ $historyFields = [
                                                     style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1060;max-height:260px;overflow-y:auto;"></div>
                                             </td>
                                             <td class="text-center">
-                                                <button type="button" class="btn btn-sm btn-outline-primary p-0" id="btn_discharge_add_complaint" title="Add Complaint" style="width:24px;height:24px;line-height:1">+</button>
+                                                <button type="button" class="btn btn-sm btn-outline-primary" id="btn_discharge_add_complaint" title="Add Complaint" style="height:26px;line-height:1;padding:0 8px;">+ Add</button>
                                             </td>
                                         </tr>
                                     </tfoot>
@@ -665,12 +665,24 @@ $historyFields = [
                                 $complaintSeedRows = [];
                                 if (isset($complaint_rows) && is_array($complaint_rows)) {
                                     foreach ($complaint_rows as $row) {
+                                        $rawRemark = (string) ($row['comp_remark'] ?? '');
+                                        $freq = '';
+                                        $sev = '';
+                                        $dur = $rawRemark;
+                                        if ($rawRemark !== '' && ($rawRemark[0] === '{' || $rawRemark[0] === '[')) {
+                                            $decoded = json_decode($rawRemark, true);
+                                            if (is_array($decoded)) {
+                                                $dur = (string) ($decoded['duration'] ?? '');
+                                                $freq = (string) ($decoded['frequency'] ?? '');
+                                                $sev = (string) ($decoded['severity'] ?? '');
+                                            }
+                                        }
                                         $complaintSeedRows[] = [
                                             'id' => (int) ($row['id'] ?? 0),
                                             'term' => (string) ($row['comp_report'] ?? ''),
-                                            'frequency' => '',
-                                            'severity' => '',
-                                            'duration' => (string) ($row['comp_remark'] ?? ''),
+                                            'frequency' => $freq,
+                                            'severity' => $sev,
+                                            'duration' => $dur,
                                             'date' => '',
                                         ];
                                     }
@@ -680,6 +692,7 @@ $historyFields = [
                                 <input type="hidden" name="discharge_complaints_json" id="discharge_complaints_json" value="">
 
                                 <!-- Fixed dropdowns for table cell inputs -->
+                                <div id="discharge_row_complaint_dd" style="display:none;position:fixed;z-index:1095;min-width:240px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 6px 16px rgba(0,0,0,.15);max-height:240px;overflow-y:auto;"></div>
                                 <div id="discharge_freq_dd" style="display:none;position:fixed;z-index:1090;min-width:160px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
                                 <div id="discharge_sev_dd" style="display:none;position:fixed;z-index:1090;min-width:140px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
                                 <div id="discharge_dur_dd" style="display:none;position:fixed;z-index:1090;min-width:160px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
@@ -2302,9 +2315,10 @@ $historyFields = [
                     nameInput.name = 'complaint_term[]';
                     nameInput.className = 'form-control form-control-sm complaint-name-input';
                     nameInput.value = item.term || '';
-                    nameInput.placeholder = 'Complaint…';
+                    nameInput.placeholder = 'Complaint (Type to search)…';
                     nameInput.style.fontSize = '.82rem';
                     nameInput.setAttribute('data-idx', idx);
+                    nameInput.setAttribute('autocomplete', 'off');
                     nameInput.addEventListener('input', function() {
                         selectedDischargeComplaints[idx].term = this.value;
                         syncDischargeComplaintJsonField();
@@ -2323,6 +2337,7 @@ $historyFields = [
                     freqInput.placeholder = 'daily…';
                     freqInput.style.fontSize = '.82rem';
                     freqInput.setAttribute('data-idx', idx);
+                    freqInput.setAttribute('autocomplete', 'off');
                     freqInput.addEventListener('input', function() {
                         selectedDischargeComplaints[idx].frequency = this.value;
                         syncDischargeComplaintJsonField();
@@ -2341,6 +2356,7 @@ $historyFields = [
                     sevInput.placeholder = 'mild…';
                     sevInput.style.fontSize = '.82rem';
                     sevInput.setAttribute('data-idx', idx);
+                    sevInput.setAttribute('autocomplete', 'off');
                     sevInput.addEventListener('input', function() {
                         selectedDischargeComplaints[idx].severity = this.value;
                         syncDischargeComplaintJsonField();
@@ -2359,6 +2375,7 @@ $historyFields = [
                     durInput.placeholder = '2 days…';
                     durInput.style.fontSize = '.82rem';
                     durInput.setAttribute('data-idx', idx);
+                    durInput.setAttribute('autocomplete', 'off');
                     durInput.addEventListener('input', function() {
                         selectedDischargeComplaints[idx].duration = this.value;
                         syncDischargeComplaintJsonField();
@@ -2372,26 +2389,146 @@ $historyFields = [
                     idInput.value = parseInt(item.id || 0, 10) || 0;
                     tr.appendChild(idInput);
 
-                    // Remove button
+                    // Action column with Update and Remove buttons
                     var td6 = document.createElement('td');
-                    td6.className = 'p-1 text-center';
+                    td6.className = 'p-1 text-center text-nowrap';
+
+                    var updateBtn = document.createElement('button');
+                    updateBtn.type = 'button';
+                    updateBtn.className = 'btn btn-sm btn-outline-success btn-update-complaint py-0 px-2 me-1';
+                    updateBtn.title = 'Save / Update this complaint';
+                    updateBtn.style.fontSize = '.78rem';
+                    updateBtn.style.height = '26px';
+                    updateBtn.setAttribute('data-idx', idx);
+                    updateBtn.innerHTML = '<i class="fas fa-check me-1"></i>Update';
+                    updateBtn.addEventListener('click', function() {
+                        saveDischargeComplaintRow(idx, $(this));
+                    });
+                    td6.appendChild(updateBtn);
+
                     var removeBtn = document.createElement('button');
                     removeBtn.type = 'button';
-                    removeBtn.className = 'btn btn-sm text-danger p-0';
+                    removeBtn.className = 'btn btn-sm btn-outline-danger btn-remove-complaint p-0';
+                    removeBtn.title = 'Remove this complaint';
+                    removeBtn.style.width = '24px';
+                    removeBtn.style.height = '26px';
                     removeBtn.style.lineHeight = '1';
+                    removeBtn.style.fontSize = '1rem';
+                    removeBtn.setAttribute('data-idx', idx);
                     removeBtn.innerHTML = '×';
                     removeBtn.addEventListener('click', function() {
-                        selectedDischargeComplaints.splice(idx, 1);
-                        renderDischargeComplaintTable();
-                        setComplaintStatus('Complaint removed.', 'success');
+                        removeDischargeComplaintRow(idx, $(this));
                     });
                     td6.appendChild(removeBtn);
-                    tr.appendChild(td6);
 
                     tbody.appendChild(tr);
                 });
 
                 syncDischargeComplaintJsonField();
+            }
+
+            function saveDischargeComplaintRow(idx, $btn) {
+                var item = selectedDischargeComplaints[idx];
+                if (!item) return;
+
+                // Sync latest values from inputs in this row
+                var $tr = $('#discharge_complaint_tbody tr[data-idx="' + idx + '"]');
+                if ($tr.length) {
+                    var termVal = ($tr.find('.complaint-name-input').val() || '').trim();
+                    var freqVal = ($tr.find('.complaint-freq-input').val() || '').trim();
+                    var sevVal  = ($tr.find('.complaint-sev-input').val() || '').trim();
+                    var durVal  = ($tr.find('.complaint-dur-input').val() || '').trim();
+                    item.term = termVal;
+                    item.frequency = freqVal;
+                    item.severity = sevVal;
+                    item.duration = durVal;
+                }
+
+                if (!item.term) {
+                    setComplaintStatus('Please enter or select a complaint name.', 'error');
+                    $tr.find('.complaint-name-input').trigger('focus');
+                    return;
+                }
+
+                var form = document.getElementById('section-complaints')
+                    ? document.getElementById('section-complaints').closest('form')
+                    : document.querySelector('form');
+                var csrf = getCsrfPair(form);
+                var isUpdate = parseInt(item.id || 0, 10) > 0;
+                var payload = {
+                    action: isUpdate ? 'update_complaint' : 'add_complaint',
+                    complaint_row_id: parseInt(item.id || 0, 10),
+                    complaint_term: item.term,
+                    complaint_frequency: item.frequency,
+                    complaint_severity: item.severity,
+                    complaint_duration: item.duration,
+                    ajax_mode: 'json'
+                };
+                payload[csrf.name] = csrf.value;
+
+                var origHtml = $btn ? $btn.html() : '';
+                if ($btn) $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+
+                $.post($(form).attr('action') || window.location.href, payload, function(data) {
+                    updateFormCsrf(form, data);
+                    if ($btn) $btn.prop('disabled', false).html(origHtml);
+
+                    if (data && (data.update === 1 || data.update === true)) {
+                        if (data.row_id && parseInt(data.row_id, 10) > 0) {
+                            selectedDischargeComplaints[idx].id = parseInt(data.row_id, 10);
+                            $tr.find('input[name="complaint_row_id[]"]').val(data.row_id);
+                        }
+                        syncDischargeComplaintJsonField();
+                        setComplaintStatus(data.notice || 'Complaint updated successfully.', 'success');
+                        if ($btn) {
+                            $btn.removeClass('btn-outline-success').addClass('btn-success').html('<i class="fas fa-check me-1"></i>Saved');
+                            setTimeout(function() {
+                                $btn.removeClass('btn-success').addClass('btn-outline-success').html('<i class="fas fa-check me-1"></i>Update');
+                            }, 1200);
+                        }
+                    } else {
+                        setComplaintStatus((data && data.notice) ? data.notice : 'Unable to save complaint.', 'error');
+                    }
+                }, 'json').fail(function() {
+                    if ($btn) $btn.prop('disabled', false).html(origHtml);
+                    setComplaintStatus('Network error while saving complaint.', 'error');
+                });
+            }
+
+            function removeDischargeComplaintRow(idx, $btn) {
+                var item = selectedDischargeComplaints[idx];
+                if (!item) return;
+
+                var rowId = parseInt(item.id || 0, 10);
+                if (rowId > 0) {
+                    var form = document.getElementById('section-complaints')
+                        ? document.getElementById('section-complaints').closest('form')
+                        : document.querySelector('form');
+                    var csrf = getCsrfPair(form);
+                    var payload = {
+                        action: 'remove_complaint',
+                        complaint_remove_id: rowId,
+                        ajax_mode: 'json'
+                    };
+                    payload[csrf.name] = csrf.value;
+
+                    if ($btn) $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+
+                    $.post($(form).attr('action') || window.location.href, payload, function(data) {
+                        updateFormCsrf(form, data);
+                        selectedDischargeComplaints.splice(idx, 1);
+                        renderDischargeComplaintTable();
+                        setComplaintStatus((data && data.notice) ? data.notice : 'Complaint removed.', 'success');
+                    }, 'json').fail(function() {
+                        selectedDischargeComplaints.splice(idx, 1);
+                        renderDischargeComplaintTable();
+                        setComplaintStatus('Complaint removed from list.', 'success');
+                    });
+                } else {
+                    selectedDischargeComplaints.splice(idx, 1);
+                    renderDischargeComplaintTable();
+                    setComplaintStatus('Complaint removed.', 'success');
+                }
             }
 
             // Quick Autotext Chips
@@ -2431,16 +2568,143 @@ $historyFields = [
                 });
             }
 
-            // ─── Inline Autotext Dropdowns (Frequency, Severity, Duration) ─────────
+            // ─── Inline Autotext Dropdowns (Complaint Name, Frequency, Severity, Duration) ─────────
             var _DISCHARGE_FREQ_OPTIONS = ['daily', 'twice daily', 'weekly', 'intermittent', 'continuous', 'occasional'];
             var _DISCHARGE_SEV_OPTIONS = ['mild', 'moderate', 'severe', 'profound'];
             var _DISCHARGE_DUR_UNITS = ['hours', 'days', 'weeks', 'months', 'years'];
+            var _dischargeRowDdIdx = -1;
 
             function _positionDischargeDd($dd, $input) {
                 if (!$input || !$input.length) return;
                 var r = $input[0].getBoundingClientRect();
-                $dd.css({ top: (r.bottom + 2) + 'px', left: r.left + 'px', width: Math.max(r.width, 160) + 'px' });
+                $dd.css({ top: (r.bottom + 2) + 'px', left: r.left + 'px', width: Math.max(r.width, 180) + 'px' });
             }
+
+            function renderRowComplaintDropdown(rows, $inp, idx) {
+                var $dd = $('#discharge_row_complaint_dd').empty();
+                _dischargeRowDdIdx = -1;
+                if (!rows || !rows.length) {
+                    $dd.append('<div class="px-3 py-2 text-muted small">No matching complaints found</div>');
+                    _positionDischargeDd($dd, $inp);
+                    $dd.show();
+                    return;
+                }
+
+                rows.forEach(function(row) {
+                    var term = ((row.name || row.term) || '').toString();
+                    var source = (row.source || '').toString();
+                    var hierarchy = (row.hierarchy || '').toString();
+                    var isSnomed = source === 'snomed';
+                    var nameColor = isSnomed ? '#0d6efd' : '#212529';
+
+                    var $item = $('<div class="px-3 py-2 border-bottom discharge-row-complaint-item" style="cursor:pointer;font-size:.85rem;line-height:1.3;transition:background .1s"></div>');
+                    $item.append($('<div class="fw-semibold text-truncate" style="color:' + nameColor + '">').text(term));
+                    if (isSnomed && hierarchy) {
+                        $item.append($('<div class="text-muted" style="font-size:.72rem">').text(hierarchy));
+                    }
+                    $item.data('term', term);
+
+                    $item.on('mouseenter', function() { $(this).css('background', '#f0f4ff'); })
+                         .on('mouseleave', function() { $(this).css('background', ''); })
+                         .on('mousedown', function(e) { e.preventDefault(); })
+                         .on('click', function() {
+                             var selectedTerm = $(this).data('term') || term;
+                             $inp.val(selectedTerm);
+                             if (idx >= 0 && idx < selectedDischargeComplaints.length) {
+                                 selectedDischargeComplaints[idx].term = selectedTerm;
+                                 syncDischargeComplaintJsonField();
+                             }
+                             $dd.hide().empty();
+                             _dischargeRowDdIdx = -1;
+                             $inp.closest('tr').find('.complaint-freq-input').trigger('focus');
+                         });
+
+                    $dd.append($item);
+                });
+
+                _positionDischargeDd($dd, $inp);
+                $dd.show();
+            }
+
+            $(document).on('input focus', '.complaint-name-input', function(e) {
+                var $inp = $(this);
+                var q = ($inp.val() || '').trim();
+                var idx = parseInt($inp.attr('data-idx'), 10);
+
+                if (idx >= 0 && idx < selectedDischargeComplaints.length) {
+                    selectedDischargeComplaints[idx].term = $inp.val();
+                    syncDischargeComplaintJsonField();
+                }
+
+                if (q.length < 1) {
+                    $('#discharge_row_complaint_dd').hide().empty();
+                    _dischargeRowDdIdx = -1;
+                    return;
+                }
+
+                var cacheKey = q.toUpperCase();
+                if (_dischargeComplaintSearchCache[cacheKey]) {
+                    renderRowComplaintDropdown(_dischargeComplaintSearchCache[cacheKey], $inp, idx);
+                    return;
+                }
+
+                if (_dischargeComplaintSearchTimer) clearTimeout(_dischargeComplaintSearchTimer);
+                if (_dischargeComplaintXhr) {
+                    try { _dischargeComplaintXhr.abort(); } catch(e){}
+                    _dischargeComplaintXhr = null;
+                }
+
+                _dischargeComplaintSearchTimer = setTimeout(function() {
+                    if (document.activeElement !== $inp[0]) return;
+                    _dischargeComplaintXhr = $.ajax({
+                        url: '<?= base_url('Opd_prescription/complaints_search') ?>',
+                        data: { q: q },
+                        dataType: 'json',
+                        success: function(data) {
+                            _dischargeComplaintXhr = null;
+                            if (document.activeElement !== $inp[0]) return;
+                            var rows = (data && data.rows) ? data.rows : [];
+                            _dischargeComplaintSearchCache[cacheKey] = rows;
+                            renderRowComplaintDropdown(rows, $inp, idx);
+                        },
+                        error: function() {
+                            _dischargeComplaintXhr = null;
+                        }
+                    });
+                }, 200);
+            });
+
+            $(document).on('keydown', '.complaint-name-input', function(e) {
+                var $dd = $('#discharge_row_complaint_dd');
+                var $items = $dd.find('.discharge-row-complaint-item');
+                if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+                    if (!$dd.is(':visible') || !$items.length) return;
+                    e.preventDefault();
+                    _dischargeRowDdIdx = e.key === 'ArrowDown'
+                        ? Math.min(_dischargeRowDdIdx + 1, $items.length - 1)
+                        : Math.max(_dischargeRowDdIdx - 1, 0);
+                    $items.css('background', '').eq(_dischargeRowDdIdx).css('background', '#f0f4ff');
+                } else if (e.key === 'Enter') {
+                    if ($dd.is(':visible') && _dischargeRowDdIdx >= 0 && _dischargeRowDdIdx < $items.length) {
+                        e.preventDefault();
+                        $items.eq(_dischargeRowDdIdx).trigger('click');
+                    } else {
+                        $(this).closest('tr').find('.complaint-freq-input').trigger('focus');
+                    }
+                    $dd.hide();
+                    _dischargeRowDdIdx = -1;
+                } else if (e.key === 'Escape') {
+                    $dd.hide();
+                    _dischargeRowDdIdx = -1;
+                }
+            });
+
+            $(document).on('blur', '.complaint-name-input', function() {
+                setTimeout(function() {
+                    $('#discharge_row_complaint_dd').hide();
+                    _dischargeRowDdIdx = -1;
+                }, 200);
+            });
 
             function getDischargeDurationSuggestions(input) {
                 input = (input || '').toString().trim();
@@ -2541,6 +2805,9 @@ $historyFields = [
             $(document).on('click', function(e) {
                 if (!$(e.target).closest('#discharge_complaint_lookup, #discharge_complaint_dropdown').length) {
                     closeDischargeComplaintDropdown();
+                }
+                if (!$(e.target).closest('.complaint-name-input, #discharge_row_complaint_dd').length) {
+                    $('#discharge_row_complaint_dd').hide();
                 }
                 if (!$(e.target).closest('.complaint-freq-input, #discharge_freq_dd').length) {
                     $('#discharge_freq_dd').hide();
@@ -7750,7 +8017,7 @@ $historyFields = [
                     var actionValue = submitter && submitter.name === 'action' ? String(submitter.value || '') : '';
                     var saveMode = submitter && submitter.dataset ? String(submitter.dataset.saveMode || '').toLowerCase() : '';
                     var statusTargetId = submitter && submitter.dataset ? String(submitter.dataset.statusId || '').trim() : '';
-                    var isComplaintAction = actionValue === 'add_complaint' || actionValue === 'remove_complaint';
+                    var isComplaintAction = actionValue === 'add_complaint' || actionValue === 'remove_complaint' || actionValue === 'update_complaint';
                     var isMedicineAction = actionValue === 'add_drug' || actionValue === 'remove_drug' || actionValue === 'apply_rx_group';
                     var targetSectionId = '';
 
@@ -7776,6 +8043,9 @@ $historyFields = [
                     if (isMedicineAction) {
                         targetSectionId = 'section-medicine';
                     }
+                    if (isComplaintAction) {
+                        targetSectionId = 'section-complaints';
+                    }
 
                     if (actionValue === 'add_procedure') {
                         var procedureDateInput = form.querySelector('[name="new_procedure_date"]');
@@ -7797,7 +8067,7 @@ $historyFields = [
                     }).done(function(result) {
                         // The server always returns JSON for AJAX requests (isAJAX() === true in CI4).
                         // Because dataType is 'html', jQuery does NOT auto-parse it — result is a raw
-                        // JSON string. Detect this by attempting JSON.parse and handle medicine actions.
+                        // JSON string. Detect this by attempting JSON.parse and handle medicine/complaint actions.
                         var parsedJson = null;
                         if (typeof result === 'string' && result.charAt(0) === '{') {
                             try { parsedJson = JSON.parse(result); } catch (e) { parsedJson = null; }
@@ -7819,9 +8089,19 @@ $historyFields = [
                                 noticeLevel = noticeLevel === 'success' ? 'error' : noticeLevel;
                             }
                             if (noticeText !== '') {
-                                setSectionStatus('discharge_medicine_status', noticeText, noticeLevel === 'success' ? 'success' : 'error');
+                                var statusIdToUse = statusTargetId !== '' ? statusTargetId : ((targetSectionId === 'section-complaints' || isComplaintAction) ? 'discharge_complaint_status' : 'discharge_medicine_status');
+                                setSectionStatus(statusIdToUse, noticeText, noticeLevel === 'success' ? 'success' : 'error');
                                 if (typeof window.notify === 'function') {
                                     window.notify(noticeLevel === 'success' ? 'success' : 'error', 'Discharge Update', noticeText);
+                                }
+                            }
+                            // Re-render complaint table rows from returned complaintRows array
+                            if ((isComplaintAction || targetSectionId === 'section-complaints') && Array.isArray(parsedJson.complaintRows)) {
+                                if (typeof selectedDischargeComplaints !== 'undefined') {
+                                    selectedDischargeComplaints = parsedJson.complaintRows;
+                                    if (typeof renderDischargeComplaintTable === 'function') {
+                                        renderDischargeComplaintTable();
+                                    }
                                 }
                             }
                             // Re-render medicine table rows from the returned drugRows array
