@@ -693,10 +693,19 @@ class Opd_prescription extends BaseController
 
         $afterRow = $this->db->table('opd_prescription')->where('id', $recordId)->where('opd_id', $opdId)->get(1)->getRowArray() ?? [];
         if (!empty($afterRow)) {
-            $this->clinicalAuditTrail->logChangedFields('opd_prescription', $recordId, $beforeRow, $afterRow, $this->getCurrentUserId());
+            try {
+                $this->clinicalAuditTrail->logChangedFields('opd_prescription', $recordId, $beforeRow, $afterRow, $this->getCurrentUserId());
+            } catch (\Throwable $auditEx) {
+                log_message('error', 'Audit trail logging failed on opd_prescription: ' . $auditEx->getMessage());
+            }
         }
 
-        $fhirStored = $this->storePrescriptionFhirBundle((int) $opdId, (int) $recordId, $patientRow, (array) $opdRow);
+        $fhirStored = false;
+        try {
+            $fhirStored = $this->storePrescriptionFhirBundle((int) $opdId, (int) $recordId, $patientRow, (array) $opdRow);
+        } catch (\Throwable $fhirEx) {
+            log_message('error', 'FHIR bundle store failed during opd save: ' . $fhirEx->getMessage() . ' in ' . $fhirEx->getFile() . ':' . $fhirEx->getLine());
+        }
 
         $this->syncPatientAddictionFlags((int) ($opdRow->p_id ?? 0), [
             'is_smoking' => (int) $this->request->getPost('is_smoking'),
@@ -746,11 +755,11 @@ class Opd_prescription extends BaseController
                 'csrfHash' => csrf_hash(),
             ]);
         } catch (\Throwable $e) {
-            log_message('error', 'opd_prescription_save failed: {message}', ['message' => $e->getMessage()]);
+            log_message('error', 'opd_prescription_save failed: ' . $e->getMessage() . ' in ' . $e->getFile() . ':' . $e->getLine());
 
             return $this->response->setJSON([
                 'update' => 0,
-                'error_text' => 'Unable to save prescription right now. Please retry.',
+                'error_text' => 'Unable to save prescription right now. ' . $e->getMessage(),
                 'csrfName' => csrf_token(),
                 'csrfHash' => csrf_hash(),
             ]);
@@ -4879,7 +4888,8 @@ class Opd_prescription extends BaseController
             $abhaAddress = $abhaField !== null ? trim((string) ($patientRow[$abhaField] ?? '')) : '';
 
             $patFirstName = $this->sanitizePersonNamePart((string) ($patientRow['p_fname'] ?? ''));
-            $patFullName  = $patFirstName;
+            $patLastName  = $this->sanitizePersonNamePart((string) ($patientRow['p_lname'] ?? ''));
+            $patFullName  = trim($patFirstName . ($patLastName !== '' ? ' ' . $patLastName : ''));
             if ($patFullName === '') {
                 $patFullName = trim((string) ($opdRow['P_name'] ?? ''));
             }
@@ -11694,7 +11704,8 @@ class Opd_prescription extends BaseController
         $abhaAddress = $abhaField !== null ? trim((string) ($patientRow[$abhaField] ?? '')) : '';
 
         $patFirstName = $this->sanitizePersonNamePart((string) ($patientRow['p_fname'] ?? ''));
-        $patFullName  = $patFirstName;
+        $patLastName  = $this->sanitizePersonNamePart((string) ($patientRow['p_lname'] ?? ''));
+        $patFullName  = trim($patFirstName . ($patLastName !== '' ? ' ' . $patLastName : ''));
         if ($patFullName === '') {
             $patFullName = trim((string) ($opdRow['P_name'] ?? ''));
         }

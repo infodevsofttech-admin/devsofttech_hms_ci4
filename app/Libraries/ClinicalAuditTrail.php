@@ -40,16 +40,21 @@ class ClinicalAuditTrail
             $module . '|' . $recordIdText . '|' . $fieldName . '|' . $oldValueJson . '|' . $newValueJson . '|' . $userIdText . '|' . $actionAt
         );
 
-        return (bool) $this->auditModel->insert([
-            'module' => $module,
-            'record_id' => $recordIdText,
-            'field_name' => $fieldName,
-            'old_value' => $oldValueJson,
-            'new_value' => $newValueJson,
-            'user_id' => $userIdText,
-            'action_at' => $actionAt,
-            'hash' => $hash,
-        ]);
+        try {
+            return (bool) $this->auditModel->insert([
+                'module' => $module,
+                'record_id' => $recordIdText,
+                'field_name' => $fieldName,
+                'old_value' => $oldValueJson,
+                'new_value' => $newValueJson,
+                'user_id' => $userIdText,
+                'action_at' => $actionAt,
+                'hash' => $hash,
+            ]);
+        } catch (\Throwable $e) {
+            log_message('error', 'Clinical audit insert failed: ' . $e->getMessage());
+            return false;
+        }
     }
 
     /**
