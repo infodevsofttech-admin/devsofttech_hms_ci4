@@ -1,4 +1,8 @@
+<link href="<?= base_url('assets/vendor/bootstrap-icons/bootstrap-icons.css') ?>" rel="stylesheet">
 <style>
+@keyframes bi-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+.spin { display: inline-block; animation: bi-spin 1s infinite linear; }
+
 /* High-Visibility Focus & Hover Effect for +ADD / Update Button */
 #btn_add_medicine {
     transition: all 0.15s ease-in-out;
@@ -1005,7 +1009,7 @@
                                             <th style="width:100px">Severity</th>
                                             <th style="width:120px">Duration</th>
                                             <th style="width:105px">Date</th>
-                                            <th style="width:24px"></th>
+                                            <th style="width:75px;text-align:center;">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody id="complaint_tbody"></tbody>
@@ -1014,22 +1018,31 @@
                                             <td></td>
                                             <td colspan="5" class="p-1 position-relative">
                                                 <input type="text" class="form-control form-control-sm" id="complaint_lookup"
-                                                       autocomplete="off" placeholder="Type complaint to add…">
+                                                       autocomplete="off" placeholder="Type complaint to search autotext (e.g. Fever, Cough, Chest pain)…">
                                                 <div id="complaint_dropdown" class="border rounded bg-white shadow-sm"
                                                      style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1060;max-height:260px;overflow-y:auto;"></div>
                                             </td>
-                                            <td></td>
+                                            <td class="text-center">
+                                                <button type="button" class="btn btn-sm btn-outline-primary" id="btn_opd_add_complaint" title="Add Complaint" style="height:26px;line-height:1;padding:0 8px;">+ Add</button>
+                                            </td>
                                         </tr>
                                     </tfoot>
                                 </table>
 
+                                <!-- Quick Autotext Chips -->
+                                <div class="my-2">
+                                    <span class="text-muted small fw-bold me-2"><i class="bi bi-clock-history me-1"></i> Quick Autotext Chips:</span>
+                                    <div id="opd_recent_complaint_chips" class="d-inline-flex flex-wrap gap-1 align-items-center">
+                                        <!-- Autotext chips loaded via JS -->
+                                    </div>
+                                </div>
+
                                 <!-- Fixed dropdowns for table cell inputs -->
+                                <div id="opd_row_complaint_dd" style="display:none;position:fixed;z-index:1095;min-width:240px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 6px 16px rgba(0,0,0,.15);max-height:240px;overflow-y:auto;"></div>
                                 <div id="complaint_dur_dd" style="display:none;position:fixed;z-index:1090;min-width:160px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
                                 <div id="complaint_sev_dd" style="display:none;position:fixed;z-index:1090;min-width:140px;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:180px;overflow-y:auto;"></div>
 
                                 <input type="hidden" id="complaint_snomed_json" value="<?= esc($opd_prescription[0]->complaint_snomed_json ?? '[]') ?>">
-                                <div class="rx-recent-chip-label">Recent complaints</div>
-                                <div class="rx-recent-chip-box" id="recent_chips_complaints"><span class="text-muted small">Loading...</span></div>
                                 <!-- Hidden fields for save-payload compatibility -->
                                 <input type="hidden" id="complaint_onset"         value="<?= esc($opd_prescription[0]->complaint_onset ?? '') ?>">
                                 <input type="hidden" id="complaint_duration_days" value="<?= esc($opd_prescription[0]->complaint_duration_days ?? '') ?>">
@@ -5289,13 +5302,16 @@
                 )
             );
 
-            // Remove button
-            $tr.append(
-                $('<td class="p-1 text-center">').append(
-                    $('<button type="button" class="btn btn-sm text-danger p-0 btn-remove-complaint" style="line-height:1;font-size:.9rem">')
-                        .attr('data-idx', idx).html('&times;')
-                )
-            );
+            // Action column: Update button (green square) + Remove button (red square)
+            var $tdAction = $('<td class="p-1 text-center text-nowrap">');
+            var $updateBtn = $('<button type="button" class="btn btn-sm btn-outline-success btn-update-opd-complaint p-0 me-1" title="Save / Update this complaint" style="width:26px;height:26px;line-height:24px;font-size:.88rem;">')
+                .attr('data-idx', idx)
+                .html('<i class="bi bi-arrow-repeat"></i>');
+            var $removeBtn = $('<button type="button" class="btn btn-sm btn-outline-danger btn-remove-complaint p-0" title="Remove this complaint" style="width:26px;height:26px;line-height:24px;font-size:.88rem;">')
+                .attr('data-idx', idx)
+                .html('<i class="bi bi-trash"></i>');
+            $tdAction.append($updateBtn).append($removeBtn);
+            $tr.append($tdAction);
 
             $tbody.append($tr);
         });
@@ -5382,14 +5398,124 @@
             .on('click', function() { onSelect(text); });
     }
 
-    // ─── Complaint Name: event delegation for editing complaint text ──────────
-    $(document).on('input', '.complaint-name-input', function() {
-        var idx = parseInt($(this).attr('data-idx'), 10);
+    // ─── Complaint Name: event delegation with autosearch for editing complaint text ──────────
+    var _opdRowComplaintDdIdx = -1;
+    var _opdRowComplaintSearchTimer = null;
+    var _opdRowComplaintSearchCache = {};
+
+    function renderOpdRowComplaintDropdown(rows, $inp, idx) {
+        var $dd = $('#opd_row_complaint_dd').empty();
+        _opdRowComplaintDdIdx = -1;
+        if (!rows || !rows.length) {
+            $dd.append('<div class="px-3 py-2 text-muted small">No matching complaints found</div>');
+            _positionDd($dd, $inp);
+            $dd.show();
+            return;
+        }
+
+        rows.forEach(function(row) {
+            var term = ((row.name || row.term) || '').toString();
+            var conceptId = (row.concept_id || '').toString();
+            var source = (row.source || (conceptId ? 'snomed' : 'local')).toString();
+            var hierarchy = (row.hierarchy || '').toString();
+            var isSnomed = source === 'snomed';
+            var nameColor = isSnomed ? '#0d6efd' : '#212529';
+
+            var $item = $('<div class="px-3 py-2 border-bottom opd-row-complaint-item" style="cursor:pointer;font-size:.85rem;line-height:1.3;transition:background .1s"></div>');
+            $item.append($('<div class="fw-semibold text-truncate" style="color:' + nameColor + '">').text(term));
+            if (isSnomed && hierarchy) {
+                $item.append($('<div class="text-muted" style="font-size:.72rem">').text(hierarchy));
+            }
+
+            $item.on('mouseenter', function() { $(this).css('background', '#f0f4ff'); })
+                 .on('mouseleave', function() { $(this).css('background', ''); })
+                 .on('mousedown', function(e) { e.preventDefault(); })
+                 .on('click', function() {
+                     $inp.val(term);
+                     if (isSnomed) {
+                         $inp.css({ color: '#0d6efd', fontWeight: '600' });
+                     } else {
+                         $inp.css({ color: '', fontWeight: '' });
+                     }
+                     if (idx >= 0 && idx < selectedComplaintItems.length) {
+                         selectedComplaintItems[idx].term = term;
+                         selectedComplaintItems[idx].concept_id = conceptId;
+                         selectedComplaintItems[idx].source = source;
+                         selectedComplaintItems[idx].hierarchy = hierarchy;
+                         syncComplaintSnomedJson();
+                         markDirty('Complaint updated');
+                     }
+                     $dd.hide().empty();
+                     _opdRowComplaintDdIdx = -1;
+                     $inp.closest('tr').find('.complaint-freq-input').trigger('focus');
+                 });
+
+            $dd.append($item);
+        });
+
+        _positionDd($dd, $inp);
+        $dd.show();
+    }
+
+    $(document).on('input focus', '.complaint-name-input', function(e) {
+        var $inp = $(this);
+        var q = ($inp.val() || '').trim();
+        var idx = parseInt($inp.attr('data-idx'), 10);
+
         if (idx >= 0 && idx < selectedComplaintItems.length) {
-            selectedComplaintItems[idx].term = ($(this).val() || '').trim();
+            selectedComplaintItems[idx].term = $inp.val();
             syncComplaintSnomedJson();
         }
+
+        if (q.length < 1) {
+            $('#opd_row_complaint_dd').hide().empty();
+            _opdRowComplaintDdIdx = -1;
+            return;
+        }
+
+        var cacheKey = q.toUpperCase();
+        if (_opdRowComplaintSearchCache[cacheKey]) {
+            renderOpdRowComplaintDropdown(_opdRowComplaintSearchCache[cacheKey], $inp, idx);
+            return;
+        }
+
+        if (_opdRowComplaintSearchTimer) clearTimeout(_opdRowComplaintSearchTimer);
+        _opdRowComplaintSearchTimer = setTimeout(function() {
+            if (!$inp.is(':focus')) return;
+            apiGet('<?= base_url('Opd_prescription/complaints_search') ?>?q=' + encodeURIComponent(q), function(data) {
+                if (!$inp.is(':focus')) return;
+                var rows = data.rows || [];
+                _opdRowComplaintSearchCache[cacheKey] = rows;
+                renderOpdRowComplaintDropdown(rows, $inp, idx);
+            });
+        }, 220);
     });
+
+    $(document).on('keydown', '.complaint-name-input', function(e) {
+        var $dd = $('#opd_row_complaint_dd');
+        var $items = $dd.find('.opd-row-complaint-item');
+        if (e.key === 'ArrowDown' || e.key === 'ArrowUp') {
+            if (!$dd.is(':visible') || !$items.length) return;
+            e.preventDefault();
+            _opdRowComplaintDdIdx = e.key === 'ArrowDown'
+                ? Math.min(_opdRowComplaintDdIdx + 1, $items.length - 1)
+                : Math.max(_opdRowComplaintDdIdx - 1, 0);
+            $items.css('background', '').eq(_opdRowComplaintDdIdx).css('background', '#f0f4ff');
+        } else if (e.key === 'Enter') {
+            if ($dd.is(':visible') && _opdRowComplaintDdIdx >= 0 && _opdRowComplaintDdIdx < $items.length) {
+                e.preventDefault();
+                $items.eq(_opdRowComplaintDdIdx).trigger('click');
+            } else {
+                $(this).closest('tr').find('.complaint-freq-input').trigger('focus');
+            }
+            $dd.hide();
+            _opdRowComplaintDdIdx = -1;
+        } else if (e.key === 'Escape') {
+            $dd.hide();
+            _opdRowComplaintDdIdx = -1;
+        }
+    });
+
     $(document).on('blur', '.complaint-name-input', function() {
         var idx = parseInt($(this).attr('data-idx'), 10);
         if (idx >= 0 && idx < selectedComplaintItems.length) {
@@ -5397,13 +5523,10 @@
             syncComplaintSnomedJson();
             markDirty('Complaint name updated');
         }
-    });
-    $(document).on('keydown', '.complaint-name-input', function(e) {
-        if (e.key === 'Enter') {
-            e.preventDefault();
-            // Move to frequency input in same row
-            $(this).closest('tr').find('.complaint-freq-input').trigger('focus');
-        }
+        setTimeout(function() {
+            $('#opd_row_complaint_dd').hide();
+            _opdRowComplaintDdIdx = -1;
+        }, 200);
     });
 
     // ─── Frequency: event delegation on table rows ────────────────────
@@ -5466,6 +5589,9 @@
         setTimeout(function() { $('#_freq_dd').remove(); }, 150);
     });
     $(document).on('click', function(e) {
+        if (!$(e.target).closest('.complaint-name-input, #opd_row_complaint_dd').length) {
+            $('#opd_row_complaint_dd').hide();
+        }
         if (!$(e.target).closest('.complaint-freq-input, #_freq_dd').length) {
             $('#_freq_dd').remove();
         }
@@ -5775,8 +5901,85 @@
         }
         selectedComplaintItems.splice(idx, 1);
         renderComplaintChips();
+        syncComplaintSnomedJson();
         markDirty('Complaint removed');
+        savePrescription(true);
     });
+
+    $(document).on('click', '.btn-update-opd-complaint', function() {
+        var $btn = $(this);
+        var idx = parseInt($btn.attr('data-idx'), 10);
+        var item = selectedComplaintItems[idx];
+        if (!item) return;
+
+        var $tr = $('#complaint_tbody tr[data-idx="' + idx + '"]');
+        if ($tr.length) {
+            item.term = ($tr.find('.complaint-name-input').val() || '').trim();
+            item.frequency = ($tr.find('.complaint-freq-input').val() || '').trim();
+            item.severity = ($tr.find('.complaint-sev-input').val() || '').trim();
+            item.duration = ($tr.find('.complaint-dur-input').val() || '').trim();
+            item.date = ($tr.find('.complaint-date-input').val() || '').trim();
+        }
+
+        if (!item.term) {
+            setStatus('error', 'Please enter a complaint name');
+            $tr.find('.complaint-name-input').trigger('focus');
+            return;
+        }
+
+        syncComplaintSnomedJson();
+        markDirty('Complaint updated');
+
+        var origHtml = '<i class="bi bi-arrow-repeat"></i>';
+        $btn.prop('disabled', true).html('<i class="bi bi-arrow-repeat spin"></i>');
+        savePrescription(false, function(ok) {
+            $btn.prop('disabled', false);
+            if (ok) {
+                $btn.removeClass('btn-outline-success').addClass('btn-success').html('<i class="bi bi-check-lg text-white"></i>');
+                setTimeout(function() {
+                    $btn.removeClass('btn-success').addClass('btn-outline-success').html(origHtml);
+                }, 1200);
+            } else {
+                $btn.html(origHtml);
+            }
+        });
+    });
+
+    $(document).on('click', '#btn_opd_add_complaint', function() {
+        var inputVal = ($('#complaint_lookup').val() || '').trim();
+        if (inputVal === '') {
+            $('#complaint_lookup').trigger('focus');
+            return;
+        }
+        addComplaintItem({ term: inputVal, source: 'local' });
+        $('#complaint_lookup').val('');
+        closeComplaintDropdown();
+    });
+
+    function renderOpdRecentChips() {
+        var $box = $('#opd_recent_complaint_chips');
+        if (!$box.length) return;
+        var commonComplaints = [
+            'Fever', 'Cough', 'Abdominal Pain', 'Chest Pain', 'Breathlessness',
+            'Headache', 'Vomiting', 'Loose Stools', 'Giddiness', 'Weakness'
+        ];
+        $box.empty();
+        commonComplaints.forEach(function(item) {
+            var $chip = $('<button type="button" class="btn btn-xs btn-outline-secondary py-0 px-2 rounded-pill me-1 mb-1" style="font-size:.78rem;"></button>')
+                .text('+ ' + item)
+                .on('click', function() {
+                    var exists = selectedComplaintItems.some(function(c) {
+                        return complaintTextKey(c.term) === complaintTextKey(item);
+                    });
+                    if (exists) {
+                        setStatus('muted', '"' + item + '" already added');
+                        return;
+                    }
+                    addComplaintItem({ term: item, source: 'local' });
+                });
+            $box.append($chip);
+        });
+    }
 
     // Init from saved JSON on page load
     (function initComplaintItemsFromSaved() {
@@ -5812,6 +6015,7 @@
                 });
             }
             renderComplaintChips();
+            renderOpdRecentChips();
             return;
         }
         try {
@@ -5827,6 +6031,7 @@
             // Ignore malformed JSON; will start fresh
         }
         renderComplaintChips();
+        renderOpdRecentChips();
     })();
 
     // ─── Diagnosis Table ──────────────────────────────────────────────────────

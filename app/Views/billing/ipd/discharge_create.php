@@ -260,7 +260,11 @@ $historyFields = [
 ];
 ?>
 
+<link href="<?= base_url('assets/vendor/bootstrap-icons/bootstrap-icons.css') ?>" rel="stylesheet">
 <style>
+    @keyframes bi-spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    .spin { display: inline-block; animation: bi-spin 1s infinite linear; }
+
     .discharge-page {
         --dc-border: #e6edf5;
         --dc-muted-bg: #f8f9fc;
@@ -630,7 +634,7 @@ $historyFields = [
                                             <th style="width:130px">Frequency</th>
                                             <th style="width:120px">Severity</th>
                                             <th style="width:140px">Duration</th>
-                                            <th style="width:115px;text-align:center;">Action</th>
+                                            <th style="width:75px;text-align:center;">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody id="discharge_complaint_tbody">
@@ -2395,13 +2399,14 @@ $historyFields = [
 
                     var updateBtn = document.createElement('button');
                     updateBtn.type = 'button';
-                    updateBtn.className = 'btn btn-sm btn-outline-success btn-update-complaint py-0 px-2 me-1';
+                    updateBtn.className = 'btn btn-sm btn-outline-success btn-update-complaint p-0 me-1';
                     updateBtn.title = 'Save / Update this complaint';
-                    updateBtn.style.fontSize = '.78rem';
+                    updateBtn.style.width = '26px';
                     updateBtn.style.height = '26px';
                     updateBtn.style.lineHeight = '24px';
+                    updateBtn.style.fontSize = '.88rem';
                     updateBtn.setAttribute('data-idx', idx);
-                    updateBtn.innerHTML = '<i class="fas fa-check me-1"></i>Update';
+                    updateBtn.innerHTML = '<i class="bi bi-arrow-repeat"></i>';
                     updateBtn.addEventListener('click', function() {
                         saveDischargeComplaintRow(idx, $(this));
                     });
@@ -2414,9 +2419,9 @@ $historyFields = [
                     removeBtn.style.width = '26px';
                     removeBtn.style.height = '26px';
                     removeBtn.style.lineHeight = '24px';
-                    removeBtn.style.fontSize = '.85rem';
+                    removeBtn.style.fontSize = '.88rem';
                     removeBtn.setAttribute('data-idx', idx);
-                    removeBtn.innerHTML = '<i class="fas fa-trash-alt"></i>';
+                    removeBtn.innerHTML = '<i class="bi bi-trash"></i>';
                     removeBtn.addEventListener('click', function() {
                         removeDischargeComplaintRow(idx, $(this));
                     });
@@ -2469,8 +2474,8 @@ $historyFields = [
                 };
                 payload[csrf.name] = csrf.value;
 
-                var origHtml = $btn ? $btn.html() : '';
-                if ($btn) $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+                var origHtml = $btn ? $btn.html() : '<i class="bi bi-arrow-repeat"></i>';
+                if ($btn) $btn.prop('disabled', true).html('<i class="bi bi-arrow-repeat spin"></i>');
 
                 $.post($(form).attr('action') || window.location.href, payload, function(data) {
                     updateFormCsrf(form, data);
@@ -2484,9 +2489,9 @@ $historyFields = [
                         syncDischargeComplaintJsonField();
                         setComplaintStatus(data.notice || 'Complaint updated successfully.', 'success');
                         if ($btn) {
-                            $btn.removeClass('btn-outline-success').addClass('btn-success').html('<i class="fas fa-check me-1"></i>Saved');
+                            $btn.removeClass('btn-outline-success').addClass('btn-success').html('<i class="bi bi-check-lg text-white"></i>');
                             setTimeout(function() {
-                                $btn.removeClass('btn-success').addClass('btn-outline-success').html('<i class="fas fa-check me-1"></i>Update');
+                                $btn.removeClass('btn-success').addClass('btn-outline-success').html('<i class="bi bi-arrow-repeat"></i>');
                             }, 1200);
                         }
                     } else {
@@ -2515,7 +2520,7 @@ $historyFields = [
                     };
                     payload[csrf.name] = csrf.value;
 
-                    if ($btn) $btn.prop('disabled', true).html('<i class="fas fa-spinner fa-spin"></i>');
+                    if ($btn) $btn.prop('disabled', true).html('<i class="bi bi-arrow-repeat spin"></i>');
 
                     $.post($(form).attr('action') || window.location.href, payload, function(data) {
                         updateFormCsrf(form, data);
