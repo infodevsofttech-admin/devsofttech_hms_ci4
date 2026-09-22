@@ -1310,12 +1310,6 @@ $historyFields = [
                                                 <label class="form-label fw-semibold mb-1 text-dark">Medicine Name <span class="text-danger">*</span></label>
                                                 <input type="text" class="form-control form-control-lg shadow-sm" id="discharge_med_name" autocomplete="off" placeholder="Type medicine name (e.g. Paracetamol 500mg, Amoxicillin)...">
                                                 <div id="discharge_med_name_dd" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1080;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 6px 16px rgba(0,0,0,.15);max-height:280px;overflow-y:auto;"></div>
-                                                <!-- Substitute Box -->
-                                                <div class="col-12" id="discharge_substitute_box" style="display:none;margin-top:0.5rem;">
-                                                    <div class="small text-muted" id="discharge_substitute_note"></div>
-                                                    <div class="small text-muted" id="discharge_substitute_empty" style="display:none;">No substitute found.</div>
-                                                    <div id="discharge_substitute_rows" style="max-height:200px;overflow-y:auto;"></div>
-                                                </div>
                                             </div>
                                             <div class="col-md-2">
                                                 <label class="form-label fw-semibold mb-1 text-dark">Form / Type</label>
@@ -1472,7 +1466,7 @@ $historyFields = [
                                                 <th>Freq</th>
                                                 <th>Days</th>
                                                 <th>Remark</th>
-                                                <th style="width:90px;">Action</th>
+                                                <th style="width:160px;min-width:160px;">Action</th>
                                             </tr>
                                         </thead>
                                         <tbody id="discharge_medicine_tbody">
@@ -1489,7 +1483,7 @@ $historyFields = [
                                                         <td><?= esc((string) ($row['dosage_freq'] ?? '')) ?></td>
                                                         <td><?= esc((string) ($row['no_of_days'] ?? '')) ?></td>
                                                         <td><?= esc((string) ($row['remark'] ?? '')) ?></td>
-                                                        <td class="d-flex gap-1">
+                                                        <td class="d-flex gap-1 flex-wrap">
                                                             <button
                                                                 type="button"
                                                                 class="btn btn-outline-primary btn-sm btn-edit-discharge-med"
@@ -1508,12 +1502,31 @@ $historyFields = [
                                                                 data-qty="<?= esc((string) ($row['qty'] ?? '')) ?>"
                                                                 data-remark="<?= esc((string) ($row['remark'] ?? '')) ?>">Edit</button>
                                                             <button type="button" class="btn btn-outline-danger btn-sm btn-remove-discharge-med" data-id="<?= (int) ($row['id'] ?? 0) ?>" data-source="<?= esc((string) ($row['source'] ?? 'legacy')) ?>">Remove</button>
+                                                            <button type="button" class="btn btn-outline-info btn-sm btn-discharge-substitute-row" data-id="<?= (int) ($row['id'] ?? 0) ?>" data-source="<?= esc((string) ($row['source'] ?? 'legacy')) ?>" data-med-name="<?= esc((string) ($row['med_name'] ?? '')) ?>" data-med-salt="<?= esc((string) ($row['med_salt'] ?? '')) ?>" data-med-type="<?= esc((string) ($row['med_type'] ?? '')) ?>" title="View Substitutes"><i class="bi bi-arrow-repeat"></i> Sub</button>
                                                         </td>
                                                     </tr>
                                             <?php endforeach;
                                             endif; ?>
                                         </tbody>
                                     </table>
+                                </div>
+                                <!-- Substitute Box below added medicines table -->
+                                <div id="discharge_substitute_box" class="card mt-2 border-info shadow-sm" style="display:none;">
+                                    <div class="card-header bg-info-subtle py-1 px-3 d-flex justify-content-between align-items-center">
+                                        <span class="fw-semibold small text-info-emphasis">
+                                            <i class="bi bi-arrow-repeat me-1"></i> Substitutes for: <strong id="discharge_substitute_med_name"></strong>
+                                        </span>
+                                        <div class="d-flex align-items-center gap-2">
+                                            <span class="badge bg-info text-dark" id="discharge_substitute_note"></span>
+                                            <button type="button" class="btn-close btn-sm" id="btn_close_discharge_substitutes" aria-label="Close"></button>
+                                        </div>
+                                    </div>
+                                    <div class="card-body p-2">
+                                        <div class="small text-muted py-2 text-center" id="discharge_substitute_empty" style="display:none;">
+                                            <i class="bi bi-info-circle me-1"></i> No substitute found for this medicine composition.
+                                        </div>
+                                        <div id="discharge_substitute_rows" class="d-flex flex-wrap gap-2" style="max-height:220px;overflow-y:auto;"></div>
+                                    </div>
                                 </div>
                                 <div class="d-flex justify-content-end align-items-center mt-2">
                                     <button type="button" class="btn btn-sm btn-outline-danger" id="btn_discharge_med_reset" title="Remove all added medicines"><i class="bi bi-trash me-1"></i>Remove All</button>
@@ -6373,10 +6386,6 @@ $historyFields = [
                         }
                     });
 
-                    if (matched.id) {
-                        loadDischargeMedicineSubstitutes(matched.id, medName);
-                    }
-
                     setTimeout(function() {
                         isSelectingDischargeMed = false;
                     }, 300);
@@ -6531,24 +6540,32 @@ $historyFields = [
                     });
                 }
 
-                // ─── Load Medicine Substitutes ──────────────────────────────────────
-                function loadDischargeMedicineSubstitutes(medId, medName) {
+                // ─── Load Medicine Substitutes (Invoked via 'Sub' button on added medicines) ───
+                function loadDischargeMedicineSubstitutes(medId, medName, medType) {
                     medId = parseInt(medId || '0', 10);
                     medName = (medName || '').toString().trim();
                     var $box = $('#discharge_substitute_box');
+                    var $medTitle = $('#discharge_substitute_med_name');
                     var $note = $('#discharge_substitute_note');
                     var $empty = $('#discharge_substitute_empty');
                     var $rows = $('#discharge_substitute_rows');
 
-                    if (medId <= 0) {
+                    if (!medName) {
                         $box.hide();
                         return;
                     }
 
-                    $note.text('');
+                    $medTitle.text(medName + (medType ? ' (' + medType + ')' : ''));
+                    $note.text('Loading...');
                     $empty.hide();
                     $rows.empty();
-                    $box.hide();
+                    $box.show();
+
+                    if ($box.length && $box.offset()) {
+                        $('html, body').animate({
+                            scrollTop: $box.offset().top - 120
+                        }, 200);
+                    }
 
                     var url = '<?= base_url('Opd_prescription/medicine_substitutes') ?>?med_id=' + encodeURIComponent(medId) +
                         '&med_name=' + encodeURIComponent(medName);
@@ -6557,80 +6574,153 @@ $historyFields = [
                         var rows = (data && data.rows) ? data.rows : [];
 
                         if (!rows.length) {
-                            $box.hide();
-                            $empty.hide();
+                            $note.text('0 found');
+                            $empty.show().text('No substitutes found for this composition.');
                             $rows.empty();
+                            $box.show();
                             return;
                         }
 
-                        $note.text(rows.length + ' substitute(s)');
+                        $note.text(rows.length + ' substitute(s) found');
                         $empty.hide();
                         $rows.empty();
                         $box.show();
 
                         rows.forEach(function(row) {
-                            var medId = parseInt(row.id || 0, 10);
-                            var name = String(row.med_name || '').trim();
-                            var type = String(row.med_type || '').trim();
-                            var generic = String(row.genericname || row.salt_name || '').trim();
+                            var sId = parseInt(row.id || 0, 10);
+                            var sName = String(row.med_name || '').trim();
+                            var sType = String(row.med_type || row.formulation || '').trim();
+                            var sGeneric = String(row.genericname || row.salt_name || row.med_salt || '').trim();
+                            var sCompany = String(row.company_name || '').trim();
 
-                            if (name === '') {
+                            if (sName === '') {
                                 return;
                             }
 
-                            var card = '<div class=\"card mb-1\" style=\"font-size:0.875rem;\">' +
-                                '<div class=\"card-body py-1 px-2\">' +
-                                '<div class=\"d-flex justify-content-between align-items-center\">' +
-                                '<div><strong>' + $('<div>').text(name).html() + '</strong>' +
-                                (type ? ' <small class=\"text-muted\">(' + $('<div>').text(type).html() + ')</small>' : '') +
-                                (generic ? '<br><small class=\"text-muted\">' + $('<div>').text(generic).html() + '</small>' : '') +
+                            var card = '<div class="card border shadow-sm p-2" style="font-size:0.85rem;min-width:280px;flex:1 1 300px;background:#ffffff;">' +
+                                '<div class="d-flex justify-content-between align-items-start">' +
+                                    '<div>' +
+                                        '<div class="fw-bold text-dark">' + $('<div>').text(sName).html() +
+                                            (sType ? ' <span class="badge bg-secondary-subtle text-dark border">' + $('<div>').text(sType).html() + '</span>' : '') +
+                                        '</div>' +
+                                        (sGeneric ? '<div class="text-primary small" style="font-size:0.8rem;">' + $('<div>').text(sGeneric).html() + '</div>' : '') +
+                                        (sCompany ? '<div class="text-muted small" style="font-size:0.75rem;">' + $('<div>').text(sCompany).html() + '</div>' : '') +
+                                    '</div>' +
+                                    '<div class="btn-group btn-group-sm ms-2">' +
+                                        '<button type="button" class="btn btn-sm btn-outline-primary btn-discharge-substitute-replace" ' +
+                                            'data-id="' + sId + '" ' +
+                                            'data-name="' + $('<div>').text(sName).html() + '" ' +
+                                            'data-type="' + $('<div>').text(sType).html() + '" ' +
+                                            'data-salt="' + $('<div>').text(sGeneric).html() + '" ' +
+                                            'title="Replace in this medicine row">Replace</button>' +
+                                        '<button type="button" class="btn btn-sm btn-outline-success btn-discharge-substitute-use-form" ' +
+                                            'data-id="' + sId + '" ' +
+                                            'data-name="' + $('<div>').text(sName).html() + '" ' +
+                                            'data-type="' + $('<div>').text(sType).html() + '" ' +
+                                            'data-salt="' + $('<div>').text(sGeneric).html() + '" ' +
+                                            'title="Load into form as new medicine">+ Add to Form</button>' +
+                                    '</div>' +
                                 '</div>' +
-                                '<div class=\"btn-group btn-group-sm\">' +
-                                '<button type=\"button\" class=\"btn btn-sm btn-outline-primary btn-discharge-substitute-use\" ' +
-                                'data-id=\"' + medId + '\" ' +
-                                'data-name=\"' + $('<div>').text(name).html() + '\" ' +
-                                'data-type=\"' + $('<div>').text(type).html() + '\">Use</button>' +
-                                '</div></div></div></div>';
+                            '</div>';
 
                             $rows.append(card);
                         });
                     }, 'json').fail(function() {
-                        $note.text('');
-                        $empty.show();
+                        $note.text('Error');
+                        $empty.show().text('Failed to load substitutes. Please try again.');
                         $rows.empty();
                     });
                 }
 
-                // Handle substitute "Use" button
-                $(document).on('click', '.btn-discharge-substitute-use', function() {
-                    var medId = parseInt($(this).data('id') || '0', 10);
-                    var medName = String($(this).data('name') || '').trim();
-                    var medType = String($(this).data('type') || '').trim();
+                // Handle Sub button click on added medicine rows
+                $(document).on('click', '.btn-discharge-substitute-row', function(e) {
+                    if (e) e.preventDefault();
+                    var $btn = $(this);
+                    var $tr = $btn.closest('tr');
+                    var medName = String($btn.data('med-name') || $tr.find('td:eq(1)').text() || '').trim();
+                    var medType = String($btn.data('med-type') || $tr.find('td:eq(0)').text() || '').trim();
+                    var medId = parseInt($btn.data('id') || $tr.data('row-id') || 0, 10);
+                    var rowId = parseInt($btn.data('id') || $tr.data('row-id') || 0, 10);
+                    var rowSource = String($btn.data('source') || $tr.data('row-source') || 'legacy').trim();
 
-                    if (medName === '') {
+                    if (!medName) {
                         return;
                     }
 
-                    $('#discharge_med_id').val(medId);
-                    $('#discharge_med_name').val(medName);
-                    if (medType !== '') {
-                        setDischargeMedType(medType);
-                    }
+                    $('#discharge_medicine_tbody tr').removeClass('table-info');
+                    $tr.addClass('table-info');
 
-                    $('#discharge_substitute_box').hide();
-                    $('#discharge_med_name').trigger('focus');
+                    $('#discharge_substitute_box').data('target-row-id', rowId);
+                    $('#discharge_substitute_box').data('target-row-source', rowSource);
+
+                    loadDischargeMedicineSubstitutes(medId, medName, medType);
                 });
 
-                // Load substitutes when medicine is selected
-                dischargeMedInput.addEventListener('change', function() {
-                    var medId = parseInt($('#discharge_med_id').val() || '0', 10);
-                    var medName = String(dischargeMedInput.value || '').trim();
+                // Close substitute box
+                $(document).on('click', '#btn_close_discharge_substitutes', function() {
+                    $('#discharge_substitute_box').hide();
+                    $('#discharge_medicine_tbody tr').removeClass('table-info');
+                });
 
-                    if (medId > 0 || medName !== '') {
-                        setTimeout(function() {
-                            loadDischargeMedicineSubstitutes(medId, medName);
-                        }, 100);
+                // Handle substitute "Replace" button
+                $(document).on('click', '.btn-discharge-substitute-replace', function() {
+                    var sName = String($(this).data('name') || '').trim();
+                    var sType = String($(this).data('type') || '').trim();
+                    var sSalt = String($(this).data('salt') || '').trim();
+                    var sId = parseInt($(this).data('id') || '0', 10);
+
+                    var targetRowId = $('#discharge_substitute_box').data('target-row-id');
+                    var $targetRow = null;
+                    if (targetRowId !== undefined && targetRowId !== null) {
+                        $targetRow = $('#discharge_medicine_tbody tr[data-row-id="' + targetRowId + '"]');
                     }
+                    if (!$targetRow || !$targetRow.length) {
+                        $targetRow = $('#discharge_medicine_tbody tr.table-info');
+                    }
+
+                    if ($targetRow && $targetRow.length) {
+                        // Open in edit mode to preserve dosage/timing/frequency
+                        $targetRow.find('.btn-edit-discharge-med').trigger('click');
+                        $('#discharge_med_id').val(sId);
+                        $('#discharge_med_name').val(sName);
+                        $('#discharge_med_salt').val(sSalt);
+                        if (sType) {
+                            setDischargeMedType(sType);
+                        }
+                        $('#discharge_substitute_box').hide();
+                        $('#discharge_medicine_tbody tr').removeClass('table-info');
+                        setMedicineStatus('Substitute selected. Review and click "Update Medicine" to save.', 'info');
+                        $('#btn_discharge_med_add').focus();
+                    } else {
+                        $('#discharge_med_id').val(sId);
+                        $('#discharge_med_name').val(sName);
+                        $('#discharge_med_salt').val(sSalt);
+                        if (sType) {
+                            setDischargeMedType(sType);
+                        }
+                        $('#discharge_substitute_box').hide();
+                        $('#discharge_med_name').focus();
+                    }
+                });
+
+                // Handle substitute "+ Add to Form" button
+                $(document).on('click', '.btn-discharge-substitute-use-form', function() {
+                    var sName = String($(this).data('name') || '').trim();
+                    var sType = String($(this).data('type') || '').trim();
+                    var sSalt = String($(this).data('salt') || '').trim();
+                    var sId = parseInt($(this).data('id') || '0', 10);
+
+                    resetMedicineFormState();
+                    $('#discharge_med_id').val(sId);
+                    $('#discharge_med_name').val(sName);
+                    $('#discharge_med_salt').val(sSalt);
+                    if (sType) {
+                        setDischargeMedType(sType);
+                    }
+                    $('#discharge_substitute_box').hide();
+                    $('#discharge_medicine_tbody tr').removeClass('table-info');
+                    setMedicineStatus('Substitute loaded as new medicine. Fill timing/duration and click +ADD.', 'info');
+                    $('#discharge_dosage').focus();
                 });
 
                 // ─── Rx-Group Functionality ──────────────────────────────────────
@@ -6788,7 +6878,7 @@ $historyFields = [
                     var id = parseInt(rowId || 0, 10);
                     var source = String(rowSource || 'legacy').trim() || 'legacy';
                     data = data || {};
-                    return '<td class="d-flex gap-1">'
+                    return '<td class="d-flex gap-1 flex-wrap">'
                         + '<button type="button" class="btn btn-outline-primary btn-sm btn-edit-discharge-med" '
                         + 'data-id="' + id + '" '
                         + 'data-source="' + $('<div>').text(source).html() + '" '
@@ -6806,6 +6896,13 @@ $historyFields = [
                         + 'data-remark="' + $('<div>').text(data.remark || '').html() + '"'
                         + '>Edit</button>'
                         + '<button type="button" class="btn btn-outline-danger btn-sm btn-remove-discharge-med" data-id="' + id + '" data-source="' + $('<div>').text(source).html() + '">Remove</button>'
+                        + '<button type="button" class="btn btn-outline-info btn-sm btn-discharge-substitute-row" '
+                        + 'data-id="' + id + '" '
+                        + 'data-source="' + $('<div>').text(source).html() + '" '
+                        + 'data-med-name="' + $('<div>').text(data.med_name || '').html() + '" '
+                        + 'data-med-salt="' + $('<div>').text(data.med_salt || '').html() + '" '
+                        + 'data-med-type="' + $('<div>').text(data.med_type || '').html() + '" '
+                        + 'title="View Substitutes"><i class="bi bi-arrow-repeat"></i> Sub</button>'
                         + '</td>';
                 }
 
