@@ -1468,7 +1468,7 @@ $historyFields = [
                                                 <th>Type</th>
                                                 <th>Medicine</th>
                                                 <th>Dose</th>
-                                                <th>When</th>
+                                                <th>Relation to Food (When)</th>
                                                 <th>Freq</th>
                                                 <th>Days</th>
                                                 <th>Remark</th>
@@ -5733,17 +5733,22 @@ $historyFields = [
                 };
 
                 var dischargeWhenDescMap = {
-                    'BF': 'BF -> Before Food',
-                    'AF': 'AF -> After Food',
-                    'WF': 'WF -> With Food',
-                    'ES': 'ES -> Empty Stomach',
-                    'BBF': 'BBF -> Before Breakfast',
-                    'ABF': 'ABF -> After Breakfast',
-                    'BL': 'BL -> Before Lunch',
-                    'AL': 'AL -> After Lunch',
-                    'BD': 'BD -> Before Dinner',
-                    'AD': 'AD -> After Dinner',
-                    'BT': 'BT -> Bed Time'
+                    'BF': 'BF - Before Food',
+                    'AF': 'AF - After Food',
+                    'WF': 'WF - With Food',
+                    'ES': 'EMPTY STOMACH - MORNING EMPTY STOMACH',
+                    'BB': 'BB - Before Breakfast',
+                    'AB': 'AB - After Breakfast',
+                    'BBF': 'BBF - Before Breakfast',
+                    'ABF': 'ABF - After Breakfast',
+                    'BL': 'BL - Before Lunch',
+                    'AL': 'AL - After Lunch',
+                    'BD': 'BD - Before Dinner',
+                    'AD': 'AD - After Dinner',
+                    'BT': 'BT - Bed Time',
+                    'WT': 'WT - With Tea',
+                    'BBATH': 'BBATH - Before Bath',
+                    'EMPTY STOMACH': 'EMPTY STOMACH - MORNING EMPTY STOMACH'
                 };
 
                 function renderSelectOptions($select, rows, placeholder, descMap) {
@@ -5751,17 +5756,85 @@ $historyFields = [
                     (rows || []).forEach(function(row) {
                         var id = (row && row.id !== undefined) ? String(row.id) : '';
                         var label = (row && row.label !== undefined) ? String(row.label) : '';
-                        if (!id || !label) {
+                        var secLabel = (row && row.secondary_label !== undefined) ? String(row.secondary_label) : '';
+                        var localLabel = (row && row.local_label !== undefined) ? String(row.local_label) : '';
+                        if (!label && !id) {
                             return;
                         }
+                        if (!label && id) {
+                            label = id;
+                        }
+                        var val = label;
                         var displayText = label;
-                        if (descMap && descMap[label.toUpperCase()]) {
+                        if (secLabel && secLabel.toLowerCase() !== label.toLowerCase()) {
+                            displayText = label + ' - ' + secLabel;
+                        } else if (descMap && descMap[label.toUpperCase()]) {
                             displayText = descMap[label.toUpperCase()];
                         }
-                        html += '<option value="' + $('<div>').text(id).html() + '">' + $('<div>').text(displayText).html() + '</option>';
+                        html += '<option value="' + $('<div>').text(val).html() + '" data-id="' + $('<div>').text(id).html() + '"' + (localLabel ? ' data-local-label="' + $('<div>').text(localLabel).html() + '"' : '') + '>' + $('<div>').text(displayText).html() + '</option>';
                     });
                     $select.html(html);
                 }
+
+                function setDischargeWhenValue(val) {
+                    var $sel = $('#discharge_dosage_when');
+                    if (!$sel.length) return;
+                    var probe = (val || '').toString().trim();
+                    if (!probe || probe === '0' || probe === '-' || probe.toLowerCase() === 'when') {
+                        $sel.val('');
+                        return;
+                    }
+                    var probeLower = probe.toLowerCase();
+
+                    // 1. Direct value match
+                    $sel.val(probe);
+                    if ($sel.val()) return;
+
+                    // 2. Case-insensitive value match
+                    var matchedVal = '';
+                    $sel.find('option').each(function() {
+                        var oVal = $(this).val();
+                        if (oVal && oVal.toLowerCase() === probeLower) {
+                            matchedVal = oVal;
+                            return false;
+                        }
+                    });
+                    if (matchedVal) {
+                        $sel.val(matchedVal);
+                        return;
+                    }
+
+                    // 3. Match by data-id
+                    var $byDataId = $sel.find('option[data-id="' + probe.replace(/"/g, '&quot;') + '"]');
+                    if ($byDataId.length) {
+                        $sel.val($byDataId.val());
+                        return;
+                    }
+
+                    // 4. Match by option text
+                    $sel.find('option').each(function() {
+                        var oVal = $(this).val();
+                        var oText = $(this).text().trim().toLowerCase();
+                        if (!oVal) return;
+                        if (oText === probeLower || oText.indexOf(probeLower + ' -') === 0 || oText.indexOf(probeLower + ' ->') === 0) {
+                            matchedVal = oVal;
+                            return false;
+                        }
+                        if (probeLower === 'es' && (oVal.toLowerCase() === 'empty stomach' || oText.indexOf('empty stomach') !== -1)) {
+                            matchedVal = oVal;
+                            return false;
+                        }
+                    });
+                    if (matchedVal) {
+                        $sel.val(matchedVal);
+                        return;
+                    }
+
+                    // 5. Fallback: ensure option and select
+                    ensureDoseOption('#discharge_dosage_when', probe);
+                    $sel.val(probe);
+                }
+                window.setDischargeWhenValue = setDischargeWhenValue;
 
                 function loadDischargeDoseMasters() {
                     $.get('<?= base_url('Opd_prescription/rx_group_dose_masters') ?>', function(data) {
@@ -5772,8 +5845,17 @@ $historyFields = [
                             where: (data && data.where) ? data.where : []
                         };
 
+                        var currentWhen = $('#discharge_dosage_when').val();
                         renderSelectOptions($('#discharge_dosage_when'), doseMasterCache.when, 'When', dischargeWhenDescMap);
+                        if (currentWhen) {
+                            setDischargeWhenValue(currentWhen);
+                        }
+
+                        var currentWhere = $('#discharge_dose_where').val();
                         renderSelectOptions($('#discharge_dose_where'), doseMasterCache.where, 'Route');
+                        if (currentWhere) {
+                            $('#discharge_dose_where').val(currentWhere);
+                        }
                     }, 'json').fail(function() {
                         setMedicineStatus('Unable to load dose masters.', 'error');
                     });
@@ -6269,8 +6351,12 @@ $historyFields = [
                         var value = matched[mapping[0]];
                         var target = section.querySelector(mapping[1]);
                         if (value && target && target.value === '') {
-                            ensureDoseOption(target, value);
-                            target.value = value;
+                            if (mapping[1] === '#discharge_dosage_when') {
+                                setDischargeWhenValue(value);
+                            } else {
+                                ensureDoseOption(target, value);
+                                target.value = value;
+                            }
                         }
                     });
 
@@ -6675,8 +6761,12 @@ $historyFields = [
                     }
 
                     var exists = false;
+                    var valLower = value.toLowerCase();
                     $(select).find('option').each(function() {
-                        if ($(this).val() === value) {
+                        var oVal = $(this).val();
+                        var oId = String($(this).data('id') || '');
+                        var oText = $(this).text().trim().toLowerCase();
+                        if (oVal === value || (oVal && oVal.toLowerCase() === valLower) || oId === value || oText === valLower) {
                             exists = true;
                             return false;
                         }
@@ -6762,23 +6852,7 @@ $historyFields = [
                     $('#discharge_dosage').val(doseLabel || doseId || '');
 
                     // Relation to Food (When): If empty or 0, reset dropdown to empty placeholder
-                    if (whenId !== '' && whenId !== '0') {
-                        $('#discharge_dosage_when').val(whenId);
-                        if (!$('#discharge_dosage_when').val() && whenLabel) {
-                            ensureDoseOption('#discharge_dosage_when', whenLabel);
-                            $('#discharge_dosage_when').val(whenLabel);
-                        }
-                    } else if (whenLabel !== '' && whenLabel !== '-' && whenLabel !== '0' && whenLabel !== 'When') {
-                        ensureDoseOption('#discharge_dosage_when', whenLabel);
-                        $('#discharge_dosage_when').val(whenLabel);
-                        if (!$('#discharge_dosage_when').val()) {
-                            $('#discharge_dosage_when option').filter(function() {
-                                return $(this).text().trim().toLowerCase() === whenLabel.toLowerCase();
-                            }).prop('selected', true);
-                        }
-                    } else {
-                        $('#discharge_dosage_when').val('');
-                    }
+                    setDischargeWhenValue(whenLabel || whenId);
 
                     $('#discharge_dosage_freq').val(freqLabel || freqId || '');
 
@@ -6842,7 +6916,9 @@ $historyFields = [
                         var value = String(btn.getAttribute('data-fill-value') || '').trim();
                         var target = targetId ? section.querySelector('#' + targetId) : null;
                         if (target) {
-                            if (target.tagName.toLowerCase() === 'select') {
+                            if (targetId === 'discharge_dosage_when') {
+                                setDischargeWhenValue(value);
+                            } else if (target.tagName.toLowerCase() === 'select') {
                                 // For select elements, set the value or add it if needed
                                 target.value = value;
                             } else {
@@ -6890,7 +6966,7 @@ $historyFields = [
                         var whenLabel = dosageWhen;
                         if (dosageWhen) {
                             var whenRow = doseMasterCache.when.find(function(r) {
-                                return String(r.id) === dosageWhen;
+                                return String(r.id) === dosageWhen || String(r.label).toLowerCase() === dosageWhen.toLowerCase();
                             });
                             if (whenRow) whenLabel = whenRow.label;
                         }
