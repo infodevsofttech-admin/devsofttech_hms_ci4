@@ -1315,23 +1315,52 @@
                                             <label class="form-label fw-semibold mb-1 text-dark">Form / Type</label>
                                             <select class="form-select shadow-sm" id="med_type">
                                                 <option value="">Select Type</option>
-                                                <option value="TAB">TAB (Tablet)</option>
-                                                <option value="CAP">CAP (Capsule)</option>
-                                                <option value="SYR">SYR (Syrup)</option>
-                                                <option value="INJ">INJ (Injection)</option>
-                                                <option value="CREAM">CREAM (Cream)</option>
-                                                <option value="OINT">OINT (Ointment)</option>
-                                                <option value="GEL">GEL (Gel)</option>
-                                                <option value="EYE DROP">EYE DROP</option>
-                                                <option value="EAR DROP">EAR DROP</option>
-                                                <option value="DROPS">DROPS</option>
-                                                <option value="RESPULES">RESPULES</option>
-                                                <option value="SACHET">SACHET</option>
-                                                <option value="LOTION">LOTION</option>
-                                                <option value="SPRAY">SPRAY</option>
-                                                <option value="PATCH">PATCH</option>
-                                                <option value="POWDER">POWDER</option>
-                                                <option value="SUPPOSITORY">SUPPOSITORY</option>
+                                                <optgroup label="Oral Solid">
+                                                    <option value="TAB">TAB (Tablet)</option>
+                                                    <option value="CAP">CAP (Capsule)</option>
+                                                    <option value="SACHET">SACHET (Granules / Powder)</option>
+                                                    <option value="POWDER">POWDER (Oral Powder)</option>
+                                                    <option value="LOZENGE">LOZENGE (Chewable / Troche)</option>
+                                                </optgroup>
+                                                <optgroup label="Oral Liquid">
+                                                    <option value="SYR">SYR (Syrup)</option>
+                                                    <option value="SUSP">SUSP (Suspension)</option>
+                                                    <option value="SOLN">SOLN (Oral Solution)</option>
+                                                    <option value="DROPS">DROPS (Oral Drops)</option>
+                                                </optgroup>
+                                                <optgroup label="Dermatology &amp; Topical">
+                                                    <option value="CREAM">CREAM (Cream)</option>
+                                                    <option value="OINT">OINT (Ointment)</option>
+                                                    <option value="GEL">GEL (Gel)</option>
+                                                    <option value="LOTION">LOTION (Lotion)</option>
+                                                    <option value="SHAMPOO">SHAMPOO (Medicated Shampoo)</option>
+                                                    <option value="SOAP">SOAP (Medicated Soap / Bar)</option>
+                                                    <option value="OIL">OIL (Medicated Oil)</option>
+                                                    <option value="SPRAY">SPRAY (Topical Spray)</option>
+                                                    <option value="DUSTING POWDER">DUSTING POWDER</option>
+                                                    <option value="PAINT">PAINT (Gum / Throat Paint)</option>
+                                                    <option value="PATCH">PATCH (Transdermal Patch)</option>
+                                                </optgroup>
+                                                <optgroup label="Respiratory &amp; ENT">
+                                                    <option value="RESPULES">RESPULES (Nebulizer)</option>
+                                                    <option value="INHALER">INHALER (MDI / Rotacaps)</option>
+                                                    <option value="NASAL SPRAY">NASAL SPRAY</option>
+                                                    <option value="NASAL DROP">NASAL DROP</option>
+                                                    <option value="EAR DROP">EAR DROP</option>
+                                                    <option value="GARGLE">GARGLE / MOUTHWASH</option>
+                                                </optgroup>
+                                                <optgroup label="Ophthalmic (Eye)">
+                                                    <option value="EYE DROP">EYE DROP</option>
+                                                    <option value="EYE OINT">EYE OINT (Eye Ointment)</option>
+                                                </optgroup>
+                                                <optgroup label="Parenteral (Injections &amp; Infusions)">
+                                                    <option value="INJ">INJ (Injection)</option>
+                                                    <option value="IV FLUID">IV FLUID (Infusion)</option>
+                                                </optgroup>
+                                                <optgroup label="Rectal &amp; Vaginal">
+                                                    <option value="SUPPOSITORY">SUPPOSITORY (Rectal)</option>
+                                                    <option value="PESSARY">PESSARY (Vaginal Tablet)</option>
+                                                </optgroup>
                                             </select>
                                         </div>
                                         <div class="col-md-3">
@@ -8841,12 +8870,16 @@
         if ($select.val()) return;
         var type = (medType || '').toString().trim().toUpperCase();
         var targetText = 'ORAL';
-        if (['INJ', 'INJECTION', 'IV', 'IM', 'INFUSION'].indexOf(type) !== -1) {
+        if (['INJ', 'INJECTION', 'IV', 'IM', 'INFUSION', 'IV FLUID'].indexOf(type) !== -1) {
             targetText = 'INJ';
-        } else if (['CREAM', 'OINT', 'OINTMENT', 'GEL', 'LOTION', 'PATCH'].indexOf(type) !== -1) {
+        } else if (['CREAM', 'OINT', 'OINTMENT', 'GEL', 'LOTION', 'PATCH', 'SHAMPOO', 'SOAP', 'OIL', 'SPRAY', 'DUSTING POWDER', 'PAINT', 'EYE OINT', 'GARGLE'].indexOf(type) !== -1) {
             targetText = 'TOPICAL';
         } else if (['EYE DROP', 'EAR DROP', 'NASAL DROP', 'DROPS'].indexOf(type) !== -1) {
             targetText = 'DROP';
+        } else if (['RESPULES', 'INHALER', 'NASAL SPRAY'].indexOf(type) !== -1) {
+            targetText = 'INHAL';
+        } else if (['SUPPOSITORY', 'PESSARY'].indexOf(type) !== -1) {
+            targetText = 'RECT';
         }
 
         var matchedVal = '';
@@ -8870,7 +8903,7 @@
         }
 
         if (!matchedVal) {
-            var label = targetText === 'ORAL' ? 'Oral' : (targetText === 'INJ' ? 'Injection' : (targetText === 'TOPICAL' ? 'Topical' : 'Drop'));
+            var label = targetText === 'ORAL' ? 'Oral (PO)' : (targetText === 'INJ' ? 'Injection' : (targetText === 'TOPICAL' ? 'Topical' : (targetText === 'INHAL' ? 'Inhalation' : (targetText === 'RECT' ? 'Rectal' : 'Drop'))));
             ensureMedicineMasterOption($select, label);
             matchedVal = label;
         }

@@ -88,23 +88,52 @@
                         <label class="form-label">Formulation / Type</label>
                         <select id="med_formulation" class="form-select form-select-sm">
                             <option value="">Select Type</option>
-                            <option value="TAB">TAB (Tablet)</option>
-                            <option value="CAP">CAP (Capsule)</option>
-                            <option value="SYR">SYR (Syrup)</option>
-                            <option value="INJ">INJ (Injection)</option>
-                            <option value="CREAM">CREAM (Cream)</option>
-                            <option value="OINT">OINT (Ointment)</option>
-                            <option value="GEL">GEL (Gel)</option>
-                            <option value="EYE DROP">EYE DROP</option>
-                            <option value="EAR DROP">EAR DROP</option>
-                            <option value="DROPS">DROPS</option>
-                            <option value="RESPULES">RESPULES</option>
-                            <option value="SACHET">SACHET</option>
-                            <option value="LOTION">LOTION</option>
-                            <option value="SPRAY">SPRAY</option>
-                            <option value="PATCH">PATCH</option>
-                            <option value="POWDER">POWDER</option>
-                            <option value="SUPPOSITORY">SUPPOSITORY</option>
+                            <optgroup label="Oral Solid">
+                                <option value="TAB">TAB (Tablet)</option>
+                                <option value="CAP">CAP (Capsule)</option>
+                                <option value="SACHET">SACHET (Granules / Powder)</option>
+                                <option value="POWDER">POWDER (Oral Powder)</option>
+                                <option value="LOZENGE">LOZENGE (Chewable / Troche)</option>
+                            </optgroup>
+                            <optgroup label="Oral Liquid">
+                                <option value="SYR">SYR (Syrup)</option>
+                                <option value="SUSP">SUSP (Suspension)</option>
+                                <option value="SOLN">SOLN (Oral Solution)</option>
+                                <option value="DROPS">DROPS (Oral Drops)</option>
+                            </optgroup>
+                            <optgroup label="Dermatology &amp; Topical">
+                                <option value="CREAM">CREAM (Cream)</option>
+                                <option value="OINT">OINT (Ointment)</option>
+                                <option value="GEL">GEL (Gel)</option>
+                                <option value="LOTION">LOTION (Lotion)</option>
+                                <option value="SHAMPOO">SHAMPOO (Medicated Shampoo)</option>
+                                <option value="SOAP">SOAP (Medicated Soap / Bar)</option>
+                                <option value="OIL">OIL (Medicated Oil)</option>
+                                <option value="SPRAY">SPRAY (Topical Spray)</option>
+                                <option value="DUSTING POWDER">DUSTING POWDER</option>
+                                <option value="PAINT">PAINT (Gum / Throat Paint)</option>
+                                <option value="PATCH">PATCH (Transdermal Patch)</option>
+                            </optgroup>
+                            <optgroup label="Respiratory &amp; ENT">
+                                <option value="RESPULES">RESPULES (Nebulizer)</option>
+                                <option value="INHALER">INHALER (MDI / Rotacaps)</option>
+                                <option value="NASAL SPRAY">NASAL SPRAY</option>
+                                <option value="NASAL DROP">NASAL DROP</option>
+                                <option value="EAR DROP">EAR DROP</option>
+                                <option value="GARGLE">GARGLE / MOUTHWASH</option>
+                            </optgroup>
+                            <optgroup label="Ophthalmic (Eye)">
+                                <option value="EYE DROP">EYE DROP</option>
+                                <option value="EYE OINT">EYE OINT (Eye Ointment)</option>
+                            </optgroup>
+                            <optgroup label="Parenteral (Injections &amp; Infusions)">
+                                <option value="INJ">INJ (Injection)</option>
+                                <option value="IV FLUID">IV FLUID (Infusion)</option>
+                            </optgroup>
+                            <optgroup label="Rectal &amp; Vaginal">
+                                <option value="SUPPOSITORY">SUPPOSITORY (Rectal)</option>
+                                <option value="PESSARY">PESSARY (Vaginal Tablet)</option>
+                            </optgroup>
                         </select>
                     </div>
                     <div class="mb-2">
@@ -482,6 +511,24 @@
             rawForm = 'PATCH';
         } else if (rawForm === 'SACHETS') {
             rawForm = 'SACHET';
+        } else if (rawForm === 'SUSPENSION' || rawForm === 'SUSPENSIONS') {
+            rawForm = 'SUSP';
+        } else if (rawForm === 'SOLUTION' || rawForm === 'SOLUTIONS') {
+            rawForm = 'SOLN';
+        } else if (rawForm === 'SHAMPOOS') {
+            rawForm = 'SHAMPOO';
+        } else if (rawForm === 'SOAPS' || rawForm === 'SOAP BAR') {
+            rawForm = 'SOAP';
+        } else if (rawForm === 'OILS') {
+            rawForm = 'OIL';
+        } else if (rawForm === 'INHALERS') {
+            rawForm = 'INHALER';
+        } else if (rawForm === 'MOUTHWASH' || rawForm === 'MOUTH WASH' || rawForm === 'GARGLES') {
+            rawForm = 'GARGLE';
+        } else if (rawForm === 'SUPPOSITORIES') {
+            rawForm = 'SUPPOSITORY';
+        } else if (rawForm === 'PESSARIES') {
+            rawForm = 'PESSARY';
         }
         if (rawForm && !$('#med_formulation option[value="' + rawForm.replace(/"/g, '&quot;') + '"]').length) {
             $('#med_formulation').append('<option value="' + $('<div>').text(rawForm).html() + '">' + $('<div>').text(rawForm).html() + '</option>');
