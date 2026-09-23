@@ -1380,9 +1380,10 @@ $historyFields = [
                                                     </optgroup>
                                                 </select>
                                             </div>
-                                            <div class="col-md-3">
+                                            <div class="col-md-3 position-relative">
                                                 <label class="form-label fw-semibold mb-1 text-dark">Dose / Strength</label>
                                                 <input type="text" class="form-control shadow-sm" id="discharge_dosage" autocomplete="off" placeholder="e.g. 1 Tab / 5ml / 500mg">
+                                                <div id="discharge_dosage_dd" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1080;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
                                             </div>
                                         </div>
 
@@ -6149,6 +6150,305 @@ $historyFields = [
                     });
                 }
 
+                // ── Smart Dose / Strength Autocomplete for #discharge_dosage ─────────────────
+                (function() {
+                    var dosageInput = document.getElementById('discharge_dosage');
+                    var dosageDropdown = document.getElementById('discharge_dosage_dd');
+                    if (!dosageInput || !dosageDropdown) return;
+
+                    var highlightIdx = -1;
+
+                    function getCat() {
+                        var ft = ($('#discharge_med_type').val() || '').toString().trim().toUpperCase();
+                        var mn = ($('#discharge_med_name').val() || '').toString().trim().toUpperCase();
+                        if (!ft) {
+                            if (/\b(TAB|TABLET|TABLETS)\b/i.test(mn)) ft = 'TAB';
+                            else if (/\b(CAP|CAPSULE|CAPSULES)\b/i.test(mn)) ft = 'CAP';
+                            else if (/\b(SYP|SYRUP|SUSP|SUSPENSION|SOLN|LIQUID)\b/i.test(mn)) ft = 'SYR';
+                            else if (/\b(INJ|INJECTION|INFUSION)\b/i.test(mn)) ft = 'INJ';
+                            else if (/\b(DROP|DROPS|EYE DROP|EAR DROP|NASAL DROP)\b/i.test(mn)) ft = 'DROPS';
+                            else if (/\b(OINT|OINTMENT|GEL|CREAM|LOTION)\b/i.test(mn)) ft = 'CREAM';
+                            else if (/\b(INHALER|PUFF|MDI|ROTACAP)\b/i.test(mn)) ft = 'INHALER';
+                            else if (/\b(RESPULE|RESPULES)\b/i.test(mn)) ft = 'RESPULES';
+                            else if (/\b(SACHET|GRANULES|POWDER)\b/i.test(mn)) ft = 'SACHET';
+                        }
+                        if (ft === 'TAB' || ft === 'TABLET' || ft === 'LOZENGE') return 'tablet';
+                        if (ft === 'CAP' || ft === 'CAPSULE') return 'capsule';
+                        if (ft === 'SYR' || ft === 'SUSP' || ft === 'SOLN' || ft === 'SYRUP' || ft === 'SUSPENSION') return 'syrup';
+                        if (ft.indexOf('DROP') !== -1 || ft === 'DROPS') return 'drops';
+                        if (ft === 'INHALER') return 'inhaler';
+                        if (ft === 'RESPULES') return 'respules';
+                        if (ft.indexOf('SPRAY') !== -1) return 'spray';
+                        if (ft === 'SACHET' || ft === 'POWDER') return 'sachet';
+                        if (ft === 'INJ' || ft === 'INFUSION' || ft === 'INJECTION') return 'injection';
+                        if (['CREAM', 'OINT', 'GEL', 'LOTION', 'SHAMPOO', 'SOAP', 'OIL', 'DUSTING POWDER', 'PAINT', 'PATCH'].indexOf(ft) !== -1) return 'topical';
+                        if (ft === 'SUPPOSITORY' || ft === 'ENEMA' || ft === 'PESSARY') return 'suppository';
+                        if (ft === 'GARGLE') return 'gargle';
+                        return 'general';
+                    }
+
+                    var PRESETS = {
+                        tablet: ['1 Tab', '1/2 Tab', '2 Tab', '1/4 Tab', '1.5 Tab', '500 mg', '650 mg', '250 mg', '100 mg', '50 mg', '10 mg', '5 mg', '20 mg', '40 mg'],
+                        capsule: ['1 Cap', '2 Cap', '500 mg', '250 mg', '100 mg', '20 mg', '40 mg', '150 mg', '300 mg'],
+                        syrup: ['5 ml (1 tsp)', '10 ml (2 tsp)', '2.5 ml (1/2 tsp)', '15 ml (1 tbsp)', '2 ml', '1 ml', '3 ml', '7.5 ml', '1 tsp', '2 tsp', '1 tbsp', '20 ml'],
+                        drops: ['1 Drop', '2 Drops', '3 Drops', '4 Drops', '1-2 Drops', '2-3 Drops', '0.5 ml', '1 ml'],
+                        inhaler: ['1 Puff', '2 Puffs', '1-2 Puffs', '3 Puffs'],
+                        respules: ['1 Respule', '1/2 Respule', '2 Respules', '1 Respule in 2.5 ml Saline'],
+                        spray: ['1 Spray each nostril', '2 Sprays each nostril', '1 Spray', '2 Sprays'],
+                        sachet: ['1 Sachet in half glass water', '1 Sachet', '1/2 Sachet', '1 Scoop', '5 g', '10 g', '1 tsp'],
+                        injection: ['1 Amp', '1 Vial', '1 ml', '2 ml', '5 ml', '10 ml', '100 ml', '500 ml', '100 mg', '250 mg', '500 mg', '1 g', '1000 IU', '5000 IU'],
+                        topical: ['Apply Thinly', '1 Application', '1 Fingertip Unit (FTU)', 'Apply Generously', '1 Patch', 'Few Drops'],
+                        suppository: ['1 Suppository', '1 Pessary', '1 Enema'],
+                        gargle: ['10 ml with warm water', '15 ml with equal parts water', '5 ml', '10 ml'],
+                        general: ['1 Tab', '1/2 Tab', '2 Tab', '1 Cap', '5 ml (1 tsp)', '10 ml (2 tsp)', '2.5 ml (1/2 tsp)', '500 mg', '650 mg', '250 mg', '1 Puff', '1 Sachet', '1 Drop', '1 Amp']
+                    };
+
+                    function getSuggestions(val) {
+                        var q = String(val || '').trim().toLowerCase();
+                        var cat = getCat();
+                        var res = [], seen = {};
+
+                        function add(s) {
+                            if (!s) return;
+                            var k = String(s).trim();
+                            if (k && !seen[k.toLowerCase()]) {
+                                seen[k.toLowerCase()] = true;
+                                res.push(k);
+                            }
+                        }
+
+                        var isHalf = (q === '1/2' || q === '0.5' || q === 'half' || q === '.5');
+                        var isQuarter = (q === '1/4' || q === '0.25' || q === '.25');
+                        var isOneAndHalf = (q === '1.5' || q === '1 1/2');
+                        var isTwoAndHalf = (q === '2.5' || q === '2 1/2');
+
+                        if (isHalf) {
+                            if (cat === 'tablet') { add('1/2 Tab'); add('1/4 Tab'); add('1 Tab'); }
+                            else if (cat === 'capsule') { add('1/2 Cap'); add('1 Cap'); }
+                            else if (cat === 'syrup') { add('2.5 ml (1/2 tsp)'); add('1/2 tsp (2.5 ml)'); add('2.5 ml'); add('5 ml (1 tsp)'); }
+                            else if (cat === 'sachet') { add('1/2 Sachet'); add('1 Sachet'); }
+                            else if (cat === 'respules') { add('1/2 Respule'); add('1 Respule'); }
+                            else if (cat === 'drops') { add('0.5 ml'); add('1 Drop'); }
+                            else { add('1/2 Tab'); add('2.5 ml (1/2 tsp)'); add('1/2 Sachet'); add('1/2 Cap'); }
+                        } else if (isQuarter) {
+                            if (cat === 'tablet') { add('1/4 Tab'); add('1/2 Tab'); }
+                            else if (cat === 'syrup') { add('1.25 ml (1/4 tsp)'); }
+                            else { add('1/4 Tab'); }
+                        } else if (isOneAndHalf) {
+                            if (cat === 'tablet') { add('1.5 Tab'); }
+                            else if (cat === 'syrup') { add('7.5 ml (1.5 tsp)'); }
+                            else { add('1.5 Tab'); add('7.5 ml'); }
+                        } else if (isTwoAndHalf) {
+                            if (cat === 'tablet') { add('2.5 Tab'); }
+                            else if (cat === 'syrup') { add('2.5 ml (1/2 tsp)'); add('12.5 ml'); }
+                            else { add('2.5 ml'); add('2.5 Tab'); }
+                        }
+
+                        var numMatch = q.match(/^(\d+(?:\.\d+)?)/);
+                        if (numMatch) {
+                            var n = parseFloat(numMatch[1]);
+                            var nStr = numMatch[1];
+
+                            if (cat === 'tablet') {
+                                if (n === 1) { add('1 Tab'); add('1/2 Tab'); add('1/4 Tab'); add('1.5 Tab'); add('10 mg'); add('100 mg'); add('1000 mg (1 g)'); }
+                                else if (n === 2) { add('2 Tab'); add('2.5 Tab'); add('20 mg'); add('200 mg'); add('250 mg'); }
+                                else if (n === 3) { add('3 Tab'); add('30 mg'); add('300 mg'); }
+                                else if (n === 4) { add('4 Tab'); add('1/4 Tab'); add('40 mg'); add('400 mg'); }
+                                else if (n === 5) { add('500 mg'); add('50 mg'); add('5 mg'); add('1/2 Tab'); add('5 Tab'); }
+                                else if (n === 6) { add('650 mg'); add('60 mg'); add('6 Tab'); }
+                                else { if (n < 10) add(nStr + ' Tab'); add(nStr + ' mg'); add(nStr + ' mcg'); add(nStr + ' g'); }
+                            } else if (cat === 'capsule') {
+                                if (n === 1) { add('1 Cap'); add('2 Cap'); add('100 mg'); add('150 mg'); add('10 mg'); }
+                                else if (n === 2) { add('2 Cap'); add('20 mg'); add('200 mg'); add('250 mg'); }
+                                else if (n === 5) { add('500 mg'); add('50 mg'); add('5 Cap'); }
+                                else { if (n < 10) add(nStr + ' Cap'); add(nStr + ' mg'); add(nStr + ' mcg'); }
+                            } else if (cat === 'syrup') {
+                                if (n === 1) { add('1 tsp (5 ml)'); add('1 tbsp (15 ml)'); add('1/2 tsp (2.5 ml)'); add('1 ml'); add('10 ml (2 tsp)'); add('15 ml (1 tbsp)'); }
+                                else if (n === 2) { add('2 ml'); add('2.5 ml (1/2 tsp)'); add('2 tsp (10 ml)'); add('20 ml'); }
+                                else if (n === 3) { add('3 ml'); add('3.5 ml'); add('30 ml'); }
+                                else if (n === 4) { add('4 ml'); add('4.5 ml'); }
+                                else if (n === 5) { add('5 ml (1 tsp)'); add('5 ml'); add('2.5 ml (1/2 tsp)'); add('15 ml (1 tbsp)'); add('50 ml'); }
+                                else if (n === 7 || n === 7.5) { add('7.5 ml (1.5 tsp)'); add('7 ml'); }
+                                else if (n === 10) { add('10 ml (2 tsp)'); add('10 ml'); }
+                                else if (n === 15) { add('15 ml (1 tbsp)'); add('15 ml'); }
+                                else if (n === 20) { add('20 ml'); }
+                                else { add(nStr + ' ml'); if (n <= 4) add(nStr + ' tsp (' + (n * 5) + ' ml)'); if (n <= 2) add(nStr + ' tbsp (' + (n * 15) + ' ml)'); }
+                            } else if (cat === 'drops') {
+                                if (n === 1) { add('1 Drop'); add('1-2 Drops'); add('0.5 ml'); add('1 ml'); }
+                                else if (n === 2) { add('2 Drops'); add('2-3 Drops'); add('2 ml'); }
+                                else if (n === 3) { add('3 Drops'); add('3-4 Drops'); }
+                                else if (n === 4) { add('4 Drops'); add('4-5 Drops'); }
+                                else if (n === 5) { add('5 Drops'); }
+                                else { add(n === 1 ? '1 Drop' : (nStr + ' Drops')); add(nStr + ' ml'); }
+                            } else if (cat === 'inhaler') {
+                                if (n === 1) { add('1 Puff'); add('2 Puffs'); add('1-2 Puffs'); }
+                                else if (n === 2) { add('2 Puffs'); add('1-2 Puffs'); }
+                                else { add(n === 1 ? '1 Puff' : (nStr + ' Puffs')); }
+                            } else if (cat === 'respules') {
+                                if (n === 1) { add('1 Respule'); add('1/2 Respule'); add('2 Respules'); add('1 Respule in 2.5 ml Saline'); }
+                                else { add(n === 1 ? '1 Respule' : (nStr + ' Respules')); }
+                            } else if (cat === 'spray') {
+                                if (n === 1) { add('1 Spray each nostril'); add('2 Sprays each nostril'); add('1 Spray'); add('2 Sprays'); }
+                                else { add(nStr + ' Sprays each nostril'); add(nStr + ' Sprays'); }
+                            } else if (cat === 'sachet') {
+                                if (n === 1) { add('1 Sachet in half glass water'); add('1 Sachet'); add('1/2 Sachet'); add('1 Scoop'); add('5 g'); add('10 g'); }
+                                else { add(nStr + ' Sachets'); add(nStr + ' g'); }
+                            } else if (cat === 'injection') {
+                                if (n === 1) { add('1 Amp'); add('1 Vial'); add('1 ml'); add('10 ml'); add('100 ml'); add('500 ml'); add('100 mg'); add('1 g'); add('1000 IU'); }
+                                else if (n === 2) { add('2 ml'); add('2 Amp'); add('2 Vial'); add('250 mg'); add('2 g'); }
+                                else if (n === 5) { add('5 ml'); add('500 mg'); add('500 ml (IV)'); add('5000 IU'); }
+                                else { add(nStr + ' ml'); add(nStr + ' Amp'); add(nStr + ' Vial'); add(nStr + ' mg'); }
+                            } else if (cat === 'topical') {
+                                if (n === 1) { add('1 Application'); add('1 Fingertip Unit (FTU)'); add('1 Patch'); add('Apply Thinly'); }
+                                else { add(nStr + ' Applications'); add(nStr + ' Patches'); }
+                            } else if (cat === 'suppository') {
+                                add(nStr + ' Suppository'); add(nStr + ' Pessary'); add(nStr + ' Enema');
+                            } else if (cat === 'gargle') {
+                                add(nStr + '0 ml in half cup warm water'); add(nStr + ' ml');
+                            } else {
+                                if (n === 1) { add('1 Tab'); add('1/2 Tab'); add('1 Cap'); add('1 tsp (5 ml)'); add('1 ml'); add('1 Puff'); add('1 Sachet'); add('1 Drop'); add('1 Amp'); add('100 mg'); add('500 mg'); }
+                                else if (n === 2) { add('2 Tab'); add('2 Cap'); add('2 tsp (10 ml)'); add('2 ml'); add('2.5 ml (1/2 tsp)'); add('2 Puffs'); add('2 Drops'); add('250 mg'); }
+                                else if (n === 5) { add('5 ml (1 tsp)'); add('500 mg'); add('50 mg'); add('5 mg'); add('5 Drops'); add('5 g'); }
+                                else { add(nStr + ' Tab'); add(nStr + ' ml'); add(nStr + ' mg'); add(nStr + ' Cap'); }
+                            }
+                        }
+
+                        var presets = PRESETS[cat] || PRESETS.general;
+                        presets.forEach(function(p) {
+                            if (!q || p.toLowerCase().indexOf(q) !== -1) {
+                                add(p);
+                            }
+                        });
+
+                        if (doseMasterCache && Array.isArray(doseMasterCache.dose)) {
+                            doseMasterCache.dose.forEach(function(item) {
+                                var label = (item.label || item.name || '').toString().trim();
+                                if (label && (!q || label.toLowerCase().indexOf(q) !== -1)) {
+                                    add(label);
+                                }
+                            });
+                        }
+
+                        return res.slice(0, 12);
+                    }
+
+                    function updateHighlight(items, updateInput) {
+                        items.forEach(function(el, i) {
+                            if (i === highlightIdx) {
+                                el.style.backgroundColor = '#0d6efd';
+                                el.style.color = '#ffffff';
+                                el.style.fontWeight = '600';
+                                if (updateInput) {
+                                    dosageInput.value = el.getAttribute('data-val') || el.innerText.trim();
+                                }
+                                var cTop = dosageDropdown.scrollTop;
+                                var cBottom = cTop + dosageDropdown.clientHeight;
+                                var eTop = el.offsetTop;
+                                var eBottom = eTop + el.offsetHeight;
+                                if (eTop < cTop) {
+                                    dosageDropdown.scrollTop = eTop;
+                                } else if (eBottom > cBottom) {
+                                    dosageDropdown.scrollTop = eBottom - dosageDropdown.clientHeight;
+                                }
+                            } else {
+                                el.style.backgroundColor = '';
+                                el.style.color = '';
+                                el.style.fontWeight = '';
+                            }
+                        });
+                    }
+
+                    function renderDropdown(items) {
+                        if (!items.length) {
+                            dosageDropdown.style.display = 'none';
+                            dosageDropdown.innerHTML = '';
+                            highlightIdx = -1;
+                            return;
+                        }
+                        var html = '';
+                        items.forEach(function(item, i) {
+                            html += '<div class="px-3 py-2 border-bottom discharge-dosage-opt" data-val="' + $('<div>').text(item).html() + '" style="cursor:pointer;font-size:13px;">' + $('<div>').text(item).html() + '</div>';
+                        });
+                        dosageDropdown.innerHTML = html;
+                        dosageDropdown.style.display = 'block';
+                        var els = dosageDropdown.querySelectorAll('.discharge-dosage-opt');
+                        els.forEach(function(el, idx) {
+                            el.addEventListener('mouseenter', function() {
+                                highlightIdx = idx;
+                                updateHighlight(els, false);
+                            });
+                            el.addEventListener('mousedown', function(e) { e.preventDefault(); });
+                            el.addEventListener('click', function() {
+                                dosageInput.value = this.getAttribute('data-val');
+                                dosageDropdown.style.display = 'none';
+                                highlightIdx = -1;
+                                var freq = document.getElementById('discharge_dosage_freq');
+                                if (freq) freq.focus();
+                            });
+                        });
+                    }
+
+                    dosageInput.addEventListener('focus', function() {
+                        var sugs = getSuggestions(dosageInput.value);
+                        highlightIdx = -1;
+                        renderDropdown(sugs);
+                    });
+
+                    dosageInput.addEventListener('input', function() {
+                        var sugs = getSuggestions(dosageInput.value);
+                        highlightIdx = -1;
+                        renderDropdown(sugs);
+                    });
+
+                    dosageInput.addEventListener('blur', function() {
+                        setTimeout(function() { dosageDropdown.style.display = 'none'; highlightIdx = -1; }, 200);
+                    });
+
+                    dosageInput.addEventListener('keydown', function(e) {
+                        var items = dosageDropdown.querySelectorAll('.discharge-dosage-opt');
+                        var isVisible = dosageDropdown.style.display === 'block' && items.length > 0;
+
+                        if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            if (!isVisible) {
+                                var sugs = getSuggestions(dosageInput.value);
+                                renderDropdown(sugs);
+                                items = dosageDropdown.querySelectorAll('.discharge-dosage-opt');
+                                highlightIdx = 0;
+                                updateHighlight(items, true);
+                                return;
+                            }
+                            highlightIdx = (highlightIdx + 1) % items.length;
+                            updateHighlight(items, true);
+                        } else if (e.key === 'ArrowUp') {
+                            if (!isVisible) return;
+                            e.preventDefault();
+                            highlightIdx = (highlightIdx - 1 + items.length) % items.length;
+                            updateHighlight(items, true);
+                        } else if (e.key === 'Enter' || e.key === 'Tab') {
+                            if (isVisible) {
+                                if (e.key === 'Enter') e.preventDefault();
+                                if (highlightIdx >= 0 && items[highlightIdx]) {
+                                    dosageInput.value = items[highlightIdx].getAttribute('data-val');
+                                }
+                                dosageDropdown.style.display = 'none';
+                                highlightIdx = -1;
+                                var freq = document.getElementById('discharge_dosage_freq');
+                                if (freq) freq.focus();
+                            }
+                        } else if (e.key === 'Escape') {
+                            dosageDropdown.style.display = 'none';
+                            highlightIdx = -1;
+                        }
+                    });
+
+                    window.refreshDischargeDosageDropdown = function() {
+                        if (dosageDropdown.style.display === 'block' || document.activeElement === dosageInput) {
+                            renderDropdown(getSuggestions(dosageInput.value));
+                        }
+                    };
+                })();
+
                 // ── Smart Frequency Autocomplete for #discharge_dosage_freq ─────────────────
                 (function() {
                     var freqInput = document.getElementById('discharge_dosage_freq');
@@ -6258,30 +6558,37 @@ $historyFields = [
 
                         if (e.key === 'ArrowDown') {
                             e.preventDefault();
-                            highlightIdx = (highlightIdx + 1) % sugs.length;
+                            if (freqDropdown.style.display === 'none') {
+                                renderDropdown(sugs);
+                                highlightIdx = 0;
+                            } else {
+                                highlightIdx = (highlightIdx + 1) % sugs.length;
+                            }
                             renderDropdown(sugs);
-                        } else if (e.key === 'ArrowUp') {
-                            e.preventDefault();
-                            highlightIdx = (highlightIdx - 1 + sugs.length) % sugs.length;
-                            renderDropdown(sugs);
-                        } else if (e.key === 'Enter') {
-                            e.preventDefault();
                             if (highlightIdx >= 0 && sugs[highlightIdx]) {
                                 freqInput.value = sugs[highlightIdx].code;
                             }
-                            freqDropdown.style.display = 'none';
-                            var whenSelect = document.getElementById('discharge_dosage_when');
-                            if (whenSelect) whenSelect.focus();
+                        } else if (e.key === 'ArrowUp') {
+                            if (freqDropdown.style.display === 'none') return;
+                            e.preventDefault();
+                            highlightIdx = (highlightIdx - 1 + sugs.length) % sugs.length;
+                            renderDropdown(sugs);
+                            if (highlightIdx >= 0 && sugs[highlightIdx]) {
+                                freqInput.value = sugs[highlightIdx].code;
+                            }
+                        } else if (e.key === 'Enter' || e.key === 'Tab') {
+                            if (freqDropdown.style.display === 'block') {
+                                if (e.key === 'Enter') e.preventDefault();
+                                if (highlightIdx >= 0 && sugs[highlightIdx]) {
+                                    freqInput.value = sugs[highlightIdx].code;
+                                }
+                                freqDropdown.style.display = 'none';
+                                var whenSelect = document.getElementById('discharge_dosage_when');
+                                if (whenSelect) whenSelect.focus();
+                            }
                         } else if (e.key === 'Escape') {
                             freqDropdown.style.display = 'none';
                         }
-                    });
-
-                    $(document).on('click', '.discharge-freq-opt', function() {
-                        freqInput.value = $(this).data('code');
-                        freqDropdown.style.display = 'none';
-                        var whenSelect = document.getElementById('discharge_dosage_when');
-                        if (whenSelect) whenSelect.focus();
                     });
 
                     document.addEventListener('click', function(e) {
@@ -6297,20 +6604,61 @@ $historyFields = [
                     var daysDropdown = document.getElementById('discharge_no_of_days_dd');
                     if (!daysInput || !daysDropdown) return;
 
+                    var _DURATION_PRESETS = [
+                        '1 Day', '2 Days', '3 Days', '4 Days', '5 Days', '6 Days', '7 Days',
+                        '10 Days', '14 Days', '15 Days', '21 Days', '1 Month', '2 Months', '3 Months'
+                    ];
                     var selectedIdx = -1;
 
                     function buildOptions(val) {
-                        val = String(val || '').trim();
-                        var num = parseInt(val, 10);
-                        if (isNaN(num) || num <= 0) return [];
-                        var unitDays = num === 1 ? 'Day' : 'Days';
-                        var unitWeeks = num === 1 ? 'Week' : 'Weeks';
-                        var unitMonths = num === 1 ? 'Month' : 'Months';
-                        return [
-                            num + ' ' + unitDays,
-                            num + ' ' + unitWeeks,
-                            num + ' ' + unitMonths
-                        ];
+                        var q = String(val || '').trim().toLowerCase();
+                        var suggestions = [], seen = {};
+
+                        var numMatch = q.match(/^(\d+)/);
+                        if (numMatch) {
+                            var n = parseInt(numMatch[1], 10);
+                            var unitDays = n === 1 ? '1 Day' : (n + ' Days');
+                            var unitWeeks = n === 1 ? '1 Week' : (n + ' Weeks');
+                            var unitMonths = n === 1 ? '1 Month' : (n + ' Months');
+
+                            [unitDays, unitWeeks, unitMonths].forEach(function(s) {
+                                if (!seen[s.toLowerCase()]) { seen[s.toLowerCase()] = true; suggestions.push(s); }
+                            });
+                        }
+
+                        _DURATION_PRESETS.forEach(function(p) {
+                            if (!q || p.toLowerCase().indexOf(q) !== -1) {
+                                if (!seen[p.toLowerCase()]) { seen[p.toLowerCase()] = true; suggestions.push(p); }
+                            }
+                        });
+
+                        return suggestions.slice(0, 10);
+                    }
+
+                    function updateHighlight(items, updateInput) {
+                        items.forEach(function(el, i) {
+                            if (i === selectedIdx) {
+                                el.style.backgroundColor = '#0d6efd';
+                                el.style.color = '#ffffff';
+                                el.style.fontWeight = '600';
+                                if (updateInput) {
+                                    daysInput.value = el.getAttribute('data-val') || el.innerText.trim();
+                                }
+                                var cTop = daysDropdown.scrollTop;
+                                var cBottom = cTop + daysDropdown.clientHeight;
+                                var eTop = el.offsetTop;
+                                var eBottom = eTop + el.offsetHeight;
+                                if (eTop < cTop) {
+                                    daysDropdown.scrollTop = eTop;
+                                } else if (eBottom > cBottom) {
+                                    daysDropdown.scrollTop = eBottom - daysDropdown.clientHeight;
+                                }
+                            } else {
+                                el.style.backgroundColor = '';
+                                el.style.color = '';
+                                el.style.fontWeight = '';
+                            }
+                        });
                     }
 
                     function renderDropdown(items) {
@@ -6321,60 +6669,94 @@ $historyFields = [
                             return;
                         }
                         var html = '';
-                        items.forEach(function(item, i) {
-                            html += '<a href="javascript:void(0)" class="dropdown-item discharge-days-opt ' + (i === selectedIdx ? 'active' : '') + '" data-val="' + $('<div>').text(item).html() + '" style="font-size:12px; padding:4px 12px;">' + $('<div>').text(item).html() + '</a>';
+                        items.forEach(function(item) {
+                            html += '<div class="px-3 py-2 border-bottom discharge-days-opt" data-val="' + $('<div>').text(item).html() + '" style="cursor:pointer;font-size:13px;">' + $('<div>').text(item).html() + '</div>';
                         });
                         daysDropdown.innerHTML = html;
                         daysDropdown.style.display = 'block';
+
+                        var els = daysDropdown.querySelectorAll('.discharge-days-opt');
+                        els.forEach(function(el, idx) {
+                            el.addEventListener('mouseenter', function() {
+                                selectedIdx = idx;
+                                updateHighlight(els, false);
+                            });
+                            el.addEventListener('mousedown', function(e) { e.preventDefault(); });
+                            el.addEventListener('click', function() {
+                                daysInput.value = this.getAttribute('data-val') || this.innerText.trim();
+                                daysDropdown.style.display = 'none';
+                                selectedIdx = -1;
+                                var remark = document.getElementById('discharge_remark');
+                                if (remark) remark.focus();
+                            });
+                        });
                     }
+
+                    daysInput.addEventListener('focus', function() {
+                        var items = buildOptions(daysInput.value);
+                        selectedIdx = -1;
+                        renderDropdown(items);
+                    });
 
                     daysInput.addEventListener('input', function() {
                         var items = buildOptions(daysInput.value);
-                        selectedIdx = items.length ? 0 : -1;
+                        selectedIdx = -1;
                         renderDropdown(items);
+                    });
+
+                    daysInput.addEventListener('blur', function() {
+                        setTimeout(function() { daysDropdown.style.display = 'none'; selectedIdx = -1; }, 200);
                     });
 
                     daysInput.addEventListener('keydown', function(e) {
                         var items = daysDropdown.querySelectorAll('.discharge-days-opt');
-                        if (!items.length || daysDropdown.style.display === 'none') {
-                            if (e.key === 'Enter') {
+                        var isVisible = daysDropdown.style.display === 'block' && items.length > 0;
+
+                        if (e.key === 'ArrowDown') {
+                            e.preventDefault();
+                            if (!isVisible) {
+                                var opts = buildOptions(daysInput.value);
+                                renderDropdown(opts);
+                                items = daysDropdown.querySelectorAll('.discharge-days-opt');
+                                if (!items.length) return;
+                                selectedIdx = 0;
+                                updateHighlight(items, true);
+                                return;
+                            }
+                            if (selectedIdx < 0) {
+                                selectedIdx = 0;
+                            } else {
+                                selectedIdx = (selectedIdx + 1) % items.length;
+                            }
+                            updateHighlight(items, true);
+                        } else if (e.key === 'ArrowUp') {
+                            if (!isVisible) return;
+                            e.preventDefault();
+                            if (selectedIdx < 0) {
+                                selectedIdx = items.length - 1;
+                            } else {
+                                selectedIdx = (selectedIdx - 1 + items.length) % items.length;
+                            }
+                            updateHighlight(items, true);
+                        } else if (e.key === 'Enter' || e.key === 'Tab') {
+                            if (isVisible) {
+                                if (e.key === 'Enter') e.preventDefault();
+                                var targetIdx = selectedIdx >= 0 ? selectedIdx : 0;
+                                if (items[targetIdx]) {
+                                    daysInput.value = items[targetIdx].getAttribute('data-val') || items[targetIdx].innerText.trim();
+                                }
+                                daysDropdown.style.display = 'none';
+                                selectedIdx = -1;
+                                var remark = document.getElementById('discharge_remark');
+                                if (remark) remark.focus();
+                            } else if (e.key === 'Enter') {
                                 e.preventDefault();
                                 var remark = document.getElementById('discharge_remark');
                                 if (remark) remark.focus();
                             }
-                            return;
-                        }
-                        if (e.key === 'ArrowDown') {
-                            e.preventDefault();
-                            selectedIdx = (selectedIdx + 1) % items.length;
-                            renderDropdown(buildOptions(daysInput.value));
-                        } else if (e.key === 'ArrowUp') {
-                            e.preventDefault();
-                            selectedIdx = (selectedIdx - 1 + items.length) % items.length;
-                            renderDropdown(buildOptions(daysInput.value));
-                        } else if (e.key === 'Enter') {
-                            e.preventDefault();
-                            if (selectedIdx >= 0 && items[selectedIdx]) {
-                                daysInput.value = items[selectedIdx].getAttribute('data-val');
-                            }
-                            daysDropdown.style.display = 'none';
-                            var remark = document.getElementById('discharge_remark');
-                            if (remark) remark.focus();
                         } else if (e.key === 'Escape') {
                             daysDropdown.style.display = 'none';
-                        }
-                    });
-
-                    $(document).on('click', '.discharge-days-opt', function() {
-                        daysInput.value = $(this).data('val');
-                        daysDropdown.style.display = 'none';
-                        var remark = document.getElementById('discharge_remark');
-                        if (remark) remark.focus();
-                    });
-
-                    document.addEventListener('click', function(e) {
-                        if (!daysInput.contains(e.target) && !daysDropdown.contains(e.target)) {
-                            daysDropdown.style.display = 'none';
+                            selectedIdx = -1;
                         }
                     });
                 })();
@@ -6593,6 +6975,9 @@ $historyFields = [
 
                 $('#discharge_med_type').on('change input', function() {
                     autoSelectDischargeRoute($(this).val());
+                    if (window.refreshDischargeDosageDropdown) {
+                        window.refreshDischargeDosageDropdown();
+                    }
                 });
 
                 function applyDischargeMedicineMatch(matched) {

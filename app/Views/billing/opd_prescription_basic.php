@@ -6433,16 +6433,23 @@
         general: ['1 Tab', '1/2 Tab', '2 Tab', '1 Cap', '5 ml (1 tsp)', '10 ml (2 tsp)', '2.5 ml (1/2 tsp)', '500 mg', '650 mg', '250 mg', '1 Puff', '1 Sachet', '1 Drop', '1 Amp']
     };
 
-    function highlightMedDosageItem(idx) {
+    function highlightMedDosageItem(idx, updateInput) {
         var $items = $('#med_dosage_dd .med-dosage-dd-item');
         if (!$items.length) return;
         if (idx < 0) idx = 0;
         if (idx >= $items.length) idx = $items.length - 1;
         medDosageHighlightIdx = idx;
 
-        $items.css('background', '').removeClass('active-dd-item');
+        $items.css({ 'background': '', 'color': '', 'font-weight': '' }).removeClass('active-dd-item');
         var $target = $items.eq(medDosageHighlightIdx);
-        $target.css('background', '#e2ebff').addClass('active-dd-item');
+        $target.css({ 'background': '#0d6efd', 'color': '#ffffff', 'font-weight': '600' }).addClass('active-dd-item');
+
+        if (updateInput) {
+            var val = $target.text().trim();
+            if (val) {
+                $('#med_dosage').val(val);
+            }
+        }
 
         var container = document.getElementById('med_dosage_dd');
         var elem = $target[0];
@@ -6819,27 +6826,33 @@
             if (!isVisible) {
                 var sugs = getMedDosageSuggestions(($(this).val() || '').trim());
                 renderMedDosageDropdown(sugs);
-                highlightMedDosageItem(0);
+                highlightMedDosageItem(0, true);
                 return;
             }
             e.preventDefault();
             var nextIdx = medDosageHighlightIdx + 1;
             if (nextIdx >= $items.length) nextIdx = 0;
-            highlightMedDosageItem(nextIdx);
+            highlightMedDosageItem(nextIdx, true);
         } else if (e.key === 'ArrowUp') {
             if (!isVisible) return;
             e.preventDefault();
             var prevIdx = medDosageHighlightIdx - 1;
             if (prevIdx < 0) prevIdx = $items.length - 1;
-            highlightMedDosageItem(prevIdx);
-        } else if (e.key === 'Enter') {
+            highlightMedDosageItem(prevIdx, true);
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
             if (isVisible) {
-                e.preventDefault();
                 var targetIdx = medDosageHighlightIdx >= 0 ? medDosageHighlightIdx : 0;
                 var $target = $items.eq(targetIdx);
                 if ($target.length) {
-                    $target.trigger('click');
+                    if (e.key === 'Enter') e.preventDefault();
+                    $('#med_dosage').val($target.text().trim()).trigger('change');
+                    $dd.hide().empty();
+                    medDosageHighlightIdx = -1;
+                    setTimeout(function() { $('#med_freq').focus(); }, 30);
                 }
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                setTimeout(function() { $('#med_freq').focus(); }, 30);
             }
         } else if (e.key === 'Escape') {
             $dd.hide().empty();
@@ -7013,16 +7026,23 @@
     ];
     var medDaysHighlightIdx = -1;
 
-    function highlightMedDaysItem(idx) {
+    function highlightMedDaysItem(idx, updateInput) {
         var $items = $('#med_days_dd .med-days-dd-item');
         if (!$items.length) return;
         if (idx < 0) idx = 0;
         if (idx >= $items.length) idx = $items.length - 1;
         medDaysHighlightIdx = idx;
 
-        $items.css('background', '').removeClass('active-dd-item');
+        $items.css({ 'background': '', 'color': '', 'font-weight': '' }).removeClass('active-dd-item');
         var $target = $items.eq(medDaysHighlightIdx);
-        $target.css('background', '#e2ebff').addClass('active-dd-item');
+        $target.css({ 'background': '#0d6efd', 'color': '#ffffff', 'font-weight': '600' }).addClass('active-dd-item');
+
+        if (updateInput) {
+            var val = $target.text().trim();
+            if (val) {
+                $('#med_days').val(val);
+            }
+        }
 
         var container = document.getElementById('med_days_dd');
         var elem = $target[0];
@@ -7103,28 +7123,33 @@
             if (!isVisible) {
                 var sugs = getMedDaysSuggestions(($(this).val() || '').trim());
                 renderMedDaysDropdown(sugs);
-                highlightMedDaysItem(0);
+                highlightMedDaysItem(0, true);
                 return;
             }
             e.preventDefault();
             var nextIdx = medDaysHighlightIdx + 1;
             if (nextIdx >= $items.length) nextIdx = 0;
-            highlightMedDaysItem(nextIdx);
+            highlightMedDaysItem(nextIdx, true);
         } else if (e.key === 'ArrowUp') {
             if (!isVisible) return;
             e.preventDefault();
             var prevIdx = medDaysHighlightIdx - 1;
             if (prevIdx < 0) prevIdx = $items.length - 1;
-            highlightMedDaysItem(prevIdx);
-        } else if (e.key === 'Enter') {
+            highlightMedDaysItem(prevIdx, true);
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
             if (isVisible) {
-                e.preventDefault();
                 var targetIdx = medDaysHighlightIdx >= 0 ? medDaysHighlightIdx : 0;
                 var $target = $items.eq(targetIdx);
                 if ($target.length) {
-                    $target.trigger('click');
+                    if (e.key === 'Enter') e.preventDefault();
+                    $('#med_days').val($target.text().trim()).trigger('change');
+                    $dd.hide().empty();
+                    medDaysHighlightIdx = -1;
                     setTimeout(function() { $('#med_remark').focus(); }, 30);
                 }
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                setTimeout(function() { $('#med_remark').focus(); }, 30);
             }
         } else if (e.key === 'Escape') {
             $dd.hide().empty();
