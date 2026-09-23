@@ -6319,7 +6319,7 @@ class Ipd_discharge extends BaseController
             && ($this->request->isAJAX() || $this->request->getPost('ajax_mode') === 'json')
             && in_array(
                 (string) ($this->request->getPost('action') ?? ''),
-                ['add_drug', 'remove_drug', 'remove_all_drugs', 'add_course', 'remove_course', 'apply_rx_group', 'add_complaint', 'update_complaint', 'remove_complaint'],
+                ['add_drug', 'remove_drug', 'remove_all_drugs', 'add_course', 'update_course', 'remove_course', 'apply_rx_group', 'add_complaint', 'update_complaint', 'remove_complaint', 'add_diagnosis', 'update_diagnosis', 'remove_diagnosis'],
                 true
             );
 
@@ -6760,9 +6760,122 @@ class Ipd_discharge extends BaseController
                     $notice = 'Select a valid diagnosis row to remove.';
                     $noticeType = 'warning';
                 }
+            } elseif ($action === 'add_course') {
+                $name = trim((string) ($this->request->getPost('new_course_name') ?? ''));
+                $remark = trim((string) ($this->request->getPost('new_course_remark') ?? ''));
+                $masterId = max(0, (int) ($this->request->getPost('new_course_master_id') ?? 0));
+                $courseRemarkText = trim((string) ($this->request->getPost('course_remark') ?? ''));
+                if ($name !== '' && $this->tableHasColumns('ipd_discharge_course', ['ipd_id', 'comp_report'])) {
+                    // Prevent duplicate course row on slow networks or rapid clicks
+                    $existing = $this->db->table('ipd_discharge_course')
+                        ->where('ipd_id', $ipdId)
+                        ->where('LOWER(TRIM(comp_report))', strtolower($name))
+                        ->countAllResults();
+                    if ($existing > 0) {
+                        $savedAny = true;
+                        $notice = 'Course/treatment is already in the list.';
+                        $noticeType = 'info';
+                    } else {
+                        $insert = [
+                            'ipd_id' => $ipdId,
+                            'comp_code' => $masterId,
+                            'comp_report' => $name,
+                            'comp_remark' => $remark,
+                            'update_by' => $userLabel,
+                        ];
+                        if ($this->db->fieldExists('order_id', 'ipd_discharge_course')) {
+                            $insert['order_id'] = 0;
+                        }
+                        $savedAny = (bool) $this->db->table('ipd_discharge_course')->insert($insert);
+                        $notice = $savedAny ? 'Course row added.' : 'Unable to add course row.';
+                        $noticeType = $savedAny ? 'success' : 'warning';
+                    }
+
+                    if ($this->tableHasColumns('ipd_discharge_course_remark', ['ipd_id']) && $courseRemarkText !== '') {
+                        $savedAny = $this->upsertByIpd('ipd_discharge_course_remark', $ipdId, [
+                            'comp_report' => '',
+                            'comp_remark' => $courseRemarkText,
+                            'update_by' => $userLabel,
+                        ]) || $savedAny;
+                    }
+                } else {
+                    $notice = $name === ''
+                        ? 'Enter course/treatment text before adding.'
+                        : 'Course table/columns are missing in database.';
+                    $noticeType = 'warning';
+                }
+            } elseif ($action === 'update_course') {
+                $courseId = (int) ($this->request->getPost('course_row_id') ?? $this->request->getPost('course_edit_id') ?? 0);
+                $name = trim((string) ($this->request->getPost('new_course_name') ?? ''));
+                $remark = trim((string) ($this->request->getPost('new_course_remark') ?? ''));
+                $masterId = max(0, (int) ($this->request->getPost('new_course_master_id') ?? 0));
+                $courseRemarkText = trim((string) ($this->request->getPost('course_remark') ?? ''));
+
+                if ($courseId > 0 && $name !== '' && $this->tableHasColumns('ipd_discharge_course', ['id', 'ipd_id', 'comp_report'])) {
+                    $dupCount = $this->db->table('ipd_discharge_course')
+                        ->where('ipd_id', $ipdId)
+                        ->where('id !=', $courseId)
+                        ->where('LOWER(TRIM(comp_report))', strtolower($name))
+                        ->countAllResults();
+                    if ($dupCount > 0) {
+                        $savedAny = false;
+                        $notice = 'Another row with this course/treatment text already exists.';
+                        $noticeType = 'warning';
+                    } else {
+                        $update = [
+                            'comp_report' => $name,
+                            'comp_remark' => $remark,
+                            'update_by' => $userLabel,
+                        ];
+                        if ($masterId > 0) {
+                            $update['comp_code'] = $masterId;
+                        }
+                        $savedAny = (bool) $this->db->table('ipd_discharge_course')
+                            ->where('id', $courseId)
+                            ->where('ipd_id', $ipdId)
+                            ->update($update);
+                        $notice = $savedAny ? 'Course row updated.' : 'Unable to update course row.';
+                        $noticeType = $savedAny ? 'success' : 'warning';
+                    }
+
+                    if ($this->tableHasColumns('ipd_discharge_course_remark', ['ipd_id']) && $courseRemarkText !== '') {
+                        $savedAny = $this->upsertByIpd('ipd_discharge_course_remark', $ipdId, [
+                            'comp_report' => '',
+                            'comp_remark' => $courseRemarkText,
+                            'update_by' => $userLabel,
+                        ]) || $savedAny;
+                    }
+                } else {
+                    $notice = $name === ''
+                        ? 'Enter course/treatment text before saving.'
+                        : 'Select a valid course row to update.';
+                    $noticeType = 'warning';
+                }
+            } elseif ($action === 'remove_course') {
+                $removeId = (int) ($this->request->getPost('course_remove_id') ?? 0);
+                $courseRemarkText = trim((string) ($this->request->getPost('course_remark') ?? ''));
+                if ($removeId > 0 && $this->tableHasColumns('ipd_discharge_course', ['id', 'ipd_id'])) {
+                    $savedAny = (bool) $this->db->table('ipd_discharge_course')
+                        ->where('id', $removeId)
+                        ->where('ipd_id', $ipdId)
+                        ->delete();
+                    $notice = $savedAny ? 'Course row removed.' : 'Unable to remove course row.';
+                    $noticeType = $savedAny ? 'success' : 'warning';
+
+                    if ($this->tableHasColumns('ipd_discharge_course_remark', ['ipd_id']) && $courseRemarkText !== '') {
+                        $savedAny = $this->upsertByIpd('ipd_discharge_course_remark', $ipdId, [
+                            'comp_report' => '',
+                            'comp_remark' => $courseRemarkText,
+                            'update_by' => $userLabel,
+                        ]) || $savedAny;
+                    }
+                } else {
+                    $notice = 'Select a valid course row to remove.';
+                    $noticeType = 'warning';
+                }
             }
 
-            if (($this->request->isAJAX() || $this->request->getPost('ajax_mode') === 'json') && in_array($action, ['add_complaint', 'update_complaint', 'remove_complaint', 'add_surgery', 'remove_surgery', 'add_procedure', 'remove_procedure', 'add_diagnosis', 'update_diagnosis', 'remove_diagnosis'], true)) {
+            if (($this->request->isAJAX() || $this->request->getPost('ajax_mode') === 'json') && in_array($action, ['add_complaint', 'update_complaint', 'remove_complaint', 'add_surgery', 'remove_surgery', 'add_procedure', 'remove_procedure', 'add_diagnosis', 'update_diagnosis', 'remove_diagnosis', 'add_course', 'update_course', 'remove_course'], true)) {
                 $complaintRows = $this->getDischargeComplaintRows($ipdId);
                 $surgeryRows = $this->byIpdRows('ipd_discharge_surgery', ['id', 'surgery_name', 'surgery_date', 'surgery_remark'], 'id ASC', $ipdId);
                 $procedureRows = $this->byIpdRows('ipd_discharge_procedure', ['id', 'procedure_name', 'procedure_date', 'procedure_remark'], 'id ASC', $ipdId);
@@ -6777,7 +6890,11 @@ class Ipd_discharge extends BaseController
                     $diagCols[] = 'snomed_term';
                 }
                 $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', $diagCols, 'id ASC', $ipdId);
-                $courseRows = $this->byIpdRows('ipd_discharge_course', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
+                $courseCols = ['id', 'comp_report', 'comp_remark'];
+                if ($this->db->fieldExists('comp_code', 'ipd_discharge_course')) {
+                    $courseCols[] = 'comp_code';
+                }
+                $courseRows = $this->byIpdRows('ipd_discharge_course', $courseCols, 'id ASC', $ipdId);
                 return $this->response->setJSON([
                     'update' => ($savedAny ?? false) ? 1 : 0,
                     'notice' => $notice ?? '',
@@ -6792,60 +6909,6 @@ class Ipd_discharge extends BaseController
                     'csrfName' => csrf_token(),
                     'csrfHash' => csrf_hash(),
                 ]);
-            } elseif ($action === 'add_course') {
-                $name = trim((string) ($this->request->getPost('new_course_name') ?? ''));
-                $remark = trim((string) ($this->request->getPost('new_course_remark') ?? ''));
-                $courseRemarkText = trim((string) ($this->request->getPost('course_remark') ?? ''));
-                if ($name !== '' && $this->tableHasColumns('ipd_discharge_course', ['ipd_id', 'comp_report'])) {
-                    $insert = [
-                        'ipd_id' => $ipdId,
-                        'comp_code' => 0,
-                        'comp_report' => $name,
-                        'comp_remark' => $remark,
-                        'update_by' => $userLabel,
-                    ];
-                    if ($this->db->fieldExists('order_id', 'ipd_discharge_course')) {
-                        $insert['order_id'] = 0;
-                    }
-                    $savedAny = (bool) $this->db->table('ipd_discharge_course')->insert($insert);
-                    $notice = $savedAny ? 'Course row added.' : 'Unable to add course row.';
-                    $noticeType = $savedAny ? 'success' : 'warning';
-
-                    if ($this->tableHasColumns('ipd_discharge_course_remark', ['ipd_id'])) {
-                        $savedAny = $this->upsertByIpd('ipd_discharge_course_remark', $ipdId, [
-                            'comp_report' => '',
-                            'comp_remark' => $courseRemarkText,
-                            'update_by' => $userLabel,
-                        ]) || $savedAny;
-                    }
-                } else {
-                    $notice = $name === ''
-                        ? 'Enter course/treatment text before adding.'
-                        : 'Course table/columns are missing in database.';
-                    $noticeType = 'warning';
-                }
-            } elseif ($action === 'remove_course') {
-                $removeId = (int) ($this->request->getPost('course_remove_id') ?? 0);
-                $courseRemarkText = trim((string) ($this->request->getPost('course_remark') ?? ''));
-                if ($removeId > 0 && $this->tableHasColumns('ipd_discharge_course', ['id', 'ipd_id'])) {
-                    $savedAny = (bool) $this->db->table('ipd_discharge_course')
-                        ->where('id', $removeId)
-                        ->where('ipd_id', $ipdId)
-                        ->delete();
-                    $notice = $savedAny ? 'Course row removed.' : 'Unable to remove course row.';
-                    $noticeType = $savedAny ? 'success' : 'warning';
-
-                    if ($this->tableHasColumns('ipd_discharge_course_remark', ['ipd_id'])) {
-                        $savedAny = $this->upsertByIpd('ipd_discharge_course_remark', $ipdId, [
-                            'comp_report' => '',
-                            'comp_remark' => $courseRemarkText,
-                            'update_by' => $userLabel,
-                        ]) || $savedAny;
-                    }
-                } else {
-                    $notice = 'Select a valid course row to remove.';
-                    $noticeType = 'warning';
-                }
             } elseif ($action === 'add_drug') {
                 $name = trim((string) (
                     $this->request->getPost('new_drug_name')
@@ -7860,7 +7923,8 @@ class Ipd_discharge extends BaseController
             // keystroke causes the observed "timeout" on slow/local stacks.
             $isLightweightAjaxAction = in_array($action, [
                 'add_drug', 'remove_drug', 'remove_all_drugs',
-                'add_course', 'remove_course',
+                'add_course', 'update_course', 'remove_course',
+                'add_diagnosis', 'update_diagnosis', 'remove_diagnosis',
                 'apply_rx_group',
             ], true);
 
@@ -7974,7 +8038,11 @@ class Ipd_discharge extends BaseController
             $diagCols[] = 'snomed_term';
         }
         $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', $diagCols, 'id ASC', $ipdId);
-        $courseRows = $this->byIpdRows('ipd_discharge_course', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
+        $courseCols = ['id', 'comp_report', 'comp_remark'];
+        if ($this->db->fieldExists('comp_code', 'ipd_discharge_course')) {
+            $courseCols[] = 'comp_code';
+        }
+        $courseRows = $this->byIpdRows('ipd_discharge_course', $courseCols, 'id ASC', $ipdId);
         $drugRows = $this->byIpdRows('ipd_discharge_drug', ['id', 'drug_name', 'drug_dose', 'drug_day'], 'id ASC', $ipdId);
         $legacyDrugRows = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['id', 'med_name', 'med_salt', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'qty', 'remark'], 'id ASC', $ipdId);
         if (empty($legacyDrugRows)) {

@@ -1242,7 +1242,7 @@ $historyFields = [
                                         <tr>
                                             <th>Course</th>
                                             <th>Remark</th>
-                                            <th style="width:90px;">Action</th>
+                                            <th style="width:130px;" class="text-center">Action</th>
                                         </tr>
                                     </thead>
                                     <tbody id="discharge_course_tbody">
@@ -1250,19 +1250,34 @@ $historyFields = [
                                             <tr>
                                                 <td colspan="3" class="text-muted text-center">No course rows.</td>
                                             </tr>
-                                            <?php else: foreach ($courseRows as $row): ?>
-                                                <tr>
-                                                    <td><?= esc((string) ($row['comp_report'] ?? '')) ?></td>
-                                                    <td><?= esc((string) ($row['comp_remark'] ?? '')) ?></td>
-                                                    <td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-course-row" data-id="<?= (int) ($row['id'] ?? 0) ?>">Remove</button></td>
+                                            <?php else: foreach ($courseRows as $row): 
+                                                $cId = (int) ($row['id'] ?? 0);
+                                                $cReport = (string) ($row['comp_report'] ?? '');
+                                                $cRemark = (string) ($row['comp_remark'] ?? '');
+                                                $cCode = (int) ($row['comp_code'] ?? 0);
+                                            ?>
+                                                <tr id="course_row_<?= $cId ?>">
+                                                    <td class="course-report-text"><?= esc($cReport) ?></td>
+                                                    <td class="course-remark-text"><?= esc($cRemark) ?></td>
+                                                    <td class="text-center">
+                                                        <div class="btn-group btn-group-sm" role="group">
+                                                            <button type="button" class="btn btn-outline-primary btn-sm btn-edit-course-row" 
+                                                                data-id="<?= $cId ?>" 
+                                                                data-name="<?= esc($cReport, 'attr') ?>" 
+                                                                data-remark="<?= esc($cRemark, 'attr') ?>" 
+                                                                data-code="<?= $cCode ?>">Edit</button>
+                                                            <button type="button" class="btn btn-outline-danger btn-sm btn-remove-course-row" data-id="<?= $cId ?>">Remove</button>
+                                                        </div>
+                                                    </td>
                                                 </tr>
                                         <?php endforeach;
                                         endif; ?>
                                     </tbody>
                                 </table>
                                 <input type="hidden" name="course_remove_id" id="course_remove_id" value="0">
+                                <input type="hidden" name="course_edit_id" id="course_edit_id" value="0">
                                 <input type="hidden" name="new_course_master_id" id="new_course_master_id" value="0">
-                                <div class="row g-2">
+                                <div class="row g-2 align-items-center">
                                     <div class="col-md-6 position-relative">
                                         <div class="input-group">
                                             <input type="text" class="form-control" name="new_course_name" id="new_course_name" autocomplete="off" placeholder="Course / treatment (type to search master)">
@@ -1273,7 +1288,10 @@ $historyFields = [
                                         <div id="discharge_course_dropdown" class="dropdown-menu" style="display:none;position:absolute;z-index:1050;max-height:250px;overflow-y:auto;width:100%;"></div>
                                     </div>
                                     <div class="col-md-4"><input type="text" class="form-control" name="new_course_remark" id="new_course_remark" placeholder="Remark"></div>
-                                    <div class="col-md-2"><button type="button" class="btn btn-primary btn-sm w-100" id="btn_add_course_row">+ADD Row</button></div>
+                                    <div class="col-md-2 d-flex gap-1">
+                                        <button type="button" class="btn btn-primary btn-sm flex-fill" id="btn_add_course_row">+ADD Row</button>
+                                        <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_cancel_course_edit" style="display:none;">Cancel</button>
+                                    </div>
                                 </div>
                                 <datalist id="discharge_course_suggest"></datalist>
                                 <div id="discharge_course_status" class="complaint-status text-muted"></div>
@@ -3601,10 +3619,15 @@ $historyFields = [
                         e.preventDefault();
                         highlightedIndex = Math.max(highlightedIndex - 1, 0);
                         updateHighlight(items);
-                    } else if (e.key === 'Enter' && isVisible) {
+                    } else if (e.key === 'Enter') {
                         e.preventDefault();
-                        if (highlightedIndex >= 0 && items[highlightedIndex]) {
+                        if (isVisible && highlightedIndex >= 0 && items[highlightedIndex]) {
                             items[highlightedIndex].click();
+                            setTimeout(function() { $('#new_course_remark').trigger('focus'); }, 50);
+                        } else {
+                            dropdown.style.display = 'none';
+                            highlightedIndex = -1;
+                            $('#new_course_remark').trigger('focus');
                         }
                     } else if (e.key === 'Escape') {
                         dropdown.style.display = 'none';
@@ -5327,40 +5350,149 @@ $historyFields = [
                 });
             }
 
+            var isCourseSubmitting = false;
+
+            function resetCourseEditMode() {
+                $('#course_edit_id').val('0');
+                $('#new_course_name').val('');
+                $('#new_course_remark').val('');
+                $('#new_course_master_id').val('0');
+                $('#discharge_course_tbody tr').removeClass('table-warning');
+                $('#btn_add_course_row').html('+ADD Row').removeClass('btn-warning fw-bold').addClass('btn-primary');
+                $('#btn_cancel_course_edit').hide();
+            }
+
             function renderCourseRows(rows) {
                 var $tbody = $('#discharge_course_tbody');
                 if (!rows || !rows.length) {
                     $tbody.html('<tr><td colspan="3" class="text-muted text-center">No course rows.</td></tr>');
                     return;
                 }
+                var currentEditId = parseInt($('#course_edit_id').val() || '0', 10);
                 var html = '';
                 rows.forEach(function(row) {
                     var id = parseInt(row.id || '0', 10);
-                    var name = $('<div>').text(row.comp_report || '').html();
-                    var remark = $('<div>').text(row.comp_remark || '').html();
-                    html += '<tr>'
-                        + '<td>' + name + '</td>'
-                        + '<td>' + remark + '</td>'
-                        + '<td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-course-row" data-id="' + id + '">Remove</button></td>'
+                    var name = (row.comp_report || '').toString();
+                    var remark = (row.comp_remark || '').toString();
+                    var code = parseInt(row.comp_code || '0', 10);
+
+                    var safeName = $('<div>').text(name).html();
+                    var safeRemark = $('<div>').text(remark).html();
+                    var safeAttr = function(val) {
+                        return String(val || '')
+                            .replace(/&/g, '&amp;')
+                            .replace(/"/g, '&quot;')
+                            .replace(/'/g, '&#39;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;');
+                    };
+
+                    var trClass = (currentEditId > 0 && currentEditId === id) ? ' class="table-warning"' : '';
+
+                    html += '<tr id="course_row_' + id + '"' + trClass + '>'
+                        + '<td class="course-report-text">' + safeName + '</td>'
+                        + '<td class="course-remark-text">' + safeRemark + '</td>'
+                        + '<td class="text-center">'
+                        + '<div class="btn-group btn-group-sm" role="group">'
+                        + '<button type="button" class="btn btn-outline-primary btn-sm btn-edit-course-row" '
+                        + 'data-id="' + id + '" '
+                        + 'data-name="' + safeAttr(name) + '" '
+                        + 'data-remark="' + safeAttr(remark) + '" '
+                        + 'data-code="' + code + '">Edit</button>'
+                        + '<button type="button" class="btn btn-outline-danger btn-sm btn-remove-course-row" data-id="' + id + '">Remove</button>'
+                        + '</div>'
+                        + '</td>'
                         + '</tr>';
                 });
                 $tbody.html(html);
             }
 
+            $(document).on('click', '.btn-edit-course-row', function() {
+                var $btn = $(this);
+                var id = parseInt($btn.data('id') || '0', 10);
+                if (id <= 0) return;
+
+                var name = String($btn.attr('data-name') || $btn.data('name') || '').trim();
+                var remark = String($btn.attr('data-remark') || $btn.data('remark') || '').trim();
+                var code = parseInt($btn.attr('data-code') || $btn.data('code') || '0', 10);
+
+                if (!name) {
+                    var $tr = $btn.closest('tr');
+                    name = $tr.find('.course-report-text').text().trim();
+                    remark = $tr.find('.course-remark-text').text().trim();
+                }
+
+                $('#course_edit_id').val(id);
+                $('#new_course_name').val(name);
+                $('#new_course_remark').val(remark);
+                $('#new_course_master_id').val(code);
+
+                $('#discharge_course_tbody tr').removeClass('table-warning');
+                $('#course_row_' + id).addClass('table-warning');
+
+                $('#btn_add_course_row')
+                    .html('<i class="fa fa-check me-1"></i>Update')
+                    .removeClass('btn-primary')
+                    .addClass('btn-warning fw-bold');
+                $('#btn_cancel_course_edit').show();
+
+                setSectionStatus('discharge_course_status', 'Editing course/treatment: update details and click Update.', 'info');
+                $('#new_course_name').trigger('focus');
+            });
+
+            $(document).on('click', '#btn_cancel_course_edit', function() {
+                resetCourseEditMode();
+                setSectionStatus('discharge_course_status', 'Edit cancelled.', 'info');
+            });
+
             $(document).on('click', '#btn_add_course_row', function() {
+                if (isCourseSubmitting) {
+                    return false;
+                }
+
                 var form = getDischargeForm();
                 var name = ($('#new_course_name').val() || '').toString().trim();
                 if (!name) {
                     setSectionStatus('discharge_course_status', 'Enter course/treatment before adding.', 'error');
-                    return;
+                    $('#new_course_name').trigger('focus');
+                    return false;
                 }
+
+                var editId = parseInt($('#course_edit_id').val() || '0', 10);
+                var isEdit = (editId > 0);
+
+                // Client-side duplicate check to prevent duplicate clicks on slow networks
+                var normalizedName = name.toLowerCase();
+                var isDuplicate = false;
+                $('#discharge_course_tbody tr').each(function() {
+                    var rowId = parseInt($(this).find('.btn-edit-course-row').data('id') || $(this).find('.btn-remove-course-row').data('id') || 0, 10);
+                    if (isEdit && rowId === editId) {
+                        return; // Skip self when updating
+                    }
+                    var existingName = $(this).find('.course-report-text').text().trim().toLowerCase();
+                    if (existingName && existingName === normalizedName) {
+                        isDuplicate = true;
+                        return false;
+                    }
+                });
+
+                if (isDuplicate) {
+                    var dupMsg = isEdit
+                        ? 'Another row with this course/treatment text already exists.'
+                        : 'Course/treatment "' + name + '" is already in the list.';
+                    setSectionStatus('discharge_course_status', dupMsg, 'warning');
+                    return false;
+                }
+
                 var remark = ($('#new_course_remark').val() || '').toString().trim();
                 var masterId = parseInt($('#new_course_master_id').val() || '0', 10);
                 var courseRemarkText = ($('#course_remark').val() || '').toString().trim();
 
                 var csrf = getCsrfPair(form);
                 var payload = {
-                    action: 'add_course',
+                    action: isEdit ? 'update_course' : 'add_course',
+                    course_row_id: editId,
+                    course_edit_id: editId,
                     new_course_name: name,
                     new_course_remark: remark,
                     new_course_master_id: masterId,
@@ -5368,24 +5500,48 @@ $historyFields = [
                 };
                 payload[csrf.name] = csrf.value;
 
+                // Lock UI against slow network multiple submissions
+                isCourseSubmitting = true;
+                var $btn = $('#btn_add_course_row');
+                var originalHtml = isEdit ? '<i class="fa fa-check me-1"></i>Update' : '+ADD Row';
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' + (isEdit ? 'Updating...' : 'Adding...'));
+                $('#btn_cancel_course_edit').prop('disabled', true);
+                $('#new_course_name, #new_course_remark').prop('readonly', true);
+
                 $.post($(form).attr('action') || window.location.href, payload, function(data) {
                     updateFormCsrf(form, data);
                     if (data && data.courseRows) {
                         renderCourseRows(data.courseRows);
                     }
-                    $('#new_course_name').val('');
-                    $('#new_course_remark').val('');
-                    $('#new_course_master_id').val('0');
-                    setSectionStatus('discharge_course_status', (data && data.notice) ? data.notice : 'Course row added.', 'success');
+                    resetCourseEditMode();
+                    var notice = (data && data.notice) ? data.notice : (isEdit ? 'Course row updated.' : 'Course row added.');
+                    var noticeType = (data && data.noticeType) ? data.noticeType : (data && data.update ? 'success' : 'warning');
+                    setSectionStatus('discharge_course_status', notice, noticeType);
+                    $('#new_course_name').trigger('focus');
                 }, 'json').fail(function() {
-                    setSectionStatus('discharge_course_status', 'Unable to add course row.', 'error');
+                    setSectionStatus('discharge_course_status', isEdit ? 'Unable to update course row.' : 'Unable to add course row.', 'error');
+                }).always(function() {
+                    isCourseSubmitting = false;
+                    $btn.prop('disabled', false).html(originalHtml);
+                    $('#btn_cancel_course_edit').prop('disabled', false);
+                    $('#new_course_name, #new_course_remark').prop('readonly', false);
+                    if ($('#course_edit_id').val() === '0') {
+                        $btn.html('+ADD Row').removeClass('btn-warning fw-bold').addClass('btn-primary');
+                    }
                 });
             });
 
             $(document).on('click', '.btn-remove-course-row', function() {
+                var $btn = $(this);
+                if ($btn.prop('disabled')) return;
                 var form = getDischargeForm();
-                var id = parseInt($(this).data('id') || '0', 10);
+                var id = parseInt($btn.data('id') || '0', 10);
                 if (id <= 0) return;
+
+                if (parseInt($('#course_edit_id').val() || '0', 10) === id) {
+                    resetCourseEditMode();
+                }
+
                 var courseRemarkText = ($('#course_remark').val() || '').toString().trim();
                 var csrf = getCsrfPair(form);
                 var payload = {
@@ -5395,13 +5551,27 @@ $historyFields = [
                 };
                 payload[csrf.name] = csrf.value;
 
+                $btn.prop('disabled', true).text('Removing...');
+
                 $.post($(form).attr('action') || window.location.href, payload, function(data) {
                     updateFormCsrf(form, data);
                     if (data && data.courseRows) {
                         renderCourseRows(data.courseRows);
                     }
-                    setSectionStatus('discharge_course_status', (data && data.notice) ? data.notice : 'Course row removed.', 'success');
-                }, 'json');
+                    var notice = (data && data.notice) ? data.notice : 'Course row removed.';
+                    var noticeType = (data && data.noticeType) ? data.noticeType : 'success';
+                    setSectionStatus('discharge_course_status', notice, noticeType);
+                }, 'json').fail(function() {
+                    $btn.prop('disabled', false).text('Remove');
+                    setSectionStatus('discharge_course_status', 'Unable to remove course row.', 'error');
+                });
+            });
+
+            $(document).on('keydown', '#new_course_remark', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    $('#btn_add_course_row').trigger('click');
+                }
             });
 
             function initCourseMasterCrud(form) {
