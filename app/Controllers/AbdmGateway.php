@@ -4608,9 +4608,14 @@ class AbdmGateway extends BaseController
             return $this->response->setJSON(['ok' => 1, 'careContexts' => [], 'count' => 0]);
         }
 
-        $payload = $this->request->getJSON(true);
+        try {
+            $payload = $this->request->getJSON(true);
+        } catch (\Throwable) {
+            $payload = null;
+        }
         if (! is_array($payload)) {
-            $payload = [];
+            $raw = (string) $this->request->getBody();
+            $payload = json_decode($raw, true) ?? [];
         }
 
         $requestId = trim((string) ($payload['requestId'] ?? $payload['request_id'] ?? $this->request->getHeaderLine('X-Request-Id')));
@@ -5364,10 +5369,13 @@ class AbdmGateway extends BaseController
             if (hash_equals($expected, $sigLower)) {
                 return null;
             }
-            return $this->response->setStatusCode(401)->setJSON([
-                'ok' => 0,
-                'error_text' => 'Invalid webhook signature',
-            ]);
+            // If signature failed but Authorization Bearer header is present, fall through to Bearer check
+            if (trim((string) $this->request->getHeaderLine('Authorization')) === '') {
+                return $this->response->setStatusCode(401)->setJSON([
+                    'ok' => 0,
+                    'error_text' => 'Invalid webhook signature',
+                ]);
+            }
         }
 
         // 2. If Authorization header is present, validate Bearer token
