@@ -1145,7 +1145,7 @@ $historyFields = [
                                         <tr>
                                             <th>Diagnosis</th>
                                             <th>Remark</th>
-                                            <th style="width:90px;">Action</th>
+                                            <th style="width:130px;" class="text-center">Action</th>
                                         </tr>
                                     </thead>
                                      <tbody id="discharge_final_diagnosis_tbody">
@@ -1153,27 +1153,49 @@ $historyFields = [
                                              <tr>
                                                  <td colspan="3" class="text-muted text-center">No diagnosis rows.</td>
                                              </tr>
-                                             <?php else: foreach ($diagnosisRows as $row): ?>
-                                                 <tr>
-                                                     <td><?= esc((string) ($row['comp_report'] ?? '')) ?></td>
-                                                     <td><?= esc((string) ($row['comp_remark'] ?? '')) ?></td>
-                                                     <td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-final-diagnosis-row" data-id="<?= (int) ($row['id'] ?? 0) ?>">Remove</button></td>
+                                             <?php else: foreach ($diagnosisRows as $row): 
+                                                 $dId = (int) ($row['id'] ?? 0);
+                                                 $dReport = (string) ($row['comp_report'] ?? '');
+                                                 $dRemark = (string) ($row['comp_remark'] ?? '');
+                                                 $dCode = (int) ($row['comp_code'] ?? 0);
+                                                 $dSnomedId = (string) ($row['snomed_concept_id'] ?? '');
+                                                 $dSnomedTerm = (string) ($row['snomed_term'] ?? '');
+                                             ?>
+                                                 <tr id="diag_row_<?= $dId ?>">
+                                                     <td class="diag-report-text"><?= esc($dReport) ?></td>
+                                                     <td class="diag-remark-text"><?= esc($dRemark) ?></td>
+                                                     <td class="text-center">
+                                                         <div class="btn-group btn-group-sm" role="group">
+                                                             <button type="button" class="btn btn-outline-primary btn-sm btn-edit-final-diagnosis-row" 
+                                                                 data-id="<?= $dId ?>" 
+                                                                 data-name="<?= esc($dReport, 'attr') ?>" 
+                                                                 data-remark="<?= esc($dRemark, 'attr') ?>" 
+                                                                 data-code="<?= $dCode ?>" 
+                                                                 data-snomed-id="<?= esc($dSnomedId, 'attr') ?>" 
+                                                                 data-snomed-term="<?= esc($dSnomedTerm, 'attr') ?>">Edit</button>
+                                                             <button type="button" class="btn btn-outline-danger btn-sm btn-remove-final-diagnosis-row" data-id="<?= $dId ?>">Remove</button>
+                                                         </div>
+                                                     </td>
                                                  </tr>
                                          <?php endforeach;
                                          endif; ?>
                                      </tbody>
                                  </table>
                                  <input type="hidden" name="diagnosis_remove_id" id="diagnosis_remove_id" value="0">
+                                 <input type="hidden" name="diagnosis_edit_id" id="diagnosis_edit_id" value="0">
                                  <input type="hidden" name="new_diagnosis_master_code" id="new_diagnosis_master_code" value="0">
                                  <input type="hidden" name="new_diagnosis_snomed_concept_id" id="new_diagnosis_snomed_concept_id" value="">
                                  <input type="hidden" name="new_diagnosis_snomed_term" id="new_diagnosis_snomed_term" value="">
-                                 <div class="row g-2">
+                                 <div class="row g-2 align-items-center">
                                      <div class="col-md-6 position-relative">
                                          <input type="text" class="form-control" name="new_diagnosis_name" id="new_diagnosis_name" autocomplete="off" placeholder="Diagnosis">
                                          <div id="discharge_diagnosis_dropdown" class="dropdown-menu shadow-sm w-100" style="display:none; position:absolute; top:100%; left:0; z-index:1060; max-height:220px; overflow-y:auto;"></div>
                                      </div>
-                                     <div class="col-md-5"><input type="text" class="form-control" name="new_diagnosis_remark" id="new_diagnosis_remark" placeholder="Remark"></div>
-                                     <div class="col-md-1"><button type="button" class="btn btn-primary btn-sm w-100" id="btn_add_final_diagnosis_row">+ADD</button></div>
+                                     <div class="col-md-4"><input type="text" class="form-control" name="new_diagnosis_remark" id="new_diagnosis_remark" placeholder="Remark"></div>
+                                     <div class="col-md-2 d-flex gap-1">
+                                         <button type="button" class="btn btn-primary btn-sm flex-fill" id="btn_add_final_diagnosis_row">+ADD</button>
+                                         <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_cancel_final_diagnosis_edit" style="display:none;">Cancel</button>
+                                     </div>
                                  </div>
                                  <small class="text-muted">Type a diagnosis name, SNOMED term, or ICD code to search master data.</small>
                                  <div id="discharge_diagnosis_status" class="complaint-status text-muted"></div>
@@ -4696,33 +4718,150 @@ $historyFields = [
                 initSurgeryMasterCrud(form);
             }
 
+            var isDiagnosisSubmitting = false;
+
+            function resetFinalDiagnosisEditMode() {
+                $('#diagnosis_edit_id').val('0');
+                $('#new_diagnosis_name').val('');
+                $('#new_diagnosis_remark').val('');
+                $('#new_diagnosis_master_code').val('0');
+                $('#new_diagnosis_snomed_concept_id').val('');
+                $('#new_diagnosis_snomed_term').val('');
+                $('#discharge_final_diagnosis_tbody tr').removeClass('table-warning');
+                $('#btn_add_final_diagnosis_row').html('+ADD').removeClass('btn-warning fw-bold').addClass('btn-primary');
+                $('#btn_cancel_final_diagnosis_edit').hide();
+            }
+
             function renderFinalDiagnosisRows(rows) {
                 var $tbody = $('#discharge_final_diagnosis_tbody');
                 if (!rows || !rows.length) {
                     $tbody.html('<tr><td colspan="3" class="text-muted text-center">No diagnosis rows.</td></tr>');
                     return;
                 }
+                var currentEditId = parseInt($('#diagnosis_edit_id').val() || '0', 10);
                 var html = '';
                 rows.forEach(function(row) {
                     var id = parseInt(row.id || '0', 10);
-                    var name = $('<div>').text(row.comp_report || '').html();
-                    var remark = $('<div>').text(row.comp_remark || '').html();
-                    html += '<tr>'
-                        + '<td>' + name + '</td>'
-                        + '<td>' + remark + '</td>'
-                        + '<td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-final-diagnosis-row" data-id="' + id + '">Remove</button></td>'
+                    var name = (row.comp_report || '').toString();
+                    var remark = (row.comp_remark || '').toString();
+                    var code = parseInt(row.comp_code || '0', 10);
+                    var snomedId = (row.snomed_concept_id || '').toString();
+                    var snomedTerm = (row.snomed_term || '').toString();
+
+                    var safeName = $('<div>').text(name).html();
+                    var safeRemark = $('<div>').text(remark).html();
+                    var safeAttr = function(val) {
+                        return String(val || '')
+                            .replace(/&/g, '&amp;')
+                            .replace(/"/g, '&quot;')
+                            .replace(/'/g, '&#39;')
+                            .replace(/</g, '&lt;')
+                            .replace(/>/g, '&gt;');
+                    };
+
+                    var trClass = (currentEditId > 0 && currentEditId === id) ? ' class="table-warning"' : '';
+
+                    html += '<tr id="diag_row_' + id + '"' + trClass + '>'
+                        + '<td class="diag-report-text">' + safeName + '</td>'
+                        + '<td class="diag-remark-text">' + safeRemark + '</td>'
+                        + '<td class="text-center">'
+                        + '<div class="btn-group btn-group-sm" role="group">'
+                        + '<button type="button" class="btn btn-outline-primary btn-sm btn-edit-final-diagnosis-row" '
+                        + 'data-id="' + id + '" '
+                        + 'data-name="' + safeAttr(name) + '" '
+                        + 'data-remark="' + safeAttr(remark) + '" '
+                        + 'data-code="' + code + '" '
+                        + 'data-snomed-id="' + safeAttr(snomedId) + '" '
+                        + 'data-snomed-term="' + safeAttr(snomedTerm) + '">Edit</button>'
+                        + '<button type="button" class="btn btn-outline-danger btn-sm btn-remove-final-diagnosis-row" data-id="' + id + '">Remove</button>'
+                        + '</div>'
+                        + '</td>'
                         + '</tr>';
                 });
                 $tbody.html(html);
             }
 
+            $(document).on('click', '.btn-edit-final-diagnosis-row', function() {
+                var $btn = $(this);
+                var id = parseInt($btn.data('id') || '0', 10);
+                if (id <= 0) return;
+
+                var name = String($btn.attr('data-name') || $btn.data('name') || '').trim();
+                var remark = String($btn.attr('data-remark') || $btn.data('remark') || '').trim();
+                var code = parseInt($btn.attr('data-code') || $btn.data('code') || '0', 10);
+                var snomedId = String($btn.attr('data-snomed-id') || $btn.data('snomed-id') || '').trim();
+                var snomedTerm = String($btn.attr('data-snomed-term') || $btn.data('snomed-term') || '').trim();
+
+                if (!name) {
+                    var $tr = $btn.closest('tr');
+                    name = $tr.find('.diag-report-text').text().trim();
+                    remark = $tr.find('.diag-remark-text').text().trim();
+                }
+
+                $('#diagnosis_edit_id').val(id);
+                $('#new_diagnosis_name').val(name);
+                $('#new_diagnosis_remark').val(remark);
+                $('#new_diagnosis_master_code').val(code);
+                $('#new_diagnosis_snomed_concept_id').val(snomedId);
+                $('#new_diagnosis_snomed_term').val(snomedTerm);
+
+                $('#discharge_final_diagnosis_tbody tr').removeClass('table-warning');
+                $('#diag_row_' + id).addClass('table-warning');
+
+                $('#btn_add_final_diagnosis_row')
+                    .html('<i class="fa fa-check me-1"></i>Update')
+                    .removeClass('btn-primary')
+                    .addClass('btn-warning fw-bold');
+                $('#btn_cancel_final_diagnosis_edit').show();
+
+                setSectionStatus('discharge_diagnosis_status', 'Editing diagnosis: update details and click Update.', 'info');
+                $('#new_diagnosis_name').trigger('focus');
+            });
+
+            $(document).on('click', '#btn_cancel_final_diagnosis_edit', function() {
+                resetFinalDiagnosisEditMode();
+                setSectionStatus('discharge_diagnosis_status', 'Edit cancelled.', 'info');
+            });
+
             $(document).on('click', '#btn_add_final_diagnosis_row', function() {
+                if (isDiagnosisSubmitting) {
+                    return false;
+                }
+
                 var form = getDischargeForm();
                 var name = ($('#new_diagnosis_name').val() || '').toString().trim();
                 if (!name) {
                     setSectionStatus('discharge_diagnosis_status', 'Enter diagnosis before adding.', 'error');
-                    return;
+                    $('#new_diagnosis_name').trigger('focus');
+                    return false;
                 }
+
+                var editId = parseInt($('#diagnosis_edit_id').val() || '0', 10);
+                var isEdit = (editId > 0);
+
+                // Client-side duplicate check to prevent duplicates on slow network
+                var normalizedName = name.toLowerCase();
+                var isDuplicate = false;
+                $('#discharge_final_diagnosis_tbody tr').each(function() {
+                    var rowId = parseInt($(this).find('.btn-edit-final-diagnosis-row').data('id') || $(this).find('.btn-remove-final-diagnosis-row').data('id') || 0, 10);
+                    if (isEdit && rowId === editId) {
+                        return; // Skip self when updating
+                    }
+                    var existingName = $(this).find('.diag-report-text').text().trim().toLowerCase();
+                    if (existingName && existingName === normalizedName) {
+                        isDuplicate = true;
+                        return false;
+                    }
+                });
+
+                if (isDuplicate) {
+                    var dupMsg = isEdit
+                        ? 'Another row with this diagnosis name already exists.'
+                        : 'Diagnosis "' + name + '" is already in the list.';
+                    setSectionStatus('discharge_diagnosis_status', dupMsg, 'warning');
+                    return false;
+                }
+
                 var remark = ($('#new_diagnosis_remark').val() || '').toString().trim();
                 var masterCode = parseInt($('#new_diagnosis_master_code').val() || '0', 10);
                 var snomedConceptId = ($('#new_diagnosis_snomed_concept_id').val() || '').toString().trim();
@@ -4731,7 +4870,9 @@ $historyFields = [
 
                 var csrf = getCsrfPair(form);
                 var payload = {
-                    action: 'add_diagnosis',
+                    action: isEdit ? 'update_diagnosis' : 'add_diagnosis',
+                    diagnosis_row_id: editId,
+                    diagnosis_edit_id: editId,
                     new_diagnosis_name: name,
                     new_diagnosis_remark: remark,
                     new_diagnosis_master_code: masterCode,
@@ -4741,26 +4882,48 @@ $historyFields = [
                 };
                 payload[csrf.name] = csrf.value;
 
+                // Lock UI against slow network multiple submissions
+                isDiagnosisSubmitting = true;
+                var $btn = $('#btn_add_final_diagnosis_row');
+                var originalHtml = isEdit ? '<i class="fa fa-check me-1"></i>Update' : '+ADD';
+                $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>' + (isEdit ? 'Updating...' : 'Adding...'));
+                $('#btn_cancel_final_diagnosis_edit').prop('disabled', true);
+                $('#new_diagnosis_name, #new_diagnosis_remark').prop('readonly', true);
+
                 $.post($(form).attr('action') || window.location.href, payload, function(data) {
                     updateFormCsrf(form, data);
                     if (data && data.diagnosisRows) {
                         renderFinalDiagnosisRows(data.diagnosisRows);
                     }
-                    $('#new_diagnosis_name').val('');
-                    $('#new_diagnosis_remark').val('');
-                    $('#new_diagnosis_master_code').val('0');
-                    $('#new_diagnosis_snomed_concept_id').val('');
-                    $('#new_diagnosis_snomed_term').val('');
-                    setSectionStatus('discharge_diagnosis_status', (data && data.notice) ? data.notice : 'Diagnosis row added.', 'success');
+                    resetFinalDiagnosisEditMode();
+                    var notice = (data && data.notice) ? data.notice : (isEdit ? 'Diagnosis row updated.' : 'Diagnosis row added.');
+                    var noticeType = (data && data.noticeType) ? data.noticeType : (data && data.update ? 'success' : 'warning');
+                    setSectionStatus('discharge_diagnosis_status', notice, noticeType);
+                    $('#new_diagnosis_name').trigger('focus');
                 }, 'json').fail(function() {
-                    setSectionStatus('discharge_diagnosis_status', 'Unable to add diagnosis row.', 'error');
+                    setSectionStatus('discharge_diagnosis_status', isEdit ? 'Unable to update diagnosis row.' : 'Unable to add diagnosis row.', 'error');
+                }).always(function() {
+                    isDiagnosisSubmitting = false;
+                    $btn.prop('disabled', false).html(originalHtml);
+                    $('#btn_cancel_final_diagnosis_edit').prop('disabled', false);
+                    $('#new_diagnosis_name, #new_diagnosis_remark').prop('readonly', false);
+                    if ($('#diagnosis_edit_id').val() === '0') {
+                        $btn.html('+ADD').removeClass('btn-warning fw-bold').addClass('btn-primary');
+                    }
                 });
             });
 
             $(document).on('click', '.btn-remove-final-diagnosis-row', function() {
+                var $btn = $(this);
+                if ($btn.prop('disabled')) return;
                 var form = getDischargeForm();
-                var id = parseInt($(this).data('id') || '0', 10);
+                var id = parseInt($btn.data('id') || '0', 10);
                 if (id <= 0) return;
+
+                if (parseInt($('#diagnosis_edit_id').val() || '0', 10) === id) {
+                    resetFinalDiagnosisEditMode();
+                }
+
                 var diagnosisRemarkText = ($('#diagnosis_remark').val() || '').toString().trim();
                 var csrf = getCsrfPair(form);
                 var payload = {
@@ -4770,13 +4933,27 @@ $historyFields = [
                 };
                 payload[csrf.name] = csrf.value;
 
+                $btn.prop('disabled', true).text('Removing...');
+
                 $.post($(form).attr('action') || window.location.href, payload, function(data) {
                     updateFormCsrf(form, data);
                     if (data && data.diagnosisRows) {
                         renderFinalDiagnosisRows(data.diagnosisRows);
                     }
-                    setSectionStatus('discharge_diagnosis_status', (data && data.notice) ? data.notice : 'Diagnosis row removed.', 'success');
-                }, 'json');
+                    var notice = (data && data.notice) ? data.notice : 'Diagnosis row removed.';
+                    var noticeType = (data && data.noticeType) ? data.noticeType : 'success';
+                    setSectionStatus('discharge_diagnosis_status', notice, noticeType);
+                }, 'json').fail(function() {
+                    $btn.prop('disabled', false).text('Remove');
+                    setSectionStatus('discharge_diagnosis_status', 'Unable to remove diagnosis row.', 'error');
+                });
+            });
+
+            $(document).on('keydown', '#new_diagnosis_remark', function(e) {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    $('#btn_add_final_diagnosis_row').trigger('click');
+                }
             });
 
             function bindDiagnosisIcdLookup(form) {
@@ -4875,6 +5052,11 @@ $historyFields = [
                         if ($dd.is(':visible') && ddIdx >= 0 && ddIdx < $items.length) {
                             e.preventDefault();
                             $items.eq(ddIdx).trigger('click');
+                            setTimeout(function() { $('#new_diagnosis_remark').trigger('focus'); }, 50);
+                        } else {
+                            e.preventDefault();
+                            closeDd();
+                            $('#new_diagnosis_remark').trigger('focus');
                         }
                     } else if (e.key === 'Escape') {
                         closeDd();

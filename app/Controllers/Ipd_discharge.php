@@ -6633,30 +6633,41 @@ class Ipd_discharge extends BaseController
                 $snomedTerm = trim((string) ($this->request->getPost('new_diagnosis_snomed_term') ?? ''));
                 $diagnosisRemarkText = trim((string) ($this->request->getPost('diagnosis_remark') ?? ''));
                 if ($name !== '' && $this->tableHasColumns('ipd_discharge_diagnosis', ['ipd_id', 'comp_report'])) {
-                    $insert = [
-                        'ipd_id' => $ipdId,
-                        'comp_code' => $masterCode,
-                        'comp_report' => $name,
-                        'comp_remark' => $remark,
-                        'update_by' => $userLabel,
-                    ];
-                    if ($this->db->fieldExists('snomed_concept_id', 'ipd_discharge_diagnosis')) {
-                        $insert['snomed_concept_id'] = $snomedConceptId;
+                    // Prevent duplicate row insertion on slow networks or multiple clicks
+                    $existing = $this->db->table('ipd_discharge_diagnosis')
+                        ->where('ipd_id', $ipdId)
+                        ->where('LOWER(TRIM(comp_report))', strtolower($name))
+                        ->countAllResults();
+                    if ($existing > 0) {
+                        $savedAny = true;
+                        $notice = 'Diagnosis is already in the list.';
+                        $noticeType = 'info';
+                    } else {
+                        $insert = [
+                            'ipd_id' => $ipdId,
+                            'comp_code' => $masterCode,
+                            'comp_report' => $name,
+                            'comp_remark' => $remark,
+                            'update_by' => $userLabel,
+                        ];
+                        if ($this->db->fieldExists('snomed_concept_id', 'ipd_discharge_diagnosis')) {
+                            $insert['snomed_concept_id'] = $snomedConceptId;
+                        }
+                        if ($this->db->fieldExists('snomed_term', 'ipd_discharge_diagnosis')) {
+                            $insert['snomed_term'] = $snomedTerm;
+                        }
+                        if ($this->db->fieldExists('snomed_source', 'ipd_discharge_diagnosis')) {
+                            $insert['snomed_source'] = $snomedConceptId !== '' ? 'disease_master' : '';
+                        }
+                        if ($this->db->fieldExists('order_id', 'ipd_discharge_diagnosis')) {
+                            $insert['order_id'] = 0;
+                        }
+                        $savedAny = (bool) $this->db->table('ipd_discharge_diagnosis')->insert($insert);
+                        $notice = $savedAny ? 'Diagnosis row added.' : 'Unable to add diagnosis row.';
+                        $noticeType = $savedAny ? 'success' : 'warning';
                     }
-                    if ($this->db->fieldExists('snomed_term', 'ipd_discharge_diagnosis')) {
-                        $insert['snomed_term'] = $snomedTerm;
-                    }
-                    if ($this->db->fieldExists('snomed_source', 'ipd_discharge_diagnosis')) {
-                        $insert['snomed_source'] = $snomedConceptId !== '' ? 'disease_master' : '';
-                    }
-                    if ($this->db->fieldExists('order_id', 'ipd_discharge_diagnosis')) {
-                        $insert['order_id'] = 0;
-                    }
-                    $savedAny = (bool) $this->db->table('ipd_discharge_diagnosis')->insert($insert);
-                    $notice = $savedAny ? 'Diagnosis row added.' : 'Unable to add diagnosis row.';
-                    $noticeType = $savedAny ? 'success' : 'warning';
 
-                    if ($this->tableHasColumns('ipd_discharge_diagnosis_remark', ['ipd_id'])) {
+                    if ($this->tableHasColumns('ipd_discharge_diagnosis_remark', ['ipd_id']) && $diagnosisRemarkText !== '') {
                         $savedAny = $this->upsertByIpd('ipd_discharge_diagnosis_remark', $ipdId, [
                             'comp_report' => '',
                             'comp_remark' => $diagnosisRemarkText,
@@ -6667,6 +6678,64 @@ class Ipd_discharge extends BaseController
                     $notice = $name === ''
                         ? 'Enter diagnosis before adding.'
                         : 'Diagnosis table/columns are missing in database.';
+                    $noticeType = 'warning';
+                }
+            } elseif ($action === 'update_diagnosis') {
+                $diagId = (int) ($this->request->getPost('diagnosis_row_id') ?? $this->request->getPost('diagnosis_edit_id') ?? 0);
+                $name = trim((string) ($this->request->getPost('new_diagnosis_name') ?? ''));
+                $remark = trim((string) ($this->request->getPost('new_diagnosis_remark') ?? ''));
+                $masterCode = max(0, (int) ($this->request->getPost('new_diagnosis_master_code') ?? 0));
+                $snomedConceptId = trim((string) ($this->request->getPost('new_diagnosis_snomed_concept_id') ?? ''));
+                $snomedTerm = trim((string) ($this->request->getPost('new_diagnosis_snomed_term') ?? ''));
+                $diagnosisRemarkText = trim((string) ($this->request->getPost('diagnosis_remark') ?? ''));
+
+                if ($diagId > 0 && $name !== '' && $this->tableHasColumns('ipd_discharge_diagnosis', ['id', 'ipd_id', 'comp_report'])) {
+                    $dupCount = $this->db->table('ipd_discharge_diagnosis')
+                        ->where('ipd_id', $ipdId)
+                        ->where('id !=', $diagId)
+                        ->where('LOWER(TRIM(comp_report))', strtolower($name))
+                        ->countAllResults();
+                    if ($dupCount > 0) {
+                        $savedAny = false;
+                        $notice = 'Another row with this diagnosis name already exists.';
+                        $noticeType = 'warning';
+                    } else {
+                        $update = [
+                            'comp_report' => $name,
+                            'comp_remark' => $remark,
+                            'update_by' => $userLabel,
+                        ];
+                        if ($masterCode > 0) {
+                            $update['comp_code'] = $masterCode;
+                        }
+                        if ($this->db->fieldExists('snomed_concept_id', 'ipd_discharge_diagnosis')) {
+                            $update['snomed_concept_id'] = $snomedConceptId;
+                        }
+                        if ($this->db->fieldExists('snomed_term', 'ipd_discharge_diagnosis')) {
+                            $update['snomed_term'] = $snomedTerm;
+                        }
+                        if ($this->db->fieldExists('snomed_source', 'ipd_discharge_diagnosis')) {
+                            $update['snomed_source'] = $snomedConceptId !== '' ? 'disease_master' : '';
+                        }
+                        $savedAny = (bool) $this->db->table('ipd_discharge_diagnosis')
+                            ->where('id', $diagId)
+                            ->where('ipd_id', $ipdId)
+                            ->update($update);
+                        $notice = $savedAny ? 'Diagnosis row updated.' : 'Unable to update diagnosis row.';
+                        $noticeType = $savedAny ? 'success' : 'warning';
+                    }
+
+                    if ($this->tableHasColumns('ipd_discharge_diagnosis_remark', ['ipd_id']) && $diagnosisRemarkText !== '') {
+                        $savedAny = $this->upsertByIpd('ipd_discharge_diagnosis_remark', $ipdId, [
+                            'comp_report' => '',
+                            'comp_remark' => $diagnosisRemarkText,
+                            'update_by' => $userLabel,
+                        ]) || $savedAny;
+                    }
+                } else {
+                    $notice = $name === ''
+                        ? 'Enter diagnosis before saving.'
+                        : 'Select a valid diagnosis row to update.';
                     $noticeType = 'warning';
                 }
             } elseif ($action === 'remove_diagnosis') {
@@ -6693,11 +6762,21 @@ class Ipd_discharge extends BaseController
                 }
             }
 
-            if (($this->request->isAJAX() || $this->request->getPost('ajax_mode') === 'json') && in_array($action, ['add_complaint', 'update_complaint', 'remove_complaint', 'add_surgery', 'remove_surgery', 'add_procedure', 'remove_procedure', 'add_diagnosis', 'remove_diagnosis'], true)) {
+            if (($this->request->isAJAX() || $this->request->getPost('ajax_mode') === 'json') && in_array($action, ['add_complaint', 'update_complaint', 'remove_complaint', 'add_surgery', 'remove_surgery', 'add_procedure', 'remove_procedure', 'add_diagnosis', 'update_diagnosis', 'remove_diagnosis'], true)) {
                 $complaintRows = $this->getDischargeComplaintRows($ipdId);
                 $surgeryRows = $this->byIpdRows('ipd_discharge_surgery', ['id', 'surgery_name', 'surgery_date', 'surgery_remark'], 'id ASC', $ipdId);
                 $procedureRows = $this->byIpdRows('ipd_discharge_procedure', ['id', 'procedure_name', 'procedure_date', 'procedure_remark'], 'id ASC', $ipdId);
-                $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
+                $diagCols = ['id', 'comp_report', 'comp_remark'];
+                if ($this->db->fieldExists('comp_code', 'ipd_discharge_diagnosis')) {
+                    $diagCols[] = 'comp_code';
+                }
+                if ($this->db->fieldExists('snomed_concept_id', 'ipd_discharge_diagnosis')) {
+                    $diagCols[] = 'snomed_concept_id';
+                }
+                if ($this->db->fieldExists('snomed_term', 'ipd_discharge_diagnosis')) {
+                    $diagCols[] = 'snomed_term';
+                }
+                $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', $diagCols, 'id ASC', $ipdId);
                 $courseRows = $this->byIpdRows('ipd_discharge_course', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
                 return $this->response->setJSON([
                     'update' => ($savedAny ?? false) ? 1 : 0,
@@ -7884,7 +7963,17 @@ class Ipd_discharge extends BaseController
         $complaintRows = $this->byIpdRows('ipd_discharge_complaint', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
         $surgeryRows = $this->byIpdRows('ipd_discharge_surgery', ['id', 'surgery_name', 'surgery_date', 'surgery_remark'], 'id ASC', $ipdId);
         $procedureRows = $this->byIpdRows('ipd_discharge_procedure', ['id', 'procedure_name', 'procedure_date', 'procedure_remark'], 'id ASC', $ipdId);
-        $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
+        $diagCols = ['id', 'comp_report', 'comp_remark'];
+        if ($this->db->fieldExists('comp_code', 'ipd_discharge_diagnosis')) {
+            $diagCols[] = 'comp_code';
+        }
+        if ($this->db->fieldExists('snomed_concept_id', 'ipd_discharge_diagnosis')) {
+            $diagCols[] = 'snomed_concept_id';
+        }
+        if ($this->db->fieldExists('snomed_term', 'ipd_discharge_diagnosis')) {
+            $diagCols[] = 'snomed_term';
+        }
+        $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', $diagCols, 'id ASC', $ipdId);
         $courseRows = $this->byIpdRows('ipd_discharge_course', ['id', 'comp_report', 'comp_remark'], 'id ASC', $ipdId);
         $drugRows = $this->byIpdRows('ipd_discharge_drug', ['id', 'drug_name', 'drug_dose', 'drug_day'], 'id ASC', $ipdId);
         $legacyDrugRows = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['id', 'med_name', 'med_salt', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'qty', 'remark'], 'id ASC', $ipdId);
