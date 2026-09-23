@@ -106,6 +106,7 @@ class Doctor extends BaseController
             'opd_print_format' => 'tmpl_opd_print_format',
             'opd_blank_print' => 'tmpl_opd_blank_print',
             'opd_cont_paper_print' => 'tmpl_opd_cont_paper_print',
+            'opd_day_care_template' => 'tmpl_opd_day_care_template',
             'rx_pre_print_letter_head_format' => 'tmpl_rx_pre_print_letter_head_format',
             'rx_blank_letter_head' => 'tmpl_rx_blank_letter_head',
             'rx_plain_paper' => 'tmpl_rx_plain_paper',
@@ -229,6 +230,7 @@ class Doctor extends BaseController
             'opd_print_format' => 'tmpl_opd_print_format',
             'opd_blank_print' => 'tmpl_opd_blank_print',
             'opd_cont_paper_print' => 'tmpl_opd_cont_paper_print',
+            'opd_day_care_template' => 'tmpl_opd_day_care_template',
             'rx_pre_print_letter_head_format' => 'tmpl_rx_pre_print_letter_head_format',
             'rx_blank_letter_head' => 'tmpl_rx_blank_letter_head',
             'rx_plain_paper' => 'tmpl_rx_plain_paper',
@@ -671,6 +673,7 @@ class Doctor extends BaseController
             'opd_print_format',
             'opd_blank_print',
             'opd_cont_paper_print',
+            'opd_day_care_template',
             'rx_pre_print_letter_head_format',
             'rx_blank_letter_head',
             'rx_plain_paper',
@@ -681,6 +684,23 @@ class Doctor extends BaseController
         }
 
         $doctorFields = $this->db->getFieldNames('doctor_master') ?? [];
+        if (! in_array('opd_day_care_template', $doctorFields, true)) {
+            try {
+                $forge = \Config\Database::forge();
+                $forge->addColumn('doctor_master', [
+                    'opd_day_care_template' => [
+                        'type'       => 'VARCHAR',
+                        'constraint' => 100,
+                        'null'       => true,
+                        'default'    => null,
+                        'after'      => 'opd_cont_paper_print',
+                    ],
+                ]);
+                $doctorFields[] = 'opd_day_care_template';
+            } catch (\Throwable $e) {
+                // Ignore if unable to add dynamically
+            }
+        }
         $availableFields = array_values(array_intersect($allTemplateFields, $doctorFields));
 
         $options = $this->collectStoredTemplateOptions();
@@ -734,6 +754,19 @@ class Doctor extends BaseController
             $templateId = $this->normalizeTemplateId((string) $templateId);
             if ($templateId !== '') {
                 $options[] = $templateId;
+            }
+        }
+
+        $fsDir = APPPATH . 'Views/billing/opd_templates/';
+        if (is_dir($fsDir)) {
+            $files = glob($fsDir . '*.html');
+            if ($files) {
+                foreach ($files as $file) {
+                    $templateId = $this->normalizeTemplateId(basename($file, '.html'));
+                    if ($templateId !== '') {
+                        $options[] = $templateId;
+                    }
+                }
             }
         }
 

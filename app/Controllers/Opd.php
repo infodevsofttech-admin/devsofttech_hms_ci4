@@ -2535,6 +2535,18 @@ class Opd extends BaseController
         return redirect()->to($url);
     }
 
+    public function opd_day_care(int $opdId, int $mode = 0)
+    {
+        $printConfig = $this->resolveDoctorPrintConfigByField($opdId, 'opd_day_care_template', 'day_care_format');
+        $url = base_url('Opd/opd_lettre_pdf/' . (int) $opdId);
+        if ($printConfig['template'] !== '') {
+            $url .= '?template=' . urlencode($printConfig['template']);
+        } else {
+            $url .= '?template=day_care_format';
+        }
+        return redirect()->to($url);
+    }
+
     /**
      * @return array{layout:string,template:string}
      */
@@ -2545,6 +2557,10 @@ class Opd extends BaseController
         $fallbackLayout = strtolower(trim($fallback));
         if (!in_array($fallbackLayout, $allowed, true)) {
             $fallbackLayout = 'full';
+        }
+
+        if (! $this->db->tableExists('doctor_master') || ! $this->db->fieldExists($fieldName, 'doctor_master')) {
+            return ['layout' => $fallbackLayout, 'template' => ''];
         }
 
         $query = $this->db->query(

@@ -134,6 +134,18 @@
                         </div>
                     <?php endif; ?>
 
+                    <?php if (isset($templateFieldSet['opd_day_care_template'])) : ?>
+                        <div class="col-md-4">
+                            <label class="form-label">Daycare Template</label>
+                            <select class="form-select" name="tmpl_opd_day_care_template">
+                                <option value="">-- Select Template --</option>
+                                <?php foreach ($templateOptions as $tmpl) : ?>
+                                    <option value="<?= esc($tmpl) ?>" <?= combo_checked($tmpl, strtolower(trim((string) ($formData['tmpl_opd_day_care_template'] ?? '')))) ?>><?= esc($tmpl) ?></option>
+                                <?php endforeach; ?>
+                            </select>
+                        </div>
+                    <?php endif; ?>
+
                     <?php if (isset($templateFieldSet['rx_pre_print_letter_head_format'])) : ?>
                         <div class="col-md-4">
                             <label class="form-label">Rx Pre-Print Letterhead</label>
@@ -147,7 +159,7 @@
                     <?php endif; ?>
 
                     <?php if (isset($templateFieldSet['rx_blank_letter_head'])) : ?>
-                        <div class="col-md-6">
+                        <div class="col-md-4">
                             <label class="form-label">Rx Blank Letterhead</label>
                             <select class="form-select" name="tmpl_rx_blank_letter_head">
                                 <option value="">-- Select Template --</option>

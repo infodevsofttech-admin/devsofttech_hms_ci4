@@ -49,7 +49,12 @@
         <div class="col-6 col-sm-4 col-md-2">
             <div class="card border-0 shadow-sm text-center py-2 bg-info-subtle text-info-emphasis rounded-3 border border-info-subtle">
                 <div class="fs-4 fw-bold mb-0"><?= (int)($stats['total_admitted'] ?? 0) ?></div>
-                <div class="small">Admitted Patients</div>
+                <div class="small fw-semibold">Admitted Patients</div>
+                <div class="d-flex justify-content-center gap-1 mt-1 flex-wrap" style="font-size:10px;">
+                    <span class="badge bg-primary px-1" title="Regular Inpatient (IPD)">IPD: <?= (int)($stats['count_ipd'] ?? 0) ?></span>
+                    <span class="badge bg-warning text-dark px-1 border border-warning-subtle" title="Day Care Unit (< 24h)">Day Care: <?= (int)($stats['count_daycare'] ?? 0) ?></span>
+                    <span class="badge bg-danger px-1" title="Emergency / Casualty">Cas: <?= (int)($stats['count_emergency'] ?? 0) ?></span>
+                </div>
             </div>
         </div>
     </div>
@@ -58,14 +63,22 @@
     <div class="card shadow-sm border-0 mb-3">
         <div class="card-body py-2 px-3">
             <div class="row g-2 align-items-center">
-                <div class="col-md-4">
+                <div class="col-md-12 col-lg-3">
                     <div class="input-group input-group-sm">
                         <span class="input-group-text bg-light border-end-0"><i class="bi bi-search text-muted"></i></span>
-                        <input type="text" class="form-control border-start-0" id="nursing_search_input" placeholder="Search patient name, IPD code, bed..." onkeyup="filterNursingBeds()">
+                        <input type="text" class="form-control border-start-0" id="nursing_search_input" placeholder="Search patient, IPD code, bed..." onkeyup="filterNursingBeds()">
                         <button class="btn btn-outline-secondary" type="button" onclick="$('#nursing_search_input').val(''); filterNursingBeds();">&times;</button>
                     </div>
                 </div>
-                <div class="col-md-3">
+                <div class="col-sm-6 col-md-3 col-lg-2">
+                    <select class="form-select form-select-sm" id="filter_admission_type" onchange="onAdmissionTypeDropdownChange()">
+                        <option value="">All Admission Types</option>
+                        <option value="ipd">Regular IPD (<?= (int)($stats['count_ipd'] ?? 0) ?>)</option>
+                        <option value="daycare">Day Care Unit (<?= (int)($stats['count_daycare'] ?? 0) ?>)</option>
+                        <option value="emergency">Emergency / Casualty (<?= (int)($stats['count_emergency'] ?? 0) ?>)</option>
+                    </select>
+                </div>
+                <div class="col-sm-6 col-md-3 col-lg-2">
                     <select class="form-select form-select-sm" id="filter_nursing_station" onchange="filterNursingBeds()">
                         <option value="">All Nursing Stations</option>
                         <?php foreach (($nursingStations ?? []) as $st): ?>
@@ -73,7 +86,7 @@
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-3">
+                <div class="col-sm-6 col-md-3 col-lg-2">
                     <select class="form-select form-select-sm" id="filter_nursing_ward" onchange="filterNursingBeds()">
                         <option value="">All Wards</option>
                         <?php foreach (($wards ?? []) as $wId => $wName): ?>
@@ -81,12 +94,31 @@
                         <?php endforeach; ?>
                     </select>
                 </div>
-                <div class="col-md-2 text-end">
+                <div class="col-sm-6 col-md-3 col-lg-3 text-end">
                     <div class="btn-group btn-group-sm" role="group" aria-label="Status Filters">
                         <button type="button" class="btn btn-outline-secondary active btn-status-filter" data-status="all" onclick="setStatusFilter('all', this)">All</button>
                         <button type="button" class="btn btn-outline-success btn-status-filter" data-status="available" onclick="setStatusFilter('available', this)">Free</button>
                         <button type="button" class="btn btn-outline-danger btn-status-filter" data-status="occupied" onclick="setStatusFilter('occupied', this)">Busy</button>
                     </div>
+                </div>
+            </div>
+
+            <!-- Quick Filter by Admission Type Row -->
+            <div class="d-flex align-items-center gap-2 flex-wrap pt-2 border-top mt-2">
+                <span class="small fw-bold text-muted text-uppercase" style="font-size:11px; letter-spacing:0.5px;">Quick Filter by Type:</span>
+                <div class="btn-group btn-group-sm" role="group" aria-label="Admission Type Quick Filters">
+                    <button type="button" class="btn btn-secondary btn-sm active btn-type-filter" data-type="all" onclick="setTypeFilter('all', this)">
+                        All (<?= (int)($stats['total_admitted'] ?? 0) ?>)
+                    </button>
+                    <button type="button" class="btn btn-outline-primary btn-sm btn-type-filter" data-type="ipd" onclick="setTypeFilter('ipd', this)">
+                        <i class="bi bi-hospital me-1"></i>Regular IPD (<?= (int)($stats['count_ipd'] ?? 0) ?>)
+                    </button>
+                    <button type="button" class="btn btn-outline-warning text-dark btn-sm btn-type-filter" data-type="daycare" onclick="setTypeFilter('daycare', this)">
+                        <i class="bi bi-clock-history me-1"></i>Day Care (< 24h) (<?= (int)($stats['count_daycare'] ?? 0) ?>)
+                    </button>
+                    <button type="button" class="btn btn-outline-danger btn-sm btn-type-filter" data-type="emergency" onclick="setTypeFilter('emergency', this)">
+                        <i class="bi bi-ambulance me-1"></i>Emergency / Casualty (<?= (int)($stats['count_emergency'] ?? 0) ?>)
+                    </button>
                 </div>
             </div>
         </div>
@@ -173,10 +205,13 @@
                                             $statusLabel = ucfirst($bed['bed_status']);
                                         }
 
-                                        $searchText = strtolower($bed['bed_number'] . ' ' . $bed['bed_code'] . ' ' . $bed['patient_name'] . ' ' . $bed['doctor_name'] . ' ' . $bed['ipd_code'] . ' ' . $wardInfo['ward_name'] . ' ' . $bed['station_name']);
+                                        $admType = strtolower(trim((string)($bed['admission_type'] ?? 'ipd')));
+                                        $admTypeLabel = ($admType === 'emergency') ? 'emergency casualty' : (($admType === 'daycare') ? 'daycare day care' : 'ipd inpatient regular');
+                                        $searchText = strtolower($bed['bed_number'] . ' ' . $bed['bed_code'] . ' ' . $bed['patient_name'] . ' ' . $bed['doctor_name'] . ' ' . $bed['ipd_code'] . ' ' . $wardInfo['ward_name'] . ' ' . $bed['station_name'] . ' ' . $admTypeLabel);
                                     ?>
                                     <div class="col-6 col-sm-4 col-md-3 col-lg-2 bed-card-col" 
                                          data-status="<?= esc($bed['bed_status']) ?>" 
+                                         data-admission-type="<?= esc($admType) ?>" 
                                          data-ward="<?= esc($wardInfo['ward_name']) ?>" 
                                          data-station="<?= esc($bed['station_name']) ?>" 
                                          data-search="<?= esc($searchText) ?>">
@@ -196,11 +231,26 @@
                                                             <?= esc($bed['doctor_name']) ?>
                                                         </div>
                                                     <?php endif; ?>
-                                                    <?php if ($bed['days_admitted'] !== null): ?>
-                                                        <span class="badge bg-light text-dark border border-secondary-subtle mt-1" style="font-size: 10px;">
-                                                            <i class="bi bi-clock-history me-1"></i><?= $bed['days_admitted'] ?> days
-                                                        </span>
-                                                    <?php endif; ?>
+                                                    <div class="d-flex justify-content-center align-items-center gap-1 flex-wrap mt-1">
+                                                        <?php if ($bed['days_admitted'] !== null): ?>
+                                                            <span class="badge bg-light text-dark border border-secondary-subtle" style="font-size: 10px;">
+                                                                <i class="bi bi-clock-history me-1"></i><?= $bed['days_admitted'] ?>d
+                                                            </span>
+                                                        <?php endif; ?>
+                                                        <?php if ($admType === 'emergency'): ?>
+                                                            <span class="badge bg-danger" style="font-size: 10px;" title="Emergency / Casualty">
+                                                                <i class="bi bi-ambulance me-1"></i>Casualty
+                                                            </span>
+                                                        <?php elseif ($admType === 'daycare'): ?>
+                                                            <span class="badge bg-warning text-dark border border-warning-subtle" style="font-size: 10px;" title="Day Care Unit (< 24h)">
+                                                                <i class="bi bi-clock-history me-1"></i>Day Care
+                                                            </span>
+                                                        <?php else: ?>
+                                                            <span class="badge bg-primary-subtle text-primary border border-primary-subtle" style="font-size: 10px;" title="Regular Inpatient (IPD)">
+                                                                <i class="bi bi-hospital me-1"></i>IPD
+                                                            </span>
+                                                        <?php endif; ?>
+                                                    </div>
                                                 </div>
                                             <?php else: ?>
                                                 <div class="my-2 text-success small fw-semibold">
@@ -252,6 +302,7 @@
                             <th>IPD Code</th>
                             <th>UHID</th>
                             <th>Patient Name</th>
+                            <th>Type</th>
                             <th>Bed &amp; Ward Location</th>
                             <th>Doctor</th>
                             <th>Admit Date</th>
@@ -262,17 +313,27 @@
                     <tbody>
                     <?php if (empty($records)): ?>
                         <tr>
-                            <td colspan="9" class="text-center py-4 text-muted">
+                            <td colspan="10" class="text-center py-4 text-muted">
                                 <i class="bi bi-person-x fs-3 d-block mb-1"></i> No current IPD admissions found.
                             </td>
                         </tr>
                     <?php else: ?>
                         <?php foreach ($records as $idx => $row) : ?>
-                            <tr>
+                            <?php $rowType = strtolower(trim((string) ($row->admission_type ?? 'ipd'))); ?>
+                            <tr class="table-row-admission" data-admission-type="<?= esc($rowType) ?>">
                                 <td class="fw-bold text-secondary ps-3"><?= $idx + 1 ?></td>
                                 <td><span class="badge bg-light text-dark border"><?= esc($row->ipd_code ?? '') ?></span></td>
                                 <td><code><?= esc($row->p_code ?? '') ?></code></td>
                                 <td class="fw-semibold text-primary"><?= esc(trim((string) (($row->p_fname ?? '') . ' ' . ($row->p_rname ?? '')))) ?></td>
+                                <td>
+                                    <?php if ($rowType === 'emergency'): ?>
+                                        <span class="badge bg-danger"><i class="bi bi-ambulance me-1"></i>Casualty</span>
+                                    <?php elseif ($rowType === 'daycare'): ?>
+                                        <span class="badge bg-warning text-dark border border-warning-subtle"><i class="bi bi-clock-history me-1"></i>Day Care</span>
+                                    <?php else: ?>
+                                        <span class="badge bg-primary"><i class="bi bi-hospital me-1"></i>Regular IPD</span>
+                                    <?php endif; ?>
+                                </td>
                                 <td>
                                     <span class="badge bg-info-subtle text-info-emphasis border border-info-subtle">
                                         <i class="bi bi-hospital me-1"></i><?= esc($row->Bed_Desc ?? '') ?>
@@ -298,6 +359,7 @@
 
 <script>
 var currentStatusFilter = 'all';
+var currentTypeFilter = 'all';
 
 function switchNursingView(mode) {
     if (mode === 'grid') {
@@ -319,7 +381,45 @@ function switchNursingView(mode) {
 function setStatusFilter(status, btn) {
     currentStatusFilter = status;
     $('.btn-status-filter').removeClass('active btn-secondary btn-success btn-danger').addClass('btn-outline-secondary');
-    $(btn).removeClass('btn-outline-secondary').addClass('active');
+    if (status === 'available') {
+        $(btn).removeClass('btn-outline-secondary').addClass('active btn-success');
+    } else if (status === 'occupied') {
+        $(btn).removeClass('btn-outline-secondary').addClass('active btn-danger');
+    } else {
+        $(btn).removeClass('btn-outline-secondary').addClass('active btn-secondary');
+    }
+    filterNursingBeds();
+}
+
+function setTypeFilter(type, btn) {
+    currentTypeFilter = type;
+    $('#filter_admission_type').val(type === 'all' ? '' : type);
+    $('.btn-type-filter').removeClass('active btn-secondary btn-primary btn-warning text-dark btn-danger').addClass('btn-outline-secondary');
+    if (type === 'ipd') {
+        $(btn).removeClass('btn-outline-secondary').addClass('active btn-primary');
+    } else if (type === 'daycare') {
+        $(btn).removeClass('btn-outline-secondary').addClass('active btn-warning text-dark');
+    } else if (type === 'emergency') {
+        $(btn).removeClass('btn-outline-secondary').addClass('active btn-danger');
+    } else {
+        $(btn).removeClass('btn-outline-secondary').addClass('active btn-secondary');
+    }
+    filterNursingBeds();
+}
+
+function onAdmissionTypeDropdownChange() {
+    var val = $('#filter_admission_type').val() || 'all';
+    currentTypeFilter = val;
+    $('.btn-type-filter').removeClass('active btn-secondary btn-primary btn-warning text-dark btn-danger').addClass('btn-outline-secondary');
+    if (val === 'ipd') {
+        $('.btn-type-filter[data-type="ipd"]').removeClass('btn-outline-secondary').addClass('active btn-primary');
+    } else if (val === 'daycare') {
+        $('.btn-type-filter[data-type="daycare"]').removeClass('btn-outline-secondary').addClass('active btn-warning text-dark');
+    } else if (val === 'emergency') {
+        $('.btn-type-filter[data-type="emergency"]').removeClass('btn-outline-secondary').addClass('active btn-danger');
+    } else {
+        $('.btn-type-filter[data-type="all"]').removeClass('btn-outline-secondary').addClass('active btn-secondary');
+    }
     filterNursingBeds();
 }
 
@@ -327,10 +427,13 @@ function filterNursingBeds() {
     var search = ($('#nursing_search_input').val() || '').toLowerCase().trim();
     var station = ($('#filter_nursing_station').val() || '').toLowerCase().trim();
     var ward = ($('#filter_nursing_ward').val() || '').toLowerCase().trim();
+    var admType = currentTypeFilter;
 
+    // Filter Visual Bed Grid
     $('.bed-card-col').each(function() {
         var $col = $(this);
         var bStatus = ($col.data('status') || '').toLowerCase();
+        var bAdmType = ($col.data('admission-type') || '').toLowerCase();
         var bWard = ($col.data('ward') || '').toLowerCase();
         var bStation = ($col.data('station') || '').toLowerCase();
         var bSearch = ($col.data('search') || '').toLowerCase();
@@ -340,13 +443,19 @@ function filterNursingBeds() {
         var matchWard = (ward === '' || bWard.indexOf(ward) !== -1);
         var matchStatus = (currentStatusFilter === 'all' || bStatus === currentStatusFilter);
 
-        if (matchSearch && matchStation && matchWard && matchStatus) {
+        var matchAdmType = true;
+        if (admType !== 'all' && admType !== '') {
+            matchAdmType = (bStatus === 'occupied' && bAdmType === admType);
+        }
+
+        if (matchSearch && matchStation && matchWard && matchStatus && matchAdmType) {
             $col.removeClass('d-none');
         } else {
             $col.addClass('d-none');
         }
     });
 
+    // Hide empty ward blocks
     $('.ward-block-card').each(function() {
         var $card = $(this);
         var visibleBeds = $card.find('.bed-card-col:not(.d-none)').length;
@@ -354,6 +463,22 @@ function filterNursingBeds() {
             $card.addClass('d-none');
         } else {
             $card.removeClass('d-none');
+        }
+    });
+
+    // Filter Table View rows
+    $('#ipdNursingListTable tbody tr.table-row-admission').each(function() {
+        var $tr = $(this);
+        var rowType = ($tr.data('admission-type') || '').toLowerCase();
+        var rowSearch = $tr.text().toLowerCase();
+
+        var matchSearch = (search === '' || rowSearch.indexOf(search) !== -1);
+        var matchType = (admType === 'all' || admType === '' || rowType === admType);
+
+        if (matchSearch && matchType) {
+            $tr.removeClass('d-none');
+        } else {
+            $tr.addClass('d-none');
         }
     });
 }

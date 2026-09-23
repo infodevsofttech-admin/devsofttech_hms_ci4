@@ -55,7 +55,22 @@ class IpdPatient extends BaseController
             'cleaning'         => 0,
             'total_admitted'   => count($records),
             'nursing_stations' => 0,
+            'count_ipd'        => 0,
+            'count_daycare'    => 0,
+            'count_emergency'  => 0,
         ];
+
+        foreach ($records as $rec) {
+            $admType = strtolower(trim((string) ($rec->admission_type ?? 'ipd')));
+            if ($admType === 'emergency') {
+                $stats['count_emergency']++;
+            } elseif ($admType === 'daycare') {
+                $stats['count_daycare']++;
+            } else {
+                $stats['count_ipd']++;
+            }
+        }
+
         $floors = [];
         $wards = [];
 
@@ -83,7 +98,7 @@ class IpdPatient extends BaseController
 
             if ($this->db->tableExists('ipd_master')) {
                 $builder
-                    ->select('i.id as ipd_id, i.ipd_code, i.register_date, i.r_doc_name')
+                    ->select('i.id as ipd_id, i.ipd_code, i.register_date, i.r_doc_name, i.admission_type')
                     ->join('ipd_master i', 'i.id = b.current_ipd_id AND i.ipd_status = 0', 'left', false);
 
                 if ($this->db->tableExists('patient_master')) {
@@ -145,6 +160,7 @@ class IpdPatient extends BaseController
                     'doctor_name'    => trim((string) ($row->r_doc_name ?? '')),
                     'ipd_code'       => (string) ($row->ipd_code ?? ''),
                     'ipd_id'         => (int) ($row->ipd_id ?? 0),
+                    'admission_type' => strtolower(trim((string) ($row->admission_type ?? 'ipd'))),
                     'admit_date'     => (string) ($row->register_date ?? ''),
                     'days_admitted'  => $daysAdmitted,
                     'has_oxygen'     => (bool) ($row->has_oxygen ?? false),

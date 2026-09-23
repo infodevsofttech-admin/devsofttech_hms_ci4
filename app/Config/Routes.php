@@ -705,6 +705,12 @@ $routes->get('opd_print/invoice_print_pdf/(:num)', 'Opd::invoice_print_pdf/$1');
 $routes->get('opd_print/opd_PDF_print/(:num)', 'Opd::opd_pdf_print/$1');
 $routes->get('opd_print/opd_Cont_print/(:num)', 'Opd::opd_cont_print/$1');
 $routes->get('opd_print/opd_blank_print/(:num)', 'Opd::opd_blank_print/$1');
+$routes->get('opd_print/opd_day_care/(:num)/(:num)', 'Opd::opd_day_care/$1/$2');
+$routes->get('opd_print/opd_day_care/(:num)', 'Opd::opd_day_care/$1');
+$routes->get('Opd_print/opd_day_care/(:num)/(:num)', 'Opd::opd_day_care/$1/$2');
+$routes->get('Opd_print/opd_day_care/(:num)', 'Opd::opd_day_care/$1');
+$routes->get('Opd/opd_day_care/(:num)/(:num)', 'Opd::opd_day_care/$1/$2');
+$routes->get('Opd/opd_day_care/(:num)', 'Opd::opd_day_care/$1');
 
 $routes->get('Opd_prescription/Prescription/(:num)', 'Opd_prescription::Prescription/$1');
 $routes->match(['GET', 'POST'], 'Opd_prescription/create_opd_queue/(:num)', 'Opd_prescription::create_opd_queue/$1');

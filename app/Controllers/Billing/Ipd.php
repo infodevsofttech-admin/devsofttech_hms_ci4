@@ -229,9 +229,10 @@ class Ipd extends BaseController
         }
 
         $builder = $this->db->table('patient_master p');
-        $builder->select('p.id, p.p_code, p.p_fname as patient_name, p.gender, p.age, p.dob, p.mphone1, p.mphone2');
+        $builder->select('p.id, p.p_code, p.p_fname, p.p_rname, p.gender, p.age, p.dob, p.mphone1, p.mphone2');
         $builder->groupStart()
             ->like('p.p_fname', $termClean)
+            ->orLike('p.p_rname', $termClean)
             ->orLike('p.p_code', $termClean)
             ->orLike('p.mphone1', $termClean)
             ->orLike('p.mphone2', $termClean)
@@ -243,12 +244,15 @@ class Ipd extends BaseController
         $activeIpds = [];
         if (! empty($patientIds)) {
             $rows = $this->db->table('ipd_master')
-                ->select('id, p_id, coalesce(ipd_code, pid) as ipd_code, admission_type, ipd_status')
+                ->select('id, p_id, ipd_code, admission_type, ipd_status')
                 ->whereIn('p_id', $patientIds)
                 ->where('ipd_status', 0)
                 ->get()
                 ->getResultArray();
             foreach ($rows as $r) {
+                if (empty($r['ipd_code'])) {
+                    $r['ipd_code'] = '#' . $r['id'];
+                }
                 $activeIpds[(int) $r['p_id']] = $r;
             }
         }
@@ -256,6 +260,8 @@ class Ipd extends BaseController
         foreach ($results as &$pt) {
             $genderVal = (int) ($pt['gender'] ?? 0);
             $pt['gender_text'] = ($genderVal === 1) ? 'Male' : (($genderVal === 2) ? 'Female' : 'Other');
+            $fullName = trim(($pt['p_fname'] ?? '') . ' ' . ($pt['p_rname'] ?? ''));
+            $pt['patient_name'] = $fullName !== '' ? $fullName : 'Unnamed';
             $pt['active_ipd'] = $activeIpds[(int) $pt['id']] ?? null;
         }
         unset($pt);

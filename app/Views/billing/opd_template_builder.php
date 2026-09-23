@@ -376,7 +376,7 @@ foreach ($placeholderGroups as $groupName => $groupValues) {
 
             <div class="alert alert-info">
                 <strong>Old-style (recommended):</strong> save a name (example: <strong>opd_print_parcha_chamunda_hospital_ksp</strong>), then set that name in doctor master fields:<br>
-                <code>opd_print_format</code>, <code>opd_blank_print</code>, <code>rx_pre_print_letter_head_format</code>, <code>rx_blank_letter_head</code>, <code>rx_plain_paper</code>.<br><br>
+                <code>opd_print_format</code>, <code>opd_blank_print</code>, <code>opd_cont_paper_print</code>, <code>opd_day_care_template</code>, <code>rx_pre_print_letter_head_format</code>, <code>rx_blank_letter_head</code>, <code>rx_plain_paper</code>.<br><br>
                 <strong>Optional composed mode:</strong> use <code>compose_default</code> with type-specific parts.
             </div>
         </div>

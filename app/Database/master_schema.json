@@ -4919,6 +4919,17 @@
                     "Privileges": "select,insert,update,references",
                     "Comment": ""
                 },
+                "opd_day_care_template": {
+                    "Field": "opd_day_care_template",
+                    "Type": "varchar(100)",
+                    "Collation": "utf8mb3_unicode_ci",
+                    "Null": "YES",
+                    "Key": "",
+                    "Default": null,
+                    "Extra": "",
+                    "Privileges": "select,insert,update,references",
+                    "Comment": ""
+                },
                 "opd_valid_no_days": {
                     "Field": "opd_valid_no_days",
                     "Type": "int",
