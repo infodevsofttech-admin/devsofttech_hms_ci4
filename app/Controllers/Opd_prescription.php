@@ -8795,15 +8795,6 @@ class Opd_prescription extends BaseController
         $this->auditClinicalUpdate('opd_prescription_medicine', 'added', $insertId, null, $insert);
         if ($medId > 0) {
             $this->trackMedicineUsage($medId);
-            $this->syncMedicineMasterDefaults($medId, [
-                'dosage' => $insert['dosage'] ?? '',
-                'dosage_when' => $insert['dosage_when'] ?? '',
-                'dosage_freq' => $insert['dosage_freq'] ?? '',
-                'dosage_where' => $insert['dosage_where'] ?? '',
-                'no_of_days' => $insert['no_of_days'] ?? '',
-                'qty' => $insert['qty'] ?? '',
-                'remark' => $insert['remark'] ?? '',
-            ]);
         }
 
         $message = 'Medicine added';
@@ -9214,17 +9205,7 @@ class Opd_prescription extends BaseController
             $masterMedId = $this->resolveMedicineMasterIdByName((string) ($update['med_name'] ?? $current['med_name'] ?? ''));
         }
         if ($masterMedId > 0) {
-            $merged = array_replace($current, $update);
             $this->trackMedicineUsage($masterMedId);
-            $this->syncMedicineMasterDefaults($masterMedId, [
-                'dosage' => $merged['dosage'] ?? '',
-                'dosage_when' => $merged['dosage_when'] ?? '',
-                'dosage_freq' => $merged['dosage_freq'] ?? '',
-                'dosage_where' => $merged['dosage_where'] ?? '',
-                'no_of_days' => $merged['no_of_days'] ?? '',
-                'qty' => $merged['qty'] ?? '',
-                'remark' => $merged['remark'] ?? '',
-            ]);
         }
 
         $message = 'Medicine updated';
