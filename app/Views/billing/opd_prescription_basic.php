@@ -1376,9 +1376,11 @@
                                                 </optgroup>
                                             </select>
                                         </div>
-                                        <div class="col-md-3">
+                                        <div class="col-md-3 position-relative">
                                             <label class="form-label fw-semibold mb-1 text-dark">Dose / Strength</label>
-                                            <input type="text" class="form-control shadow-sm" id="med_dosage" placeholder="e.g. 1 Tab / 5ml / 500mg">
+                                            <input type="text" class="form-control shadow-sm" id="med_dosage" autocomplete="off" placeholder="e.g. 1 Tab / 5ml / 500mg">
+                                            <select id="med_dosage_master" class="d-none"></select>
+                                            <div id="med_dosage_dd" style="display:none;position:absolute;left:0;right:0;top:100%;z-index:1080;background:#fff;border:1px solid #dee2e6;border-radius:.375rem;box-shadow:0 4px 12px rgba(0,0,0,.12);max-height:220px;overflow-y:auto;"></div>
                                         </div>
                                     </div>
 
@@ -2414,7 +2416,7 @@
                 where: (data && data.where) ? data.where : []
             };
 
-            renderMedicineMasterSelectOptions($('#med_dosage'), medicineDoseMasterCache.dose, 'Dose');
+            renderMedicineMasterSelectOptions($('#med_dosage_master'), medicineDoseMasterCache.dose, 'Dose');
             renderMedicineMasterSelectOptions($('#med_when'), medicineDoseMasterCache.when, 'When');
             renderMedicineMasterSelectOptions($('#med_freq_master'), medicineDoseMasterCache.freq, 'Freq');
             renderMedicineMasterSelectOptions($('#med_where'), medicineDoseMasterCache.where, 'Route');
@@ -6382,6 +6384,469 @@
         renderDiagnosisTable();
     })();
 
+    // ─── Dose / Strength Smart Autocomplete ──────────────────────────────
+    var medDosageHighlightIdx = -1;
+
+    function getDosageCategory(formType, medName) {
+        var ft = (formType || '').toString().trim().toUpperCase();
+        var mn = (medName || '').toString().trim().toUpperCase();
+        if (!ft) {
+            if (/\b(TAB|TABLET|TABLETS)\b/i.test(mn)) ft = 'TAB';
+            else if (/\b(CAP|CAPSULE|CAPSULES)\b/i.test(mn)) ft = 'CAP';
+            else if (/\b(SYP|SYRUP|SUSP|SUSPENSION|SOLN|LIQUID)\b/i.test(mn)) ft = 'SYR';
+            else if (/\b(INJ|INJECTION|INFUSION)\b/i.test(mn)) ft = 'INJ';
+            else if (/\b(DROP|DROPS|EYE DROP|EAR DROP|NASAL DROP)\b/i.test(mn)) ft = 'DROPS';
+            else if (/\b(OINT|OINTMENT|GEL|CREAM|LOTION)\b/i.test(mn)) ft = 'CREAM';
+            else if (/\b(INHALER|PUFF|MDI|ROTACAP)\b/i.test(mn)) ft = 'INHALER';
+            else if (/\b(RESPULE|RESPULES)\b/i.test(mn)) ft = 'RESPULES';
+            else if (/\b(SACHET|GRANULES|POWDER)\b/i.test(mn)) ft = 'SACHET';
+        }
+
+        if (ft === 'TAB' || ft === 'TABLET' || ft === 'LOZENGE') return 'tablet';
+        if (ft === 'CAP' || ft === 'CAPSULE') return 'capsule';
+        if (ft === 'SYR' || ft === 'SUSP' || ft === 'SOLN' || ft === 'SYRUP' || ft === 'SUSPENSION') return 'syrup';
+        if (ft.indexOf('DROP') !== -1 || ft === 'DROPS') return 'drops';
+        if (ft === 'INHALER') return 'inhaler';
+        if (ft === 'RESPULES') return 'respules';
+        if (ft.indexOf('SPRAY') !== -1) return 'spray';
+        if (ft === 'SACHET' || ft === 'POWDER') return 'sachet';
+        if (ft === 'INJ' || ft === 'INFUSION' || ft === 'INJECTION') return 'injection';
+        if (['CREAM', 'OINT', 'GEL', 'LOTION', 'SHAMPOO', 'SOAP', 'OIL', 'DUSTING POWDER', 'PAINT', 'PATCH'].indexOf(ft) !== -1) return 'topical';
+        if (ft === 'SUPPOSITORY' || ft === 'ENEMA' || ft === 'PESSARY') return 'suppository';
+        if (ft === 'GARGLE') return 'gargle';
+        return 'general';
+    }
+
+    var _DOSAGE_PRESETS_BY_CAT = {
+        tablet: ['1 Tab', '1/2 Tab', '2 Tab', '1/4 Tab', '1.5 Tab', '500 mg', '650 mg', '250 mg', '100 mg', '50 mg', '10 mg', '5 mg', '20 mg', '40 mg'],
+        capsule: ['1 Cap', '2 Cap', '500 mg', '250 mg', '100 mg', '20 mg', '40 mg', '150 mg', '300 mg'],
+        syrup: ['5 ml (1 tsp)', '10 ml (2 tsp)', '2.5 ml (1/2 tsp)', '15 ml (1 tbsp)', '2 ml', '1 ml', '3 ml', '7.5 ml', '1 tsp', '2 tsp', '1 tbsp', '20 ml'],
+        drops: ['1 Drop', '2 Drops', '3 Drops', '4 Drops', '1-2 Drops', '2-3 Drops', '0.5 ml', '1 ml'],
+        inhaler: ['1 Puff', '2 Puffs', '1-2 Puffs', '3 Puffs'],
+        respules: ['1 Respule', '1/2 Respule', '2 Respules', '1 Respule in 2.5 ml Saline'],
+        spray: ['1 Spray each nostril', '2 Sprays each nostril', '1 Spray', '2 Sprays'],
+        sachet: ['1 Sachet in half glass water', '1 Sachet', '1/2 Sachet', '1 Scoop', '5 g', '10 g', '1 tsp'],
+        injection: ['1 Amp', '1 Vial', '1 ml', '2 ml', '5 ml', '10 ml', '100 ml', '500 ml', '100 mg', '250 mg', '500 mg', '1 g', '1000 IU', '5000 IU'],
+        topical: ['Apply Thinly', '1 Application', '1 Fingertip Unit (FTU)', 'Apply Generously', '1 Patch', 'Few Drops'],
+        suppository: ['1 Suppository', '1 Pessary', '1 Enema'],
+        gargle: ['10 ml with warm water', '15 ml with equal parts water', '5 ml', '10 ml'],
+        general: ['1 Tab', '1/2 Tab', '2 Tab', '1 Cap', '5 ml (1 tsp)', '10 ml (2 tsp)', '2.5 ml (1/2 tsp)', '500 mg', '650 mg', '250 mg', '1 Puff', '1 Sachet', '1 Drop', '1 Amp']
+    };
+
+    function highlightMedDosageItem(idx) {
+        var $items = $('#med_dosage_dd .med-dosage-dd-item');
+        if (!$items.length) return;
+        if (idx < 0) idx = 0;
+        if (idx >= $items.length) idx = $items.length - 1;
+        medDosageHighlightIdx = idx;
+
+        $items.css('background', '').removeClass('active-dd-item');
+        var $target = $items.eq(medDosageHighlightIdx);
+        $target.css('background', '#e2ebff').addClass('active-dd-item');
+
+        var container = document.getElementById('med_dosage_dd');
+        var elem = $target[0];
+        if (container && elem) {
+            var cTop = container.scrollTop;
+            var cBottom = cTop + container.clientHeight;
+            var eTop = elem.offsetTop;
+            var eBottom = eTop + elem.offsetHeight;
+            if (eTop < cTop) {
+                container.scrollTop = eTop;
+            } else if (eBottom > cBottom) {
+                container.scrollTop = eBottom - container.clientHeight;
+            }
+        }
+    }
+
+    function getMedDosageSuggestions(input) {
+        var raw = (input || '').toString().trim();
+        var q = raw.toLowerCase();
+        var formType = ($('#med_type').val() || '').toString();
+        var medName = ($('#med_name').val() || '').toString();
+        var cat = getDosageCategory(formType, medName);
+
+        var suggestions = [], seen = {};
+        function add(val) {
+            if (!val) return;
+            var s = val.toString().trim();
+            var k = s.toLowerCase();
+            if (s && !seen[k]) {
+                seen[k] = true;
+                suggestions.push(s);
+            }
+        }
+
+        var isHalf = (q === '1/2' || q === '0.5' || q === 'half' || q === '.5');
+        var isQuarter = (q === '1/4' || q === '0.25' || q === '.25');
+        var isOneAndHalf = (q === '1.5' || q === '1 1/2');
+        var isTwoAndHalf = (q === '2.5' || q === '2 1/2');
+
+        if (isHalf) {
+            if (cat === 'tablet') { add('1/2 Tab'); add('1/4 Tab'); add('1 Tab'); }
+            else if (cat === 'capsule') { add('1/2 Cap'); add('1 Cap'); }
+            else if (cat === 'syrup') { add('2.5 ml (1/2 tsp)'); add('1/2 tsp (2.5 ml)'); add('2.5 ml'); add('5 ml (1 tsp)'); }
+            else if (cat === 'sachet') { add('1/2 Sachet'); add('1 Sachet'); }
+            else if (cat === 'respules') { add('1/2 Respule'); add('1 Respule'); }
+            else if (cat === 'drops') { add('0.5 ml'); add('1 Drop'); }
+            else { add('1/2 Tab'); add('2.5 ml (1/2 tsp)'); add('1/2 Sachet'); add('1/2 Cap'); }
+        } else if (isQuarter) {
+            if (cat === 'tablet') { add('1/4 Tab'); add('1/2 Tab'); }
+            else if (cat === 'syrup') { add('1.25 ml (1/4 tsp)'); }
+            else { add('1/4 Tab'); }
+        } else if (isOneAndHalf) {
+            if (cat === 'tablet') { add('1.5 Tab'); }
+            else if (cat === 'syrup') { add('7.5 ml (1.5 tsp)'); }
+            else { add('1.5 Tab'); add('7.5 ml'); }
+        } else if (isTwoAndHalf) {
+            if (cat === 'tablet') { add('2.5 Tab'); }
+            else if (cat === 'syrup') { add('2.5 ml (1/2 tsp)'); add('12.5 ml'); }
+            else { add('2.5 ml'); add('2.5 Tab'); }
+        }
+
+        var numMatch = q.match(/^(\d+(?:\.\d+)?)/);
+        if (numMatch) {
+            var n = parseFloat(numMatch[1]);
+            var nStr = numMatch[1];
+
+            if (cat === 'tablet') {
+                if (n === 1) {
+                    add('1 Tab');
+                    add('1/2 Tab');
+                    add('1/4 Tab');
+                    add('1.5 Tab');
+                    add('10 mg');
+                    add('100 mg');
+                    add('1000 mg (1 g)');
+                } else if (n === 2) {
+                    add('2 Tab');
+                    add('2.5 Tab');
+                    add('20 mg');
+                    add('200 mg');
+                    add('250 mg');
+                } else if (n === 3) {
+                    add('3 Tab');
+                    add('30 mg');
+                    add('300 mg');
+                } else if (n === 4) {
+                    add('4 Tab');
+                    add('1/4 Tab');
+                    add('40 mg');
+                    add('400 mg');
+                } else if (n === 5) {
+                    add('500 mg');
+                    add('50 mg');
+                    add('5 mg');
+                    add('1/2 Tab');
+                    add('5 Tab');
+                } else if (n === 6) {
+                    add('650 mg');
+                    add('60 mg');
+                    add('6 Tab');
+                } else {
+                    if (n < 10) add(nStr + ' Tab');
+                    add(nStr + ' mg');
+                    add(nStr + ' mcg');
+                    add(nStr + ' g');
+                }
+            } else if (cat === 'capsule') {
+                if (n === 1) {
+                    add('1 Cap');
+                    add('2 Cap');
+                    add('100 mg');
+                    add('150 mg');
+                    add('10 mg');
+                } else if (n === 2) {
+                    add('2 Cap');
+                    add('20 mg');
+                    add('200 mg');
+                    add('250 mg');
+                } else if (n === 5) {
+                    add('500 mg');
+                    add('50 mg');
+                    add('5 Cap');
+                } else {
+                    if (n < 10) add(nStr + ' Cap');
+                    add(nStr + ' mg');
+                    add(nStr + ' mcg');
+                }
+            } else if (cat === 'syrup') {
+                if (n === 1) {
+                    add('1 tsp (5 ml)');
+                    add('1 tbsp (15 ml)');
+                    add('1/2 tsp (2.5 ml)');
+                    add('1 ml');
+                    add('10 ml (2 tsp)');
+                    add('15 ml (1 tbsp)');
+                } else if (n === 2) {
+                    add('2 ml');
+                    add('2.5 ml (1/2 tsp)');
+                    add('2 tsp (10 ml)');
+                    add('20 ml');
+                } else if (n === 3) {
+                    add('3 ml');
+                    add('3.5 ml');
+                    add('30 ml');
+                } else if (n === 4) {
+                    add('4 ml');
+                    add('4.5 ml');
+                } else if (n === 5) {
+                    add('5 ml (1 tsp)');
+                    add('5 ml');
+                    add('2.5 ml (1/2 tsp)');
+                    add('15 ml (1 tbsp)');
+                    add('50 ml');
+                } else if (n === 7 || n === 7.5) {
+                    add('7.5 ml (1.5 tsp)');
+                    add('7 ml');
+                } else if (n === 10) {
+                    add('10 ml (2 tsp)');
+                    add('10 ml');
+                } else if (n === 15) {
+                    add('15 ml (1 tbsp)');
+                    add('15 ml');
+                } else if (n === 20) {
+                    add('20 ml');
+                } else {
+                    add(nStr + ' ml');
+                    if (n <= 4) add(nStr + ' tsp (' + (n * 5) + ' ml)');
+                    if (n <= 2) add(nStr + ' tbsp (' + (n * 15) + ' ml)');
+                }
+            } else if (cat === 'drops') {
+                if (n === 1) {
+                    add('1 Drop');
+                    add('1-2 Drops');
+                    add('0.5 ml');
+                    add('1 ml');
+                } else if (n === 2) {
+                    add('2 Drops');
+                    add('2-3 Drops');
+                    add('2 ml');
+                } else if (n === 3) {
+                    add('3 Drops');
+                    add('3-4 Drops');
+                } else if (n === 4) {
+                    add('4 Drops');
+                    add('4-5 Drops');
+                } else if (n === 5) {
+                    add('5 Drops');
+                } else {
+                    add(n === 1 ? '1 Drop' : (nStr + ' Drops'));
+                    add(nStr + ' ml');
+                }
+            } else if (cat === 'inhaler') {
+                if (n === 1) {
+                    add('1 Puff');
+                    add('2 Puffs');
+                    add('1-2 Puffs');
+                } else if (n === 2) {
+                    add('2 Puffs');
+                    add('1-2 Puffs');
+                } else {
+                    add(n === 1 ? '1 Puff' : (nStr + ' Puffs'));
+                }
+            } else if (cat === 'respules') {
+                if (n === 1) {
+                    add('1 Respule');
+                    add('1/2 Respule');
+                    add('2 Respules');
+                    add('1 Respule in 2.5 ml Saline');
+                } else {
+                    add(n === 1 ? '1 Respule' : (nStr + ' Respules'));
+                }
+            } else if (cat === 'spray') {
+                if (n === 1) {
+                    add('1 Spray each nostril');
+                    add('2 Sprays each nostril');
+                    add('1 Spray');
+                    add('2 Sprays');
+                } else {
+                    add(nStr + ' Sprays each nostril');
+                    add(nStr + ' Sprays');
+                }
+            } else if (cat === 'sachet') {
+                if (n === 1) {
+                    add('1 Sachet in half glass water');
+                    add('1 Sachet');
+                    add('1/2 Sachet');
+                    add('1 Scoop');
+                    add('5 g');
+                    add('10 g');
+                } else {
+                    add(nStr + ' Sachets');
+                    add(nStr + ' g');
+                }
+            } else if (cat === 'injection') {
+                if (n === 1) {
+                    add('1 Amp');
+                    add('1 Vial');
+                    add('1 ml');
+                    add('10 ml');
+                    add('100 ml');
+                    add('100 mg');
+                    add('1 g');
+                    add('1000 IU');
+                } else if (n === 2) {
+                    add('2 ml');
+                    add('2 Amp');
+                    add('2 Vial');
+                    add('250 mg');
+                    add('2 g');
+                } else if (n === 5) {
+                    add('5 ml');
+                    add('500 mg');
+                    add('500 ml (IV)');
+                    add('5000 IU');
+                } else {
+                    add(nStr + ' ml');
+                    add(nStr + ' Amp');
+                    add(nStr + ' Vial');
+                    add(nStr + ' mg');
+                }
+            } else if (cat === 'topical') {
+                if (n === 1) {
+                    add('1 Application');
+                    add('1 Fingertip Unit (FTU)');
+                    add('1 Patch');
+                    add('Apply Thinly');
+                } else {
+                    add(nStr + ' Applications');
+                    add(nStr + ' Patches');
+                }
+            } else if (cat === 'suppository') {
+                add(nStr + ' Suppository');
+                add(nStr + ' Pessary');
+                add(nStr + ' Enema');
+            } else if (cat === 'gargle') {
+                add(nStr + '0 ml in half cup warm water');
+                add(nStr + ' ml');
+            } else {
+                if (n === 1) {
+                    add('1 Tab');
+                    add('1/2 Tab');
+                    add('1 Cap');
+                    add('1 tsp (5 ml)');
+                    add('1 ml');
+                    add('1 Puff');
+                    add('1 Sachet');
+                    add('1 Drop');
+                    add('1 Amp');
+                    add('100 mg');
+                    add('500 mg');
+                } else if (n === 2) {
+                    add('2 Tab');
+                    add('2 Cap');
+                    add('2 tsp (10 ml)');
+                    add('2 ml');
+                    add('2.5 ml (1/2 tsp)');
+                    add('2 Puffs');
+                    add('2 Drops');
+                    add('250 mg');
+                } else if (n === 5) {
+                    add('5 ml (1 tsp)');
+                    add('500 mg');
+                    add('50 mg');
+                    add('5 mg');
+                    add('5 Drops');
+                    add('5 g');
+                } else {
+                    add(nStr + ' Tab');
+                    add(nStr + ' ml');
+                    add(nStr + ' mg');
+                    add(nStr + ' Cap');
+                }
+            }
+        }
+
+        var presets = _DOSAGE_PRESETS_BY_CAT[cat] || _DOSAGE_PRESETS_BY_CAT.general;
+        presets.forEach(function(p) {
+            if (!q || p.toLowerCase().indexOf(q) !== -1) {
+                add(p);
+            }
+        });
+
+        if (medicineDoseMasterCache && Array.isArray(medicineDoseMasterCache.dose)) {
+            medicineDoseMasterCache.dose.forEach(function(item) {
+                var label = (item.label || item.name || '').toString().trim();
+                if (label) {
+                    if (!q || label.toLowerCase().indexOf(q) !== -1) {
+                        add(label);
+                    }
+                }
+            });
+        }
+
+        return suggestions.slice(0, 12);
+    }
+
+    function renderMedDosageDropdown(sugs) {
+        var $dd = $('#med_dosage_dd').empty();
+        medDosageHighlightIdx = -1;
+        if (!sugs.length) { $dd.hide(); return; }
+
+        sugs.forEach(function(s, idx) {
+            var $row = $('<div class="px-3 py-2 border-bottom med-dosage-dd-item" data-idx="' + idx + '" style="cursor:pointer;font-size:.875rem"></div>')
+                .text(s);
+
+            $row.on('mouseenter', function() { highlightMedDosageItem(idx); })
+                .on('mouseleave', function() { $(this).css('background',''); })
+                .on('mousedown', function(e) { e.preventDefault(); })
+                .on('click', function() {
+                    $('#med_dosage').val(s).trigger('change');
+                    $dd.hide().empty();
+                    medDosageHighlightIdx = -1;
+                    setTimeout(function() { $('#med_freq').focus(); }, 30);
+                });
+
+            $dd.append($row);
+        });
+
+        $dd.show();
+    }
+
+    $('#med_dosage').on('input focus', function() {
+        var q = ($(this).val() || '').trim();
+        var sugs = getMedDosageSuggestions(q);
+        renderMedDosageDropdown(sugs);
+    }).on('blur', function() {
+        setTimeout(function() { $('#med_dosage_dd').hide(); medDosageHighlightIdx = -1; }, 200);
+    }).on('keydown', function(e) {
+        var $dd = $('#med_dosage_dd');
+        var isVisible = $dd.is(':visible');
+        var $items = $('#med_dosage_dd .med-dosage-dd-item');
+
+        if (e.key === 'ArrowDown') {
+            if (!isVisible) {
+                var sugs = getMedDosageSuggestions(($(this).val() || '').trim());
+                renderMedDosageDropdown(sugs);
+                highlightMedDosageItem(0);
+                return;
+            }
+            e.preventDefault();
+            var nextIdx = medDosageHighlightIdx + 1;
+            if (nextIdx >= $items.length) nextIdx = 0;
+            highlightMedDosageItem(nextIdx);
+        } else if (e.key === 'ArrowUp') {
+            if (!isVisible) return;
+            e.preventDefault();
+            var prevIdx = medDosageHighlightIdx - 1;
+            if (prevIdx < 0) prevIdx = $items.length - 1;
+            highlightMedDosageItem(prevIdx);
+        } else if (e.key === 'Enter') {
+            if (isVisible) {
+                e.preventDefault();
+                var targetIdx = medDosageHighlightIdx >= 0 ? medDosageHighlightIdx : 0;
+                var $target = $items.eq(targetIdx);
+                if ($target.length) {
+                    $target.trigger('click');
+                }
+            }
+        } else if (e.key === 'Escape') {
+            $dd.hide().empty();
+            medDosageHighlightIdx = -1;
+        }
+    });
+
     // ─── Medicine Frequency Smart Autocomplete ──────────────────────────────
     var _FREQ_PRESET_MAP = [
         { code: 'OD', desc: 'Once Daily (1 dose/day)' },
@@ -9170,6 +9635,10 @@
     $('#med_type').on('input change', function() {
         if (!$('#med_where').val()) {
             autoSelectDefaultRoute($(this).val(), $('#med_where'));
+        }
+        if ($('#med_dosage_dd').is(':visible') || $('#med_dosage').is(':focus')) {
+            var q = ($('#med_dosage').val() || '').trim();
+            renderMedDosageDropdown(getMedDosageSuggestions(q));
         }
     });
 
