@@ -141,7 +141,8 @@ class AbdmAuditService
                 $insert['entity_id'] = $entityId !== '' ? $entityId : null;
             }
             if (in_array('abha_id', $auditFields, true)) {
-                $insert['abha_id'] = trim((string) ($data['abha_id'] ?? '')) ?: null;
+                $val = trim((string) ($data['abha_id'] ?? ''));
+                $insert['abha_id'] = $val !== '' ? $val : ($insert['abha_id'] ?? 'UNKNOWN');
             }
             if (in_array('request_json', $auditFields, true)) {
                 $insert['request_json'] = $requestJson;

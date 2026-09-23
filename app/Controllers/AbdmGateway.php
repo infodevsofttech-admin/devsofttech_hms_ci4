@@ -4975,9 +4975,14 @@ class AbdmGateway extends BaseController
             return $authFailure;
         }
 
-        $payload = $this->request->getJSON(true);
+        try {
+            $payload = $this->request->getJSON(true);
+        } catch (\Throwable) {
+            $payload = null;
+        }
         if (! is_array($payload)) {
-            $payload = [];
+            $raw = (string) $this->request->getBody();
+            $payload = json_decode($raw, true) ?? [];
         }
 
         $requestId = trim((string) ($payload['requestId'] ?? $payload['request_id'] ?? $this->request->getHeaderLine('X-Request-Id')));
@@ -5122,9 +5127,14 @@ class AbdmGateway extends BaseController
             return $authFailure;
         }
 
-        $payload = $this->request->getJSON(true);
+        try {
+            $payload = $this->request->getJSON(true);
+        } catch (\Throwable) {
+            $payload = null;
+        }
         if (! is_array($payload)) {
-            $payload = [];
+            $raw = (string) $this->request->getBody();
+            $payload = json_decode($raw, true) ?? [];
         }
 
         $requestId = trim((string) ($payload['requestId'] ?? $payload['request_id'] ?? $this->request->getHeaderLine('X-Request-Id')));
