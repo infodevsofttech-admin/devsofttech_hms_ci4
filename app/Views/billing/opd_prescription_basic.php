@@ -6840,20 +6840,18 @@
             if (prevIdx < 0) prevIdx = $items.length - 1;
             highlightMedDosageItem(prevIdx, true);
         } else if (e.key === 'Enter' || e.key === 'Tab') {
+            if (e.key === 'Tab' && e.shiftKey) return;
+            e.preventDefault();
             if (isVisible) {
                 var targetIdx = medDosageHighlightIdx >= 0 ? medDosageHighlightIdx : 0;
                 var $target = $items.eq(targetIdx);
                 if ($target.length) {
-                    if (e.key === 'Enter') e.preventDefault();
                     $('#med_dosage').val($target.text().trim()).trigger('change');
-                    $dd.hide().empty();
-                    medDosageHighlightIdx = -1;
-                    setTimeout(function() { $('#med_freq').focus(); }, 30);
                 }
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                setTimeout(function() { $('#med_freq').focus(); }, 30);
+                $dd.hide().empty();
+                medDosageHighlightIdx = -1;
             }
+            setTimeout(function() { $('#med_freq').focus(); }, 30);
         } else if (e.key === 'Escape') {
             $dd.hide().empty();
             medDosageHighlightIdx = -1;
@@ -6866,30 +6864,36 @@
         { code: 'BD', desc: 'Twice Daily (2 doses/day)' },
         { code: 'TDS', desc: 'Thrice Daily (3 doses/day)' },
         { code: 'QID', desc: 'Four Times Daily (4 doses/day)' },
-        { code: 'HS', desc: 'At Bedtime (Once at night)' },
-        { code: 'SOS', desc: 'As Needed (Only when required)' },
+        { code: 'HS', desc: 'At Bedtime / Night' },
+        { code: 'SOS', desc: 'As Needed (If Required)' },
+        { code: 'STAT', desc: 'Immediately (Single Dose)' },
         { code: 'Q4H', desc: 'Every 4 Hours' },
         { code: 'Q6H', desc: 'Every 6 Hours' },
         { code: 'Q8H', desc: 'Every 8 Hours' },
-        { code: 'Alternate Day', desc: 'Once every 2 days' },
-        { code: 'Weekly', desc: 'Long-interval (Once a week)' },
-        { code: 'Monthly', desc: 'Long-interval (Once a month)' },
-        { code: 'Continuous Infusion', desc: 'IV drip maintained continuously' },
-        { code: 'Stat', desc: 'Immediate single dose' }
+        { code: 'Q12H', desc: 'Every 12 Hours' },
+        { code: 'Weekly', desc: 'Once a Week' },
+        { code: 'Alt Day', desc: 'Alternate Days (Every 48 Hours)' }
     ];
 
     var medFreqHighlightIdx = -1;
 
-    function highlightMedFreqItem(idx) {
+    function highlightMedFreqItem(idx, updateInput) {
         var $items = $('#med_freq_dd .med-freq-dd-item');
         if (!$items.length) return;
         if (idx < 0) idx = 0;
         if (idx >= $items.length) idx = $items.length - 1;
         medFreqHighlightIdx = idx;
 
-        $items.css('background', '').removeClass('active-dd-item');
+        $items.css({ 'background': '', 'color': '', 'font-weight': '' }).removeClass('active-dd-item');
         var $target = $items.eq(medFreqHighlightIdx);
-        $target.css('background', '#e2ebff').addClass('active-dd-item');
+        $target.css({ 'background': '#0d6efd', 'color': '#ffffff', 'font-weight': '600' }).addClass('active-dd-item');
+
+        if (updateInput) {
+            var val = $target.find('strong').text().trim() || $target.text().trim();
+            if (val) {
+                $('#med_freq').val(val).trigger('change');
+            }
+        }
 
         var container = document.getElementById('med_freq_dd');
         var elem = $target[0];
@@ -6960,13 +6964,14 @@
             }
             $row.html(labelHtml);
 
-            $row.on('mouseenter', function() { highlightMedFreqItem(idx); })
-                .on('mouseleave', function() { $(this).css('background',''); })
+            $row.on('mouseenter', function() { highlightMedFreqItem(idx, false); })
+                .on('mouseleave', function() { $(this).css({ 'background': '', 'color': '', 'font-weight': '' }); })
                 .on('mousedown', function(e) { e.preventDefault(); })
                 .on('click', function() {
                     $('#med_freq').val(code).trigger('change');
                     $dd.hide().empty();
                     medFreqHighlightIdx = -1;
+                    setTimeout(function() { $('#med_when').focus(); }, 30);
                 });
 
             $dd.append($row);
@@ -6990,32 +6995,56 @@
             if (!isVisible) {
                 var sugs = getMedFreqSuggestions(($(this).val() || '').trim());
                 renderMedFreqDropdown(sugs);
-                highlightMedFreqItem(0);
+                highlightMedFreqItem(0, true);
                 return;
             }
             e.preventDefault();
-            var nextIdx = medFreqHighlightIdx + 1;
-            if (nextIdx >= $items.length) nextIdx = 0;
-            highlightMedFreqItem(nextIdx);
+            var nextIdx = medFreqHighlightIdx < 0 ? 0 : (medFreqHighlightIdx + 1) % $items.length;
+            highlightMedFreqItem(nextIdx, true);
         } else if (e.key === 'ArrowUp') {
             if (!isVisible) return;
             e.preventDefault();
-            var prevIdx = medFreqHighlightIdx - 1;
-            if (prevIdx < 0) prevIdx = $items.length - 1;
-            highlightMedFreqItem(prevIdx);
-        } else if (e.key === 'Enter') {
+            var prevIdx = medFreqHighlightIdx < 0 ? ($items.length - 1) : (medFreqHighlightIdx - 1 + $items.length) % $items.length;
+            highlightMedFreqItem(prevIdx, true);
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
+            if (e.key === 'Tab' && e.shiftKey) return;
+            e.preventDefault();
             if (isVisible) {
-                e.preventDefault();
                 var targetIdx = medFreqHighlightIdx >= 0 ? medFreqHighlightIdx : 0;
                 var $target = $items.eq(targetIdx);
                 if ($target.length) {
-                    $target.trigger('click');
-                    setTimeout(function() { $('#med_when').focus(); }, 30);
+                    var code = $target.find('strong').text().trim() || $target.text().trim();
+                    $('#med_freq').val(code).trigger('change');
                 }
+                $dd.hide().empty();
+                medFreqHighlightIdx = -1;
             }
+            setTimeout(function() { $('#med_when').focus(); }, 30);
         } else if (e.key === 'Escape') {
             $dd.hide().empty();
             medFreqHighlightIdx = -1;
+        }
+    });
+
+    // ─── Sequential Enter-key Navigation between Formulation, Timing & Route ───
+    $('#med_type').on('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            $('#med_dosage').focus();
+        }
+    });
+
+    $('#med_when').on('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            $('#med_where').focus();
+        }
+    });
+
+    $('#med_where').on('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            $('#med_days').focus();
         }
     });
 
@@ -7137,20 +7166,18 @@
             if (prevIdx < 0) prevIdx = $items.length - 1;
             highlightMedDaysItem(prevIdx, true);
         } else if (e.key === 'Enter' || e.key === 'Tab') {
+            if (e.key === 'Tab' && e.shiftKey) return;
+            e.preventDefault();
             if (isVisible) {
                 var targetIdx = medDaysHighlightIdx >= 0 ? medDaysHighlightIdx : 0;
                 var $target = $items.eq(targetIdx);
                 if ($target.length) {
-                    if (e.key === 'Enter') e.preventDefault();
                     $('#med_days').val($target.text().trim()).trigger('change');
-                    $dd.hide().empty();
-                    medDaysHighlightIdx = -1;
-                    setTimeout(function() { $('#med_remark').focus(); }, 30);
                 }
-            } else if (e.key === 'Enter') {
-                e.preventDefault();
-                setTimeout(function() { $('#med_remark').focus(); }, 30);
+                $dd.hide().empty();
+                medDaysHighlightIdx = -1;
             }
+            setTimeout(function() { $('#med_remark').focus(); }, 30);
         } else if (e.key === 'Escape') {
             $dd.hide().empty();
             medDaysHighlightIdx = -1;
@@ -7180,16 +7207,23 @@
     ];
     var medRemarkHighlightIdx = -1;
 
-    function highlightMedRemarkItem(idx) {
+    function highlightMedRemarkItem(idx, updateInput) {
         var $items = $('#med_remark_dd .med-remark-dd-item');
         if (!$items.length) return;
         if (idx < 0) idx = 0;
         if (idx >= $items.length) idx = $items.length - 1;
         medRemarkHighlightIdx = idx;
 
-        $items.css('background', '').removeClass('active-dd-item');
+        $items.css({ 'background': '', 'color': '', 'font-weight': '' }).removeClass('active-dd-item');
         var $target = $items.eq(medRemarkHighlightIdx);
-        $target.css('background', '#e2ebff').addClass('active-dd-item');
+        $target.css({ 'background': '#0d6efd', 'color': '#ffffff', 'font-weight': '600' }).addClass('active-dd-item');
+
+        if (updateInput) {
+            var val = $target.text().trim();
+            if (val) {
+                $('#med_remark').val(val);
+            }
+        }
 
         var container = document.getElementById('med_remark_dd');
         var elem = $target[0];
@@ -7228,13 +7262,14 @@
             var $row = $('<div class="px-3 py-2 border-bottom med-remark-dd-item" data-idx="' + idx + '" style="cursor:pointer;font-size:.875rem"></div>')
                 .text(s);
 
-            $row.on('mouseenter', function() { highlightMedRemarkItem(idx); })
-                .on('mouseleave', function() { $(this).css('background',''); })
+            $row.on('mouseenter', function() { highlightMedRemarkItem(idx, false); })
+                .on('mouseleave', function() { $(this).css({ 'background': '', 'color': '', 'font-weight': '' }); })
                 .on('mousedown', function(e) { e.preventDefault(); })
                 .on('click', function() {
                     $('#med_remark').val(s).trigger('change');
                     $dd.hide().empty();
                     medRemarkHighlightIdx = -1;
+                    setTimeout(function() { $('#btn_add_medicine').focus(); }, 30);
                 });
 
             $dd.append($row);
@@ -7258,28 +7293,30 @@
             if (!isVisible) {
                 var sugs = getMedRemarkSuggestions(($(this).val() || '').trim());
                 renderMedRemarkDropdown(sugs);
-                highlightMedRemarkItem(0);
+                highlightMedRemarkItem(0, true);
                 return;
             }
             e.preventDefault();
-            var nextIdx = medRemarkHighlightIdx + 1;
-            if (nextIdx >= $items.length) nextIdx = 0;
-            highlightMedRemarkItem(nextIdx);
+            var nextIdx = medRemarkHighlightIdx < 0 ? 0 : (medRemarkHighlightIdx + 1) % $items.length;
+            highlightMedRemarkItem(nextIdx, true);
         } else if (e.key === 'ArrowUp') {
             if (!isVisible) return;
             e.preventDefault();
-            var prevIdx = medRemarkHighlightIdx - 1;
-            if (prevIdx < 0) prevIdx = $items.length - 1;
-            highlightMedRemarkItem(prevIdx);
-        } else if (e.key === 'Enter') {
-            if (isVisible && medRemarkHighlightIdx >= 0) {
-                e.preventDefault();
-                var $target = $items.eq(medRemarkHighlightIdx);
+            var prevIdx = medRemarkHighlightIdx < 0 ? ($items.length - 1) : (medRemarkHighlightIdx - 1 + $items.length) % $items.length;
+            highlightMedRemarkItem(prevIdx, true);
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
+            if (e.key === 'Tab' && e.shiftKey) return;
+            e.preventDefault();
+            if (isVisible) {
+                var targetIdx = medRemarkHighlightIdx >= 0 ? medRemarkHighlightIdx : 0;
+                var $target = $items.eq(targetIdx);
                 if ($target.length) {
-                    $target.trigger('click');
-                    setTimeout(function() { $('#btn_add_medicine').focus(); }, 30);
+                    $('#med_remark').val($target.text().trim()).trigger('change');
                 }
+                $dd.hide().empty();
+                medRemarkHighlightIdx = -1;
             }
+            setTimeout(function() { $('#btn_add_medicine').focus(); }, 30);
         } else if (e.key === 'Escape') {
             $dd.hide().empty();
             medRemarkHighlightIdx = -1;
@@ -9799,6 +9836,7 @@
                 applyMedicineSelection(row);
                 $dd.hide().empty();
                 medNameHighlightIdx = -1;
+                setTimeout(function() { $('#med_type').focus(); }, 30);
             });
 
             $dd.append($item);
@@ -9851,16 +9889,20 @@
             var prevIdx = medNameHighlightIdx - 1;
             if (prevIdx < 0) prevIdx = medicineSuggestRows.length - 1;
             highlightMedNameItem(prevIdx);
-        } else if (e.key === 'Enter') {
+        } else if (e.key === 'Enter' || e.key === 'Tab') {
+            if (e.key === 'Tab' && e.shiftKey) return;
             if (isVisible) {
                 e.preventDefault();
                 var targetIdx = medNameHighlightIdx >= 0 ? medNameHighlightIdx : 0;
                 if (medicineSuggestRows[targetIdx]) {
                     applyMedicineSelection(medicineSuggestRows[targetIdx]);
-                    $dd.hide().empty();
-                    medNameHighlightIdx = -1;
-                    setTimeout(function() { $('#med_freq').focus(); }, 30);
                 }
+                $dd.hide().empty();
+                medNameHighlightIdx = -1;
+                setTimeout(function() { $('#med_type').focus(); }, 30);
+            } else if (e.key === 'Enter') {
+                e.preventDefault();
+                setTimeout(function() { $('#med_type').focus(); }, 30);
             }
         } else if (e.key === 'Escape') {
             $dd.hide().empty();

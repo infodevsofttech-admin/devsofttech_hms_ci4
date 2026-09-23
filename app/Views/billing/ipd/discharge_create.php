@@ -6426,16 +6426,18 @@ $historyFields = [
                             highlightIdx = (highlightIdx - 1 + items.length) % items.length;
                             updateHighlight(items, true);
                         } else if (e.key === 'Enter' || e.key === 'Tab') {
+                            if (e.key === 'Tab' && e.shiftKey) return;
+                            e.preventDefault();
                             if (isVisible) {
-                                if (e.key === 'Enter') e.preventDefault();
-                                if (highlightIdx >= 0 && items[highlightIdx]) {
-                                    dosageInput.value = items[highlightIdx].getAttribute('data-val');
+                                var targetIdx = highlightIdx >= 0 ? highlightIdx : 0;
+                                if (items[targetIdx]) {
+                                    dosageInput.value = items[targetIdx].getAttribute('data-val') || items[targetIdx].innerText.trim();
                                 }
                                 dosageDropdown.style.display = 'none';
                                 highlightIdx = -1;
-                                var freq = document.getElementById('discharge_dosage_freq');
-                                if (freq) freq.focus();
                             }
+                            var freq = document.getElementById('discharge_dosage_freq');
+                            if (freq) freq.focus();
                         } else if (e.key === 'Escape') {
                             dosageDropdown.style.display = 'none';
                             highlightIdx = -1;
@@ -6521,10 +6523,10 @@ $historyFields = [
 
                         var html = '';
                         items.forEach(function(s, i) {
-                            var bgStyle = (i === highlightIdx) ? 'background:#e2ebff;' : '';
+                            var bgStyle = (i === highlightIdx) ? 'background:#0d6efd;color:#ffffff;font-weight:600;' : '';
                             var labelHtml = '<strong>' + $('<div>').text(s.code).html() + '</strong>';
                             if (s.desc) {
-                                labelHtml += ' <span class="text-muted ms-2" style="font-size:12px;">(' + $('<div>').text(s.desc).html() + ')</span>';
+                                labelHtml += ' <span class="' + (i === highlightIdx ? 'text-white-50' : 'text-muted') + ' ms-2" style="font-size:12px;">(' + $('<div>').text(s.desc).html() + ')</span>';
                             }
                             html += '<div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center discharge-freq-opt" data-code="' + $('<div>').text(s.code).html() + '" style="cursor:pointer;font-size:13px;' + bgStyle + '">' + labelHtml + '</div>';
                         });
@@ -6546,15 +6548,8 @@ $historyFields = [
                     });
 
                     freqInput.addEventListener('keydown', function(e) {
+                        if (e.key === 'Tab' && e.shiftKey) return;
                         var sugs = getSuggestions(freqInput.value);
-                        if (!sugs.length || freqDropdown.style.display === 'none') {
-                            if (e.key === 'Enter') {
-                                e.preventDefault();
-                                var whenSelect = document.getElementById('discharge_dosage_when');
-                                if (whenSelect) whenSelect.focus();
-                            }
-                            return;
-                        }
 
                         if (e.key === 'ArrowDown') {
                             e.preventDefault();
@@ -6577,18 +6572,27 @@ $historyFields = [
                                 freqInput.value = sugs[highlightIdx].code;
                             }
                         } else if (e.key === 'Enter' || e.key === 'Tab') {
+                            e.preventDefault();
                             if (freqDropdown.style.display === 'block') {
-                                if (e.key === 'Enter') e.preventDefault();
-                                if (highlightIdx >= 0 && sugs[highlightIdx]) {
-                                    freqInput.value = sugs[highlightIdx].code;
+                                var targetIdx = highlightIdx >= 0 ? highlightIdx : 0;
+                                if (sugs[targetIdx]) {
+                                    freqInput.value = sugs[targetIdx].code;
                                 }
                                 freqDropdown.style.display = 'none';
-                                var whenSelect = document.getElementById('discharge_dosage_when');
-                                if (whenSelect) whenSelect.focus();
+                                highlightIdx = -1;
                             }
+                            var whenSelect = document.getElementById('discharge_dosage_when');
+                            if (whenSelect) whenSelect.focus();
                         } else if (e.key === 'Escape') {
                             freqDropdown.style.display = 'none';
                         }
+                    });
+
+                    $(document).on('click', '.discharge-freq-opt', function() {
+                        freqInput.value = $(this).data('code');
+                        freqDropdown.style.display = 'none';
+                        var whenSelect = document.getElementById('discharge_dosage_when');
+                        if (whenSelect) whenSelect.focus();
                     });
 
                     document.addEventListener('click', function(e) {
@@ -6597,6 +6601,28 @@ $historyFields = [
                         }
                     });
                 })();
+
+                // ─── Sequential Enter-key Navigation between Formulation, Timing & Route ───
+                $('#discharge_med_type').on('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        $('#discharge_dosage').focus();
+                    }
+                });
+
+                $('#discharge_dosage_when').on('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        $('#discharge_dose_where').focus();
+                    }
+                });
+
+                $('#discharge_dose_where').on('keydown', function(e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        $('#discharge_no_of_days').focus();
+                    }
+                });
 
                 // ── Smart Duration Autotext for #discharge_no_of_days ─────────────────────────
                 (function() {
@@ -6739,21 +6765,18 @@ $historyFields = [
                             }
                             updateHighlight(items, true);
                         } else if (e.key === 'Enter' || e.key === 'Tab') {
+                            if (e.key === 'Tab' && e.shiftKey) return;
+                            e.preventDefault();
                             if (isVisible) {
-                                if (e.key === 'Enter') e.preventDefault();
                                 var targetIdx = selectedIdx >= 0 ? selectedIdx : 0;
                                 if (items[targetIdx]) {
                                     daysInput.value = items[targetIdx].getAttribute('data-val') || items[targetIdx].innerText.trim();
                                 }
                                 daysDropdown.style.display = 'none';
                                 selectedIdx = -1;
-                                var remark = document.getElementById('discharge_remark');
-                                if (remark) remark.focus();
-                            } else if (e.key === 'Enter') {
-                                e.preventDefault();
-                                var remark = document.getElementById('discharge_remark');
-                                if (remark) remark.focus();
                             }
+                            var remark = document.getElementById('discharge_remark');
+                            if (remark) remark.focus();
                         } else if (e.key === 'Escape') {
                             daysDropdown.style.display = 'none';
                             selectedIdx = -1;
@@ -6786,16 +6809,23 @@ $historyFields = [
 
                     var medRemarkHighlightIdx = -1;
 
-                    function highlightMedRemarkItem(idx) {
+                    function highlightMedRemarkItem(idx, updateInput) {
                         var $items = $('#discharge_remark_dd .discharge-remark-dd-item');
                         if (!$items.length) return;
                         if (idx < 0) idx = 0;
                         if (idx >= $items.length) idx = $items.length - 1;
                         medRemarkHighlightIdx = idx;
 
-                        $items.css('background', '').removeClass('active-dd-item');
+                        $items.css({ 'background': '', 'color': '', 'font-weight': '' }).removeClass('active-dd-item');
                         var $target = $items.eq(medRemarkHighlightIdx);
-                        $target.css('background', '#e2ebff').addClass('active-dd-item');
+                        $target.css({ 'background': '#0d6efd', 'color': '#ffffff', 'font-weight': '600' }).addClass('active-dd-item');
+
+                        if (updateInput) {
+                            var val = $target.text().trim();
+                            if (val) {
+                                $('#discharge_remark').val(val);
+                            }
+                        }
 
                         var container = document.getElementById('discharge_remark_dd');
                         var elem = $target[0];
@@ -6832,8 +6862,8 @@ $historyFields = [
                             var $row = $('<div class="px-3 py-2 border-bottom discharge-remark-dd-item" data-idx="' + idx + '" style="cursor:pointer;font-size:.875rem"></div>')
                                 .text(s);
 
-                            $row.on('mouseenter', function() { highlightMedRemarkItem(idx); })
-                                .on('mouseleave', function() { $(this).css('background',''); })
+                            $row.on('mouseenter', function() { highlightMedRemarkItem(idx, false); })
+                                .on('mouseleave', function() { $(this).css({ 'background': '', 'color': '', 'font-weight': '' }); })
                                 .on('mousedown', function(e) { e.preventDefault(); })
                                 .on('click', function() {
                                     $('#discharge_remark').val(s);
@@ -6864,31 +6894,31 @@ $historyFields = [
                             if (!isVisible) {
                                 var sugs = getMedRemarkSuggestions(($(this).val() || '').trim());
                                 renderMedRemarkDropdown(sugs);
-                                highlightMedRemarkItem(0);
+                                highlightMedRemarkItem(0, true);
                                 return;
                             }
                             e.preventDefault();
-                            var nextIdx = medRemarkHighlightIdx + 1;
-                            if (nextIdx >= $items.length) nextIdx = 0;
-                            highlightMedRemarkItem(nextIdx);
+                            var nextIdx = medRemarkHighlightIdx < 0 ? 0 : (medRemarkHighlightIdx + 1) % $items.length;
+                            highlightMedRemarkItem(nextIdx, true);
                         } else if (e.key === 'ArrowUp') {
                             if (!isVisible) return;
                             e.preventDefault();
-                            var prevIdx = medRemarkHighlightIdx - 1;
-                            if (prevIdx < 0) prevIdx = $items.length - 1;
-                            highlightMedRemarkItem(prevIdx);
-                        } else if (e.key === 'Enter') {
-                            if (isVisible && medRemarkHighlightIdx >= 0) {
-                                e.preventDefault();
-                                var $target = $items.eq(medRemarkHighlightIdx);
+                            var prevIdx = medRemarkHighlightIdx < 0 ? ($items.length - 1) : (medRemarkHighlightIdx - 1 + $items.length) % $items.length;
+                            highlightMedRemarkItem(prevIdx, true);
+                        } else if (e.key === 'Enter' || e.key === 'Tab') {
+                            if (e.key === 'Tab' && e.shiftKey) return;
+                            e.preventDefault();
+                            if (isVisible) {
+                                var targetIdx = medRemarkHighlightIdx >= 0 ? medRemarkHighlightIdx : 0;
+                                var $target = $items.eq(targetIdx);
                                 if ($target.length) {
-                                    $target.trigger('click');
+                                    $('#discharge_remark').val($target.text().trim());
                                 }
-                            } else if (!isVisible && e.key === 'Enter') {
-                                e.preventDefault();
-                                var btnAdd = document.getElementById('btn_discharge_med_add');
-                                if (btnAdd) btnAdd.focus();
+                                $dd.hide().empty();
+                                medRemarkHighlightIdx = -1;
                             }
+                            var btnAdd = document.getElementById('btn_discharge_med_add');
+                            if (btnAdd) btnAdd.focus();
                         } else if (e.key === 'Escape') {
                             $dd.hide().empty();
                             medRemarkHighlightIdx = -1;
@@ -7119,6 +7149,7 @@ $historyFields = [
                             applyDischargeMedicineMatch(row);
                             $dd.hide().empty();
                             dischargeMedHighlightIdx = -1;
+                            setTimeout(function() { $('#discharge_med_type').focus(); }, 30);
                         });
 
                         $dd.append($item);
@@ -7185,17 +7216,24 @@ $historyFields = [
                             var prevIdx = dischargeMedHighlightIdx - 1;
                             if (prevIdx < 0) prevIdx = $items.length - 1;
                             highlightDischargeMedNameItem(prevIdx);
-                        } else if (e.key === 'Enter') {
-                            if (isVisible && dischargeMedHighlightIdx >= 0 && dischargeMedSuggestRows[dischargeMedHighlightIdx]) {
+                        } else if (e.key === 'Enter' || e.key === 'Tab') {
+                            if (e.key === 'Tab' && e.shiftKey) return;
+                            if (isVisible) {
                                 e.preventDefault();
-                                applyDischargeMedicineMatch(dischargeMedSuggestRows[dischargeMedHighlightIdx]);
+                                var targetIdx = dischargeMedHighlightIdx >= 0 ? dischargeMedHighlightIdx : 0;
+                                if (dischargeMedSuggestRows[targetIdx]) {
+                                    applyDischargeMedicineMatch(dischargeMedSuggestRows[targetIdx]);
+                                }
                                 $dd.hide().empty();
                                 dischargeMedHighlightIdx = -1;
-                                var nextTarget = section.querySelector('#discharge_med_type') || section.querySelector('#discharge_dosage');
-                                if (nextTarget) nextTarget.focus();
+                                setTimeout(function() { $('#discharge_med_type').focus(); }, 30);
+                            } else if (e.key === 'Enter') {
+                                e.preventDefault();
+                                setTimeout(function() { $('#discharge_med_type').focus(); }, 30);
                             }
                         } else if (e.key === 'Escape') {
-                            $dd.hide();
+                            $dd.hide().empty();
+                            dischargeMedHighlightIdx = -1;
                         }
                     });
                 }
