@@ -5375,7 +5375,7 @@ class Opd_prescription extends BaseController
             . '  const btn=this,origHtml=btn.innerHTML;'
             . '  if(!confirm("Submit FHIR bundle for OPD #' . $opdId . ' to ABDM gateway?"))return;'
             . '  btn.disabled=true;btn.innerHTML=\'<span class="spinner-border spinner-border-sm me-1"></span>Submitting\u2026\';'
-            . '  const body=new URLSearchParams({opd_id:CTX.opdId,opd_session_id:CTX.sessionId});'
+            . '  const body=new URLSearchParams({opd_id:CTX.opdId,opd_session_id:CTX.sessionId,push_to_gateway:1});'
             . '  body.append(CSRF_NAME,CSRF_HASH);'
             . '  const submitTimeoutMs=150000;'
             . '  const submitController=new AbortController();'
