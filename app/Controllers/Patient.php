@@ -967,6 +967,43 @@ class Patient extends BaseController
 			return $this->response->setStatusCode(404)->setBody('Patient not found');
 		}
 
+		if (! empty($data['data'][0])) {
+			$curAbha = trim((string) ($data['data'][0]->abha_address ?? ''));
+			if ($curAbha === '') {
+				$foundAbha = '';
+				if ($this->db->tableExists('abdm_link_transactions')) {
+					$alt = $this->db->table('abdm_link_transactions')
+						->select('abha_address')
+						->where('patient_id', $pno)
+						->where('abha_address !=', '')
+						->orderBy('id', 'DESC')
+						->get(1)->getRowArray();
+					if (! empty($alt['abha_address'])) {
+						$foundAbha = trim((string) $alt['abha_address']);
+					}
+				}
+				if ($foundAbha === '' && $this->db->tableExists('record_links')) {
+					$rl = $this->db->table('record_links')
+						->select('abha_id')
+						->where('care_context_reference LIKE', 'OPD-' . $pno . '-%')
+						->where('abha_id !=', '')
+						->orderBy('id', 'DESC')
+						->get(1)->getRowArray();
+					if (! empty($rl['abha_id'])) {
+						$foundAbha = trim((string) $rl['abha_id']);
+					}
+				}
+				if ($foundAbha !== '') {
+					$data['data'][0]->abha_address = $foundAbha;
+					if (str_contains($foundAbha, '@')) {
+						$this->db->table('patient_master')->where('id', $pno)->update(['abha_address' => $foundAbha]);
+					} else {
+						$this->db->table('patient_master')->where('id', $pno)->update(['abha_id' => $foundAbha]);
+					}
+				}
+			}
+		}
+
 		$required_age = $data['data'][0]->age;
 		$required_age_in_month = $data['data'][0]->age_in_month;
 		$required_dob = $data['data'][0]->dob;

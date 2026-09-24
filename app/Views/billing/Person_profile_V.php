@@ -26,13 +26,41 @@
             if ($abhaAddress === '' && preg_match('/abha_address\s*:\s*([A-Za-z0-9._-]+@[A-Za-z0-9.-]+)/i', (string) ($data[0]->log ?? ''), $abhaLogMatch) === 1) {
                 $abhaAddress = trim((string) ($abhaLogMatch[1] ?? ''));
             }
+            if ($abhaAddress === '') {
+                $db = \Config\Database::connect();
+                if ($db->tableExists('abdm_link_transactions')) {
+                    $alt = $db->table('abdm_link_transactions')
+                        ->select('abha_address')
+                        ->where('patient_id', (int) ($data[0]->id ?? 0))
+                        ->where('abha_address !=', '')
+                        ->orderBy('id', 'DESC')
+                        ->get(1)->getRowArray();
+                    if (! empty($alt['abha_address'])) {
+                        $abhaAddress = trim((string) $alt['abha_address']);
+                    }
+                }
+                if ($abhaAddress === '' && $db->tableExists('record_links')) {
+                    $rl = $db->table('record_links')
+                        ->select('abha_id')
+                        ->where('care_context_reference LIKE', 'OPD-' . (int) ($data[0]->id ?? 0) . '-%')
+                        ->where('abha_id !=', '')
+                        ->orderBy('id', 'DESC')
+                        ->get(1)->getRowArray();
+                    if (! empty($rl['abha_id'])) {
+                        $abhaAddress = trim((string) $rl['abha_id']);
+                    }
+                }
+            }
+            if ($patientAbhaId === '' && $abhaAddress !== '') {
+                $patientAbhaId = $abhaAddress;
+            }
             $abhaVerifiedStatus = trim((string) ($data[0]->abha_verified_status ?? ''));
             $abhaVerificationType = trim((string) ($data[0]->abha_verification_type ?? ''));
             $abhaKycVerified = (int) ($data[0]->abha_kyc_verified ?? 0) === 1;
             $abhaMobileVerified = (int) ($data[0]->abha_mobile_verified ?? 0) === 1;
             $abhaLinkedAt = trim((string) ($data[0]->abdm_linked_at ?? ''));
             $abhaPhotoAvailable = trim((string) ($data[0]->abha_profile_photo_base64 ?? '')) !== '';
-            $isAbhaLinkedAndVerified = $patientAbhaId !== '' && strtoupper($abhaVerifiedStatus) === 'VERIFIED';
+            $isAbhaLinkedAndVerified = $patientAbhaId !== '' && in_array(strtoupper($abhaVerifiedStatus), ['VERIFIED', 'LINKED'], true);
         ?>
         <?php
             $user = auth()->user();

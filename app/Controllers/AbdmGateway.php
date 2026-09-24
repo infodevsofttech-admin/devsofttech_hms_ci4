@@ -148,11 +148,34 @@ class AbdmGateway extends BaseController
         if ($match !== null) {
             $patient = $match['patient'];
             $patientId = (int) $patient['id'];
+            $patientRef = (string) ($patient['p_code'] ?: ('P-' . $patientId));
             $patientDisplay = trim((string) ($patient['p_fname'] ?? ''));
             if ($patientDisplay === '') {
                 $patientDisplay = 'Patient ' . $patientRef;
             }
             $matchedBy = $match['matchedBy'];
+
+            // Save discovered ABHA address/ID to patient_master if not already present
+            $discoveredAbha = trim((string) (
+                $payload['patient']['id']
+                ?? $payload['patient']['abhaAddress']
+                ?? $payload['patient']['abha_address']
+                ?? $payload['abha_address']
+                ?? $payload['abhaAddress']
+                ?? $payload['abha_id']
+                ?? ''
+            ));
+            if ($discoveredAbha !== '' && $this->db->tableExists('patient_master')) {
+                $pmUpdate = [];
+                if (str_contains($discoveredAbha, '@') && empty($patient['abha_address'])) {
+                    $pmUpdate['abha_address'] = $discoveredAbha;
+                } elseif (strlen(preg_replace('/\D/', '', $discoveredAbha)) === 14 && empty($patient['abha_id'])) {
+                    $pmUpdate['abha_id'] = $discoveredAbha;
+                }
+                if (! empty($pmUpdate)) {
+                    $this->db->table('patient_master')->where('id', $patientId)->update($pmUpdate);
+                }
+            }
 
             [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientDisplay);
 
@@ -410,6 +433,63 @@ class AbdmGateway extends BaseController
                 'fhir' => $fhir,
             ];
             $resolvedRefs[$ccRef] = true;
+        }
+
+        // On-Demand Resolution: Connect FHIR records by patient_id & session_id
+        if (! empty($requestedRefs)) {
+            foreach ($requestedRefs as $ref) {
+                if (isset($resolvedRefs[$ref])) {
+                    continue;
+                }
+
+                $targetPatientId = 0;
+                $targetSessionId = 0;
+                if (preg_match('/(?:OPD|PRESCRIPTION)-(\d+)(?:-S(\d+))?/i', $ref, $m)) {
+                    $targetPatientId = (int) $m[1];
+                    $targetSessionId = (int) ($m[2] ?? 0);
+                }
+
+                $bundleData = null;
+                if ($this->db->tableExists('opd_fhir_documents')) {
+                    $docBuilder = $this->db->table('opd_fhir_documents');
+                    if ($targetSessionId > 0) {
+                        $docBuilder->where('opd_session_id', $targetSessionId);
+                    } elseif ($targetPatientId > 0) {
+                        $docBuilder->where('opd_id', $targetPatientId);
+                    }
+                    $docRow = $docBuilder->orderBy('id', 'DESC')->get(1)->getRowArray();
+                    if (! empty($docRow['bundle_json'])) {
+                        $bundleData = json_decode((string) $docRow['bundle_json'], true);
+                    }
+                }
+
+                if (! is_array($bundleData)) {
+                    $bundleData = $this->assembleFhirBundleForCareContext($ref);
+                }
+
+                if (is_array($bundleData)) {
+                    $resolvedRefs[$ref] = true;
+                    $entries[] = [
+                        'careContextReference' => $ref,
+                        'media' => 'application/fhir+json',
+                        'fhir' => $bundleData,
+                    ];
+
+                    if ($this->db->tableExists('health_records')) {
+                        $this->storeHealthRecord([
+                            'patient_id' => $targetPatientId > 0 ? $targetPatientId : null,
+                            'abha_id' => $abhaLookup,
+                            'hi_type' => 'OPConsultRecord',
+                            'entity_type' => 'opd',
+                            'entity_id' => (string) ($targetSessionId > 0 ? $targetSessionId : $targetPatientId),
+                            'fhir_bundle' => json_encode($bundleData, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                            'care_context_reference' => $ref,
+                            'push_status' => 'linked',
+                            'reuse_existing' => true,
+                        ]);
+                    }
+                }
+            }
         }
 
         $this->confirmFetchedHealthRecordsLinked($deliveredHealthRows, $abhaLookup, $requestId, $payload);
@@ -4634,6 +4714,28 @@ class AbdmGateway extends BaseController
             }
             $matchedBy = $match['matchedBy'];
 
+            // Save discovered ABHA address/ID to patient_master if not already present
+            $discoveredAbha = trim((string) (
+                $payload['patient']['id']
+                ?? $payload['patient']['abhaAddress']
+                ?? $payload['patient']['abha_address']
+                ?? $payload['abha_address']
+                ?? $payload['abhaAddress']
+                ?? $payload['abha_id']
+                ?? ''
+            ));
+            if ($discoveredAbha !== '' && $this->db->tableExists('patient_master')) {
+                $pmUpdate = [];
+                if (str_contains($discoveredAbha, '@') && empty($patient['abha_address'])) {
+                    $pmUpdate['abha_address'] = $discoveredAbha;
+                } elseif (strlen(preg_replace('/\D/', '', $discoveredAbha)) === 14 && empty($patient['abha_id'])) {
+                    $pmUpdate['abha_id'] = $discoveredAbha;
+                }
+                if (! empty($pmUpdate)) {
+                    $this->db->table('patient_master')->where('id', $patientId)->update($pmUpdate);
+                }
+            }
+
             [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientDisplay);
 
             $this->getAuditService()->log([
@@ -4806,6 +4908,35 @@ class AbdmGateway extends BaseController
                         continue;
                     }
                 } catch (\Throwable) {
+                }
+            }
+
+            // Strategy A.2: Check if opd_fhir_documents has stored FHIR bundle
+            if ($db->tableExists('opd_fhir_documents')) {
+                $targetPatientId = 0;
+                $targetSessionId = 0;
+                if (preg_match('/(?:OPD|PRESCRIPTION)-(\d+)(?:-S(\d+))?/i', $ref, $m)) {
+                    $targetPatientId = (int) $m[1];
+                    $targetSessionId = (int) ($m[2] ?? 0);
+                }
+                $docBuilder = $db->table('opd_fhir_documents');
+                if ($targetSessionId > 0) {
+                    $docBuilder->where('opd_session_id', $targetSessionId);
+                } elseif ($targetPatientId > 0) {
+                    $docBuilder->where('opd_id', $targetPatientId);
+                }
+                $docRow = $docBuilder->orderBy('id', 'DESC')->get(1)->getRowArray();
+                if (! empty($docRow['bundle_json'])) {
+                    $bundleData = json_decode((string) $docRow['bundle_json'], true);
+                    if (is_array($bundleData)) {
+                        $records[] = [
+                            'careContextReference' => $ref,
+                            'hiType'               => 'PrescriptionRecord',
+                            'display'              => 'Prescription - ' . date('d M Y', strtotime($docRow['generated_at'] ?? 'now')),
+                            'bundle'               => $bundleData,
+                        ];
+                        continue;
+                    }
                 }
             }
 
@@ -5054,6 +5185,34 @@ class AbdmGateway extends BaseController
         }
 
         $patientId = (int) $patient['id'];
+        if ($abhaAddress === '') {
+            $abhaAddress = trim((string) (
+                $patient['abha_address']
+                ?? $patient['abha_id']
+                ?? $patient['abha']
+                ?? ''
+            ));
+        }
+        if ($abhaAddress === '' && ! empty($payload['patient']['unverifiedIdentifiers']) && is_array($payload['patient']['unverifiedIdentifiers'])) {
+            foreach ($payload['patient']['unverifiedIdentifiers'] as $ui) {
+                $type = strtoupper(trim((string) ($ui['type'] ?? '')));
+                $val = trim((string) ($ui['value'] ?? ''));
+                if (in_array($type, ['HEALTH_ID', 'ABHA_ADDRESS', 'ABHA_NUMBER', 'ABHA'], true) && $val !== '') {
+                    $abhaAddress = $val;
+                    break;
+                }
+            }
+        }
+        if ($abhaAddress === '' && ! empty($payload['patient']['verifiedIdentifiers']) && is_array($payload['patient']['verifiedIdentifiers'])) {
+            foreach ($payload['patient']['verifiedIdentifiers'] as $vi) {
+                $type = strtoupper(trim((string) ($vi['type'] ?? '')));
+                $val = trim((string) ($vi['value'] ?? ''));
+                if (in_array($type, ['HEALTH_ID', 'ABHA_ADDRESS', 'ABHA_NUMBER', 'ABHA'], true) && $val !== '') {
+                    $abhaAddress = $val;
+                    break;
+                }
+            }
+        }
         $rawPhone = trim((string) ($patient['mphone1'] ?? $patient['mphone2'] ?? ''));
         $cleanPhone = substr(preg_replace('/\D/', '', $rawPhone), -10);
         if (strlen($cleanPhone) !== 10) {
@@ -5228,6 +5387,10 @@ class AbdmGateway extends BaseController
 
         $patientId = (int) $txn['patient_id'];
         $abhaAddress = trim((string) ($txn['abha_address'] ?? ''));
+        if ($abhaAddress === '') {
+            $patientRow = $this->loadPatientRow($patientId);
+            $abhaAddress = trim((string) ($patientRow['abha_address'] ?? $patientRow['abha_id'] ?? ''));
+        }
         $now = date('Y-m-d H:i:s');
 
         $this->db->transStart();
@@ -5238,7 +5401,16 @@ class AbdmGateway extends BaseController
                 'abdm_linked_at' => $now,
             ];
             if ($abhaAddress !== '') {
-                $pmUpdate['abha_address'] = $abhaAddress;
+                if (str_contains($abhaAddress, '@')) {
+                    $pmUpdate['abha_address'] = $abhaAddress;
+                } else {
+                    $digits = preg_replace('/\D/', '', $abhaAddress);
+                    if (strlen($digits) === 14) {
+                        $pmUpdate['abha_id'] = $abhaAddress;
+                    } else {
+                        $pmUpdate['abha_address'] = $abhaAddress;
+                    }
+                }
             }
             $this->db->table('patient_master')->where('id', $patientId)->update($pmUpdate);
         }
@@ -5279,6 +5451,9 @@ class AbdmGateway extends BaseController
                 ]);
             }
         }
+
+        // Auto-sync any existing FHIR documents for this patient to health_records
+        $this->syncPatientFhirToHealthRecords($patientId, $abhaAddress, $selectedRefs);
 
         $this->db->table('abdm_link_transactions')
             ->where('id', (int) $txn['id'])
@@ -5354,6 +5529,74 @@ class AbdmGateway extends BaseController
     public function recordsLinkConfirm()
     {
         return $this->m2LinkConfirm();
+    }
+
+    private function syncPatientFhirToHealthRecords(int $patientId, string $abhaAddress, array $careContextRefs): void
+    {
+        if ($patientId <= 0 || ! $this->db->tableExists('health_records')) {
+            return;
+        }
+
+        $now = Time::now('Asia/Kolkata')->toDateTimeString();
+
+        foreach ($careContextRefs as $ref) {
+            $ref = trim((string) $ref);
+            if ($ref === '') {
+                continue;
+            }
+
+            $sessionId = 0;
+            if (preg_match('/(?:OPD|PRESCRIPTION)-\d+-S(\d+)/i', $ref, $m)) {
+                $sessionId = (int) $m[1];
+            }
+
+            $docRow = null;
+            if ($this->db->tableExists('opd_fhir_documents')) {
+                $b = $this->db->table('opd_fhir_documents');
+                if ($sessionId > 0) {
+                    $b->where('opd_session_id', $sessionId);
+                } else {
+                    $b->where('opd_id', $patientId);
+                }
+                $docRow = $b->orderBy('id', 'DESC')->get(1)->getRowArray();
+            }
+
+            $bundleJson = $docRow['bundle_json'] ?? null;
+            if ($bundleJson === null) {
+                $bundle = $this->assembleFhirBundleForCareContext($ref);
+                if ($bundle !== null) {
+                    $bundleJson = json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                }
+            }
+
+            if ($bundleJson !== null) {
+                $existing = $this->db->table('health_records')
+                    ->select('id')
+                    ->where('care_context_reference', $ref)
+                    ->get(1)
+                    ->getRowArray();
+
+                $hrData = [
+                    'patient_id' => $patientId,
+                    'abha_id' => $abhaAddress !== '' ? $abhaAddress : null,
+                    'hi_type' => 'OPConsultRecord',
+                    'entity_type' => 'opd',
+                    'entity_id' => (string) ($sessionId > 0 ? $sessionId : $patientId),
+                    'record_data' => $bundleJson,
+                    'care_context_reference' => $ref,
+                    'push_status' => 'linked',
+                    'linked_at' => $now,
+                    'updated_at' => $now,
+                ];
+
+                if (! empty($existing)) {
+                    $this->db->table('health_records')->where('id', (int) $existing['id'])->update($hrData);
+                } else {
+                    $hrData['created_at'] = $now;
+                    $this->db->table('health_records')->insert($hrData);
+                }
+            }
+        }
     }
 
     // =========================================================================

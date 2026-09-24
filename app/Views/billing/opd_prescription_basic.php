@@ -558,7 +558,21 @@
                     if ($relationLabel !== '') {
                         $patientNameWithRelation .= ' (' . $relationLabel . ')';
                     }
-                    $patientAbhaAddress = trim((string) ($patient_master[0]->abha_address ?? $patient_master[0]->abha ?? ''));
+                    $patientAbhaAddress = trim((string) ($patient_master[0]->abha_address ?? $patient_master[0]->abha_id ?? $patient_master[0]->abha ?? ''));
+                    if ($patientAbhaAddress === '') {
+                        $db = \Config\Database::connect();
+                        if ($db->tableExists('record_links')) {
+                            $rl = $db->table('record_links')
+                                ->select('abha_id')
+                                ->where('care_context_reference LIKE', 'OPD-' . (int) ($patient_master[0]->id ?? 0) . '-%')
+                                ->where('abha_id !=', '')
+                                ->orderBy('id', 'DESC')
+                                ->get(1)->getRowArray();
+                            if (! empty($rl['abha_id'])) {
+                                $patientAbhaAddress = trim((string) $rl['abha_id']);
+                            }
+                        }
+                    }
                 ?>
                 <a href="javascript:load_form('<?= esc($historyUrl, 'js') ?>','Consult History');"
                    class="btn btn-info btn-sm"

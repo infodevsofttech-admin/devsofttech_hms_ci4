@@ -11763,13 +11763,41 @@ class Opd_prescription extends BaseController
             return false;
         }
 
-        // NOTE: Do NOT also enqueue an 'opd.fhir.generated' bridge_sync_queue event here.
-        // That event type has no 'abdm.'/'snomed.'/'nhcx.' prefix, so BridgeSyncService
-        // routes it to the generic CSNOtk terminology bridge (BRIDGE_SYNC_URL), which has
-        // no handler for it and always returns HTTP 404 -- it has no consumer anywhere in
-        // this codebase. The bundle is already persisted to opd_fhir_documents above; actual
-        // ABDM sharing is triggered separately via DreamsoftConnector::sharePrescriptionBundle()
-        // (event 'abdm.fhir.share.requested'), which correctly routes to ABDM_BRIDGE_URL.
+        if ($this->db->tableExists('health_records')) {
+            try {
+                $patientId = (int) ($patientRow['id'] ?? ($opdRow['p_id'] ?? 0));
+                $visitDateRaw = trim((string) ($opdRow['date_opd_visit'] ?? $opdRow['apointment_date'] ?? ''));
+                $visitDate = $visitDateRaw !== '' ? date('Y-m-d', strtotime($visitDateRaw)) : date('Y-m-d');
+                $careContextRef = 'OPD-' . $patientId . '-S' . $sessionId . '-' . str_replace('-', '', $visitDate);
+
+                $existingHr = $this->db->table('health_records')
+                    ->select('id')
+                    ->where('care_context_reference', $careContextRef)
+                    ->get(1)
+                    ->getRowArray();
+
+                $hrPayload = [
+                    'patient_id' => $patientId > 0 ? $patientId : null,
+                    'abha_id' => $abhaAddress !== '' ? $abhaAddress : null,
+                    'hi_type' => 'OPConsultRecord',
+                    'entity_type' => 'opd',
+                    'entity_id' => (string) $sessionId,
+                    'record_data' => $bundleJson,
+                    'care_context_reference' => $careContextRef,
+                    'push_status' => 'local_discovery_ready',
+                    'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                ];
+
+                if (! empty($existingHr)) {
+                    $this->db->table('health_records')->where('id', (int) $existingHr['id'])->update($hrPayload);
+                } else {
+                    $hrPayload['created_at'] = Time::now('Asia/Kolkata')->toDateTimeString();
+                    $this->db->table('health_records')->insert($hrPayload);
+                }
+            } catch (\Throwable $e) {
+                log_message('warning', '[storePrescriptionFhirBundle] auto health_records insert error: ' . $e->getMessage());
+            }
+        }
 
         return true;
     }
