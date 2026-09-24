@@ -4858,7 +4858,12 @@ class AbdmGateway extends BaseController
             ]);
         }
 
-        $body = $this->request->getJSON(true) ?: [];
+        try {
+            $body = $this->request->getJSON(true) ?: [];
+        } catch (\Throwable) {
+            $rawBody = (string) $this->request->getBody();
+            $body = json_decode($rawBody, true) ?: [];
+        }
         $careContextRefs = $body['careContextReferences'] ?? [];
         if (empty($careContextRefs) && !empty($body['careContextReference'])) {
             $careContextRefs = [$body['careContextReference']];
