@@ -15,9 +15,9 @@
         <?= csrf_field() ?>
         <?php
             $patientAbhaId = '';
-            foreach (['abha_id', 'abha_no', 'abha', 'abha_address'] as $abhaField) {
+            foreach (['abha_id', 'abha_no', 'abha'] as $abhaField) {
                 $candidateAbha = trim((string) ($data[0]->{$abhaField} ?? ''));
-                if ($candidateAbha !== '') {
+                if ($candidateAbha !== '' && strpos($candidateAbha, '@') === false) {
                     $patientAbhaId = $candidateAbha;
                     break;
                 }
@@ -50,9 +50,6 @@
                         $abhaAddress = trim((string) $rl['abha_id']);
                     }
                 }
-            }
-            if ($patientAbhaId === '' && $abhaAddress !== '') {
-                $patientAbhaId = $abhaAddress;
             }
             $abhaVerifiedStatus = trim((string) ($data[0]->abha_verified_status ?? ''));
             $abhaVerificationType = trim((string) ($data[0]->abha_verification_type ?? ''));
@@ -103,7 +100,8 @@
                                         <i class="bi bi-upload me-1"></i>Upload
                                     </button>
                                 </div>
-                                <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2 fw-semibold" onclick="openAbdmHipLinkModal(<?= (int)$data[0]->id ?>, '<?= esc($abhaAddress) ?>', { name: '<?= esc($data[0]->p_fname ?? '') ?>', gender: '<?= $data[0]->gender == 1 ? 'M' : ($data[0]->gender == 2 ? 'F' : 'O') ?>', yob: '<?= !empty($data[0]->dob) ? date('Y', strtotime($data[0]->dob)) : '' ?>', phone: '<?= esc($data[0]->mphone1 ?? '') ?>', abha_number: '<?= esc($patientAbhaId) ?>' })">
+                                <?php $validAbhaNumForModal = (strpos($patientAbhaId, '@') === false && strlen(preg_replace('/\D/', '', $patientAbhaId)) === 14) ? preg_replace('/\D/', '', $patientAbhaId) : ''; ?>
+                                <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2 fw-semibold" onclick="openAbdmHipLinkModal(<?= (int)$data[0]->id ?>, '<?= esc($abhaAddress) ?>', { name: '<?= esc($data[0]->p_fname ?? '') ?>', gender: '<?= $data[0]->gender == 1 ? 'M' : ($data[0]->gender == 2 ? 'F' : 'O') ?>', yob: '<?= !empty($data[0]->dob) ? date('Y', strtotime($data[0]->dob)) : '' ?>', phone: '<?= esc($data[0]->mphone1 ?? '') ?>', abha_number: '<?= esc($validAbhaNumForModal) ?>' })">
                                     <i class="bi bi-link-45deg me-1"></i>Link Records to ABHA (HIP)
                                 </button>
                                 <?php if (empty($abhaAddress) && !empty($data[0]->mphone1)) : ?>

@@ -388,7 +388,11 @@
             if (data.ok && data.patient) {
                 var p = data.patient;
                 if (p.abha_address) document.getElementById('hipAbhaAddress').value = p.abha_address;
-                if (p.abha_number) document.getElementById('hipAbhaNumber').value = p.abha_number;
+                var pAbhaNum = (p.abha_number || '').trim();
+                if (pAbhaNum.indexOf('@') !== -1 || pAbhaNum.replace(/\D/g, '').length !== 14) {
+                    pAbhaNum = '';
+                }
+                document.getElementById('hipAbhaNumber').value = pAbhaNum;
                 if (p.name) document.getElementById('hipPatientName').value = p.name;
                 if (p.gender) document.getElementById('hipGender').value = p.gender;
                 if (p.year_of_birth) document.getElementById('hipYob').value = p.year_of_birth;
@@ -428,7 +432,11 @@
 
         // Reset fields
         document.getElementById('hipAbhaAddress').value = abhaAddress || prefill.abha_address || '';
-        document.getElementById('hipAbhaNumber').value = prefill.abha_number || prefill.abha_id || '';
+        var rawPrefillNum = (prefill.abha_number || prefill.abha_id || '').trim();
+        if (rawPrefillNum.indexOf('@') !== -1 || rawPrefillNum.replace(/\D/g, '').length !== 14) {
+            rawPrefillNum = '';
+        }
+        document.getElementById('hipAbhaNumber').value = rawPrefillNum;
         document.getElementById('hipPatientName').value = prefill.name || prefill.patient_name || '';
         document.getElementById('hipGender').value = prefill.gender || 'M';
         document.getElementById('hipYob').value = prefill.year_of_birth || prefill.yob || '';
@@ -484,7 +492,11 @@
      */
     window.executeHipInitiatedLinking = async function() {
         var abhaAddress = document.getElementById('hipAbhaAddress').value.trim();
-        var abhaNumber  = document.getElementById('hipAbhaNumber').value.trim();
+        var rawAbhaNum  = (document.getElementById('hipAbhaNumber').value || '').trim();
+        var abhaNumber  = '';
+        if (rawAbhaNum.indexOf('@') === -1 && rawAbhaNum.replace(/\D/g, '').length === 14) {
+            abhaNumber = rawAbhaNum.replace(/\D/g, '');
+        }
         var name        = document.getElementById('hipPatientName').value.trim();
         var gender      = document.getElementById('hipGender').value;
         var yobVal      = document.getElementById('hipYob').value.trim();
@@ -516,6 +528,18 @@
         }
         if (selectedContexts.length === 0) {
             alert('Please select at least one care context to link.');
+            return;
+        }
+
+        var allAlreadyLinked = selectedContexts.length > 0 && selectedContexts.every(function(c) {
+            var cb = document.querySelector('.care-context-cb[value="' + c.ref.replace(/"/g, '\\"') + '"]');
+            return cb && cb.closest('.border') && cb.closest('.border').querySelector('.badge.bg-success-subtle');
+        });
+        if (allAlreadyLinked) {
+            alertBox.className = 'alert alert-success py-2 px-3 small';
+            alertBox.innerHTML = '<strong><i class="bi bi-check-circle-fill me-1"></i>Already Linked!</strong> '
+                + 'The selected care context(s) are already linked with this patient\'s ABHA. Patient can view and fetch the records directly in their PHR app.';
+            alertBox.classList.remove('d-none');
             return;
         }
 

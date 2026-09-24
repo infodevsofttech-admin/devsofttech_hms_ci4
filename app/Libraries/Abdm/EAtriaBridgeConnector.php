@@ -1728,6 +1728,15 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             }
         }
 
+        if (! empty($payload['abha_number'])) {
+            $cleaned = preg_replace('/\D/', '', (string) $payload['abha_number']);
+            if (strlen($cleaned) === 14 && strpos((string) $payload['abha_number'], '@') === false) {
+                $payload['abha_number'] = $cleaned;
+            } else {
+                unset($payload['abha_number']);
+            }
+        }
+
         if ($this->hfrId !== '' && empty($payload['hfr_id'])) {
             $payload['hfr_id'] = $this->hfrId;
         }
@@ -1736,6 +1745,15 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
 
     public function hipLinkCareContext(array $payload): array
     {
+        if (! empty($payload['abha_number'])) {
+            $cleaned = preg_replace('/\D/', '', (string) $payload['abha_number']);
+            if (strlen($cleaned) === 14 && strpos((string) $payload['abha_number'], '@') === false) {
+                $payload['abha_number'] = $cleaned;
+            } else {
+                unset($payload['abha_number']);
+            }
+        }
+
         if ($this->hfrId !== '' && empty($payload['hfr_id'])) {
             $payload['hfr_id'] = $this->hfrId;
         }

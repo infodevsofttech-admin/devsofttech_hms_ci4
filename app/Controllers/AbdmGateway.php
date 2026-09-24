@@ -10385,7 +10385,20 @@ class AbdmGateway extends BaseController
                 ->get(1)
                 ->getRowArray();
             if (! empty($pat['abha_id'])) {
-                $body['abha_number'] = trim((string) $pat['abha_id']);
+                $candidateNum = trim((string) $pat['abha_id']);
+                if (strpos($candidateNum, '@') === false && strlen(preg_replace('/\D/', '', $candidateNum)) === 14) {
+                    $body['abha_number'] = preg_replace('/\D/', '', $candidateNum);
+                }
+            }
+        }
+
+        // Sanitize abha_number: only keep if valid 14-digit numeric ABHA number. Never pass email/abha_address!
+        if (! empty($body['abha_number'])) {
+            $cleanedAbhaNum = preg_replace('/\D/', '', (string) $body['abha_number']);
+            if (strlen($cleanedAbhaNum) === 14 && strpos((string) $body['abha_number'], '@') === false) {
+                $body['abha_number'] = $cleanedAbhaNum;
+            } else {
+                unset($body['abha_number']);
             }
         }
 
@@ -10434,7 +10447,20 @@ class AbdmGateway extends BaseController
                 ->get(1)
                 ->getRowArray();
             if (! empty($pat['abha_id'])) {
-                $body['abha_number'] = trim((string) $pat['abha_id']);
+                $candidateNum = trim((string) $pat['abha_id']);
+                if (strpos($candidateNum, '@') === false && strlen(preg_replace('/\D/', '', $candidateNum)) === 14) {
+                    $body['abha_number'] = preg_replace('/\D/', '', $candidateNum);
+                }
+            }
+        }
+
+        // Sanitize abha_number: only keep if valid 14-digit numeric ABHA number. Never pass email/abha_address!
+        if (! empty($body['abha_number'])) {
+            $cleanedAbhaNum = preg_replace('/\D/', '', (string) $body['abha_number']);
+            if (strlen($cleanedAbhaNum) === 14 && strpos((string) $body['abha_number'], '@') === false) {
+                $body['abha_number'] = $cleanedAbhaNum;
+            } else {
+                unset($body['abha_number']);
             }
         }
 
@@ -10656,7 +10682,7 @@ class AbdmGateway extends BaseController
                 'year_of_birth' => $yob,
                 'dob'           => $dob,
                 'abha_address'  => $effAbhaAddress,
-                'abha_number'   => trim((string) ($patient['abha_id'] ?? '')),
+                'abha_number'   => (strpos((string) ($patient['abha_id'] ?? ''), '@') === false && strlen(preg_replace('/\D/', '', (string) ($patient['abha_id'] ?? ''))) === 14) ? preg_replace('/\D/', '', (string) $patient['abha_id']) : '',
                 'phone'         => $cleanPhone,
             ],
             'care_contexts' => $contextsList,
