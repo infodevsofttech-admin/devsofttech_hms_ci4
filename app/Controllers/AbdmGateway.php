@@ -1541,9 +1541,26 @@ class AbdmGateway extends BaseController
         $visitDate = $visitDateRaw !== '' ? date('Y-m-d', strtotime($visitDateRaw)) : date('Y-m-d');
         $careContextRef = trim((string) ($this->request->getPost('careContextId') ?? $this->request->getPost('care_context_reference') ?? ''));
         if ($careContextRef === '') {
-            $careContextRef = $hiType === 'PrescriptionRecord'
-                ? 'PRESCRIPTION-' . $opdId . '-S' . ($sessionForRef > 0 ? $sessionForRef : 0) . '-' . $visitDate
-                : 'OPD-' . $opdId . '-S' . ($sessionForRef > 0 ? $sessionForRef : 0) . '-' . $visitDate;
+            $existingCcRef = '';
+            if ($this->db->tableExists('health_records')) {
+                $existingHrRow = $this->db->table('health_records')
+                    ->select('care_context_reference')
+                    ->where('entity_type', 'opd')
+                    ->where('entity_id', (string) $opdId)
+                    ->where('care_context_reference !=', '')
+                    ->orderBy('id', 'DESC')
+                    ->get(1)
+                    ->getRowArray();
+                if (! empty($existingHrRow['care_context_reference'])) {
+                    $existingCcRef = trim((string) $existingHrRow['care_context_reference']);
+                }
+            }
+            if ($existingCcRef !== '') {
+                $careContextRef = $existingCcRef;
+            } else {
+                $dateClean = str_replace('-', '', $visitDate);
+                $careContextRef = 'OPD-' . $patientId . '-S' . ($sessionForRef > 0 ? $sessionForRef : 0) . '-' . $dateClean;
+            }
         }
         $careContextDisplay = $hiType === 'PrescriptionRecord'
             ? 'Prescription - ' . $visitDate

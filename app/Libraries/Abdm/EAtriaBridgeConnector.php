@@ -1393,10 +1393,34 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         $effectiveAbha = $abhaAddress !== '' ? $abhaAddress : $abhaId;
         $visitDate = (string) ($data['visit_date'] ?? date('Y-m-d'));
 
-        // Under M3 On-Demand Fetch architecture, full FHIR records are NOT sent to the Bridge.
-        // Instead, only Care Context metadata is registered with the ABDM Bridge (/v3/hip/link/notify).
-        // The complete FHIR Document Bundle stays securely inside HMS (health_records table)
-        // and is served on-demand when the Bridge calls POST /records/fetch upon patient consent.
+        $bundle = $data['record_data'] ?? $data['fhir_bundle'] ?? null;
+        if (! empty($bundle) && is_array($bundle)) {
+            // When a FHIR bundle is attached, push to /api/v3/records/push so the bridge
+            // validates the FHIR resources and holds the bundle for on-demand patient fetch.
+            $recordPushPayload = [
+                'hfr_id'                 => $this->hfrId,
+                'patient_id'             => (string) ($data['patient_id'] ?? ''),
+                'patient_name'           => $patientName,
+                'abha_address'           => $effectiveAbha,
+                'care_context_reference' => $careContextReference,
+                'care_context_display'   => $careContextDisplay,
+                'hi_type'                => $hiType,
+                'visit_date'             => $visitDate,
+                'fhir_bundle'            => $bundle,
+                'record_data'            => $bundle,
+            ];
+            if ($this->bridgeHospitalId !== '') {
+                $recordPushPayload['hospital_id'] = $this->bridgeHospitalId;
+            }
+            if ($abhaId !== '') {
+                $recordPushPayload['abha_id'] = $abhaId;
+            }
+
+            $res = $this->post('/v3/records/push', $recordPushPayload);
+            return self::normalizePushRecordResponse($res);
+        }
+
+        // Care-context only metadata registration
         $notifyPayload = [
             'hfr_id'                 => $this->hfrId,
             'hospital_id'            => $this->bridgeHospitalId,
