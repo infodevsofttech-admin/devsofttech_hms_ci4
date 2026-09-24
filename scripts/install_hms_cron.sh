@@ -36,7 +36,7 @@ $BLOCK_START
 * * * * * cd $PROJECT_DIR && $PHP_BIN spark abdm:push-sync --limit=20 --worker=cron-abdm-m2 >> $LOG_DIR/abdm_push_sync.log 2>&1
 * * * * * cd $PROJECT_DIR && $PHP_BIN spark bridge:sync --limit 10 >> $LOG_DIR/bridge_sync.log 2>&1
 * * * * * cd $PROJECT_DIR && $PHP_BIN spark snomed:process-coding >> $LOG_DIR/snomed_process.log 2>&1
-*/2 * * * * cd $PROJECT_DIR && $PHP_BIN spark abdm:hiu-poll --limit=30 >> $LOG_DIR/abdm_hiu_poll.log 2>&1
+*/2 * * * * cd $PROJECT_DIR && $PHP_BIN spark abdm:hiu-poll --limit=15 >> $LOG_DIR/abdm_hiu_poll.log 2>&1
 */5 * * * * cd $PROJECT_DIR && $PHP_BIN spark abdm:hiu-retry --limit=20 >> $LOG_DIR/abdm_hiu_retry.log 2>&1
 30 2 * * * cd $PROJECT_DIR && $PHP_BIN spark abdm:prune-logs --days=30 --strip-payload-days=2 --optimize >> $LOG_DIR/abdm_prune_logs.log 2>&1
 $BLOCK_END

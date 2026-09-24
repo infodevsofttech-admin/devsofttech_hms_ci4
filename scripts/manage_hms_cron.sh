@@ -110,7 +110,7 @@ $BLOCK_START
 # SNOMED CT Medical Coding Worker (Every 1 minute)
 * * * * * cd $project_dir && $php_bin spark snomed:process-coding >> $log_dir/snomed_process.log 2>&1
 # ABDM M3 HIU Data Request Poll (Every 2 minutes)
-*/2 * * * * cd $project_dir && $php_bin spark abdm:hiu-poll --limit=30 >> $log_dir/abdm_hiu_poll.log 2>&1
+*/2 * * * * cd $project_dir && $php_bin spark abdm:hiu-poll --limit=15 >> $log_dir/abdm_hiu_poll.log 2>&1
 # ABDM M3 HIU Retry Queue (Every 5 minutes)
 */5 * * * * cd $project_dir && $php_bin spark abdm:hiu-retry --limit=20 >> $log_dir/abdm_hiu_retry.log 2>&1
 # ABDM Audit & Gateway Log Maintenance (Daily at 02:30 AM)

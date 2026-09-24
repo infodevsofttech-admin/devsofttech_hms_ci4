@@ -19,19 +19,39 @@ class AbdmHiuPoll extends BaseCommand
 
     public function run(array $params)
     {
-        $limit = (int) (CLI::getOption('limit') ?? 30);
-        if ($limit <= 0) {
-            $limit = 30;
+        $lockDir = WRITEPATH . 'locks';
+        if (! is_dir($lockDir)) {
+            @mkdir($lockDir, 0755, true);
+        }
+        $lockFile = $lockDir . DIRECTORY_SEPARATOR . 'abdm_hiu_poll.lock';
+        $lockFp = @fopen($lockFile, 'c+');
+
+        if (! $lockFp || ! flock($lockFp, LOCK_EX | LOCK_NB)) {
+            CLI::write('Another instance of abdm:hiu-poll is already running. Skipping execution.', 'yellow');
+            if ($lockFp) {
+                fclose($lockFp);
+            }
+            return;
         }
 
-        $service = new M3HiuWorkflowService();
-        $summary = $service->pollNatGateway($limit);
+        try {
+            $limit = (int) (CLI::getOption('limit') ?? 30);
+            if ($limit <= 0) {
+                $limit = 30;
+            }
 
-        CLI::write('ABDM HIU NAT Poll Summary', 'yellow');
-        CLI::write('Processed: ' . (int) ($summary['processed'] ?? 0));
-        CLI::write('Consent updates: ' . (int) ($summary['consent_updates'] ?? 0), 'green');
-        CLI::write('Data updates: ' . (int) ($summary['data_updates'] ?? 0), 'green');
-        CLI::write('Failed: ' . (int) ($summary['failed'] ?? 0), ((int) ($summary['failed'] ?? 0) > 0 ? 'red' : 'green'));
-        CLI::write('Skipped: ' . (int) ($summary['skipped'] ?? 0));
+            $service = new M3HiuWorkflowService();
+            $summary = $service->pollNatGateway($limit);
+
+            CLI::write('ABDM HIU NAT Poll Summary', 'yellow');
+            CLI::write('Processed: ' . (int) ($summary['processed'] ?? 0));
+            CLI::write('Consent updates: ' . (int) ($summary['consent_updates'] ?? 0), 'green');
+            CLI::write('Data updates: ' . (int) ($summary['data_updates'] ?? 0), 'green');
+            CLI::write('Failed: ' . (int) ($summary['failed'] ?? 0), ((int) ($summary['failed'] ?? 0) > 0 ? 'red' : 'green'));
+            CLI::write('Skipped: ' . (int) ($summary['skipped'] ?? 0));
+        } finally {
+            flock($lockFp, LOCK_UN);
+            fclose($lockFp);
+        }
     }
 }

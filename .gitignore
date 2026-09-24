@@ -70,6 +70,8 @@ writable/uploads/*
 writable/debugbar/*
 !writable/debugbar/index.html
 
+writable/locks/*
+
 writable/ayushman/*
 
 php_errors.log

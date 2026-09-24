@@ -199,11 +199,36 @@ class M3HiuWorkflowService
         }
 
         $summary = ['processed' => 0, 'consent_updates' => 0, 'data_updates' => 0, 'failed' => 0, 'skipped' => 0];
-        $consentRows = $this->db->table('abdm_hiu_workflows')
-            ->select('*')
+
+        $fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
+        $selectCols = ['id', 'request_id', 'transaction_id', 'consent_id', 'abha_address', 'hfr_id', 'workflow_state', 'status', 'created_at', 'updated_at'];
+        foreach (['abdm_consent_request_id', 'abdm_consent_artifact_id', 'completed_at', 'expired_at', 'revoked_at'] as $col) {
+            if (in_array($col, $fields, true)) {
+                $selectCols[] = $col;
+            }
+        }
+
+        $builder = $this->db->table('abdm_hiu_workflows')
+            ->select(implode(', ', $selectCols))
             ->where('operation', 'consent_request')
             ->where('status', 'success')
-            ->orderBy('id', 'DESC')
+            ->whereNotIn('workflow_state', ['COMPLETED', 'EXPIRED', 'REVOKED', 'DENIED']);
+
+        if (in_array('completed_at', $fields, true)) {
+            $builder->where('completed_at IS NULL');
+        }
+        if (in_array('expired_at', $fields, true)) {
+            $builder->where('expired_at IS NULL');
+        }
+        if (in_array('revoked_at', $fields, true)) {
+            $builder->where('revoked_at IS NULL');
+        }
+
+        // Only poll consent requests created within the last 7 days to avoid infinite polling of stale/ancient rows
+        $cutoffDate = date('Y-m-d H:i:s', strtotime('-7 days'));
+        $builder->where('created_at >=', $cutoffDate);
+
+        $consentRows = $builder->orderBy('id', 'DESC')
             ->get($limit)
             ->getResultArray();
 
@@ -215,6 +240,25 @@ class M3HiuWorkflowService
                 continue;
             }
             $seenConsentRequests[$requestId] = true;
+
+            $consentRowId = (int) ($row['id'] ?? 0);
+
+            // Fast-check: if a child reconcile/data_fetch workflow for this request_id has already reached terminal state
+            $terminalCheck = $this->db->table('abdm_hiu_workflows')
+                ->select('id, workflow_state, operation')
+                ->where('request_id', $requestId)
+                ->whereIn('workflow_state', ['COMPLETED', 'EXPIRED', 'REVOKED', 'DENIED'])
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+
+            if (! empty($terminalCheck)) {
+                $termState = (string) ($terminalCheck['workflow_state'] ?? '');
+                $this->markConsentRequestTerminal($consentRowId, $termState);
+                $summary['skipped']++;
+                continue;
+            }
+
             $summary['processed']++;
 
             $payload = [
@@ -237,12 +281,51 @@ class M3HiuWorkflowService
                 if (! $cascade['granted']) {
                     $summary['skipped']++;
                 }
+
+                $consentState = strtolower(trim((string) (
+                    $consentResult['workflow_state']
+                    ?? $consentResult['status']
+                    ?? $consentResult['consent_status']
+                    ?? ''
+                )));
+
+                if (in_array($consentState, ['revoked', 'denied', 'expired'], true)) {
+                    $this->markConsentRequestTerminal($consentRowId, strtoupper($consentState));
+                } elseif ($cascade['granted'] && $cascade['failed'] === 0 && $cascade['data_updates'] > 0) {
+                    $this->markConsentRequestTerminal($consentRowId, 'COMPLETED');
+                }
             } else {
                 $summary['failed']++;
             }
         }
 
         return $summary;
+    }
+
+    private function markConsentRequestTerminal(int $consentRowId, string $terminalState): void
+    {
+        if ($consentRowId <= 0 || ! $this->db->tableExists('abdm_hiu_workflows')) {
+            return;
+        }
+
+        $now = Time::now('Asia/Kolkata')->toDateTimeString();
+        $update = [
+            'workflow_state' => $terminalState,
+            'updated_at' => $now,
+        ];
+
+        $fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
+        if (in_array('completed_at', $fields, true) && $terminalState === 'COMPLETED') {
+            $update['completed_at'] = $now;
+        }
+        if (in_array('expired_at', $fields, true) && $terminalState === 'EXPIRED') {
+            $update['expired_at'] = $now;
+        }
+        if (in_array('revoked_at', $fields, true) && in_array($terminalState, ['REVOKED', 'DENIED'], true)) {
+            $update['revoked_at'] = $now;
+        }
+
+        $this->db->table('abdm_hiu_workflows')->where('id', $consentRowId)->update($update);
     }
 
     /**
