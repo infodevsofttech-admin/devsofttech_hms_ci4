@@ -1104,7 +1104,7 @@ $historyFields = [
                                                     <td><?= esc((string) ($row['procedure_name'] ?? '')) ?></td>
                                                     <td><?= esc((string) ($row['procedure_date'] ?? '')) ?></td>
                                                     <td><?= esc((string) ($row['procedure_remark'] ?? '')) ?></td>
-                                                    <td><button type="submit" class="btn btn-outline-danger btn-sm" name="action" value="remove_procedure" onclick="document.getElementById('procedure_remove_id').value='<?= (int) ($row['id'] ?? 0) ?>';">Remove</button></td>
+                                                    <td><button type="button" class="btn btn-outline-danger btn-sm btn-remove-procedure-row" data-id="<?= (int) ($row['id'] ?? 0) ?>">Remove</button></td>
                                                 </tr>
                                         <?php endforeach;
                                         endif; ?>
@@ -1122,9 +1122,9 @@ $historyFields = [
                                         </div>
                                         <div id="discharge_procedure_dropdown" class="dropdown-menu" style="display:none;position:absolute;z-index:1050;max-height:250px;overflow-y:auto;width:100%;"></div>
                                     </div>
-                                    <div class="col-md-3"><input type="date" class="form-control" name="new_procedure_date"></div>
-                                    <div class="col-md-2"><input type="text" class="form-control" name="new_procedure_remark" placeholder="Remark"></div>
-                                    <div class="col-md-2"><button type="submit" class="btn btn-primary btn-sm w-100" name="action" value="add_procedure">+ADD Row</button></div>
+                                    <div class="col-md-3"><input type="date" class="form-control" name="new_procedure_date" id="new_procedure_date"></div>
+                                    <div class="col-md-2"><input type="text" class="form-control" name="new_procedure_remark" id="new_procedure_remark" placeholder="Remark"></div>
+                                    <div class="col-md-2"><button type="button" class="btn btn-primary btn-sm w-100" id="btn_add_procedure_row">+ADD Row</button></div>
                                 </div>
                                 <datalist id="discharge_procedure_suggest"></datalist>
                                 <div id="discharge_surgery_status" class="complaint-status text-muted"></div>
@@ -3423,10 +3423,17 @@ $historyFields = [
                         e.preventDefault();
                         highlightedIndex = Math.max(highlightedIndex - 1, 0);
                         updateHighlight(items);
-                    } else if (e.key === 'Enter' && isVisible) {
+                    } else if (e.key === 'Enter') {
                         e.preventDefault();
-                        if (highlightedIndex >= 0 && items[highlightedIndex]) {
+                        if (isVisible && highlightedIndex >= 0 && items[highlightedIndex]) {
                             items[highlightedIndex].click();
+                        } else {
+                            dropdown.style.display = 'none';
+                            if (inputId === 'new_surgery_name') {
+                                $('#btn_add_surgery_row').click();
+                            } else if (inputId === 'new_procedure_name') {
+                                $('#btn_add_procedure_row').click();
+                            }
                         }
                     } else if (e.key === 'Escape') {
                         dropdown.style.display = 'none';
@@ -4242,7 +4249,11 @@ $historyFields = [
                 $tbody.html(html);
             }
 
+            var isSurgerySubmitting = false;
+            var isProcedureSubmitting = false;
+
             $(document).on('click', '#btn_add_surgery_row', function() {
+                if (isSurgerySubmitting) return;
                 var form = getDischargeForm();
                 var name = ($('#new_surgery_name').val() || '').toString().trim();
                 if (!name) {
@@ -4252,6 +4263,26 @@ $historyFields = [
                 var date = ($('#new_surgery_date').val() || '').toString().trim();
                 var remark = ($('#new_surgery_remark').val() || '').toString().trim();
                 var masterId = parseInt($('#new_surgery_master_id').val() || '0', 10);
+
+                // Prevent client-side duplicate insertion
+                var isDuplicate = false;
+                $('#discharge_surgery_tbody tr').each(function() {
+                    var rowName = $(this).find('td:first').text().trim();
+                    var rowDate = $(this).find('td:nth-child(2)').text().trim();
+                    if (rowName.toUpperCase() === name.toUpperCase() && (!date || !rowDate || rowDate === date)) {
+                        isDuplicate = true;
+                        return false;
+                    }
+                });
+                if (isDuplicate) {
+                    setSectionStatus('discharge_surgery_status', 'This surgery is already added in the table.', 'error');
+                    return;
+                }
+
+                isSurgerySubmitting = true;
+                var $btn = $('#btn_add_surgery_row');
+                $btn.prop('disabled', true).text('Adding...');
+
                 var csrf = getCsrfPair(form);
                 var payload = {
                     action: 'add_surgery',
@@ -4271,9 +4302,13 @@ $historyFields = [
                     $('#new_surgery_date').val('');
                     $('#new_surgery_remark').val('');
                     $('#new_surgery_master_id').val('0');
-                    setSectionStatus('discharge_surgery_status', (data && data.notice) ? data.notice : 'Surgery row added.', 'success');
+                    var level = (data && data.noticeType === 'warning') ? 'error' : 'success';
+                    setSectionStatus('discharge_surgery_status', (data && data.notice) ? data.notice : 'Surgery row added.', level);
                 }, 'json').fail(function() {
                     setSectionStatus('discharge_surgery_status', 'Unable to add surgery row.', 'error');
+                }).always(function() {
+                    isSurgerySubmitting = false;
+                    $btn.prop('disabled', false).text('+ADD Row');
                 });
             });
 
@@ -4281,6 +4316,8 @@ $historyFields = [
                 var form = getDischargeForm();
                 var id = parseInt($(this).data('id') || '0', 10);
                 if (id <= 0) return;
+                var $btn = $(this);
+                $btn.prop('disabled', true);
                 var csrf = getCsrfPair(form);
                 var payload = {
                     action: 'remove_surgery',
@@ -4294,10 +4331,13 @@ $historyFields = [
                         renderSurgeryRows(data.surgeryRows);
                     }
                     setSectionStatus('discharge_surgery_status', (data && data.notice) ? data.notice : 'Surgery row removed.', 'success');
-                }, 'json');
+                }, 'json').always(function() {
+                    $btn.prop('disabled', false);
+                });
             });
 
             $(document).on('click', '#btn_add_procedure_row', function() {
+                if (isProcedureSubmitting) return;
                 var form = getDischargeForm();
                 var name = ($('#new_procedure_name').val() || '').toString().trim();
                 if (!name) {
@@ -4305,8 +4345,33 @@ $historyFields = [
                     return;
                 }
                 var date = ($('#new_procedure_date').val() || '').toString().trim();
+                if (!date) {
+                    var today = new Date().toISOString().split('T')[0];
+                    date = today;
+                    $('#new_procedure_date').val(today);
+                }
                 var remark = ($('#new_procedure_remark').val() || '').toString().trim();
                 var masterId = parseInt($('#new_procedure_master_id').val() || '0', 10);
+
+                // Prevent client-side duplicate insertion
+                var isDuplicate = false;
+                $('#discharge_procedure_tbody tr').each(function() {
+                    var rowName = $(this).find('td:first').text().trim();
+                    var rowDate = $(this).find('td:nth-child(2)').text().trim();
+                    if (rowName.toUpperCase() === name.toUpperCase() && (!date || !rowDate || rowDate === date)) {
+                        isDuplicate = true;
+                        return false;
+                    }
+                });
+                if (isDuplicate) {
+                    setSectionStatus('discharge_surgery_status', 'This procedure is already added in the table.', 'error');
+                    return;
+                }
+
+                isProcedureSubmitting = true;
+                var $btn = $('#btn_add_procedure_row');
+                $btn.prop('disabled', true).text('Adding...');
+
                 var csrf = getCsrfPair(form);
                 var payload = {
                     action: 'add_procedure',
@@ -4326,9 +4391,13 @@ $historyFields = [
                     $('#new_procedure_date').val('');
                     $('#new_procedure_remark').val('');
                     $('#new_procedure_master_id').val('0');
-                    setSectionStatus('discharge_surgery_status', (data && data.notice) ? data.notice : 'Procedure row added.', 'success');
+                    var level = (data && data.noticeType === 'warning') ? 'error' : 'success';
+                    setSectionStatus('discharge_surgery_status', (data && data.notice) ? data.notice : 'Procedure row added.', level);
                 }, 'json').fail(function() {
                     setSectionStatus('discharge_surgery_status', 'Unable to add procedure row.', 'error');
+                }).always(function() {
+                    isProcedureSubmitting = false;
+                    $btn.prop('disabled', false).text('+ADD Row');
                 });
             });
 
@@ -4336,6 +4405,8 @@ $historyFields = [
                 var form = getDischargeForm();
                 var id = parseInt($(this).data('id') || '0', 10);
                 if (id <= 0) return;
+                var $btn = $(this);
+                $btn.prop('disabled', true);
                 var csrf = getCsrfPair(form);
                 var payload = {
                     action: 'remove_procedure',
@@ -4349,7 +4420,9 @@ $historyFields = [
                         renderProcedureRows(data.procedureRows);
                     }
                     setSectionStatus('discharge_surgery_status', (data && data.notice) ? data.notice : 'Procedure row removed.', 'success');
-                }, 'json');
+                }, 'json').always(function() {
+                    $btn.prop('disabled', false);
+                });
             });
 
             function bindSurgeryTermLookup(form, type, lookupId, ddId, targetMasterId, statusId) {
@@ -8832,12 +8905,16 @@ $historyFields = [
 
                     if (actionValue === 'add_procedure') {
                         var procedureDateInput = form.querySelector('[name="new_procedure_date"]');
-                        if (!procedureDateInput || String(procedureDateInput.value || '').trim() === '') {
-                            setSectionStatus('discharge_surgery_status', 'Select procedure date before adding.', 'error');
-                            if (procedureDateInput) {
-                                procedureDateInput.focus();
+                        if (procedureDateInput && String(procedureDateInput.value || '').trim() === '') {
+                            var todayDateStr = new Date().toISOString().split('T')[0];
+                            procedureDateInput.value = todayDateStr;
+                            var pDateItem = payloadArray.find(function(it) { return it.name === 'new_procedure_date'; });
+                            if (pDateItem) {
+                                pDateItem.value = todayDateStr;
+                            } else {
+                                payloadArray.push({ name: 'new_procedure_date', value: todayDateStr });
                             }
-                            return;
+                            payload = window.jQuery.param(payloadArray);
                         }
                     }
 
@@ -8872,11 +8949,31 @@ $historyFields = [
                                 noticeLevel = noticeLevel === 'success' ? 'error' : noticeLevel;
                             }
                             if (noticeText !== '') {
-                                var statusIdToUse = statusTargetId !== '' ? statusTargetId : ((targetSectionId === 'section-complaints' || isComplaintAction) ? 'discharge_complaint_status' : 'discharge_medicine_status');
+                                var statusIdToUse = statusTargetId !== '' ? statusTargetId : (
+                                    (targetSectionId === 'section-complaints' || isComplaintAction) ? 'discharge_complaint_status' :
+                                    (targetSectionId === 'section-surgery' || actionValue.indexOf('surgery') !== -1 || actionValue.indexOf('procedure') !== -1) ? 'discharge_surgery_status' :
+                                    'discharge_medicine_status'
+                                );
                                 setSectionStatus(statusIdToUse, noticeText, noticeLevel === 'success' ? 'success' : 'error');
                                 if (typeof window.notify === 'function') {
                                     window.notify(noticeLevel === 'success' ? 'success' : 'error', 'Discharge Update', noticeText);
                                 }
+                            }
+                            // Re-render surgery table rows from returned surgeryRows array
+                            if (Array.isArray(parsedJson.surgeryRows) && typeof renderSurgeryRows === 'function') {
+                                renderSurgeryRows(parsedJson.surgeryRows);
+                                $('#new_surgery_name').val('');
+                                $('#new_surgery_date').val('');
+                                $('#new_surgery_remark').val('');
+                                $('#new_surgery_master_id').val('0');
+                            }
+                            // Re-render procedure table rows from returned procedureRows array
+                            if (Array.isArray(parsedJson.procedureRows) && typeof renderProcedureRows === 'function') {
+                                renderProcedureRows(parsedJson.procedureRows);
+                                $('#new_procedure_name').val('');
+                                $('#new_procedure_date').val('');
+                                $('#new_procedure_remark').val('');
+                                $('#new_procedure_master_id').val('0');
                             }
                             // Re-render complaint table rows from returned complaintRows array
                             if ((isComplaintAction || targetSectionId === 'section-complaints') && Array.isArray(parsedJson.complaintRows)) {

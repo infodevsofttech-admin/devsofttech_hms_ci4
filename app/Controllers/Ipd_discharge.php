@@ -6541,24 +6541,36 @@ class Ipd_discharge extends BaseController
                 $remark = trim((string) ($this->request->getPost('new_surgery_remark') ?? ''));
                 $masterId = max(0, (int) ($this->request->getPost('new_surgery_master_id') ?? 0));
                 if ($name !== '' && $this->tableHasColumns('ipd_discharge_surgery', ['ipd_id', 'surgery_name'])) {
-                    $insert = [
-                        'ipd_id' => $ipdId,
-                        'surgery_name' => $name,
-                        'surgery_remark' => $remark,
-                        'update_by' => $userLabel,
-                    ];
-                    if ($this->db->fieldExists('surgery_date', 'ipd_discharge_surgery')) {
-                        $insert['surgery_date'] = $date;
+                    $dupQuery = $this->db->table('ipd_discharge_surgery')
+                        ->where('ipd_id', $ipdId)
+                        ->where('surgery_name', $name);
+                    if ($date !== null && $this->db->fieldExists('surgery_date', 'ipd_discharge_surgery')) {
+                        $dupQuery->where('surgery_date', $date);
                     }
-                    if ($this->db->fieldExists('surgery_id', 'ipd_discharge_surgery')) {
-                        $insert['surgery_id'] = $masterId;
+                    if ($dupQuery->countAllResults() > 0) {
+                        $savedAny = false;
+                        $notice = 'This surgery is already added.';
+                        $noticeType = 'warning';
+                    } else {
+                        $insert = [
+                            'ipd_id' => $ipdId,
+                            'surgery_name' => $name,
+                            'surgery_remark' => $remark,
+                            'update_by' => $userLabel,
+                        ];
+                        if ($this->db->fieldExists('surgery_date', 'ipd_discharge_surgery')) {
+                            $insert['surgery_date'] = $date;
+                        }
+                        if ($this->db->fieldExists('surgery_id', 'ipd_discharge_surgery')) {
+                            $insert['surgery_id'] = $masterId;
+                        }
+                        if ($this->db->fieldExists('surgery_by_doc_id', 'ipd_discharge_surgery')) {
+                            $insert['surgery_by_doc_id'] = 0;
+                        }
+                        $savedAny = (bool) $this->db->table('ipd_discharge_surgery')->insert($insert);
+                        $notice = $savedAny ? 'Surgery row added.' : 'Unable to add surgery row.';
+                        $noticeType = $savedAny ? 'success' : 'warning';
                     }
-                    if ($this->db->fieldExists('surgery_by_doc_id', 'ipd_discharge_surgery')) {
-                        $insert['surgery_by_doc_id'] = 0;
-                    }
-                    $savedAny = (bool) $this->db->table('ipd_discharge_surgery')->insert($insert);
-                    $notice = $savedAny ? 'Surgery row added.' : 'Unable to add surgery row.';
-                    $noticeType = $savedAny ? 'success' : 'warning';
                 } else {
                     $notice = $name === ''
                         ? 'Enter surgery name before adding.'
@@ -6583,30 +6595,43 @@ class Ipd_discharge extends BaseController
                 $date = $this->parseInputDateToDb((string) ($this->request->getPost('new_procedure_date') ?? ''));
                 $remark = trim((string) ($this->request->getPost('new_procedure_remark') ?? ''));
                 $masterId = max(0, (int) ($this->request->getPost('new_procedure_master_id') ?? 0));
-                if ($name !== '' && $date !== null && $this->tableHasColumns('ipd_discharge_procedure', ['ipd_id', 'procedure_name'])) {
-                    $insert = [
-                        'ipd_id' => $ipdId,
-                        'procedure_name' => $name,
-                        'procedure_remark' => $remark,
-                        'update_by' => $userLabel,
-                    ];
-                    if ($this->db->fieldExists('procedure_date', 'ipd_discharge_procedure')) {
-                        $insert['procedure_date'] = $date;
+                if ($date === null) {
+                    $date = date('Y-m-d');
+                }
+                if ($name !== '' && $this->tableHasColumns('ipd_discharge_procedure', ['ipd_id', 'procedure_name'])) {
+                    $dupQuery = $this->db->table('ipd_discharge_procedure')
+                        ->where('ipd_id', $ipdId)
+                        ->where('procedure_name', $name);
+                    if ($date !== null && $this->db->fieldExists('procedure_date', 'ipd_discharge_procedure')) {
+                        $dupQuery->where('procedure_date', $date);
                     }
-                    if ($this->db->fieldExists('procedure_id', 'ipd_discharge_procedure')) {
-                        $insert['procedure_id'] = $masterId;
+                    if ($dupQuery->countAllResults() > 0) {
+                        $savedAny = false;
+                        $notice = 'This procedure is already added.';
+                        $noticeType = 'warning';
+                    } else {
+                        $insert = [
+                            'ipd_id' => $ipdId,
+                            'procedure_name' => $name,
+                            'procedure_remark' => $remark,
+                            'update_by' => $userLabel,
+                        ];
+                        if ($this->db->fieldExists('procedure_date', 'ipd_discharge_procedure')) {
+                            $insert['procedure_date'] = $date;
+                        }
+                        if ($this->db->fieldExists('procedure_id', 'ipd_discharge_procedure')) {
+                            $insert['procedure_id'] = $masterId;
+                        }
+                        if ($this->db->fieldExists('procedure_by_doc_id', 'ipd_discharge_procedure')) {
+                            $insert['procedure_by_doc_id'] = 0;
+                        }
+                        $savedAny = (bool) $this->db->table('ipd_discharge_procedure')->insert($insert);
+                        $notice = $savedAny ? 'Procedure row added.' : 'Unable to add procedure row.';
+                        $noticeType = $savedAny ? 'success' : 'warning';
                     }
-                    if ($this->db->fieldExists('procedure_by_doc_id', 'ipd_discharge_procedure')) {
-                        $insert['procedure_by_doc_id'] = 0;
-                    }
-                    $savedAny = (bool) $this->db->table('ipd_discharge_procedure')->insert($insert);
-                    $notice = $savedAny ? 'Procedure row added.' : 'Unable to add procedure row.';
-                    $noticeType = $savedAny ? 'success' : 'warning';
                 } else {
                     if ($name === '') {
                         $notice = 'Enter procedure name before adding.';
-                    } elseif ($date === null) {
-                        $notice = 'Select a valid procedure date before adding.';
                     } else {
                         $notice = 'Procedure table/columns are missing in database.';
                     }
