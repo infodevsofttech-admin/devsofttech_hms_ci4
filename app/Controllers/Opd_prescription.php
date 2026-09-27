@@ -11781,7 +11781,7 @@ class Opd_prescription extends BaseController
                     'abha_id' => $abhaAddress !== '' ? $abhaAddress : null,
                     'hi_type' => 'OPConsultRecord',
                     'entity_type' => 'opd',
-                    'entity_id' => (string) $sessionId,
+                    'entity_id' => (string) $opdId,
                     'record_data' => $bundleJson,
                     'care_context_reference' => $careContextRef,
                     'push_status' => 'local_discovery_ready',
