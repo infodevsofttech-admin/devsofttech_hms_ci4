@@ -2352,9 +2352,34 @@ class Ipd_discharge extends BaseController
             $dirParts      = [];
             $dirLocalParts = [];
 
-            // ── When (Relation to Food) ──────────────────────────────────────────
+            // --- SAFEGUARD: Clean up $whenText and $freqText ---
+            $upperWhen = strtoupper($whenText);
+            $isFreqPatternInWhen = in_array($upperWhen, [
+                'ONCE A DAY', 'ONCE A WEEK', 'ONCE A FIFTEN DAY', 'ONLY NOW', 'DAILY', 'EVERYDAY', 'EVERY DAY',
+                'ALTERNATE DAY', 'TWICE A DAY', 'THREE TIMES A DAY', 'OD', 'BD', 'TDS', 'TID', 'QID', 'HS', 'SOS', 'STAT',
+            ], true) || preg_match('/^(OD|BD|TDS|TID|QID|HS|SOS|STAT)\b/i', $upperWhen);
+
+            if ($isFreqPatternInWhen) {
+                if ($freqText === '') {
+                    $freqText = $whenText;
+                }
+                $whenText = '';
+                $upperWhen = '';
+            }
+
+            // 1. FREQUENCY (OD, BD, TDS …)
+            if ($freqText !== '') {
+                $upperFreq = strtoupper($freqText);
+                $dirParts[] = $freqText;
+                if (isset($freqHindiMap[$upperFreq])) {
+                    $dirLocalParts[] = $freqHindiMap[$upperFreq];
+                } elseif (isset($doseFreqHindiMap[strtolower($freqText)])) {
+                    $dirLocalParts[] = $doseFreqHindiMap[strtolower($freqText)];
+                }
+            }
+
+            // 2. RELATION TO FOOD / TIMING (When)
             if ($whenText !== '') {
-                $upperWhen = strtoupper($whenText);
                 // Expand short codes to descriptive form
                 if (isset($whenCodeDescMap[$upperWhen])) {
                     $dirParts[] = $whenCodeDescMap[$upperWhen];
@@ -2369,41 +2394,33 @@ class Ipd_discharge extends BaseController
                 }
             }
 
-            // ── Dose / Schedule (e.g. "BBF (BEFORE BREAKFAST)", "1 Tab") ────────
+            // 3. DOSE / STRENGTH (e.g. "1 Tab", "500mg")
             if ($doseText !== '') {
                 $dirParts[] = $doseText;
             }
 
-            // ── Frequency (OD, BD, TDS …) ────────────────────────────────────────
-            if ($freqText !== '') {
-                $upperFreq = strtoupper($freqText);
-                $dirParts[] = $freqText;
-                if (isset($freqHindiMap[$upperFreq])) {
-                    $dirLocalParts[] = $freqHindiMap[$upperFreq];
-                } elseif (isset($doseFreqHindiMap[strtolower($freqText)])) {
-                    $dirLocalParts[] = $doseFreqHindiMap[strtolower($freqText)];
-                }
-            }
-
-            // ── Remark (Medicine Advice) — only if clean ─────────────────────────
-            if ($cleanRemark !== '') {
-                $upperRemark = strtoupper($cleanRemark);
-                $dirParts[]  = $cleanRemark;
-                if (isset($remarkHindiMap[$upperRemark])) {
-                    $dirLocalParts[] = $remarkHindiMap[$upperRemark];
-                }
-            }
-
+            // 4. DURATION (e.g. 5 Days, 7 Days)
             if ($days !== '') {
                 $daysText = is_numeric($days) ? $days . ' Days' : $days;
                 $dirParts[] = $daysText;
                 $daysNum = is_numeric($days) ? (int) $days : 0;
                 if ($daysNum > 0) {
                     $dirLocalParts[] = $daysNum . ' दिन';
+                } elseif (preg_match('/^(\d+)\s*day/i', $days, $dm)) {
+                    $dirLocalParts[] = $dm[1] . ' दिन';
                 } elseif (stripos($days, 'week') !== false) {
-                    $dirLocalParts[] = '1 हफ़्ता';
+                    $dirLocalParts[] = (preg_match('/^(\d+)/', $days, $wm) ? $wm[1] . ' हफ़्ता' : '1 हफ़्ता');
                 } elseif (stripos($days, 'month') !== false) {
-                    $dirLocalParts[] = '1 महीना';
+                    $dirLocalParts[] = (preg_match('/^(\d+)/', $days, $mm) ? $mm[1] . ' महीना' : '1 महीना');
+                }
+            }
+
+            // 5. MEDICINE ADVICE / REMARKS (only if clean)
+            if ($cleanRemark !== '') {
+                $upperRemark = strtoupper($cleanRemark);
+                $dirParts[]  = $cleanRemark;
+                if (isset($remarkHindiMap[$upperRemark])) {
+                    $dirLocalParts[] = $remarkHindiMap[$upperRemark];
                 }
             }
 

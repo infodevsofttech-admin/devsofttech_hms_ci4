@@ -2768,16 +2768,34 @@ class Opd extends BaseController
 
             $whenCodeDescMap = [
                 'BF'   => 'BF (BEFORE FOOD)',
+                'BEFORE FOOD' => 'BF (BEFORE FOOD)',
                 'AF'   => 'AF (AFTER FOOD)',
+                'AFTER FOOD' => 'AF (AFTER FOOD)',
                 'WF'   => 'WF (WITH FOOD)',
+                'WITH FOOD' => 'WF (WITH FOOD)',
                 'ES'   => 'ES (EMPTY STOMACH)',
+                'EMPTY STOMACH' => 'ES (EMPTY STOMACH)',
+                'MORNING EMPTY STOMACH' => 'ES (EMPTY STOMACH)',
                 'BBF'  => 'BBF (BEFORE BREAKFAST)',
+                'BB'   => 'BB (BEFORE BREAKFAST)',
+                'BEFORE BREAKFAST' => 'BBF (BEFORE BREAKFAST)',
                 'ABF'  => 'ABF (AFTER BREAKFAST)',
+                'AB'   => 'AB (AFTER BREAKFAST)',
+                'AFTER BREAKFAST' => 'ABF (AFTER BREAKFAST)',
                 'BL'   => 'BL (BEFORE LUNCH)',
+                'BEFORE LUNCH' => 'BL (BEFORE LUNCH)',
                 'AL'   => 'AL (AFTER LUNCH)',
+                'AFTER LUNCH' => 'AL (AFTER LUNCH)',
                 'BD'   => 'BD (BEFORE DINNER)',
+                'BEFORE DINNER' => 'BD (BEFORE DINNER)',
                 'AD'   => 'AD (AFTER DINNER)',
+                'AFTER DINNER' => 'AD (AFTER DINNER)',
                 'BT'   => 'BT (BED TIME)',
+                'BED TIME' => 'BT (BED TIME)',
+                'WT'   => 'WT (WITH TEA)',
+                'WITH TEA' => 'WT (WITH TEA)',
+                'BBATH'=> 'BEFORE BATH',
+                'ABATH'=> 'AFTER BATH',
             ];
 
             $whenHindiMap = [
@@ -2789,9 +2807,12 @@ class Opd extends BaseController
                 'WITH FOOD' => 'भोजन के साथ',
                 'ES'   => 'सुबह खाली पेट',
                 'EMPTY STOMACH' => 'सुबह खाली पेट',
+                'MORNING EMPTY STOMACH' => 'सुबह खाली पेट',
                 'BBF'  => 'नाश्ते से पहले',
+                'BB'   => 'नाश्ते से पहले',
                 'BEFORE BREAKFAST' => 'नाश्ते से पहले',
                 'ABF'  => 'नाश्ते के बाद',
+                'AB'   => 'नाश्ते के बाद',
                 'AFTER BREAKFAST' => 'नाश्ते के बाद',
                 'BL'   => 'दोपहर के भोजन से पहले',
                 'BEFORE LUNCH' => 'दोपहर के भोजन से पहले',
@@ -2803,13 +2824,22 @@ class Opd extends BaseController
                 'AFTER DINNER' => 'रात के भोजन के बाद',
                 'BT'   => 'रात को सोते समय',
                 'BED TIME' => 'रात को सोते समय',
+                'WT'   => 'चाय के साथ',
+                'WITH TEA' => 'चाय के साथ',
+                'BBATH'=> 'स्नान से पहले',
+                'ABATH'=> 'स्नान के बाद',
             ];
 
             $freqHindiMap = [
                 'OD'   => 'दिन में एक बार (OD)',
+                'ONCE A DAY' => 'दिन में एक बार',
+                'ONCE DAILY' => 'दिन में एक बार',
                 'BD'   => 'दिन में दो बार (BD)',
+                'BID'  => 'दिन में दो बार (BID)',
+                'TWICE A DAY' => 'दिन में दो बार',
                 'TDS'  => 'दिन में तीन बार (TDS)',
                 'TID'  => 'दिन में तीन बार (TID)',
+                'THRICE A DAY' => 'दिन में तीन बार',
                 'QID'  => 'दिन में चार बार (QID)',
                 'HS'   => 'रात को सोते समय (HS)',
                 'SOS'  => 'ज़रूरत पड़ने पर (SOS)',
@@ -2884,11 +2914,61 @@ class Opd extends BaseController
                 }
 
                 // 2) English Directions & Local Language (Hindi) Directions
+                // PATTERN ORDER: Frequency | Relation to Food (When) | Dose / Strength | Route (if non-oral) | Duration | Medicine Advice / Remarks
                 $dirParts = [];
                 $dirLocalParts = [];
 
-                if ($when !== '') {
+                // --- SAFEGUARD: Clean up $when and $freq ---
+                // Detect if $when contains frequency or schedule values from legacy/misconfigured master data (e.g. 'ONCE A DAY')
+                $upperWhen = strtoupper($when);
+                $isFreqPatternInWhen = in_array($upperWhen, [
+                    'ONCE A DAY', 'ONCE A WEEK', 'ONCE A FIFTEN DAY', 'ONLY NOW', 'DAILY', 'EVERYDAY', 'EVERY DAY',
+                    'ALTERNATE DAY', 'TWICE A DAY', 'THREE TIMES A DAY', 'OD', 'BD', 'TDS', 'TID', 'QID', 'HS', 'SOS', 'STAT',
+                ], true) || preg_match('/^(OD|BD|TDS|TID|QID|HS|SOS|STAT)\b/i', $upperWhen);
+
+                if ($isFreqPatternInWhen) {
+                    if ($freq === '') {
+                        $freq = $when;
+                    }
+                    $when = '';
+                    $upperWhen = '';
+                } elseif (is_numeric($when)) {
+                    $whenId = (int) $when;
+                    if ($whenId === 11) {
+                        if ($freq === '') {
+                            $freq = 'OD';
+                        }
+                        $when = '';
+                    } elseif ($whenId === 1) {
+                        $when = 'BF';
+                    } elseif ($whenId === 2) {
+                        $when = 'AF';
+                    } elseif ($whenId === 9) {
+                        $when = 'ES';
+                    } elseif ($whenId === 12) {
+                        $when = 'BT';
+                    } else {
+                        $when = '';
+                    }
                     $upperWhen = strtoupper($when);
+                }
+
+                // 1. FREQUENCY (e.g. BD, OD, TDS)
+                if ($freq !== '') {
+                    $upperFreq = strtoupper($freq);
+                    $dirParts[] = $freq;
+
+                    if (isset($freqHindiMap[$upperFreq])) {
+                        $dirLocalParts[] = $freqHindiMap[$upperFreq];
+                    } elseif (isset($doseFreqHindiMap[strtolower($freq)])) {
+                        $dirLocalParts[] = $doseFreqHindiMap[strtolower($freq)];
+                    } elseif (isset($doseShedHindiMap[strtolower($freq)])) {
+                        $dirLocalParts[] = $doseShedHindiMap[strtolower($freq)];
+                    }
+                }
+
+                // 2. RELATION TO FOOD / TIMING (When) (e.g. AF (AFTER FOOD), BF (BEFORE FOOD), ES (EMPTY STOMACH))
+                if ($when !== '') {
                     if (isset($whenCodeDescMap[$upperWhen])) {
                         $dirParts[] = $whenCodeDescMap[$upperWhen];
                     } else {
@@ -2902,31 +2982,21 @@ class Opd extends BaseController
                     }
                 }
 
-                if ($remark !== '') {
-                    $upperRemark = strtoupper($remark);
-                    $dirParts[] = $upperRemark;
+                // 3. DOSE / STRENGTH (e.g. 1 Tab, 500mg, 5ml)
+                if ($dose !== '') {
+                    $dirParts[] = $dose;
 
-                    if (isset($remarkHindiMap[$upperRemark])) {
-                        $dirLocalParts[] = $remarkHindiMap[$upperRemark];
+                    if (isset($doseShedHindiMap[strtolower($dose)])) {
+                        $dirLocalParts[] = $doseShedHindiMap[strtolower($dose)];
                     }
                 }
 
-                $doseFreqCombined = trim($dose . ($dose !== '' && $freq !== '' ? ' ' : '') . $freq);
-                if ($doseFreqCombined !== '') {
-                    $dirParts[] = $doseFreqCombined;
-
-                    $upperFreq = strtoupper($freq);
-                    if (isset($freqHindiMap[$upperFreq])) {
-                        $dirLocalParts[] = $freqHindiMap[$upperFreq];
-                    } elseif (isset($doseFreqHindiMap[strtolower($freq)])) {
-                        $dirLocalParts[] = $doseFreqHindiMap[strtolower($freq)];
-                    }
-                }
-
+                // 4. ROUTE OF ADMINISTRATION (printed only if not default Oral)
                 if ($where !== '' && strcasecmp($where, 'Oral') !== 0 && strcasecmp($where, 'Oral (PO)') !== 0) {
                     $dirParts[] = $where;
                 }
 
+                // 5. DURATION (e.g. 5 Days, 7 Days, 1 Month)
                 if ($days !== '') {
                     $daysText = (is_numeric($days) ? $days . ' Days' : $days);
                     $dirParts[] = $daysText;
@@ -2934,10 +3004,23 @@ class Opd extends BaseController
                     $daysNum = is_numeric($days) ? (int)$days : 0;
                     if ($daysNum > 0) {
                         $dirLocalParts[] = $daysNum . ' दिन';
+                    } elseif (preg_match('/^(\d+)\s*day/i', $days, $dm)) {
+                        $dirLocalParts[] = $dm[1] . ' दिन';
                     } elseif (stripos($days, 'week') !== false) {
-                        $dirLocalParts[] = '1 हफ़्ता';
+                        $dirLocalParts[] = (preg_match('/^(\d+)/', $days, $wm) ? $wm[1] . ' हफ़्ता' : '1 हफ़्ता');
                     } elseif (stripos($days, 'month') !== false) {
-                        $dirLocalParts[] = '1 महीना';
+                        $dirLocalParts[] = (preg_match('/^(\d+)/', $days, $mm) ? $mm[1] . ' महीना' : '1 महीना');
+                    }
+                }
+
+                // 6. MEDICINE ADVICE / REMARKS (e.g. 1/2 GLASS WATER, Take with warm water)
+                $cleanRemark = trim((string) preg_replace('/^(edit\s*remove|remove\s*edit|edit|remove|delete)\s*$/i', '', $remark));
+                if ($cleanRemark !== '') {
+                    $upperRemark = strtoupper($cleanRemark);
+                    $dirParts[] = $upperRemark;
+
+                    if (isset($remarkHindiMap[$upperRemark])) {
+                        $dirLocalParts[] = $remarkHindiMap[$upperRemark];
                     }
                 }
 
