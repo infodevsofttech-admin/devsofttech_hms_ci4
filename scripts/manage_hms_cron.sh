@@ -89,19 +89,18 @@ cmd_install() {
 
     mkdir -p "$log_dir"
 
-    local tmp_cron
-    tmp_cron="$(mktemp)"
-    trap 'rm -f "$tmp_cron"' EXIT
+    TMP_CRON="$(mktemp)"
+    trap 'rm -f "${TMP_CRON:-}"' EXIT
 
     # Keep non-HMS crontab lines
     crontab -l 2>/dev/null | awk -v start="$BLOCK_START" -v end="$BLOCK_END" '
         $0 == start {in_block=1; next}
         $0 == end {in_block=0; next}
         !in_block {print}
-    ' > "$tmp_cron"
+    ' > "$TMP_CRON"
 
     # Append default managed block
-    cat >> "$tmp_cron" <<EOF
+    cat >> "$TMP_CRON" <<EOF
 $BLOCK_START
 # ABDM M2 Care Context Push Sync (Every 1 minute)
 * * * * * cd $project_dir && $php_bin spark abdm:push-sync --limit=20 --worker=cron-abdm-m2 >> $log_dir/abdm_push_sync.log 2>&1
@@ -120,7 +119,7 @@ $BLOCK_START
 $BLOCK_END
 EOF
 
-    crontab "$tmp_cron"
+    crontab "$TMP_CRON"
     echo "Successfully installed default HMS cron suite for: $project_dir"
     echo "PHP binary detected: $php_bin"
     echo "Logs directory: $log_dir"
