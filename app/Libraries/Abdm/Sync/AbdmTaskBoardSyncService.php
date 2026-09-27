@@ -75,7 +75,7 @@ class AbdmTaskBoardSyncService
 
         // 1. Fetch done appointments from the last 30 days where patient has ABHA
         $rows = $this->db->table('opd_master o')
-            ->select('o.opd_id, o.p_id, o.P_name, o.apointment_date, o.opd_date, o.opd_status, o.doc_name, o.doc_id, p.' . $abhaCol . ' as abha_id, p.p_fname, p.gender, p.dob', false)
+            ->select('o.opd_id, o.p_id, o.P_name, o.apointment_date, o.opd_status, o.doc_name, p.' . $abhaCol . ' as abha_id, p.p_fname, p.gender, p.dob', false)
             ->join('patient_master p', 'p.id = o.p_id', 'left')
             ->where('o.opd_status', 2)
             ->where('DATE(o.apointment_date) >=', date('Y-m-d', strtotime('-30 days')), false)
@@ -202,7 +202,7 @@ class AbdmTaskBoardSyncService
 
             $summary['eligible']++;
 
-            $consultDate = (string) ($row['apointment_date'] ?? $row['opd_date'] ?? '');
+            $consultDate = (string) ($row['apointment_date'] ?? '');
             $visitDate = $consultDate !== '' ? date('Y-m-d', strtotime($consultDate)) : date('Y-m-d');
             $derivedCcRef = 'OPD-' . $opdId . '-S' . ($sessionId > 0 ? $sessionId : 0) . '-' . $visitDate;
 
