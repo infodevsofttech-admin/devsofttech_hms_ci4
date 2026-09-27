@@ -2199,7 +2199,7 @@ class Opd extends BaseController
             $tokenVars = $this->buildOpdPdfTokenVars($data);
             $html = $this->applyOpdPdfTemplateTokens($customHtml, $tokenVars);
             $html = $this->sanitizeOpdNamedHeaderFooterReferences($html);
-            $html = $this->applyOpdLongContentPaginationGuard($html);
+            $html = $this->applyOpdLongContentPaginationGuard($html, 8.0, 210.0);
             $html = mpdf_normalize_font_weight_css($html);
 
             if ($debugHtml) {
@@ -2407,7 +2407,8 @@ class Opd extends BaseController
             $rawFooterHtml = '';
         }
 
-        $html = $this->applyOpdLongContentPaginationGuard($html);
+        $resolvedPaperWidthMm = $format === 'LETTER' ? 215.9 : ($format === 'A5' ? 148.0 : ($format === 'CUSTOM' ? (float) $customWidthMm : 210.0));
+        $html = $this->applyOpdLongContentPaginationGuard($html, min(12.0, max(5.0, (float) $marginTop)), $resolvedPaperWidthMm);
         $html = mpdf_normalize_font_weight_css($html);
 
         if ($rawHeaderHtml !== '') {
@@ -2759,11 +2760,23 @@ class Opd extends BaseController
 
         $medicalHtml = '';
         if (!empty($rxMeds)) {
-            $medicalHtml .= '<table width="100%" style="border-collapse:collapse;font-size:12px;border:1px solid #cce5ff;margin-top:5px;margin-bottom:5px;">';
+            $medCount = count($rxMeds);
+            // Idea 1: Dynamic compact styling for prescriptions with >= 6 medicines
+            // Strictly enforce readability floor: font-size must never drop below 9.5px (or 8.5px for Hindi subtext).
+            $isCompactMeds = ($medCount >= 6);
+            $tblFontSize = $isCompactMeds ? '10px' : '12px';
+            $tblCellPadding = $isCompactMeds ? '2.5px 5px' : '6px 8px';
+            $tblHeaderPadding = $isCompactMeds ? '3px 5px' : '6px 8px';
+            $tblMarginY = $isCompactMeds ? '2px' : '5px';
+            $genericFontSize = $isCompactMeds ? '8.5px' : '10px';
+            $hindiFontSize = $isCompactMeds ? '8.5px' : '11px';
+            $hindiLineHeight = $isCompactMeds ? '1.22' : '1.4';
+
+            $medicalHtml .= '<table width="100%" style="border-collapse:collapse;font-size:' . $tblFontSize . ';border:1px solid #cce5ff;margin-top:' . $tblMarginY . ';margin-bottom:' . $tblMarginY . ';">';
             $medicalHtml .= '<thead><tr style="background:#eef6fc;border-bottom:2px solid #b8daff;">'
-                . '<th style="padding:6px 8px;text-align:left;width:5%;font-weight:bold;color:#000;">#</th>'
-                . '<th style="padding:6px 8px;text-align:left;width:40%;font-weight:bold;color:#000;">Medicine</th>'
-                . '<th style="padding:6px 8px;text-align:left;width:55%;font-weight:bold;color:#000;">Directions</th>'
+                . '<th style="padding:' . $tblHeaderPadding . ';text-align:left;width:5%;font-weight:bold;color:#000;">#</th>'
+                . '<th style="padding:' . $tblHeaderPadding . ';text-align:left;width:40%;font-weight:bold;color:#000;">Medicine</th>'
+                . '<th style="padding:' . $tblHeaderPadding . ';text-align:left;width:55%;font-weight:bold;color:#000;">Directions</th>'
                 . '</tr></thead><tbody>';
 
             $whenCodeDescMap = [
@@ -2910,7 +2923,7 @@ class Opd extends BaseController
                 $nameHtml = '<strong>' . esc($fullMedName) . '</strong>';
                 if ($generic !== '') {
                     // Show only generic data directly below medicine name (no "Salt/Generic:" heading label)
-                    $nameHtml .= '<div style="font-size:10px;color:#555;font-weight:normal;margin-top:2px;">' . esc($generic) . '</div>';
+                    $nameHtml .= '<div style="font-size:' . $genericFontSize . ';color:#555;font-weight:normal;margin-top:1px;">' . esc($generic) . '</div>';
                 }
 
                 // 2) English Directions & Local Language (Hindi) Directions
@@ -3028,11 +3041,11 @@ class Opd extends BaseController
                 $localDirectionsText = !empty($dirLocalParts) ? implode(' | ', array_values(array_unique($dirLocalParts))) : '';
 
                 $medicalHtml .= '<tr style="border-bottom:1px solid #e2e8f0;">'
-                    . '<td style="padding:6px 8px;vertical-align:middle;text-align:left;">' . $i . '</td>'
-                    . '<td style="padding:6px 8px;vertical-align:middle;text-align:left;">' . $nameHtml . '</td>'
-                    . '<td style="padding:6px 8px;vertical-align:middle;text-align:left;">'
+                    . '<td style="padding:' . $tblCellPadding . ';vertical-align:middle;text-align:left;">' . $i . '</td>'
+                    . '<td style="padding:' . $tblCellPadding . ';vertical-align:middle;text-align:left;">' . $nameHtml . '</td>'
+                    . '<td style="padding:' . $tblCellPadding . ';vertical-align:middle;text-align:left;">'
                     . '<div>' . esc($directionsText) . '</div>'
-                    . ($localDirectionsText !== '' ? ('<div style="font-size:11px;color:#444;line-height:1.4;margin-top:2px;" lang="hi">' . esc($localDirectionsText) . '</div>') : '')
+                    . ($localDirectionsText !== '' ? ('<div style="font-size:' . $hindiFontSize . ';color:#444;line-height:' . $hindiLineHeight . ';margin-top:1px;" lang="hi">' . esc($localDirectionsText) . '</div>') : '')
                     . '</td>'
                     . '</tr>';
             }
@@ -3938,9 +3951,16 @@ class Opd extends BaseController
             }
         }
 
+        $rxMeds = is_array($data['rx_medicines'] ?? null) ? $data['rx_medicines'] : [];
+        $isCompactMeds = count($rxMeds) >= 6;
+
         $headingStyleMode = (string) ($this->opdPlaceholderRenderOptions['heading_style'] ?? 'bold');
         $lineGap = (float) ($this->opdPlaceholderRenderOptions['line_gap'] ?? 1.6);
         $blockGapMm = (float) ($this->opdPlaceholderRenderOptions['block_gap_mm'] ?? 2.8);
+        if ($isCompactMeds) {
+            $lineGap = min($lineGap, 1.35);
+            $blockGapMm = min($blockGapMm, 1.5);
+        }
         $lineGapCss = number_format($lineGap, 2, '.', '');
         $blockGapCss = number_format($blockGapMm, 2, '.', '');
 
@@ -4382,8 +4402,10 @@ class Opd extends BaseController
         $tokens['morbidities_block'] = $formatBlock('Co-Morbidities', (string) ($tokens['morbidities'] ?? ''));
 
         $medicalHtml = trim((string) ($tokens['medical'] ?? ''));
+        $rxTitleFontSize = $isCompactMeds ? '18px' : '24px';
+        $rxTitleMargin = $isCompactMeds ? '3px' : '8px';
         $tokens['Rx'] = $medicalHtml !== ''
-            ? $blockGapHtml . '<div style="display:block;"><div style="font-weight:700;font-size:24px;line-height:1.2;margin-bottom:8px;">Rx :</div>' . $medicalHtml . '</div>' . $blockGapHtml
+            ? $blockGapHtml . '<div style="display:block;"><div style="font-weight:700;font-size:' . $rxTitleFontSize . ';line-height:1.2;margin-bottom:' . $rxTitleMargin . ';">Rx :</div>' . $medicalHtml . '</div>' . $blockGapHtml
             : '';
         $tokens['rx'] = $tokens['Rx'];
         // {{medical}} used directly in templates: wrap with the same top/bottom margin.
@@ -4649,7 +4671,7 @@ class Opd extends BaseController
         return $html;
     }
 
-    private function applyOpdLongContentPaginationGuard(string $html): string
+    private function applyOpdLongContentPaginationGuard(string $html, float $pageMarginTopMm = 10.0, float $paperWidthMm = 210.0): string
     {
         if ($html === '') {
             return '';
@@ -4664,28 +4686,127 @@ class Opd extends BaseController
         $textLength = strlen((string) $plainText);
         $lineBreakCount = substr_count(strtolower($html), '<br');
         $rowCount = substr_count(strtolower($html), '<tr');
-        $looksLong = $textLength > 1800 || $lineBreakCount > 45 || $rowCount > 18;
+
+        // Trigger pagination guard when content threatens single-page overflow:
+        // >= 8 rows, >= 18 line breaks, or text length > 900
+        $looksLong = $rowCount >= 8 || $lineBreakCount >= 18 || $textLength > 900;
         if (! $looksLong) {
             return $html;
         }
 
-        $guardCss = '<style>'
+        // Parse print area dimensions (top, left, width) from .RxPlace CSS
+        $dim = [
+            'top'   => 90.0,
+            'left'  => 10.0,
+            'width' => 195.0,
+        ];
+
+        $convertMm = static function (float $val, string $unit, float $baseMm = 210.0): float {
+            $unit = strtolower(trim($unit));
+            if ($unit === 'cm') {
+                return $val * 10.0;
+            }
+            if ($unit === 'in') {
+                return $val * 25.4;
+            }
+            if ($unit === 'px') {
+                return $val * 0.264583;
+            }
+            if ($unit === 'pt') {
+                return $val * 0.352778;
+            }
+            if ($unit === '%') {
+                return ($val / 100.0) * $baseMm;
+            }
+            return $val; // default mm
+        };
+
+        if (preg_match('/(\.(?:RxPlace|rxplace)\s*\{[^}]+\})/is', $html, $blockMatch)) {
+            $body = $blockMatch[1];
+            if (preg_match('/(?:^|[;\{\s])top\s*:\s*([0-9\.]+)\s*(mm|cm|px|in|pt|%)?/i', $body, $m)) {
+                $dim['top'] = $convertMm((float) $m[1], $m[2] ?? 'mm', 297.0);
+            }
+            if (preg_match('/(?:^|[;\{\s])left\s*:\s*([0-9\.]+)\s*(mm|cm|px|in|pt|%)?/i', $body, $m)) {
+                $dim['left'] = $convertMm((float) $m[1], $m[2] ?? 'mm', $paperWidthMm);
+            }
+            if (preg_match('/(?:^|[;\{\s])width\s*:\s*([0-9\.]+)\s*(mm|cm|px|in|pt|%)?/i', $body, $m)) {
+                $unit = $m[2] ?? 'mm';
+                if ($unit !== '%' || (float) $m[1] < 99.0) {
+                    $dim['width'] = $convertMm((float) $m[1], $unit, $paperWidthMm);
+                }
+            }
+        }
+
+        // Sanitize print area and calculate right margin to preserve width ratio
+        $leftMm = max(0.0, min($paperWidthMm - 30.0, $dim['left']));
+        $widthMm = max(30.0, min($paperWidthMm - $leftMm, $dim['width']));
+        $rightMarginMm = max(0.0, $paperWidthMm - $leftMm - $widthMm);
+
+        // Top clearance spacer height on Page 1 (letterhead offset minus page top margin)
+        $spacerHeightMm = max(0.0, $dim['top'] - $pageMarginTopMm);
+
+        // In-place update margin-left and margin-right in any existing @page blocks
+        if (preg_match('/@page\s*\{/i', $html)) {
+            if (preg_match('/(@page\s*\{[^}]*?margin-left\s*:\s*)([^;\}]+)/is', $html)) {
+                $html = preg_replace('/(@page\s*\{[^}]*?margin-left\s*:\s*)([^;\}]+)/is', '${1}' . round($leftMm, 1) . 'mm', $html);
+            }
+            if (preg_match('/(@page\s*\{[^}]*?margin-right\s*:\s*)([^;\}]+)/is', $html)) {
+                $html = preg_replace('/(@page\s*\{[^}]*?margin-right\s*:\s*)([^;\}]+)/is', '${1}' . round($rightMarginMm, 1) . 'mm', $html);
+            }
+        }
+
+        // Neutralize position: absolute inside .RxPlace declaration directly in existing style blocks
+        // (mPDF strips !important, so replacing the rule in-place ensures it does not override)
+        $html = preg_replace(
+            '/(\.(?:RxPlace|rxplace)[^{]*\{)([^}]+)(\})/is',
+            '$1 position: static; width: 100%; max-width: 100%; margin: 0; padding: 0; $3',
+            $html
+        );
+
+        // Insert top clearance spacer right before .RxPlace so Page 1 reserves space for letterhead,
+        // but subsequent pages start cleanly at the top of the continuation sheet
+        $topSpacer = '<div style="display:block;height:' . round($spacerHeightMm, 1) . 'mm;line-height:0;font-size:0;margin:0;padding:0;">&nbsp;</div>';
+        $html = preg_replace('/(<div\s+class=["\'][^"\']*\brxplace\b[^"\']*["\']>)/i', $topSpacer . "\n$1", $html, 1);
+
+        // Preserve existing named header/footer references if present in the document
+        $extraPageRules = '';
+        if (preg_match('/header\s*:\s*([^;\}]+)/i', $html, $hm)) {
+            $extraPageRules .= 'header: ' . trim($hm[1]) . '; ';
+        }
+        if (preg_match('/footer\s*:\s*([^;\}]+)/i', $html, $fm)) {
+            $extraPageRules .= 'footer: ' . trim($fm[1]) . '; ';
+        }
+
+        // Append overriding CSS at the end so mPDF cascade respects pagination rules,
+        // maintaining the exact left margin, printable width ratio, and column alignment
+        $guardCss = "\n" . '<style>'
+            . '@page {'
+            . 'margin-left: ' . round($leftMm, 1) . 'mm !important;'
+            . 'margin-right: ' . round($rightMarginMm, 1) . 'mm !important;'
+            . $extraPageRules
+            . '}'
             . '.RxPlace, .rxplace {'
             . 'position: static !important;'
             . 'top: auto !important;'
             . 'left: auto !important;'
             . 'right: auto !important;'
             . 'bottom: auto !important;'
-            . 'width: auto !important;'
+            . 'width: 100% !important;'
+            . 'max-width: 100% !important;'
             . 'height: auto !important;'
             . 'max-height: none !important;'
             . 'overflow: visible !important;'
+            . 'margin: 0 !important;'
+            . 'padding: 0 !important;'
             . '}'
-            . 'table{page-break-inside:auto;}'
-            . 'tr,td,th{page-break-inside:avoid;page-break-after:auto;}'
+            . 'table { page-break-inside: auto !important; width: 100% !important; }'
+            . 'tr, td, th { page-break-inside: avoid !important; }'
+            . 'thead { display: table-header-group !important; }'
+            . 'br { margin-bottom: 2px !important; }'
+            . 'table p { margin-bottom: 3px !important; }'
             . '</style>';
 
-        return $guardCss . "\n" . $html;
+        return $html . $guardCss;
     }
 
     /**
