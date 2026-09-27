@@ -3300,6 +3300,7 @@
         btn.textContent = 'Submitting...';
         var body = new URLSearchParams({ opd_id: _fhirOpdId, opd_session_id: _fhirSessionId });
         body.append('push_to_gateway', '1');
+        body.append('hi_type', 'OPConsultRecord');
         body.append(csrfName, csrfHash);
         var submitTimeoutMs = 150000;
         var submitController = new AbortController();

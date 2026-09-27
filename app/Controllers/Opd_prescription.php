@@ -4931,7 +4931,8 @@ class Opd_prescription extends BaseController
             if ($prescriptionPdf !== null) {
                 $clinicalContext['attachments'][] = $prescriptionPdf;
             }
-            $bundle          = $this->fhirR4Builder->buildPrescriptionBundle($patient, $encounter, $medications, $conditions, $clinicalContext);
+            $clinicalContext['bundle_type'] = 'OPConsultRecord';
+            $bundle          = $this->fhirR4Builder->buildOpConsultBundle($patient, $encounter, $medications, $conditions, $clinicalContext);
             $bundleJson      = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
             $user        = function_exists('auth') ? auth()->user() : null;
@@ -4951,7 +4952,7 @@ class Opd_prescription extends BaseController
                 $this->db->table('opd_fhir_documents')
                     ->where('id', (int) $existing['id'])
                     ->update([
-                        'bundle_type' => 'PrescriptionRecord',
+                        'bundle_type' => 'OPConsultRecord',
                         'bundle_json'  => $bundleJson,
                         'generated_by' => $generatedBy,
                         'generated_at' => $generatedAt,
@@ -4961,7 +4962,7 @@ class Opd_prescription extends BaseController
                 $this->db->table('opd_fhir_documents')->insert([
                     'opd_id'         => $opdId,
                     'opd_session_id' => $sessionId,
-                    'bundle_type'    => 'PrescriptionRecord',
+                    'bundle_type'    => 'OPConsultRecord',
                     'bundle_json'    => $bundleJson,
                     'generated_by'   => $generatedBy,
                     'generated_at'   => $generatedAt,
@@ -5587,6 +5588,7 @@ class Opd_prescription extends BaseController
                     'opd_session_id' => $sessionId,
                     'patient_id' => $patientId,
                     'abha_id' => $abhaId,
+                    'hi_type' => (string) ($this->request->getPost('hi_type') ?: ($bundleRow['bundle_type'] ?? 'OPConsultRecord')),
                     'consent_handle' => (string) ($this->request->getPost('consent_handle') ?? ''),
                     'push_to_gateway' => $pushToGateway ? 1 : 0,
                     csrf_token() => csrf_hash(),
@@ -11732,12 +11734,13 @@ class Opd_prescription extends BaseController
         $medications = $this->getPrescriptionMedicines($sessionId);
         $conditions = $this->getPrescriptionConditions($sessionId);
         $clinicalContext = $this->getPrescriptionClinicalContext($sessionId, $opdRow);
+        $clinicalContext['bundle_type'] = 'OPConsultRecord';
         $clinicalContext['attachments'] = $this->collectOpdFhirAttachments($opdId);
         $prescriptionPdf = $this->buildPrescriptionDigitalSharePdf($patientRow, $opdRow, $sessionId, $medications, $conditions, $clinicalContext);
         if ($prescriptionPdf !== null) {
             $clinicalContext['attachments'][] = $prescriptionPdf;
         }
-        $bundle = $this->fhirR4Builder->buildPrescriptionBundle($patient, $encounter, $medications, $conditions, $clinicalContext);
+        $bundle = $this->fhirR4Builder->buildOpConsultBundle($patient, $encounter, $medications, $conditions, $clinicalContext);
         $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         $userId = null;
@@ -11753,7 +11756,7 @@ class Opd_prescription extends BaseController
         $inserted = (bool) $this->db->table('opd_fhir_documents')->insert([
             'opd_id' => $opdId,
             'opd_session_id' => $sessionId,
-            'bundle_type' => 'PrescriptionRecord',
+            'bundle_type' => 'OPConsultRecord',
             'bundle_json' => $bundleJson,
             'generated_by' => $generatedBy,
             'generated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),

@@ -1529,11 +1529,20 @@ class AbdmGateway extends BaseController
             ]);
         }
 
+        $requestedHiType = trim((string) ($this->request->getPost('hi_type') ?? ''));
         $bundleType = trim((string) ($bundleRow['bundle_type'] ?? 'OPConsultRecord'));
-        $hiType = match ($bundleType) {
-            'MedicationRequestBundle', 'Prescription', 'PrescriptionRecord' => 'PrescriptionRecord',
-            default => 'OPConsultRecord',
-        };
+        if ($requestedHiType !== '') {
+            $hiType = match ($requestedHiType) {
+                'OPConsultation', 'OPConsultRecord' => 'OPConsultRecord',
+                'MedicationRequestBundle', 'Prescription', 'PrescriptionRecord' => 'PrescriptionRecord',
+                default => $requestedHiType,
+            };
+        } else {
+            $hiType = match ($bundleType) {
+                'OPConsultRecord', 'OPConsultation' => 'OPConsultRecord',
+                default => 'PrescriptionRecord',
+            };
+        }
         $consentHandleResolved = is_array($consent) ? trim((string) ($consent['consent_handle'] ?? '')) : '';
         $consentExternalId = is_array($consent) ? $this->resolveConsentExternalId($consent) : '';
         $sessionForRef = $sessionId > 0 ? $sessionId : (int) ($bundleRow['opd_session_id'] ?? 0);
@@ -1564,7 +1573,7 @@ class AbdmGateway extends BaseController
         }
         $careContextDisplay = $hiType === 'PrescriptionRecord'
             ? 'Prescription - ' . $visitDate
-            : 'OPD Visit - ' . $visitDate;
+            : 'Consultation Record - ' . $visitDate;
 
         $payload = [
             'opd_id' => $opdId,

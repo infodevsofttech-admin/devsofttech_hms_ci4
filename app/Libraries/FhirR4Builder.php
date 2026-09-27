@@ -11,7 +11,22 @@ class FhirR4Builder
      * @param array<string, mixed> $encounter
      * @param array<int, array<string, mixed>> $medications
      * @param array<int, array<string, mixed>> $conditions
-        * @param array<string, mixed> $context
+     * @param array<string, mixed> $context
+     *
+     * @return array<string, mixed>
+     */
+    public function buildOpConsultBundle(array $patient, array $encounter, array $medications, array $conditions = [], array $context = []): array
+    {
+        $context['bundle_type'] = 'OPConsultRecord';
+        return $this->buildPrescriptionBundle($patient, $encounter, $medications, $conditions, $context);
+    }
+
+    /**
+     * @param array<string, mixed> $patient
+     * @param array<string, mixed> $encounter
+     * @param array<int, array<string, mixed>> $medications
+     * @param array<int, array<string, mixed>> $conditions
+     * @param array<string, mixed> $context
      *
      * @return array<string, mixed>
      */
@@ -684,10 +699,19 @@ class FhirR4Builder
         }
 
         // ── Composition (first entry per ABDM spec) ───────────────────────────
+        $requestedBundleType = trim((string) ($context['bundle_type'] ?? $context['record_type'] ?? 'PrescriptionRecord'));
+        $isOpConsult = in_array($requestedBundleType, ['OPConsultRecord', 'OPConsultation'], true);
+
+        $compositionProfile = $isOpConsult
+            ? 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/OPConsultRecord'
+            : 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/PrescriptionRecord';
+        $compositionTitle = $isOpConsult ? 'OP Consultation Record' : 'Prescription Record';
+        $bundlePrefix = $isOpConsult ? 'OPCONSULT-' : 'PRESCRIPTION-';
+
         $composition = [
             'resourceType' => 'Composition',
             'id'           => $compositionUuid,
-            'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/PrescriptionRecord']],
+            'meta'         => ['profile' => [$compositionProfile]],
             'language'     => 'en-IN',
             'identifier'   => ['system' => 'https://ndhm.in/phr', 'value' => $compositionUuid],
             'status'       => 'final',
@@ -705,7 +729,7 @@ class FhirR4Builder
             'author'    => $practitionerRef !== ''
                 ? [['reference' => $practitionerRef, 'display' => 'Practitioner']]
                 : [['display' => 'Unknown']],
-            'title'     => 'Prescription Record',
+            'title'     => $compositionTitle,
             'section'   => $compositionSections,
         ];
         if ($organizationRef !== '') {
@@ -724,7 +748,7 @@ class FhirR4Builder
             ? 'https://' . strtolower(preg_replace('/[^A-Za-z0-9]/', '', $hfrId)) . '.hfr.abdm.gov.in'
             : 'https://hfr.abdm.gov.in';
         $bundleIdValue  = $hfrId !== ''
-            ? 'PRESCRIPTION-' . ($encounter['id'] ?? $bundleUuid) . '-' . date('Y-m-d')
+            ? $bundlePrefix . ($encounter['id'] ?? $bundleUuid) . '-' . date('Y-m-d')
             : $bundleUuid;
 
         return $this->sanitizeBundle([

@@ -321,14 +321,14 @@ class AbdmTaskBoardSyncService
             $bundle = ['raw' => $bundleJson];
         }
 
-        $bundleType = trim((string) ($docRow['bundle_type'] ?? 'PrescriptionRecord'));
+        $bundleType = trim((string) ($docRow['bundle_type'] ?? 'OPConsultRecord'));
         $hiType = match ($bundleType) {
-            'OPConsultRecord' => 'OPConsultRecord',
-            default => 'PrescriptionRecord',
+            'PrescriptionRecord' => 'PrescriptionRecord',
+            default => 'OPConsultRecord',
         };
         $careContextDisplay = $hiType === 'PrescriptionRecord'
             ? 'Prescription - ' . $visitDate
-            : 'OPD Visit - ' . $visitDate;
+            : 'Consultation Record - ' . $visitDate;
 
         $now = Time::now('Asia/Kolkata')->toDateTimeString();
 
