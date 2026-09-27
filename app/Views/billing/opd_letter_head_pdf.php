@@ -345,12 +345,19 @@ $toLocalText = static function (string $input): string {
 
     <div class="rx-title">Rx :</div>
     <?php if (!empty($rx_medicines ?? [])) : ?>
-        <table class="rx-table" cellspacing="0" cellpadding="0" style="border:1px solid #cce5ff;">
+        <?php
+        $isCompactMeds = count($rx_medicines ?? []) >= 8;
+        $cellPadding = $isCompactMeds ? '2.5px 5px' : '6px 8px';
+        $genericFontSize = $isCompactMeds ? '8.5px' : '9.5px';
+        $localFontSize = $isCompactMeds ? '8.5px' : '9.5px';
+        $localLineHeight = $isCompactMeds ? '1.2' : '1.4';
+        ?>
+        <table class="rx-table" cellspacing="0" cellpadding="0" style="border:1px solid #cce5ff;<?= $isCompactMeds ? 'font-size:10px;' : '' ?>">
             <thead>
             <tr style="background:#eef6fc;border-bottom:2px solid #b8daff;">
-                <th style="width:5%;padding:6px 8px;font-weight:bold;color:#000;">#</th>
-                <th style="width:40%;padding:6px 8px;font-weight:bold;color:#000;">Medicine</th>
-                <th style="width:55%;padding:6px 8px;font-weight:bold;color:#000;">Directions</th>
+                <th style="width:5%;padding:<?= $cellPadding ?>;font-weight:bold;color:#000;">#</th>
+                <th style="width:40%;padding:<?= $cellPadding ?>;font-weight:bold;color:#000;">Medicine</th>
+                <th style="width:55%;padding:<?= $cellPadding ?>;font-weight:bold;color:#000;">Directions</th>
             </tr>
             </thead>
             <tbody>
@@ -459,17 +466,17 @@ $toLocalText = static function (string $input): string {
                 $localDirectionsText = !empty($dirLocalParts) ? implode(' | ', array_values(array_unique($dirLocalParts))) : '';
                 ?>
                 <tr style="border-bottom:1px solid #e2e8f0;">
-                    <td style="padding:6px 8px;vertical-align:middle;"><?= esc((string) ($idx + 1)) ?></td>
-                    <td style="padding:6px 8px;vertical-align:middle;">
+                    <td style="padding:<?= $cellPadding ?>;vertical-align:middle;"><?= esc((string) ($idx + 1)) ?></td>
+                    <td style="padding:<?= $cellPadding ?>;vertical-align:middle;">
                         <strong><?= esc($fullMedName) ?></strong>
                         <?php if ($generic !== '') : ?>
-                            <div style="font-size:9.5px;color:#555;font-weight:normal;margin-top:2px;"><?= esc($generic) ?></div>
+                            <div style="font-size:<?= $genericFontSize ?>;color:#555;font-weight:normal;margin-top:1px;"><?= esc($generic) ?></div>
                         <?php endif; ?>
                     </td>
-                    <td style="padding:6px 8px;vertical-align:middle;">
+                    <td style="padding:<?= $cellPadding ?>;vertical-align:middle;">
                         <div><?= esc($directionsText) ?></div>
                         <?php if ($localDirectionsText !== '') : ?>
-                            <div style="font-size:9.5px;color:#444;line-height:1.4;margin-top:2px;" lang="hi"><?= esc($localDirectionsText) ?></div>
+                            <div style="font-size:<?= $localFontSize ?>;color:#444;line-height:<?= $localLineHeight ?>;margin-top:1px;" lang="hi"><?= esc($localDirectionsText) ?></div>
                         <?php endif; ?>
                     </td>
                 </tr>
