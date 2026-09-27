@@ -66,6 +66,11 @@ class AbdmSyncWorkerService
                 $result = $this->processRecord($entityId, $payload, (string) ($row['idempotency_key'] ?? ''));
             } elseif ($entityType === 'patient') {
                 $result = $this->processPatient($entityId, $payload, (string) ($row['idempotency_key'] ?? ''));
+            } elseif ($entityType === 'sms_notify') {
+                $smsService = new AbdmSmsNotifyService($this->db);
+                $phone = (string) ($payload['phone_number'] ?? '');
+                $hipName = (string) ($payload['hip_name'] ?? '');
+                $result = $smsService->dispatchSmsNotify($phone, $hipName, $entityId);
             } else {
                 $result = [
                     'ok' => false,

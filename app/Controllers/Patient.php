@@ -228,6 +228,7 @@ class Patient extends BaseController
 		]);
 
 		$this->enqueuePatientAbhaSync($insertId, $data, 'patient.created');
+		$this->enqueuePatientSmsNotify($insertId, $data, 'patient.created');
 		$this->createPatientAbdmWorkTask($insertId, $data, $abhaId);
 
 		// Check Multiple UHID
@@ -4492,6 +4493,40 @@ class Patient extends BaseController
 			);
 		} catch (\Throwable $e) {
 			// Do not block patient workflows if queue service is unavailable.
+		}
+	}
+
+	/**
+	 * Asynchronously queue ABDM deep-link SMS notify (sms/notify2) when patient registers with phone only.
+	 * Handled via background Spark cron worker so internet downtime never blocks patient creation.
+	 *
+	 * @param array<string, mixed> $patientData
+	 */
+	private function enqueuePatientSmsNotify(int $patientId, array $patientData, string $trigger = 'patient.created'): void
+	{
+		if ($patientId <= 0) {
+			return;
+		}
+
+		$phone = preg_replace('/\D/', '', (string) ($patientData['mphone1'] ?? ''));
+		if (strlen($phone) < 10) {
+			return;
+		}
+
+		$abhaField = $this->resolvePatientAbhaIdField();
+		$abhaId = $abhaField !== null ? trim((string) ($patientData[$abhaField] ?? '')) : '';
+		$abhaAddress = trim((string) ($patientData['abha_address'] ?? ''));
+
+		// Only queue for patients who do not have established ABHA details
+		if ($abhaId !== '' || $abhaAddress !== '') {
+			return;
+		}
+
+		try {
+			$smsService = new \App\Libraries\Abdm\Sync\AbdmSmsNotifyService($this->db);
+			$smsService->enqueue($patientId, substr($phone, -10), '', $trigger);
+		} catch (\Throwable $e) {
+			// Fail-open: do not block patient workflows
 		}
 	}
 
