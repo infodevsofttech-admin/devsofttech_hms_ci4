@@ -4843,7 +4843,7 @@ class Opd_prescription extends BaseController
      *
      * @return array<string, mixed>
      */
-    private function regenerateFhirBundleInternal(int $opdId, int $sessionId): array
+    public function regenerateFhirBundleInternal(int $opdId, int $sessionId): array
     {
 
         if ($opdId <= 0) {
@@ -8799,6 +8799,14 @@ class Opd_prescription extends BaseController
             $this->trackMedicineUsage($medId);
         }
 
+        if ($opdId > 0 && $sessionId > 0) {
+            try {
+                $this->regenerateFhirBundleInternal($opdId, $sessionId);
+            } catch (\Throwable $fhirEx) {
+                log_message('warning', 'FHIR bundle auto-update on medicine_add failed: ' . $fhirEx->getMessage());
+            }
+        }
+
         $message = 'Medicine added';
         if (! empty($masterInfo['is_new'])) {
             $message .= ' | New medicine saved in OPD master';
@@ -9210,6 +9218,20 @@ class Opd_prescription extends BaseController
             $this->trackMedicineUsage($masterMedId);
         }
 
+        $sessionId = (int) ($current['opd_pre_id'] ?? 0);
+        $opdId = 0;
+        if ($sessionId > 0 && $this->db->tableExists('opd_prescription')) {
+            $pRow = $this->db->table('opd_prescription')->select('opd_id')->where('id', $sessionId)->get(1)->getRowArray();
+            $opdId = (int) ($pRow['opd_id'] ?? 0);
+        }
+        if ($opdId > 0 && $sessionId > 0) {
+            try {
+                $this->regenerateFhirBundleInternal($opdId, $sessionId);
+            } catch (\Throwable $fhirEx) {
+                log_message('warning', 'FHIR bundle auto-update on medicine_update failed: ' . $fhirEx->getMessage());
+            }
+        }
+
         $message = 'Medicine updated';
         if (! empty($masterInfo['is_new'])) {
             $message .= ' | New medicine saved in OPD master';
@@ -9309,6 +9331,21 @@ class Opd_prescription extends BaseController
         $row = $this->db->table($table)->where('id', (int) $id)->get(1)->getRowArray() ?? [];
         $this->db->table($table)->where('id', (int) $id)->delete();
         $this->auditClinicalUpdate('opd_prescription_medicine', 'removed', (int) $id, $row, null);
+
+        $sessionId = (int) ($row['opd_pre_id'] ?? 0);
+        $opdId = 0;
+        if ($sessionId > 0 && $this->db->tableExists('opd_prescription')) {
+            $pRow = $this->db->table('opd_prescription')->select('opd_id')->where('id', $sessionId)->get(1)->getRowArray();
+            $opdId = (int) ($pRow['opd_id'] ?? 0);
+        }
+        if ($opdId > 0 && $sessionId > 0) {
+            try {
+                $this->regenerateFhirBundleInternal($opdId, $sessionId);
+            } catch (\Throwable $fhirEx) {
+                log_message('warning', 'FHIR bundle auto-update on medicine_remove failed: ' . $fhirEx->getMessage());
+            }
+        }
+
         return $this->response->setJSON(['update' => 1, 'error_text' => 'Medicine removed']);
     }
 

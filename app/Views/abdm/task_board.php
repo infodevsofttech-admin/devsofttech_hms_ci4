@@ -62,8 +62,8 @@
                 ['Patients Without ABHA', 'without_abha', 'danger'],
                 ['ABHA Verified', 'abha_verified', 'success'],
                 ['Verified In Range', 'verified_in_range', 'info'],
-                ['Records Pushed', 'records_pushed', 'warning'],
-                ['Pushed In Range', 'records_pushed_in_range', 'primary'],
+                ['Care Contexts Linked', 'records_pushed', 'success'],
+                ['Linked In Range', 'records_pushed_in_range', 'primary'],
                 ['OPD Tokens', 'opd_tokens', 'secondary'],
                 ['Tokens In Range', 'opd_tokens_in_range', 'success'],
             ] as [$label, $key, $tone]): ?>
@@ -178,22 +178,14 @@
                                         <button type="button" class="btn btn-sm btn-outline-success action-btn" data-action="create_abha">Create ABHA</button>
                                     <?php elseif ($type === 'patient_abha_update'): ?>
                                         <button type="button" class="btn btn-sm btn-outline-primary action-btn" data-action="update_abha">Update ABHA</button>
-                                    <?php elseif ($type === 'immunization_record_publish'): ?>
-                                        <?php if ($bridgeSubmitted): ?>
-                                            <button type="button" class="btn btn-sm btn-outline-success" disabled title="Submitted to ABDM Bridge<?= $bridgeCareContext !== '' ? ': ' . esc($bridgeCareContext) : '' ?>">Submitted to Bridge</button>
-                                        <?php else: ?>
-                                            <button type="button" class="btn btn-sm btn-outline-success immunization-bridge-btn" title="Push this ImmunizationRecord FHIR bundle to ABDM Bridge.">Push to Bridge</button>
-                                        <?php endif; ?>
-                                    <?php else: ?>
-                                        <button type="button" class="btn btn-sm btn-outline-warning action-btn" data-action="submit">Submit</button>
+                                    <?php endif; ?>
+                                    <button type="button" class="btn btn-sm btn-outline-success btn-row-hip-link" title="HIP-Initiated Care Context Linking"><i class="bi bi-link-45deg"></i> Link Care Context</button>
+                                    <?php if ($showPreview): ?>
+                                        <button type="button" class="btn btn-sm btn-outline-primary preview-fhir-btn">Preview FHIR</button>
                                     <?php endif; ?>
                                     <?php if ($showSandbox): ?>
                                         <button type="button" class="btn btn-sm btn-outline-info sandbox-btn">Sandbox</button>
                                     <?php endif; ?>
-                                    <?php if ($showPreview): ?>
-                                        <button type="button" class="btn btn-sm btn-outline-primary preview-fhir-btn">Preview FHIR</button>
-                                    <?php endif; ?>
-                                    <button type="button" class="btn btn-sm btn-outline-success btn-row-hip-link" title="HIP-Initiated Care Context Linking"><i class="bi bi-link-45deg"></i> Link</button>
                                     <button type="button" class="btn btn-sm btn-outline-dark close-btn">Close</button>
                                 </div>
                             </td>
@@ -376,13 +368,7 @@
                             $bridgeRecordId = trim((string) ($r['bridge_record_id'] ?? ''));
                             $hasFhir = (int) ($r['has_fhir'] ?? 0) === 1;
                             $pushStatusRaw = strtolower(trim((string) ($r['push_status'] ?? '')));
-                            $canSubmitGateway = $hasFhir;
-                            $submitButtonLabel = in_array($pushStatusRaw, ['queued', 'linked', 'failed'], true)
-                                ? 'Submit Again'
-                                : 'Submit to ABDM';
-                            $submitButtonClass = in_array($pushStatusRaw, ['queued', 'linked'], true)
-                                ? 'btn-outline-secondary'
-                                : 'btn-outline-warning';
+                            $isCareContextLinked = in_array(strtolower($linkStatus), ['linked', 'registered'], true) || in_array($pushStatusRaw, ['linked', 'pushed', 'queued'], true);
                             $statusBadgeClass = 'badge bg-' . $statusTone;
                             if ($statusTone === 'warning') {
                                 $statusBadgeClass .= ' text-dark';
@@ -417,13 +403,18 @@
                             </td>
                             <td>
                                 <button type="button" class="btn btn-sm btn-outline-primary btn-opd-consult-fhir" data-opd-id="<?= (int) ($r['opd_id'] ?? 0) ?>">Preview FHIR</button>
-                                <?php if ($canSubmitGateway): ?>
+                                <?php if ($isCareContextLinked): ?>
+                                    <span class="badge bg-success ms-1"><i class="bi bi-check-circle"></i> Linked</span>
+                                <?php else: ?>
                                     <button
                                         type="button"
-                                        class="btn btn-sm <?= esc($submitButtonClass) ?> btn-opd-consult-submit-gateway ms-1"
+                                        class="btn btn-sm btn-outline-success btn-opd-care-context-link ms-1"
                                         data-opd-id="<?= (int) ($r['opd_id'] ?? 0) ?>"
+                                        data-patient-id="<?= (int) ($r['p_id'] ?? $r['patient_id'] ?? 0) ?>"
                                         data-abha-id="<?= esc((string) ($r['abha_id'] ?? '')) ?>"
-                                    ><?= esc($submitButtonLabel) ?></button>
+                                        data-patient-name="<?= esc((string) ($r['P_name'] ?? '')) ?>"
+                                        title="Link Care Context with patient ABHA (M2)"
+                                    ><i class="bi bi-link-45deg"></i> Link Context</button>
                                 <?php endif; ?>
                             </td>
                         </tr>
@@ -490,7 +481,11 @@
                                 </td>
                                 <td class="text-nowrap">
                                     <button type="button" class="btn btn-sm btn-outline-primary btn-invoice-preview">Preview</button>
-                                    <button type="button" class="btn btn-sm btn-outline-warning btn-invoice-push" <?= $alreadySubmitted ? 'disabled' : '' ?>>Push</button>
+                                    <?php if ($alreadySubmitted): ?>
+                                        <span class="badge bg-success ms-1"><i class="bi bi-check-circle"></i> Linked</span>
+                                    <?php else: ?>
+                                        <button type="button" class="btn btn-sm btn-outline-success btn-invoice-care-link ms-1" data-patient-id="<?= (int) ($invoice['patient_id'] ?? 0) ?>" data-abha-id="<?= esc((string) ($invoice['abha_id'] ?? '')) ?>" data-patient-name="<?= esc((string) ($invoice['patient_name'] ?? '')) ?>" title="Link Care Context with patient ABHA"><i class="bi bi-link-45deg"></i> Link Context</button>
+                                    <?php endif; ?>
                                 </td>
                             </tr>
                         <?php endforeach; ?>
@@ -538,8 +533,6 @@
                     <button type="button" class="btn btn-sm btn-outline-warning" id="btnRegenerateFhirModal" title="Rebuild FHIR bundle from current clinical data"><i class="bi bi-arrow-clockwise"></i> Regenerate</button>
                     <button type="button" class="btn btn-sm btn-primary" id="btnUpdateFhirJson" title="Validate and apply edited JSON changes to preview and database"><i class="bi bi-check2-circle"></i> Update JSON</button>
                     <div>
-                        <label class="me-3 small text-muted"><input type="checkbox" id="chkForceNewRecord" checked> New Record ID (for PHR testing)</label>
-                        <button type="button" class="btn btn-sm btn-outline-success" id="btnSubmitFhirToAbdm" title="Push FHIR bundle to ABDM bridge"><i class="bi bi-cloud-upload"></i> Submit to ABDM</button>
                         <button type="button" class="btn btn-sm btn-outline-secondary" id="btnCopyFhirModal">Copy JSON</button>
                         <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                     </div>
@@ -2999,7 +2992,8 @@
         });
     })();
 
-    btnSubmitFhirToAbdm.addEventListener('click', function () {
+    if (btnSubmitFhirToAbdm) {
+        btnSubmitFhirToAbdm.addEventListener('click', function () {
         var btn = this;
 
         if (_fhirSubmitMode === 'invoice') {
@@ -3374,6 +3368,7 @@
             alert(' Error: ' + msg);
         });
     });
+    }
 
     document.getElementById('btnCopyFhirModal').addEventListener('click', function () {
         var btn = this;
@@ -3481,6 +3476,17 @@
             var patientName = patientCell ? (patientCell.querySelector('strong') || patientCell.children[0] || {}).textContent || '' : '';
             if (typeof window.openAbdmHipLinkModal === 'function') {
                 window.openAbdmHipLinkModal(patientId, abhaId, { patient_name: patientName.trim() });
+            }
+        });
+    });
+
+    document.querySelectorAll('.btn-opd-care-context-link, .btn-invoice-care-link').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var patientId = parseInt(btn.getAttribute('data-patient-id') || '0', 10);
+            var abhaId = (btn.getAttribute('data-abha-id') || '').trim();
+            var patientName = (btn.getAttribute('data-patient-name') || '').trim();
+            if (typeof window.openAbdmHipLinkModal === 'function') {
+                window.openAbdmHipLinkModal(patientId, abhaId, { patient_name: patientName });
             }
         });
     });

@@ -4901,6 +4901,41 @@ class AbdmGateway extends BaseController
                 continue;
             }
 
+            // Strategy 0: Live On-Demand Fresh Generation for OPD Consult Record
+            if (preg_match('/(?:OPD|PRESCRIPTION)-(\d+)(?:-S(\d+))?/i', $ref, $m)) {
+                $targetPatientId = (int) $m[1];
+                $targetSessionId = (int) ($m[2] ?? 0);
+                $targetOpdId = 0;
+
+                if ($targetSessionId > 0 && $db->tableExists('opd_prescription')) {
+                    $pRow = $db->table('opd_prescription')->select('opd_id')->where('id', $targetSessionId)->get(1)->getRowArray();
+                    $targetOpdId = (int) ($pRow['opd_id'] ?? 0);
+                }
+                if ($targetOpdId <= 0 && $targetPatientId > 0 && $db->tableExists('opd_master')) {
+                    $opdRow = $db->table('opd_master')->select('opd_id')->where('p_id', $targetPatientId)->orderBy('opd_id', 'DESC')->get(1)->getRowArray();
+                    $targetOpdId = (int) ($opdRow['opd_id'] ?? 0);
+                }
+
+                if ($targetOpdId > 0) {
+                    try {
+                        $opdCtrl = new \App\Controllers\Opd_prescription();
+                        $opdCtrl->initController($this->request, $this->response, service('logger'));
+                        $regen = $opdCtrl->regenerateFhirBundleInternal($targetOpdId, $targetSessionId);
+                        if (!empty($regen['ok']) && !empty($regen['bundle'])) {
+                            $records[] = [
+                                'careContextReference' => $ref,
+                                'hiType'               => 'OPConsultRecord',
+                                'display'              => 'Consultation Record - ' . date('d M Y'),
+                                'bundle'               => $regen['bundle'],
+                            ];
+                            continue;
+                        }
+                    } catch (\Throwable $ex) {
+                        log_message('warning', 'Live FHIR bundle generation in recordsFetch failed: ' . $ex->getMessage());
+                    }
+                }
+            }
+
             // Strategy A: Check if health_records already has stored FHIR record_data
             $hrRow = null;
             if ($db->tableExists('health_records')) {
@@ -4962,8 +4997,8 @@ class AbdmGateway extends BaseController
                     if (is_array($bundleData)) {
                         $records[] = [
                             'careContextReference' => $ref,
-                            'hiType'               => 'PrescriptionRecord',
-                            'display'              => 'Prescription - ' . date('d M Y', strtotime($docRow['generated_at'] ?? 'now')),
+                            'hiType'               => $docRow['bundle_type'] ?? 'OPConsultRecord',
+                            'display'              => 'Consultation Record - ' . date('d M Y', strtotime($docRow['generated_at'] ?? 'now')),
                             'bundle'               => $bundleData,
                         ];
                         continue;
