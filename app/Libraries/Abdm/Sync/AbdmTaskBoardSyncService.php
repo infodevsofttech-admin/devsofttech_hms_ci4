@@ -289,20 +289,23 @@ class AbdmTaskBoardSyncService
 
         // If patient_master has abha_address separately, resolve it
         if ($abhaAddress === '' && $this->db->tableExists('patient_master')) {
-            $pm = $this->db->table('patient_master')
-                ->select('abha_address, abha_id, abha_no')
-                ->where('id', $patientId)
-                ->get(1)
-                ->getRowArray();
-            if (! empty($pm)) {
-                if (! empty($pm['abha_address'])) {
-                    $abhaAddress = trim((string) $pm['abha_address']);
-                }
-                if ($abhaNumber === '' && ! empty($pm['abha_id']) && preg_match('/^\d{14}$/', trim((string) $pm['abha_id']))) {
-                    $abhaNumber = trim((string) $pm['abha_id']);
-                }
-                if ($abhaNumber === '' && ! empty($pm['abha_no']) && preg_match('/^\d{14}$/', trim((string) $pm['abha_no']))) {
-                    $abhaNumber = trim((string) $pm['abha_no']);
+            $pFields = $this->db->getFieldNames('patient_master') ?? [];
+            $selectCols = array_values(array_intersect(['abha_address', 'abha_id', 'abha_number', 'abha_no', 'abha'], $pFields));
+            if (! empty($selectCols)) {
+                $pm = $this->db->table('patient_master')
+                    ->select(implode(', ', $selectCols))
+                    ->where('id', $patientId)
+                    ->get(1)
+                    ->getRowArray();
+                if (! empty($pm)) {
+                    if (! empty($pm['abha_address'])) {
+                        $abhaAddress = trim((string) $pm['abha_address']);
+                    }
+                    foreach (['abha_number', 'abha_id', 'abha_no', 'abha'] as $c) {
+                        if ($abhaNumber === '' && ! empty($pm[$c]) && preg_match('/^\d{14}$/', trim((string) $pm[$c]))) {
+                            $abhaNumber = trim((string) $pm[$c]);
+                        }
+                    }
                 }
             }
         }
