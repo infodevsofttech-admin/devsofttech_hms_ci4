@@ -2408,7 +2408,7 @@ class Opd extends BaseController
         }
 
         $resolvedPaperWidthMm = $format === 'LETTER' ? 215.9 : ($format === 'A5' ? 148.0 : ($format === 'CUSTOM' ? (float) $customWidthMm : 210.0));
-        $html = $this->applyOpdLongContentPaginationGuard($html, min(12.0, max(5.0, (float) $marginTop)), $resolvedPaperWidthMm);
+        $html = $this->applyOpdLongContentPaginationGuard($html, (float) $marginTop, $resolvedPaperWidthMm);
         $html = mpdf_normalize_font_weight_css($html);
 
         if ($rawHeaderHtml !== '') {
@@ -4742,8 +4742,18 @@ class Opd extends BaseController
         $widthMm = max(30.0, min($paperWidthMm - $leftMm, $dim['width']));
         $rightMarginMm = max(0.0, $paperWidthMm - $leftMm - $widthMm);
 
-        // Top clearance spacer height on Page 1 (letterhead offset minus page top margin)
-        $spacerHeightMm = max(0.0, $dim['top'] - $pageMarginTopMm);
+        // Check existing @page margin-top in document
+        $existingPageTopMm = 0.0;
+        if (preg_match_all('/@page\s*\{[^}]*?margin-top\s*:\s*([0-9\.]+)\s*(mm|cm|px|in|pt)?/i', $html, $allTm, PREG_SET_ORDER)) {
+            $lastTm = end($allTm);
+            $existingPageTopMm = $convertMm((float) $lastTm[1], $lastTm[2] ?? 'mm', 297.0);
+        }
+        if ($existingPageTopMm <= 0.0 && $pageMarginTopMm > 0.0) {
+            $existingPageTopMm = $pageMarginTopMm;
+        }
+
+        // Top clearance spacer height on Page 1 (only the delta needed to reach the template's target top)
+        $spacerHeightMm = max(0.0, $dim['top'] - $existingPageTopMm);
 
         // In-place update margin-left and margin-right in any existing @page blocks
         if (preg_match('/@page\s*\{/i', $html)) {
@@ -4765,15 +4775,17 @@ class Opd extends BaseController
 
         // Insert top clearance spacer right before .RxPlace so Page 1 reserves space for letterhead,
         // but subsequent pages start cleanly at the top of the continuation sheet
-        $topSpacer = '<div style="display:block;height:' . round($spacerHeightMm, 1) . 'mm;line-height:0;font-size:0;margin:0;padding:0;">&nbsp;</div>';
-        $html = preg_replace('/(<div\s+class=["\'][^"\']*\brxplace\b[^"\']*["\']>)/i', $topSpacer . "\n$1", $html, 1);
+        if ($spacerHeightMm > 0.5) {
+            $topSpacer = '<div style="display:block;height:' . round($spacerHeightMm, 1) . 'mm;line-height:0;font-size:0;margin:0;padding:0;">&nbsp;</div>';
+            $html = preg_replace('/(<div\s+class=["\'][^"\']*\brxplace\b[^"\']*["\']>)/i', $topSpacer . "\n$1", $html, 1);
+        }
 
         // Preserve existing named header/footer references if present in the document
         $extraPageRules = '';
-        if (preg_match('/header\s*:\s*([^;\}]+)/i', $html, $hm)) {
+        if (preg_match('/(?<![a-zA-Z0-9_-])header\s*:\s*(html_[a-zA-Z0-9_-]+)/i', $html, $hm)) {
             $extraPageRules .= 'header: ' . trim($hm[1]) . '; ';
         }
-        if (preg_match('/footer\s*:\s*([^;\}]+)/i', $html, $fm)) {
+        if (preg_match('/(?<![a-zA-Z0-9_-])footer\s*:\s*(html_[a-zA-Z0-9_-]+)/i', $html, $fm)) {
             $extraPageRules .= 'footer: ' . trim($fm[1]) . '; ';
         }
 
