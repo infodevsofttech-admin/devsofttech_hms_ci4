@@ -1640,33 +1640,44 @@ class Ipd_discharge extends BaseController
                 ->get(1)
                 ->getRowArray();
 
+            $saved = false;
             if (! empty($existing['id'])) {
-                return (bool) $builder
+                $saved = (bool) $builder
                     ->where('id', (int) $existing['id'])
                     ->update(['content' => $content]);
+            } else {
+                $insert = [
+                    'ipd_id' => $ipdId,
+                    'content' => $content,
+                ];
+
+                // Legacy schema has NOT NULL columns without defaults.
+                $userLabel = substr($this->currentUserLabel(), 0, 50);
+                if ($this->db->fieldExists('created_by', 'ipd_discharge')) {
+                    $insert['created_by'] = $userLabel;
+                }
+                if ($this->db->fieldExists('checked_by', 'ipd_discharge')) {
+                    $insert['checked_by'] = $userLabel;
+                }
+                if ($this->db->fieldExists('created_datetime', 'ipd_discharge')) {
+                    $insert['created_datetime'] = date('Y-m-d H:i:s');
+                }
+                if ($this->db->fieldExists('ipd_discharge_print', 'ipd_discharge')) {
+                    $insert['ipd_discharge_print'] = 0;
+                }
+
+                $saved = (bool) $builder->insert($insert);
             }
 
-            $insert = [
-                'ipd_id' => $ipdId,
-                'content' => $content,
-            ];
-
-            // Legacy schema has NOT NULL columns without defaults.
-            $userLabel = substr($this->currentUserLabel(), 0, 50);
-            if ($this->db->fieldExists('created_by', 'ipd_discharge')) {
-                $insert['created_by'] = $userLabel;
-            }
-            if ($this->db->fieldExists('checked_by', 'ipd_discharge')) {
-                $insert['checked_by'] = $userLabel;
-            }
-            if ($this->db->fieldExists('created_datetime', 'ipd_discharge')) {
-                $insert['created_datetime'] = date('Y-m-d H:i:s');
-            }
-            if ($this->db->fieldExists('ipd_discharge_print', 'ipd_discharge')) {
-                $insert['ipd_discharge_print'] = 0;
+            if ($saved && $this->db->tableExists('abdm_work_tasks')) {
+                $this->db->table('abdm_work_tasks')
+                    ->where('task_type', 'ipd_discharge_publish')
+                    ->where('entity_id', (string) $ipdId)
+                    ->whereIn('status', ['pending', 'in_progress'])
+                    ->update(['updated_at' => date('Y-m-d H:i:s')]);
             }
 
-            return (bool) $builder->insert($insert);
+            return $saved;
         } catch (\Throwable $e) {
             log_message('error', 'Discharge content save failed for IPD {ipd}: {msg}', [
                 'ipd' => $ipdId,

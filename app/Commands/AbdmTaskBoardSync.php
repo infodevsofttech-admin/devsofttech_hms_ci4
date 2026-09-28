@@ -48,19 +48,24 @@ class AbdmTaskBoardSync extends BaseCommand
 
             CLI::write('Eligible : ' . $opdSummary['eligible']);
             CLI::write('Linked   : ' . $opdSummary['linked'], 'green');
+            CLI::write('Cooling  : ' . ($opdSummary['cooling'] ?? 0), 'cyan');
             CLI::write('Failed   : ' . $opdSummary['failed'], $opdSummary['failed'] > 0 ? 'red' : 'green');
             CLI::write('Skipped  : ' . $opdSummary['skipped']);
 
             foreach ($opdSummary['details'] as $item) {
                 $statusColor = match ($item['status'] ?? '') {
-                    'linked' => 'green',
-                    'failed' => 'red',
-                    default  => 'yellow',
+                    'linked'  => 'green',
+                    'failed'  => 'red',
+                    'cooling' => 'cyan',
+                    default   => 'yellow',
                 };
+                $coolingNote = (isset($item['status']) && $item['status'] === 'cooling')
+                    ? ' [Cooling: ' . ($item['remaining_minutes'] ?? 0) . 'm left, auto-link at ' . ($item['auto_link_at'] ?? '') . ']'
+                    : '';
                 $extra = isset($item['queue_id']) && $item['queue_id'] !== ''
                     ? ' [Queue: ' . $item['queue_id'] . (isset($item['bridge_record_id']) ? ' Bridge: #' . $item['bridge_record_id'] : '') . ']'
                     : (isset($item['error']) ? ' [Error: ' . $item['error'] . ']' : '');
-                CLI::write('  OPD #' . ($item['opd_id'] ?? 0) . ' (' . ($item['patient'] ?? '') . ') -> ' . ($item['status'] ?? '') . $extra, $statusColor);
+                CLI::write('  OPD #' . ($item['opd_id'] ?? 0) . ' (' . ($item['patient'] ?? '') . ') -> ' . ($item['status'] ?? '') . $coolingNote . $extra, $statusColor);
             }
         }
 
@@ -72,19 +77,24 @@ class AbdmTaskBoardSync extends BaseCommand
 
             CLI::write('Eligible : ' . $taskSummary['eligible']);
             CLI::write('Linked   : ' . $taskSummary['linked'], 'green');
+            CLI::write('Cooling  : ' . ($taskSummary['cooling'] ?? 0), 'cyan');
             CLI::write('Failed   : ' . $taskSummary['failed'], $taskSummary['failed'] > 0 ? 'red' : 'green');
             CLI::write('Skipped  : ' . $taskSummary['skipped']);
 
             foreach ($taskSummary['details'] as $item) {
                 $statusColor = match ($item['status'] ?? '') {
-                    'linked' => 'green',
-                    'failed' => 'red',
-                    default  => 'yellow',
+                    'linked'  => 'green',
+                    'failed'  => 'red',
+                    'cooling' => 'cyan',
+                    default   => 'yellow',
                 };
+                $coolingNote = (isset($item['status']) && $item['status'] === 'cooling')
+                    ? ' [Cooling: ' . ($item['remaining_minutes'] ?? 0) . 'm left, auto-link at ' . ($item['auto_link_at'] ?? '') . ']'
+                    : '';
                 $extra = isset($item['queue_id']) && $item['queue_id'] !== ''
                     ? ' [Queue: ' . $item['queue_id'] . ']'
                     : (isset($item['error']) ? ' [Error: ' . $item['error'] . ']' : '');
-                CLI::write('  Task #' . ($item['task_id'] ?? 0) . ' (' . ($item['task_type'] ?? '') . ') -> ' . ($item['status'] ?? '') . $extra, $statusColor);
+                CLI::write('  Task #' . ($item['task_id'] ?? 0) . ' (' . ($item['task_type'] ?? '') . ') -> ' . ($item['status'] ?? '') . $coolingNote . $extra, $statusColor);
             }
         }
 

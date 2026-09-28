@@ -703,6 +703,7 @@ class Opd_prescription extends BaseController
         $fhirStored = false;
         try {
             $fhirStored = $this->storePrescriptionFhirBundle((int) $opdId, (int) $recordId, $patientRow, (array) $opdRow);
+            $this->createOpdPrescriptionWorkTask((int) $opdId, (int) $recordId);
         } catch (\Throwable $fhirEx) {
             log_message('error', 'FHIR bundle store failed during opd save: ' . $fhirEx->getMessage() . ' in ' . $fhirEx->getFile() . ':' . $fhirEx->getLine());
         }
@@ -11790,14 +11791,36 @@ class Opd_prescription extends BaseController
         }
         $generatedBy = (string) ($userId ?? session('user_id') ?? 'system');
 
-        $inserted = (bool) $this->db->table('opd_fhir_documents')->insert([
-            'opd_id' => $opdId,
-            'opd_session_id' => $sessionId,
-            'bundle_type' => 'OPConsultRecord',
-            'bundle_json' => $bundleJson,
-            'generated_by' => $generatedBy,
-            'generated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
-        ]);
+        $now = Time::now('Asia/Kolkata')->toDateTimeString();
+        $existingDoc = $this->db->table('opd_fhir_documents')
+            ->where('opd_id', $opdId)
+            ->where('opd_session_id', $sessionId)
+            ->where('bundle_type', 'OPConsultRecord')
+            ->orderBy('id', 'DESC')
+            ->get(1)
+            ->getRowArray();
+
+        if (! empty($existingDoc['id'])) {
+            $inserted = (bool) $this->db->table('opd_fhir_documents')
+                ->where('id', (int) $existingDoc['id'])
+                ->update([
+                    'bundle_json'  => $bundleJson,
+                    'generated_by' => $generatedBy,
+                    'generated_at' => $now,
+                    'updated_at'   => $now,
+                ]);
+        } else {
+            $inserted = (bool) $this->db->table('opd_fhir_documents')->insert([
+                'opd_id'         => $opdId,
+                'opd_session_id' => $sessionId,
+                'bundle_type'    => 'OPConsultRecord',
+                'bundle_json'    => $bundleJson,
+                'generated_by'   => $generatedBy,
+                'generated_at'   => $now,
+                'created_at'     => $now,
+                'updated_at'     => $now,
+            ]);
+        }
 
         if (! $inserted) {
             return false;

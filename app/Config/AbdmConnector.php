@@ -144,4 +144,19 @@ class AbdmConnector extends BaseConfig
     // REQUIRED on production; falls back to a derived key in development.
     // ------------------------------------------------------------------
     // ABDM_FHIR_ENCRYPTION_KEY =
+
+    // ------------------------------------------------------------------
+    // Automated Care-Context Linking Grace / Cooling Period
+    // Prevents premature data push while staff/doctors may still modify
+    // prescriptions, lab reports, radiology reports, or discharge summaries.
+    // Manual push from ABDM Task Board always bypasses this cooling period.
+    // ------------------------------------------------------------------
+    public bool $autoLinkEnabled = true;
+
+    /** Default cooling period for OPD, Lab, Radiology, and all other HI types (in minutes). */
+    public int $autoLinkDelayMinutes = 60;
+
+    /** Cooling period for IPD Discharge Summary (in hours). */
+    public int $autoLinkDelayDischargeHours = 24;
 }
+

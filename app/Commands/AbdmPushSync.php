@@ -52,7 +52,7 @@ class AbdmPushSync extends BaseCommand
         $tbService = new AbdmTaskBoardSyncService();
         $tbSummary = $tbService->syncAll($limit);
 
-        CLI::write('OPD Consults -> Eligible: ' . ($tbSummary['opd']['eligible'] ?? 0) . ' | Linked: ' . ($tbSummary['opd']['linked'] ?? 0) . ' | Failed: ' . ($tbSummary['opd']['failed'] ?? 0), 'green');
-        CLI::write('Work Tasks   -> Eligible: ' . ($tbSummary['tasks']['eligible'] ?? 0) . ' | Linked: ' . ($tbSummary['tasks']['linked'] ?? 0) . ' | Failed: ' . ($tbSummary['tasks']['failed'] ?? 0), 'green');
+        CLI::write('OPD Consults -> Eligible: ' . ($tbSummary['opd']['eligible'] ?? 0) . ' | Linked: ' . ($tbSummary['opd']['linked'] ?? 0) . ' | Cooling: ' . ($tbSummary['opd']['cooling'] ?? 0) . ' | Failed: ' . ($tbSummary['opd']['failed'] ?? 0), 'green');
+        CLI::write('Work Tasks   -> Eligible: ' . ($tbSummary['tasks']['eligible'] ?? 0) . ' | Linked: ' . ($tbSummary['tasks']['linked'] ?? 0) . ' | Cooling: ' . ($tbSummary['tasks']['cooling'] ?? 0) . ' | Failed: ' . ($tbSummary['tasks']['failed'] ?? 0), 'green');
     }
 }

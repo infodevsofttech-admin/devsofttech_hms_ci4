@@ -4,6 +4,7 @@ namespace App\Controllers;
 
 use App\Libraries\AbdmWorkTaskService;
 use App\Libraries\BridgeSyncService;
+use App\Libraries\Abdm\Sync\AbdmTaskBoardSyncService;
 
 class AbdmTaskBoard extends BaseController
 {
@@ -21,7 +22,7 @@ class AbdmTaskBoard extends BaseController
         $this->backfillImmunizationTasks();
         $this->backfillHealthDocumentTasks();
         $this->backfillWellnessTasks();
-        $tasks = $this->enrichImmunizationPushState($this->taskService->getOpenTasks(300));
+        $tasks = $this->enrichTasksWithCoolingState($this->enrichImmunizationPushState($this->taskService->getOpenTasks(300)));
 
         $dateFrom = trim((string) ($this->request->getGet('date_from') ?? date('Y-m-d')));
         $dateTo = trim((string) ($this->request->getGet('date_to') ?? date('Y-m-d')));
@@ -56,7 +57,7 @@ class AbdmTaskBoard extends BaseController
         $this->backfillWellnessTasks();
         return $this->response->setJSON([
             'ok' => 1,
-            'tasks' => $this->enrichImmunizationPushState($this->taskService->getOpenTasks(300)),
+            'tasks' => $this->enrichTasksWithCoolingState($this->enrichImmunizationPushState($this->taskService->getOpenTasks(300))),
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
@@ -131,6 +132,49 @@ class AbdmTaskBoard extends BaseController
             $task['bridge_push_status'] = $pushStatus;
             $task['bridge_care_context_reference'] = trim((string) ($healthRecord['care_context_reference'] ?? ''));
             $task['bridge_submitted'] = in_array($pushStatus, ['queued', 'pushed', 'linked'], true) ? 1 : 0;
+        }
+        unset($task);
+
+        return $tasks;
+    }
+
+    /** @param array<int,array<string,mixed>> $tasks */
+    private function enrichTasksWithCoolingState(array $tasks): array
+    {
+        if (empty($tasks)) {
+            return [];
+        }
+
+        foreach ($tasks as &$task) {
+            $taskType = (string) ($task['task_type'] ?? '');
+            $lastModified = ! empty($task['updated_at'])
+                ? (string) $task['updated_at']
+                : (! empty($task['created_at']) ? (string) $task['created_at'] : null);
+
+            $cooling = AbdmTaskBoardSyncService::calculateCooling($taskType, $lastModified);
+
+            $task['cooling_active'] = ! empty($cooling['is_cooling_active']);
+            $task['cooling_remaining_minutes'] = (int) ($cooling['remaining_minutes'] ?? 0);
+            $task['cooling_remaining_seconds'] = (int) ($cooling['remaining_seconds'] ?? 0);
+            $task['auto_link_at'] = $cooling['auto_link_at'] ?? null;
+            $task['ready_for_autolink'] = false;
+
+            if ($task['cooling_active']) {
+                $remMin = $task['cooling_remaining_minutes'];
+                if ($remMin >= 60) {
+                    $hours = intdiv($remMin, 60);
+                    $mins = $remMin % 60;
+                    $timeStr = $mins > 0 ? "{$hours}h {$mins}m" : "{$hours}h";
+                } else {
+                    $timeStr = "{$remMin}m";
+                }
+                $task['cooling_label'] = "Cooling ({$timeStr} left)";
+                $task['cooling_tooltip'] = "Cooling active until {$task['auto_link_at']} to allow clinician edits. Modifications reset the timer. Click Link to bypass.";
+            } elseif (! empty($task['auto_link_at']) && $task['auto_link_at'] !== 'disabled') {
+                $task['ready_for_autolink'] = true;
+                $task['cooling_label'] = "Ready for Link";
+                $task['cooling_tooltip'] = "Cooling period elapsed at {$task['auto_link_at']}. Queued for automated linking.";
+            }
         }
         unset($task);
 
@@ -920,7 +964,7 @@ class AbdmTaskBoard extends BaseController
         $latestDocByOpd = [];
         if (! empty($opdIds) && $this->db->tableExists('opd_fhir_documents')) {
             $docRows = $this->db->table('opd_fhir_documents')
-                ->select('id, opd_id, opd_session_id, generated_at, created_at')
+                ->select('id, opd_id, opd_session_id, generated_at, created_at, updated_at')
                 ->whereIn('opd_id', $opdIds)
                 ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle', 'PrescriptionRecord'])
                 ->orderBy('id', 'DESC')
@@ -1019,11 +1063,24 @@ class AbdmTaskBoard extends BaseController
             $statusTone = 'secondary';
             $statusNote = 'FHIR not registered in health_records yet.';
 
+            $docModified = null;
             if ($doc !== null) {
                 $statusLabel = 'FHIR Generated';
                 $statusTone = 'info';
                 $statusNote = 'FHIR bundle generated; awaiting registration.';
+
+                $docTimestamps = array_filter([
+                    ! empty($doc['updated_at']) ? (string) $doc['updated_at'] : null,
+                    ! empty($doc['generated_at']) ? (string) $doc['generated_at'] : null,
+                    ! empty($doc['created_at']) ? (string) $doc['created_at'] : null,
+                ]);
+                $docModified = ! empty($docTimestamps) ? max($docTimestamps) : null;
             }
+
+            $cooling = AbdmTaskBoardSyncService::calculateCooling('opd_prescription_publish', $docModified);
+            $isCoolingActive = ! empty($cooling['is_cooling_active']);
+            $coolingRemainingMinutes = (int) ($cooling['remaining_minutes'] ?? 0);
+            $autoLinkAt = $cooling['auto_link_at'] ?? null;
 
             if ($pushStatus !== '') {
                 if ($pushStatus === 'local_discovery_ready') {
@@ -1061,6 +1118,28 @@ class AbdmTaskBoard extends BaseController
                 $statusNote = 'Link callback reported failure.';
             }
 
+            // If not yet linked or submitted to gateway, reflect cooling window state
+            $isAlreadyLinkedOrQueued = in_array($linkStatus, ['linked', 'registered'], true) || in_array($pushStatus, ['linked', 'pushed', 'queued'], true);
+            if ($doc !== null && ! $isAlreadyLinkedOrQueued) {
+                if ($isCoolingActive) {
+                    $remMin = $coolingRemainingMinutes;
+                    if ($remMin >= 60) {
+                        $hours = intdiv($remMin, 60);
+                        $mins = $remMin % 60;
+                        $timeStr = $mins > 0 ? "{$hours}h {$mins}m" : "{$hours}h";
+                    } else {
+                        $timeStr = "{$remMin}m";
+                    }
+                    $statusLabel = 'Cooling (' . $timeStr . ' left)';
+                    $statusTone = 'warning';
+                    $statusNote = 'Cooling active until ' . $autoLinkAt . ' to allow clinician prescription edits before auto-link.';
+                } elseif (! empty($autoLinkAt) && $autoLinkAt !== 'disabled') {
+                    $statusLabel = 'Ready for Auto-Link';
+                    $statusTone = 'primary';
+                    $statusNote = 'Cooling period elapsed. Ready for automated link push.';
+                }
+            }
+
             $queueId = trim((string) ($hr['abdm_txn_id'] ?? ''));
             $bridgeRecordId = (int) ($hr['bridge_record_id'] ?? 0);
 
@@ -1075,6 +1154,9 @@ class AbdmTaskBoard extends BaseController
                 'queue_id' => $queueId,
                 'bridge_record_id' => $bridgeRecordId > 0 ? $bridgeRecordId : null,
                 'has_fhir' => $doc !== null ? 1 : 0,
+                'cooling_active' => $isCoolingActive ? 1 : 0,
+                'cooling_remaining_minutes' => $coolingRemainingMinutes,
+                'auto_link_at' => $autoLinkAt,
             ]);
         }
 

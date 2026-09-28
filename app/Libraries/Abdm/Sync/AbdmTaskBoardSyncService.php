@@ -58,6 +58,7 @@ class AbdmTaskBoardSyncService
         $summary = [
             'eligible' => 0,
             'linked'   => 0,
+            'cooling'  => 0,
             'failed'   => 0,
             'skipped'  => 0,
             'details'  => [],
@@ -200,8 +201,6 @@ class AbdmTaskBoardSyncService
                 continue;
             }
 
-            $summary['eligible']++;
-
             $consultDate = (string) ($row['apointment_date'] ?? '');
             $visitDate = $consultDate !== '' ? date('Y-m-d', strtotime($consultDate)) : date('Y-m-d');
             $derivedCcRef = 'OPD-' . $opdId . '-S' . ($sessionId > 0 ? $sessionId : 0) . '-' . $visitDate;
@@ -210,6 +209,33 @@ class AbdmTaskBoardSyncService
             if ($careContextRef === '') {
                 $careContextRef = $derivedCcRef;
             }
+
+            // Check cooling period from the latest modification/generation timestamp
+            $docTimestamps = array_filter([
+                ! empty($doc['updated_at']) ? (string) $doc['updated_at'] : null,
+                ! empty($doc['generated_at']) ? (string) $doc['generated_at'] : null,
+                ! empty($hr['updated_at']) ? (string) $hr['updated_at'] : null,
+                ! empty($doc['created_at']) ? (string) $doc['created_at'] : null,
+            ]);
+            $lastModified = ! empty($docTimestamps) ? max($docTimestamps) : ($row['apointment_date'] ?? date('Y-m-d H:i:s'));
+
+            $cooling = self::calculateCooling('opd_prescription_publish', $lastModified);
+            if ($cooling['is_cooling_active']) {
+                $summary['cooling']++;
+                $summary['details'][] = [
+                    'opd_id'            => $opdId,
+                    'patient'           => trim((string) ($row['P_name'] ?? '')),
+                    'abha'              => trim((string) ($row['abha_id'] ?? '')),
+                    'care_context'      => $careContextRef,
+                    'last_modified'     => $lastModified,
+                    'remaining_minutes' => $cooling['remaining_minutes'],
+                    'auto_link_at'      => $cooling['auto_link_at'],
+                    'status'            => 'cooling',
+                ];
+                continue;
+            }
+
+            $summary['eligible']++;
 
             if ($dryRun) {
                 $summary['details'][] = [
@@ -521,6 +547,7 @@ class AbdmTaskBoardSyncService
         $summary = [
             'eligible' => 0,
             'linked'   => 0,
+            'cooling'  => 0,
             'failed'   => 0,
             'skipped'  => 0,
             'details'  => [],
@@ -552,21 +579,6 @@ class AbdmTaskBoardSyncService
             return $summary;
         }
 
-        $summary['eligible'] = count($tasks);
-
-        if ($dryRun) {
-            foreach ($tasks as $t) {
-                $summary['details'][] = [
-                    'task_id'   => (int) $t['id'],
-                    'task_type' => $t['task_type'],
-                    'entity_id' => $t['entity_id'],
-                    'patient'   => $t['patient_name'] ?? '',
-                    'status'    => 'dry_run_eligible',
-                ];
-            }
-            return $summary;
-        }
-
         foreach ($tasks as $task) {
             $taskId = (int) $task['id'];
             $taskType = (string) $task['task_type'];
@@ -574,6 +586,38 @@ class AbdmTaskBoardSyncService
             $patientId = (int) ($task['patient_id'] ?? 0);
             $abhaId = trim((string) ($task['abha_id'] ?? ''));
 
+            // Check cooling period from the latest modification/refresh timestamp
+            $lastModified = ! empty($task['updated_at']) ? $task['updated_at'] : ($task['created_at'] ?? date('Y-m-d H:i:s'));
+            $cooling = self::calculateCooling($taskType, $lastModified);
+
+            if ($cooling['is_cooling_active']) {
+                $summary['cooling']++;
+                $summary['details'][] = [
+                    'task_id'           => $taskId,
+                    'task_type'         => $taskType,
+                    'entity_id'         => $entityId,
+                    'patient'           => $task['patient_name'] ?? '',
+                    'last_modified'     => $lastModified,
+                    'remaining_minutes' => $cooling['remaining_minutes'],
+                    'auto_link_at'      => $cooling['auto_link_at'],
+                    'status'            => 'cooling',
+                ];
+                continue;
+            }
+
+            if ($dryRun) {
+                $summary['eligible']++;
+                $summary['details'][] = [
+                    'task_id'   => $taskId,
+                    'task_type' => $taskType,
+                    'entity_id' => $entityId,
+                    'patient'   => $task['patient_name'] ?? '',
+                    'status'    => 'dry_run_eligible',
+                ];
+                continue;
+            }
+
+            $summary['eligible']++;
             $result = $this->processIndividualWorkTask($task);
 
             if ($result['ok'] === 1) {
@@ -811,4 +855,90 @@ class AbdmTaskBoardSyncService
 
         return null;
     }
+
+    /**
+     * Calculate cooling period state for any task or document.
+     *
+     * Rules:
+     * - IPD Discharge Summary: 24 hours from last modified/printed time.
+     * - All other HI types (OPD Consult/Prescription, Lab, Radiology, Wellness, Immunization, etc.):
+     *   60 minutes from last modified/updated/printed time.
+     * - Any modification/update in HMS refreshes the timestamp, resetting the cooling period.
+     *
+     * @param string $taskType Task type, HI type, or entity name
+     * @param string|null $lastModified DateTime string of the last update/generation
+     * @return array{
+     *     is_cooling_active: bool,
+     *     remaining_seconds: int,
+     *     remaining_minutes: int,
+     *     required_seconds: int,
+     *     last_modified: string,
+     *     auto_link_at: string
+     * }
+     */
+    public static function calculateCooling(string $taskType, ?string $lastModified): array
+    {
+        $cfg = config('AbdmConnector');
+        $autoLinkEnabled = (bool) ($cfg->autoLinkEnabled ?? true);
+        if (! $autoLinkEnabled) {
+            return [
+                'is_cooling_active' => true,
+                'cooling_active'    => true,
+                'remaining_seconds' => PHP_INT_MAX,
+                'remaining_minutes' => PHP_INT_MAX,
+                'required_seconds'  => PHP_INT_MAX,
+                'last_modified'     => (string) $lastModified,
+                'auto_link_at'      => 'disabled',
+            ];
+        }
+
+        $typeLower = strtolower(trim($taskType));
+        if (in_array($typeLower, ['ipd_discharge_publish', 'ipd_discharge', 'dischargesummaryrecord', 'ipd'], true)) {
+            $hours = max(1, (int) ($cfg->autoLinkDelayDischargeHours ?? 24));
+            $requiredSeconds = $hours * 3600;
+        } else {
+            $minutes = max(1, (int) ($cfg->autoLinkDelayMinutes ?? 60));
+            $requiredSeconds = $minutes * 60;
+        }
+
+        $lastTimestamp = ! empty($lastModified) ? strtotime($lastModified) : 0;
+        if ($lastTimestamp <= 0) {
+            $lastTimestamp = time();
+        }
+
+        $now = time();
+        $elapsedSeconds = max(0, $now - $lastTimestamp);
+        $remainingSeconds = max(0, $requiredSeconds - $elapsedSeconds);
+        $isCoolingActive = ($remainingSeconds > 0);
+        $remainingMinutes = (int) ceil($remainingSeconds / 60);
+        $autoLinkAt = date('Y-m-d H:i:s', $lastTimestamp + $requiredSeconds);
+
+        return [
+            'is_cooling_active' => $isCoolingActive,
+            'cooling_active'    => $isCoolingActive,
+            'remaining_seconds' => $remainingSeconds,
+            'remaining_minutes' => $remainingMinutes,
+            'required_seconds'  => $requiredSeconds,
+            'last_modified'     => (string) $lastModified,
+            'auto_link_at'      => $autoLinkAt,
+        ];
+    }
+
+    /**
+     * Instance wrapper for calculateCooling.
+     *
+     * @return array{
+     *     is_cooling_active: bool,
+     *     remaining_seconds: int,
+     *     remaining_minutes: int,
+     *     required_seconds: int,
+     *     last_modified: string,
+     *     auto_link_at: string
+     * }
+     */
+    public function resolveCoolingState(string $taskType, ?string $lastModified): array
+    {
+        return self::calculateCooling($taskType, $lastModified);
+    }
 }
+

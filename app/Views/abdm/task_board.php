@@ -5,6 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1">
     <title>ABDM Work Task Board</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
     <style>
         body { background: #f5f7fb; }
         .container-wrap { width: 100%; margin: 0; padding: 20px 24px; box-sizing: border-box; }
@@ -168,6 +169,13 @@
                                 <?php elseif ($bridgeSubmitted): ?>
                                     <span class="badge bg-info status-pill">BRIDGE SUBMITTED</span>
                                     <?php if ($bridgeCareContext !== ''): ?><div class="small"><code><?= esc($bridgeCareContext) ?></code></div><?php endif; ?>
+                                <?php elseif (! empty($t['cooling_active'])): ?>
+                                    <span class="badge bg-warning text-dark status-pill" title="<?= esc((string) ($t['cooling_tooltip'] ?? '')) ?>"><i class="bi bi-clock-history"></i> <?= esc((string) ($t['cooling_label'] ?? 'COOLING')) ?></span>
+                                    <?php if (! empty($t['auto_link_at']) && $t['auto_link_at'] !== 'disabled'): ?>
+                                        <div class="small text-muted" style="font-size:10px;">Auto-link: <?= esc(substr((string) $t['auto_link_at'], 11, 5)) ?></div>
+                                    <?php endif; ?>
+                                <?php elseif (! empty($t['ready_for_autolink'])): ?>
+                                    <span class="badge bg-primary status-pill" title="<?= esc((string) ($t['cooling_tooltip'] ?? '')) ?>"><i class="bi bi-lightning-charge"></i> READY TO LINK</span>
                                 <?php else: ?>
                                     <span class="badge bg-secondary status-pill"><?= esc((string) ($t['status'] ?? 'pending')) ?></span>
                                 <?php endif; ?>
