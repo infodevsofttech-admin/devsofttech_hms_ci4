@@ -83,6 +83,9 @@ class LabTemplateSeeder extends Seeder
         $this->db->query('SET FOREIGN_KEY_CHECKS = 1');
         $this->db->query('SET SESSION SQL_MODE = @OLD_SQL_MODE');
 
+        // Seed comprehensive X-Ray, CT-Scan, and MRI templates + service charges
+        $this->call(RadiologyTemplatesSeeder::class);
+
         CLI::write('Lab template seeder complete.', 'green');
     }
 
