@@ -46,6 +46,14 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
             p_datetime TEXT
         )");
 
+        $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('opd_master') . " (
+            opd_id INTEGER PRIMARY KEY,
+            p_id INTEGER,
+            apointment_date TEXT,
+            opd_book_date TEXT,
+            doc_name TEXT
+        )");
+
         $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('health_records') . " (
             id INTEGER PRIMARY KEY,
             patient_id INTEGER,
@@ -92,6 +100,7 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
         $db->table('charge_master')->emptyTable();
         $db->table('lab_request')->emptyTable();
         $db->table('opd_prescription')->emptyTable();
+        $db->table('opd_master')->emptyTable();
         $db->table('health_records')->emptyTable();
         $db->table('patient_master')->emptyTable();
         $db->table('ipd_master')->emptyTable();
@@ -322,6 +331,27 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
 
         $this->assertSame(1, $body['ok'] ?? 0);
         $this->assertSame('RAD-31-20260929', $body['care_context_reference'] ?? '');
+    }
+
+    public function testDiscoversOpdMasterVisitWhenPrescriptionNotCreated(): void
+    {
+        $db = \Config\Database::connect();
+        $db->table('opd_master')->insert([
+            'opd_id' => 77,
+            'p_id' => 12,
+            'apointment_date' => '2026-09-29 14:30:00',
+            'opd_book_date' => '2026-09-29 14:00:00',
+            'doc_name' => 'NIDHI PANDEY',
+        ]);
+
+        $refGateway = new ReflectionClass($this->gateway);
+        $method = $refGateway->getMethod('findCareContextsForPatient');
+        $method->setAccessible(true);
+
+        [$v3, $full] = $method->invoke($this->gateway, 12, 'P26071000012', 'KESHAV SINGH');
+
+        $refs = array_column($v3, 'referenceNumber');
+        $this->assertContains('OPD-12-S77-20260929', $refs);
     }
 }
 

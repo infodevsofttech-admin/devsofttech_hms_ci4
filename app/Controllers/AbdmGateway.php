@@ -6225,6 +6225,39 @@ class AbdmGateway extends BaseController
             }
         }
 
+        // 4b. Query opd_master (OPD consultation appointments/visits not already in prescriptions)
+        if ($this->db->tableExists('opd_master')) {
+            $opdMasterRows = $this->db->table('opd_master')
+                ->select('opd_id, p_id, apointment_date, opd_book_date, doc_name')
+                ->where('p_id', $patientId)
+                ->orderBy('opd_id', 'DESC')
+                ->limit(30)
+                ->get()
+                ->getResultArray();
+
+            foreach ($opdMasterRows as $om) {
+                $visitRaw = ! empty($om['apointment_date']) && $om['apointment_date'] !== '0000-00-00 00:00:00'
+                    ? $om['apointment_date']
+                    : (! empty($om['opd_book_date']) ? $om['opd_book_date'] : date('Y-m-d'));
+                $visitDate = date('Y-m-d', strtotime((string) $visitRaw));
+                $dateStr = date('d M Y', strtotime($visitDate));
+                $opdId = (int) $om['opd_id'];
+                $ccRef = 'OPD-' . $patientId . '-S' . $opdId . '-' . str_replace('-', '', $visitDate);
+                $docName = trim((string) ($om['doc_name'] ?? ''));
+                $display = 'OPConsultRecord - ' . ($docName !== '' ? 'Dr. ' . $docName . ' - ' : '') . $dateStr;
+
+                $addContext([
+                    'careContextId'   => $ccRef,
+                    'referenceNumber' => $ccRef,
+                    'display'         => $display,
+                    'record_type'     => 'OPConsultRecord',
+                    'patient_id'      => $patientId,
+                    'is_fhir_ready'   => true,
+                    'is_primary'      => false,
+                ]);
+            }
+        }
+
         // 5. Query ipd_master (Discharge summaries)
         if ($this->db->tableExists('ipd_master')) {
             $ipdRows = $this->db->table('ipd_master')
@@ -10917,7 +10950,16 @@ class AbdmGateway extends BaseController
             if ($patientId > 0) {
                 $builder->where('id', $patientId);
             } elseif ($abhaAddress !== '') {
-                $builder->where('abha_address', $abhaAddress);
+                $cleanAbha = preg_replace('/\D/', '', $abhaAddress);
+                if (strlen($cleanAbha) === 14) {
+                    $builder->groupStart()
+                        ->where('abha_address', $abhaAddress)
+                        ->orWhere('abha_id', $cleanAbha)
+                        ->orWhere('abha_id', $abhaAddress)
+                        ->groupEnd();
+                } else {
+                    $builder->where('abha_address', $abhaAddress);
+                }
             } elseif ($pCode !== '') {
                 $builder->where('p_code', $pCode);
             }

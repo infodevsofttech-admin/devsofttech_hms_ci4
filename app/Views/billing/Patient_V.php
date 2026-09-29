@@ -45,6 +45,7 @@
 <?= view('partials/abha_create_modal') ?>
 <?= view('partials/abha_qr_modal') ?>
 <?= view('partials/abha_mobile_modal') ?>
+<?= view('partials/abdm_hip_link_modal') ?>
 <section class="content">
     <div class="row">
         <div class="col-md-12">
@@ -105,6 +106,7 @@
                                                     <input class="form-control" name="input_abha_id" id="input_abha_id"
                                                         placeholder="14-digit ABHA ID" type="text" autocomplete="off"
                                                         maxlength="14" data-inputmask='"mask": "99999999999999"' data-mask>
+                                                    <input type="hidden" name="input_abha_address" id="input_abha_address" value="">
                                                     <div id="abha_id_feedback" class="mt-1" style="display:none;"></div>
                                                 </div>
                                             </div>
@@ -410,7 +412,7 @@
                             </div>
 
                             <div class="row g-3 py-3 px-2">
-                                <div class="col-lg-4">
+                                <div class="col-xl-3 col-md-6">
                                     <div class="card h-100 border-primary">
                                         <div class="card-body d-flex flex-column">
                                             <div class="d-flex align-items-center gap-2 mb-2">
@@ -428,7 +430,7 @@
                                     </div>
                                 </div>
 
-                                <div class="col-lg-4">
+                                <div class="col-xl-3 col-md-6">
                                     <div class="card h-100 border-success">
                                         <div class="card-body d-flex flex-column">
                                             <div class="d-flex align-items-center gap-2 mb-2">
@@ -449,7 +451,7 @@
                                     </div>
                                 </div>
 
-                                <div class="col-lg-4">
+                                <div class="col-xl-3 col-md-6">
                                     <div class="card h-100 border-info">
                                         <div class="card-body d-flex flex-column">
                                             <div class="d-flex align-items-center gap-2 mb-2">
@@ -462,6 +464,31 @@
                                                 <li><i class="bi bi-check-circle-fill text-success me-1"></i>No OTP needed for demographics</li>
                                             </ul>
                                             <button type="button" class="btn btn-info text-white w-100 mt-auto" onclick="abhaRegSelectMethod('qr')"><i class="bi bi-upc-scan me-1"></i>Scan ABHA QR</button>
+                                        </div>
+                                    </div>
+                                </div>
+
+                                <div class="col-xl-3 col-md-6">
+                                    <div class="card h-100 border-warning">
+                                        <div class="card-body d-flex flex-column">
+                                            <div class="d-flex align-items-center gap-2 mb-2">
+                                                <i class="bi bi-link-45deg fs-3 text-warning"></i>
+                                                <h6 class="mb-0">Link Records to ABHA (HIP)</h6>
+                                            </div>
+                                            <p class="text-muted small mb-2">Link hospital visits & diagnostic records to patient's ABHA address using ABDM M2 HIP workflows.</p>
+                                            <ul class="list-unstyled small text-muted mb-3">
+                                                <li><i class="bi bi-check-circle-fill text-success me-1"></i>Demographic Auth (Method 4)</li>
+                                                <li><i class="bi bi-check-circle-fill text-success me-1"></i>Link OPD & Diagnostics</li>
+                                                <li><i class="bi bi-check-circle-fill text-success me-1"></i>Deep Link SMS to ABHA App</li>
+                                            </ul>
+                                            <div class="d-grid gap-2 mt-auto">
+                                                <button type="button" class="btn btn-warning text-dark fw-semibold" onclick="openAbdmHipLinkModal()">
+                                                    <i class="bi bi-link-45deg me-1"></i>Link Records to ABHA (HIP)
+                                                </button>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm" onclick="openAbdmHipSmsModal()">
+                                                    <i class="bi bi-chat-dots me-1"></i>Send Deep Link SMS
+                                                </button>
+                                            </div>
                                         </div>
                                     </div>
                                 </div>
