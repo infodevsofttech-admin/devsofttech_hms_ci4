@@ -255,7 +255,18 @@ window.AbhaMobileModal = (function () {
     }
     function digits(value) { return String(value == null ? '' : value).replace(/\D/g, ''); }
     function apiMessage(response, fallback) {
-        return response && (response.error_text || response.message) ? escapeHtml(response.error_text || response.message) : fallback;
+        var raw = response && (response.error_text || response.message)
+            ? String(response.error_text || response.message)
+            : fallback;
+        if (/UIDAI Error code/i.test(raw) || /ABDM-1204/i.test(raw) || /attempts.*exceeded/i.test(raw) || /invalid.*otp/i.test(raw) || /incorrect.*otp/i.test(raw) || /otp.*match/i.test(raw) || /otp.*expired/i.test(raw)) {
+            if (/attempts.*exceeded/i.test(raw) || /403/.test(raw)) {
+                raw = 'Incorrect OTP. Maximum number of attempts exceeded. Please generate a fresh OTP and try again.';
+            } else {
+                raw = 'Incorrect OTP';
+            }
+        }
+        raw = raw.replace(/\s*\(Bridge Request ID:[^)]*\)/gi, '').replace(/^ABDM-\d+\s*:\s*/i, '');
+        return escapeHtml(raw);
     }
     function alertBox(type, message) {
         var alertEl = document.getElementById('abhaMobileAlert');

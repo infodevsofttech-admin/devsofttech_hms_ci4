@@ -10,8 +10,33 @@
  *   Step 5: ABHA Profile, Official Card & HIMS linking (CRT_ABHA_113, 114, 115 / TAGGING_UNIQUEPATIENTID_UNIQUEABHANUMBER)
  *
  * Include once per page:  <?= view('partials/abha_create_modal') ?>
- * Then call: window.AbhaCreateModal.open(function (profile) { ... }, prefillMobile);
+ * Then call: window.AbhaCreateModal.open(function (profile) { ... }, prefillMobile, prefillName);
  */
+$healthcareWorkerName = 'Healthcare Worker';
+if (function_exists('auth') && auth()->loggedIn()) {
+    $u = auth()->user();
+    $healthcareWorkerName = $u->username ?? 'Healthcare Worker';
+    if ($u && !empty($u->id)) {
+        try {
+            $db = \Config\Database::connect();
+            $tables = config('Auth')->tables ?? [];
+            $identitiesTable = $tables['identities'] ?? 'auth_identities';
+            if ($db && $db->tableExists($identitiesTable)) {
+                $row = $db->table($identitiesTable)
+                    ->where('user_id', $u->id)
+                    ->where('type', 'email_password')
+                    ->get()
+                    ->getRowArray();
+                if (!empty($row['extra'])) {
+                    $extra = json_decode($row['extra'], true);
+                    if (!empty($extra['full_name'])) {
+                        $healthcareWorkerName = trim($extra['full_name']);
+                    }
+                }
+            }
+        } catch (\Throwable $e) {}
+    }
+}
 ?>
 <style>
     .abha-create-modal .modal-content { border:0; border-radius:12px; overflow:hidden; }
@@ -28,6 +53,8 @@
     .abha-create-consent.border-danger { border-color:#dc3545 !important; border-style:solid !important; }
     #abhaCreateConsentAgreeWrap { transition: all .15s ease-in-out; }
     #abhaCreateConsentAgreeWrap.border-danger { border-color:#dc3545 !important; background-color:#fff5f5 !important; }
+    .abha-declaration-card { background:#fbfcfe; border:1px solid #dce3ec; border-radius:8px; padding:10px 14px; margin-top:10px; transition:border-color .15s ease-in-out, background-color .15s ease-in-out; }
+    .abha-declaration-card.border-danger { border-color:#dc3545 !important; background-color:#fff5f5 !important; }
     .abha-create-address { display:block; border:1px solid #dce3ec; border-radius:8px; padding:11px 14px; cursor:pointer; font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
     .abha-create-address:has(input:checked) { border-color:#356cf4; background:#edf2ff; box-shadow:0 0 0 1px #356cf4; }
     .abha-profile-list { margin:0; }
@@ -128,8 +155,25 @@
                                 I Agree &mdash; I have read and agree to all consent declarations for Aadhaar authentication and ABHA creation <span class="text-danger">*</span>
                             </label>
                         </div>
+
+                        <!-- ABDM M1 Declarations: Healthcare Worker & Beneficiary Name (Image 3) -->
+                        <div class="abha-declaration-card" id="abhaCreateDeclarationWrap">
+                            <div class="form-check d-flex align-items-start" id="abhaCreateHcwConsentWrap">
+                                <input class="form-check-input me-2 mt-1 flex-shrink-0" type="checkbox" id="abhaCreateHcwConsent" style="cursor:pointer;">
+                                <label class="form-check-label small text-dark mb-0" for="abhaCreateHcwConsent" style="cursor:pointer;">
+                                    I, the healthcare worker, <strong id="abhaCreateHcwName"><?= esc($healthcareWorkerName) ?></strong>, confirm that I have duly informed and explained the beneficiary the contents of consent for the aforementioned purposes.
+                                </label>
+                            </div>
+                            <div class="form-check mt-2 d-flex align-items-center flex-wrap" id="abhaCreateBeneficiaryConsentWrap">
+                                <input class="form-check-input me-2 flex-shrink-0" type="checkbox" id="abhaCreateBeneficiaryConsent" style="cursor:pointer;">
+                                <label class="form-check-label small text-dark mb-0" for="abhaCreateBeneficiaryConsent" style="cursor:pointer;">
+                                    I, <input type="text" class="form-control form-control-sm d-inline-block mx-1 fw-bold" id="abhaCreateBeneficiaryName" placeholder="Enter beneficiary name" autocomplete="name" style="width:170px; display:inline-block; vertical-align:middle; height:30px;" required> have been explained about the consent as stated above and hereby provide my consent for the aforementioned purposes. <span class="text-danger">*</span>
+                                </label>
+                            </div>
+                        </div>
+
                         <div class="text-danger small mt-1 d-none" id="abhaCreateConsentError">
-                            <i class="bi bi-exclamation-circle-fill me-1"></i>Consent is mandatory. Please check "I Agree" to proceed to the next step.
+                            <i class="bi bi-exclamation-circle-fill me-1"></i><span id="abhaCreateConsentErrorText">Consent is mandatory. Please enter beneficiary name and agree to all consent declarations.</span>
                         </div>
                     </div>
 
@@ -145,7 +189,6 @@
                         <i class="bi bi-chat-dots-fill text-success" style="font-size:2.2rem"></i>
                         <h6 class="mt-2 mb-1">Enter Aadhaar OTP</h6>
                         <div class="text-muted small" id="abhaCreateOtpHint">We just sent an OTP on the Mobile Number linked with Aadhaar. Enter the OTP below to proceed with ABHA creation.</div>
-                        <div class="text-muted small mt-1 d-none" id="abhaCreateOtpRequestId"></div>
                     </div>
                     <label class="form-label fw-semibold" for="abhaCreateOtp">6-digit Aadhaar OTP</label>
                     <div class="input-group input-group-lg">
@@ -298,10 +341,17 @@ window.AbhaCreateModal = (function () {
         if (/loginId/i.test(raw) && /invalid/i.test(raw)) {
             raw = 'Aadhaar Number is not valid. Valid 12-digit Aadhaar number is required.';
         }
-        var message = escapeHtml(raw);
-        return response && response.request_id
-            ? message + ' <small class="d-block mt-1">Bridge Request ID: ' + escapeHtml(response.request_id) + '</small>'
-            : message;
+        // ABDM M1: Map incorrect OTP errors to clear message without raw error codes
+        if (/UIDAI Error code/i.test(raw) || /ABDM-1204/i.test(raw) || /attempts.*exceeded/i.test(raw) || /invalid.*otp/i.test(raw) || /incorrect.*otp/i.test(raw) || /otp.*match/i.test(raw) || /otp.*expired/i.test(raw)) {
+            if (/attempts.*exceeded/i.test(raw) || /403/.test(raw)) {
+                raw = 'Incorrect OTP. Maximum number of attempts exceeded. Please generate a fresh OTP and try again.';
+            } else {
+                raw = 'Incorrect OTP';
+            }
+        }
+        // Strip any residual (Bridge Request ID: ...) or error code traces
+        raw = raw.replace(/\s*\(Bridge Request ID:[^)]*\)/gi, '').replace(/^ABDM-\d+\s*:\s*/i, '');
+        return escapeHtml(raw);
     }
     function validateVerhoeff(num) {
         num = digits(num);
@@ -429,15 +479,22 @@ window.AbhaCreateModal = (function () {
     function sendAadhaarOtp(isResend) {
         var aadhaar = digits($('#abhaCreateAadhaar').val());
         var mobile = digits($('#abhaCreateMobile').val());
+        var beneficiaryName = $.trim($('#abhaCreateBeneficiaryName').val());
         var totalConsent = $('.abha-consent-chk').length;
         var checkedConsent = $('.abha-consent-chk:checked').length;
         var isAllConsentChecked = (totalConsent > 0 && checkedConsent === totalConsent) || $('#abhaCreateConsentAgree').is(':checked');
+        var isHcwConsentChecked = $('#abhaCreateHcwConsent').is(':checked');
+        var isBeneficiaryConsentChecked = $('#abhaCreateBeneficiaryConsent').is(':checked');
 
         // Reset visual validation states
         $('#abhaCreateAadhaar').removeClass('is-invalid');
         $('#abhaCreateMobile').removeClass('is-invalid');
+        $('#abhaCreateBeneficiaryName').removeClass('is-invalid');
         $('#abhaCreateConsentWrap').removeClass('border-danger');
         $('#abhaCreateConsentAgreeWrap').removeClass('border-danger');
+        $('#abhaCreateDeclarationWrap').removeClass('border-danger');
+        $('#abhaCreateHcwConsentWrap').removeClass('border-danger');
+        $('#abhaCreateBeneficiaryConsentWrap').removeClass('border-danger');
         $('#abhaCreateConsentError').addClass('d-none');
 
         if (aadhaar.length !== 12 || !validateVerhoeff(aadhaar)) {
@@ -448,6 +505,27 @@ window.AbhaCreateModal = (function () {
         if (mobile.length !== 10 || !/^[6-9]\d{9}$/.test(mobile)) {
             $('#abhaCreateMobile').addClass('is-invalid').trigger('focus');
             alertBox('warning', 'Please enter a valid 10-digit mobile number for ABHA communication.');
+            return;
+        }
+        if (beneficiaryName === '') {
+            $('#abhaCreateBeneficiaryName').addClass('is-invalid').trigger('focus');
+            $('#abhaCreateBeneficiaryConsentWrap').addClass('border-danger');
+            $('#abhaCreateDeclarationWrap').addClass('border-danger');
+            alertBox('warning', 'While creating an ABHA, the user is required to enter their name during the consent collection process.');
+            return;
+        }
+        if (!isHcwConsentChecked) {
+            $('#abhaCreateHcwConsentWrap').addClass('border-danger');
+            $('#abhaCreateDeclarationWrap').addClass('border-danger');
+            alertBox('warning', 'Please accept the healthcare worker consent declaration.');
+            $('#abhaCreateHcwConsent').trigger('focus');
+            return;
+        }
+        if (!isBeneficiaryConsentChecked) {
+            $('#abhaCreateBeneficiaryConsentWrap').addClass('border-danger');
+            $('#abhaCreateDeclarationWrap').addClass('border-danger');
+            alertBox('warning', 'Please accept the beneficiary consent declaration.');
+            $('#abhaCreateBeneficiaryConsent').trigger('focus');
             return;
         }
         if (!isAllConsentChecked) {
@@ -475,6 +553,7 @@ window.AbhaCreateModal = (function () {
             aadhaar: aadhaar,
             auth_type: 'aadhaar_otp',
             consent: 1,
+            beneficiary_name: beneficiaryName,
             '<?= csrf_token() ?>': csrf()
         }, function (response) {
             button.prop('disabled', false).html('<i class="bi bi-send me-1"></i>Send OTP');
@@ -487,9 +566,6 @@ window.AbhaCreateModal = (function () {
             var destination = response.masked_mobile || ((response.message || '').match(/\*{2,}\d{4}/) || [''])[0] || '******XXXX';
             var promptMessage = 'We just sent an OTP on the Mobile Number ' + destination + ' linked with Aadhaar. Enter the OTP below to proceed with ABHA creation.';
             $('#abhaCreateOtpHint').text(promptMessage);
-            $('#abhaCreateOtpRequestId')
-                .toggleClass('d-none', !response.request_id)
-                .text(response.request_id ? 'Bridge Request ID: ' + response.request_id : '');
             showStep(2);
             startResendTimer($('#abhaCreateResendBtn'), 60);
             $('#abhaCreateOtp').trigger('focus');
@@ -728,8 +804,12 @@ window.AbhaCreateModal = (function () {
         function clearConsentValidation() {
             $('#abhaCreateConsentWrap').removeClass('border-danger');
             $('#abhaCreateConsentAgreeWrap').removeClass('border-danger');
+            $('#abhaCreateDeclarationWrap').removeClass('border-danger');
+            $('#abhaCreateHcwConsentWrap').removeClass('border-danger');
+            $('#abhaCreateBeneficiaryConsentWrap').removeClass('border-danger');
+            $('#abhaCreateBeneficiaryName').removeClass('is-invalid');
             $('#abhaCreateConsentError').addClass('d-none');
-            if ($('#abhaCreateAlert').text().indexOf('Consent is mandatory') !== -1) {
+            if ($('#abhaCreateAlert').text().indexOf('Consent') !== -1 || $('#abhaCreateAlert').text().indexOf('beneficiary name') !== -1) {
                 alertBox('', '');
             }
         }
@@ -737,6 +817,12 @@ window.AbhaCreateModal = (function () {
         $('#abhaCreateConsentAgree').on('change', function () {
             var checked = $(this).is(':checked');
             $('.abha-consent-chk').prop('checked', checked);
+            $('#abhaCreateHcwConsent').prop('checked', checked);
+            if (checked && $.trim($('#abhaCreateBeneficiaryName').val()) !== '') {
+                $('#abhaCreateBeneficiaryConsent').prop('checked', true);
+            } else if (!checked) {
+                $('#abhaCreateBeneficiaryConsent').prop('checked', false);
+            }
             $('#abhaCreateSelectAllConsent').text(checked ? 'Deselect All' : 'Select All');
             if (checked) {
                 clearConsentValidation();
@@ -755,15 +841,32 @@ window.AbhaCreateModal = (function () {
         });
 
         $('#abhaCreateSelectAllConsent').on('click', function () {
-            var total = $('.abha-consent-chk').length;
-            var checked = $('.abha-consent-chk:checked').length;
+            var total = $('.abha-consent-chk').length + 2;
+            var checked = $('.abha-consent-chk:checked').length + ($('#abhaCreateHcwConsent').is(':checked') ? 1 : 0) + ($('#abhaCreateBeneficiaryConsent').is(':checked') ? 1 : 0);
             var shouldCheck = (checked < total);
             $('.abha-consent-chk').prop('checked', shouldCheck);
             $('#abhaCreateConsentAgree').prop('checked', shouldCheck);
+            $('#abhaCreateHcwConsent').prop('checked', shouldCheck);
+            $('#abhaCreateBeneficiaryConsent').prop('checked', shouldCheck);
             $(this).text(shouldCheck ? 'Deselect All' : 'Select All');
             if (shouldCheck) {
                 clearConsentValidation();
             }
+        });
+
+        $('#abhaCreateBeneficiaryName').on('click', function (e) {
+            e.stopPropagation();
+        }).on('input', function () {
+            $(this).removeClass('is-invalid');
+            if ($.trim($(this).val()) !== '') {
+                $('#abhaCreateBeneficiaryConsent').prop('checked', true);
+                $('#abhaCreateBeneficiaryConsentWrap').removeClass('border-danger');
+            }
+            clearConsentValidation();
+        });
+
+        $('#abhaCreateHcwConsent, #abhaCreateBeneficiaryConsent').on('change', function () {
+            clearConsentValidation();
         });
 
         $('#abhaCreateAadhaar').on('input', function () {
@@ -825,7 +928,7 @@ window.AbhaCreateModal = (function () {
     });
 
     return {
-        open: function (callback, prefillMobile) {
+        open: function (callback, prefillMobile, prefillName, prefillHcwName) {
             onCompleted = callback;
             createTxnId = '';
             mobileTxnId = '';
@@ -836,9 +939,12 @@ window.AbhaCreateModal = (function () {
             stopTimers();
             $('#abhaCreateAadhaar,#abhaCreateMobile,#abhaCreateOtp,#abhaCreateMobileOtp,#abhaCreateCustomAddress').val('').removeClass('is-invalid');
             $('#abhaCreateMobile').val(digits(prefillMobile));
-            $('#abhaCreateOtpRequestId').addClass('d-none').text('');
-            $('#abhaCreateConsent1,#abhaCreateConsent2,#abhaCreateConsent3,#abhaCreateConsent4,#abhaCreateConsentAgree').prop('checked', false);
-            $('#abhaCreateConsentWrap,#abhaCreateConsentAgreeWrap').removeClass('border-danger');
+            $('#abhaCreateBeneficiaryName').val(prefillName ? String(prefillName).trim() : '').removeClass('is-invalid');
+            if (prefillHcwName) {
+                $('#abhaCreateHcwName').text(prefillHcwName);
+            }
+            $('#abhaCreateConsent1,#abhaCreateConsent2,#abhaCreateConsent3,#abhaCreateConsent4,#abhaCreateConsentAgree,#abhaCreateHcwConsent,#abhaCreateBeneficiaryConsent').prop('checked', false);
+            $('#abhaCreateConsentWrap,#abhaCreateConsentAgreeWrap,#abhaCreateDeclarationWrap,#abhaCreateHcwConsentWrap,#abhaCreateBeneficiaryConsentWrap').removeClass('border-danger');
             $('#abhaCreateConsentError').addClass('d-none');
             $('#abhaCreateSelectAllConsent').text('Select All');
             $('#abhaCreatePhoto,#abhaCreateDownloadCard').addClass('d-none');

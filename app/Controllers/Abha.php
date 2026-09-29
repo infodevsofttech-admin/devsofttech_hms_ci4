@@ -25,6 +25,7 @@ class Abha extends BaseController
         $aadhaar = preg_replace('/\D/', '', trim((string) ($this->request->getPost('aadhaar') ?? '')));
         $authType = trim((string) ($this->request->getPost('auth_type') ?? 'aadhaar_otp'));
         $consent = $this->request->getPost('consent');
+        $beneficiaryName = trim((string) ($this->request->getPost('beneficiary_name') ?? ''));
 
         if (strlen($aadhaar) !== 12 || ! $this->validateVerhoeff($aadhaar)) {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'Aadhaar Number is not valid. Valid 12-digit Aadhaar number is required.']);
@@ -47,6 +48,9 @@ class Abha extends BaseController
             // later for local-patient name/age/gender/aadhaar matching (never sent to browser).
             if ($txnId) {
                 session()->set('abha_aadhaar_txn_' . $txnId, $aadhaar);
+                if ($beneficiaryName !== '') {
+                    session()->set('abha_beneficiary_' . $txnId, $beneficiaryName);
+                }
             }
             return $this->response->setJSON([
                 'ok' => 1,
@@ -102,10 +106,7 @@ class Abha extends BaseController
 
         if (empty($result['ok']) || $result['ok'] != 1) {
             $requestId = trim((string) ($result['request_id'] ?? ''));
-            $errorText = $this->extractBridgeErrorText($result, 'Please enter a valid OTP. Entered OTP is either expired or incorrect.');
-            if ($requestId !== '') {
-                $errorText .= ' (Bridge Request ID: ' . $requestId . ')';
-            }
+            $errorText = $this->extractBridgeErrorText($result, 'Incorrect OTP');
             return $this->response->setJSON([
                 'ok'         => 0,
                 'error_text' => $errorText,
@@ -1669,7 +1670,22 @@ class Abha extends BaseController
                 if (stripos($trimmed, 'loginId') !== false && stripos($trimmed, 'invalid') !== false) {
                     return 'Aadhaar Number is not valid. Valid 12-digit Aadhaar number is required.';
                 }
-                return $trimmed;
+                // Normalize ABDM/UIDAI OTP errors: replace technical error codes with clear user-friendly messages (ABDM M1)
+                if (preg_match('/(?:UIDAI Error code\s*:\s*403|attempts for OTP match is exceeded|max(?:imum)? number of attempts.*exceeded)/i', $trimmed)) {
+                    return 'Incorrect OTP. Maximum number of attempts exceeded. Please generate a fresh OTP and try again.';
+                }
+                if (preg_match('/(?:UIDAI Error code\s*:\s*400|Invalid (?:Aadhaar )?OTP value|Invalid OTP|Incorrect OTP|OTP mismatch|OTP.*not valid|OTP.*either expired or incorrect)/i', $trimmed)) {
+                    return 'Incorrect OTP';
+                }
+                // Strip raw technical error code prefixes (e.g. ABDM-1204 : or UIDAI Error code : 400 :)
+                $cleaned = preg_replace('/^(?:ABDM-\d+\s*:\s*)?(?:UIDAI Error code\s*:\s*\d+\s*:\s*)?/i', '', $trimmed);
+                if (preg_match('/(?:invalid.*otp|incorrect.*otp|otp.*invalid|otp.*incorrect|otp.*match)/i', $cleaned)) {
+                    if (preg_match('/(?:attempts|exceeded|403)/i', $cleaned)) {
+                        return 'Incorrect OTP. Maximum number of attempts exceeded. Please generate a fresh OTP and try again.';
+                    }
+                    return 'Incorrect OTP';
+                }
+                return $cleaned;
             }
         }
 
@@ -1691,6 +1707,10 @@ class Abha extends BaseController
                 $fieldMsg = trim($message);
                 if (strcasecmp($field, 'loginId') === 0 && stripos($fieldMsg, 'invalid') !== false) {
                     $fieldErrors[] = 'Aadhaar Number is not valid. Valid 12-digit Aadhaar number is required.';
+                } elseif (preg_match('/(?:attempts.*exceeded|403)/i', $fieldMsg)) {
+                    $fieldErrors[] = 'Incorrect OTP. Maximum number of attempts exceeded. Please generate a fresh OTP and try again.';
+                } elseif (preg_match('/(?:invalid.*otp|incorrect.*otp|otp.*match)/i', $fieldMsg)) {
+                    $fieldErrors[] = 'Incorrect OTP';
                 } else {
                     $fieldErrors[] = $field . ': ' . $fieldMsg;
                 }
@@ -1698,6 +1718,10 @@ class Abha extends BaseController
         }
         if ($fieldErrors !== []) {
             return implode('; ', $fieldErrors);
+        }
+
+        if (preg_match('/(?:invalid.*otp|incorrect.*otp|otp.*expired)/i', $fallback)) {
+            return 'Incorrect OTP';
         }
 
         return $fallback;

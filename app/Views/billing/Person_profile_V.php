@@ -563,7 +563,7 @@ $(document).ready(function() {
                     });
                 }
                 window.AbhaPatientMatchModal.open(profile, candidates, refreshProfile, currentPatientId);
-            }, <?= json_encode((string) ($data[0]->mphone1 ?? '')) ?>);
+            }, <?= json_encode((string) ($data[0]->mphone1 ?? '')) ?>, <?= json_encode(trim((string) ($data[0]->p_fname ?? ''))) ?>);
         });
 
     function getPatientIdOrWarn() {

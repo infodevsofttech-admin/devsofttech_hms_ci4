@@ -844,8 +844,20 @@
 
             for (var i = 0; i < candidates.length; i++) {
                 if (typeof candidates[i] === 'string' && candidates[i].trim() !== '') {
-                    return candidates[i].trim();
+                    var val = candidates[i].trim();
+                    if (/UIDAI Error code/i.test(val) || /ABDM-1204/i.test(val) || /attempts.*exceeded/i.test(val) || /invalid.*otp/i.test(val) || /incorrect.*otp/i.test(val) || /otp.*match/i.test(val) || /otp.*expired/i.test(val)) {
+                        if (/attempts.*exceeded/i.test(val) || /403/.test(val)) {
+                            return 'Incorrect OTP. Maximum number of attempts exceeded. Please generate a fresh OTP and try again.';
+                        }
+                        return 'Incorrect OTP';
+                    }
+                    val = val.replace(/\s*\(Bridge Request ID:[^)]*\)/gi, '').replace(/^ABDM-\d+\s*:\s*/i, '');
+                    return val;
                 }
+            }
+
+            if (/invalid.*otp|incorrect.*otp/i.test(fallbackText)) {
+                return 'Incorrect OTP';
             }
 
             return fallbackText;
@@ -1439,7 +1451,7 @@
                     window.AbhaPatientMatchModal.open(profile, profile.candidates || [], function(finalResponse) {
                         if (typeof showRegResult === 'function') showRegResult(finalResponse);
                     });
-                }, $('#input_mphone1').val());
+                }, $('#input_mphone1').val(), $('#input_name').val());
             }).on('click.abhaLauncher', '#abha_open_verify_modal_btn', function() {
                 openAbhaAccountVerification('', null);
             });
