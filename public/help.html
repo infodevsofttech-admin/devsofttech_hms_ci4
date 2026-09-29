@@ -241,7 +241,7 @@
 
                 <div class="update-item abdm">
                     <strong>ABDM Milestone 2 (M2) HIP Certified Workflows <span class="status-chip success ms-1">NEW</span></strong>
-                    <div>HIP-initiated care context linking via <strong>Method 4 Demographic Auth</strong> and <strong>Deep Link SMS (<code>sms/notify2</code>)</strong>. Instant care context discovery for newly generated OPD visit slips from reception, dual 14-digit numeric &amp; <code>@sbx</code> handle auto-resolution, and automated FHIR R4 Bundle publishing (OPConsultRecord, DiagnosticReportRecord, DischargeSummaryRecord).</div>
+                    <div>HIP-initiated care context linking via <strong>Method 4 Demographic Auth</strong> and <strong>Deep Link SMS Notifications</strong>. Instant care context discovery for newly generated OPD visit slips from reception, dual 14-digit numeric &amp; <code>@sbx</code> handle auto-resolution, and automated FHIR R4 clinical record publishing (OPConsultRecord, DiagnosticReportRecord, DischargeSummaryRecord).</div>
                 </div>
 
                 <div class="update-item abdm">
@@ -250,8 +250,8 @@
                 </div>
 
                 <div class="update-item">
-                    <strong>Standardized Radiology Templates for Modalities 2, 3, 4 <span class="status-chip success ms-1">NEW</span></strong>
-                    <div>Complete seed of clinical reporting templates for <strong>X-Ray</strong> (Modality 3), <strong>CT-Scan</strong> (Modality 4), and <strong>MRI</strong> (Modality 2), along with dynamically synchronized service charge links in <code>hc_items</code> for direct billing-to-template injection.</div>
+                    <strong>Standardized Radiology Templates for Imaging Modalities <span class="status-chip success ms-1">NEW</span></strong>
+                    <div>Complete seed of clinical reporting templates for <strong>Digital X-Ray</strong>, <strong>CT-Scan</strong>, and <strong>MRI</strong>, along with dynamically synchronized service charge links in the Hospital Tariff Master for direct billing-to-template injection.</div>
                 </div>
 
                 <div class="update-item">
@@ -349,7 +349,7 @@
             <!-- ========================================================================= -->
             <section id="patient-management" class="guide-section searchable-section">
                 <h2><span class="section-number">03</span>Patient Management &amp; Registration Module</h2>
-                <p><strong>Sidebar Menu:</strong> <code>Billing &rarr; Patient List</code> (URL: <code>/billing/patient</code>)<br>
+                <p><strong>Sidebar Menu:</strong> <code>Billing &rarr; Patient List</code><br>
                 <strong>Intended Users:</strong> Front Desk Receptionists, OPD Registration Staff, Admission Clerks.</p>
 
                 <p>This module serves as the primary master registry for all individuals receiving healthcare services at the facility. It provides comprehensive duplicate prevention, ABDM ABHA creation and verification, quick search, and direct launching of OPD, IPD, and Emergency encounters.</p>
@@ -362,72 +362,72 @@
                     <li>Search by <strong>Patient Full Name</strong> (supports partial matching, e.g. "Rahul").</li>
                     <li>Search by <strong>Aadhaar Number</strong> (12 digits) or <strong>14-Digit ABHA ID</strong>.</li>
                     <li>Search by <strong>ABHA Address Handle</strong> (e.g. <code>rahul@sbx</code>).</li>
-                    <li><strong>Action:</strong> Clicking on any patient row opens their comprehensive <strong>Patient Profile</strong> (<code>/billing/patient/person_record/:id</code>).</li>
+                    <li><strong>Action:</strong> Clicking on any patient row opens their comprehensive <strong>Patient 360&deg; Profile &amp; Medical History</strong>.</li>
                 </ul>
 
-                <h3>Screen 2: New Person Registration Form (`#nperson`)</h3>
+                <h3>Screen 2: New Person Registration Form</h3>
                 <p><strong>Purpose:</strong> Register a brand-new patient into the hospital master database. All fields are explained below:</p>
 
                 <div class="table-responsive">
                     <table class="table table-bordered field-table">
                         <thead>
                             <tr>
-                                <th style="width: 22%;">Field Name</th>
-                                <th style="width: 15%;">Type / Requirement</th>
+                                <th style="width: 25%;">Form Field</th>
+                                <th style="width: 20%;">Format / Requirement</th>
                                 <th>Operational Description &amp; Clinical Purpose</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr>
-                                <td><strong>Aadhaar Number</strong> (<code>input_udai</code>)</td>
+                                <td><strong>Aadhaar Number</strong></td>
                                 <td>12 Digits (Numeric)<br><span class="text-muted">Optional</span></td>
                                 <td>Government unique identity number. Used for duplicate checking across the database and mandatory for Ayushman Bharat (PM-JAY) claims and official schemes.</td>
                             </tr>
                             <tr>
-                                <td><strong>ABHA ID</strong> (<code>input_abha_id</code>)</td>
-                                <td>14 Digits (Numeric)<br><span class="text-muted">Auto-filled via ABHA</span></td>
-                                <td>Ayushman Bharat Health Account 14-digit national identifier. Prevents duplicate patient creation and links hospital files to national health ecosystem.</td>
+                                <td><strong>ABHA Number / Address</strong></td>
+                                <td>14 Digits or @sbx Handle<br><span class="text-muted">Auto-filled via ABHA</span></td>
+                                <td>Ayushman Bharat Health Account national identifier. Prevents duplicate patient creation and links hospital files to national health ecosystem.</td>
                             </tr>
                             <tr>
-                                <td><strong>Phone Number</strong> (<code>input_mphone1</code>)</td>
+                                <td><strong>Primary Mobile Number</strong></td>
                                 <td>10 Digits (Numeric)<br><span class="field-req">Mandatory *</span></td>
                                 <td>Primary communication mobile number. Used for SMS appointment alerts, OTP verification, billing invoice delivery, and ABDM discovery matching.</td>
                             </tr>
                             <tr>
-                                <td><strong>Title &amp; Full Name</strong> (<code>cbo_title</code>, <code>input_name</code>)</td>
-                                <td>Dropdown &amp; Text<br><span class="field-req">Mandatory *</span></td>
+                                <td><strong>Title &amp; Full Name</strong></td>
+                                <td>Salutation Dropdown &amp; Text<br><span class="field-req">Mandatory *</span></td>
                                 <td>Patient's legal name. Appears on all official medical records, prescriptions, diagnostic reports, and medico-legal documents.</td>
                             </tr>
                             <tr>
-                                <td><strong>Gender</strong> (<code>optionsRadios_gender</code>)</td>
-                                <td>Radio (Male / Female / Other)<br><span class="field-req">Mandatory *</span></td>
+                                <td><strong>Gender</strong></td>
+                                <td>Male / Female / Other<br><span class="field-req">Mandatory *</span></td>
                                 <td>Clinical gender. Critical for ward bed allocation, diagnostic reference range calculations (e.g. Hemoglobin), and obstetrics/gynecology workflows.</td>
                             </tr>
                             <tr>
-                                <td><strong>Age / Date of Birth</strong> (<code>datepicker_dob</code>, <code>input_age_year</code>)</td>
-                                <td>Date or Numeric Years<br><span class="field-req">Mandatory *</span></td>
+                                <td><strong>Date of Birth / Age</strong></td>
+                                <td>Calendar Date or Years<br><span class="field-req">Mandatory *</span></td>
                                 <td>Toggle between exact calendar DOB or estimated Age in years/months. System auto-calculates Year of Birth (YOB) required for ABDM and pediatric dosing.</td>
                             </tr>
                             <tr>
-                                <td><strong>Relation &amp; Relative Name</strong> (<code>cbo_relation</code>, <code>input_relative_name</code>)</td>
-                                <td>Dropdown &amp; Text<br><span class="field-req">Mandatory *</span></td>
+                                <td><strong>Relation &amp; Guardian / Relative Name</strong></td>
+                                <td>Relation Type &amp; Full Name<br><span class="field-req">Mandatory *</span></td>
                                 <td>Caregiver / Legal Guardian (S/o, D/o, W/o, C/o, M/o). Essential for pediatric and unconscious patients, informed consent, and billing authorizations.</td>
                             </tr>
                             <tr>
-                                <td><strong>Blood Group</strong> (<code>input_blood_group</code>)</td>
-                                <td>Dropdown<br><span class="text-muted">Default: 'Not Define'</span></td>
+                                <td><strong>Blood Group</strong></td>
+                                <td>Dropdown Selection<br><span class="text-muted">Default: 'Not Defined'</span></td>
                                 <td>ABO &amp; Rh group (A+, B+, O+, AB+, etc.). Vital for emergency trauma resuscitation, surgery readiness, and blood bank compatibility.</td>
                             </tr>
                             <tr>
-                                <td><strong>Refer By</strong> (<code>refer_by_name</code>)</td>
+                                <td><strong>Referred By (Doctor / Hospital / Self)</strong></td>
                                 <td>Searchable Autocomplete<br><span class="text-muted">Optional</span></td>
-                                <td>Referring physician, healthcare provider, or outreach hospital. Automatically validates against active doctor master for referral accounting.</td>
+                                <td>Referring physician, healthcare provider, or outreach hospital. Automatically validates against active doctor list for referral accounting.</td>
                             </tr>
                         </tbody>
                     </table>
                 </div>
 
-                <h3>Screen 3: ABHA Management Tab (`#abha`)</h3>
+                <h3>Screen 3: ABHA Management Tab</h3>
                 <p><strong>Purpose:</strong> Seamless national Ayushman Bharat digital health identity integration directly at the registration desk:</p>
                 <div class="quick-grid">
                     <div class="quick-item">
@@ -448,7 +448,7 @@
                     </div>
                 </div>
 
-                <h3>Screen 4: Patient Profile Hub (`person_record/:id`)</h3>
+                <h3>Screen 4: Patient 360&deg; Profile Hub</h3>
                 <p>Once a patient is registered, their profile displays emergency and clinical shortcuts:</p>
                 <ul>
                     <li><span class="badge bg-primary">Appointment For OPD</span> &mdash; Generates OPD visit slip and assigns consulting doctor.</li>
@@ -473,10 +473,10 @@
                     <li><strong>Reception Registration:</strong> Receptionist opens patient profile and clicks <strong>Appointment For OPD</strong>.</li>
                     <li><strong>Consultation Parameters:</strong> Select Department (General Medicine, Orthopedics, Cardiology, etc.), Doctor, Fee Category (Normal, Revisit, Free, Camp), and Organization/Insurance case if applicable.</li>
                     <li><strong>Receipt &amp; Token:</strong> System generates OPD Slip with unique visit token (e.g. <code>Token #14</code>) and care context reference <code>OPD-{PatientId}-S{OpdId}-{Date}</code>.</li>
-                    <li><strong>ABDM OPD Queue:</strong> Patients scanning the hospital facility QR code via ABHA app appear automatically in the <strong>ABDM OPD Queue</strong> (<code>AbdmOpdQueue</code>) with pre-filled demographics for 1-click token creation.</li>
+                    <li><strong>ABDM OPD Queue:</strong> Patients scanning the hospital facility QR code via ABHA app appear automatically in the <strong>ABDM OPD Queue</strong> under Front Desk with pre-filled demographics for 1-click token creation.</li>
                 </ol>
 
-                <h3>Clinical Consultation Screen (`opd_prescription_basic`)</h3>
+                <h3>Doctor OPD Consultation &amp; Prescription Desk</h3>
                 <p>Doctors access the consultation workspace from their daily appointment list. The screen contains dedicated clinical sections:</p>
                 <ul>
                     <li><strong>Vitals &amp; Physical Examination:</strong> BP (Systolic/Diastolic), Pulse, SpO2, Temperature, Respiratory Rate, Height, Weight, BMI, Waist circumference, and general examination tags (Pallor, Icterus, Cyanosis, Clubbing, Edema).</li>
@@ -563,7 +563,7 @@
             <!-- ========================================================================= -->
             <section id="ot-management" class="guide-section searchable-section">
                 <h2><span class="section-number">06</span>Operation Theatre (OT) Management</h2>
-                <p><strong>Sidebar Menu:</strong> <code>In-Patient &amp; Nursing Care &rarr; OT Surgery Queue</code> (URL: <code>/ot/queue</code>)</p>
+                <p><strong>Sidebar Menu:</strong> <code>In-Patient &amp; Nursing Care &rarr; OT Surgery Queue</code></p>
 
                 <ol class="workflow">
                     <li><strong>Surgery Request:</strong> Treating surgeon submits surgery request specifying procedure name, operating surgeon, assistant, anaesthetist, required OT room, priority (Elective / Emergency), and requested date/time.</li>
@@ -589,23 +589,23 @@
                 <h2><span class="section-number">07</span>Doctor's Work &amp; Clinical Masters</h2>
                 <p><strong>Sidebar Menu:</strong> <code>Doctor's Work</code> (Appointments, Rx-Group, OPD Medicine, Clinical Masters, Clinical Templates, Document Issue, Immunization)</p>
 
-                <h3>1. Rx-Group Master (`Opd_prescription/rx_group_panel`)</h3>
+                <h3>1. Rx-Group Master (Prescription Protocol Sets)</h3>
                 <p><strong>Purpose:</strong> Build reusable multi-medicine prescription sets for 1-click prescribing during busy OPD hours.</p>
                 <ul>
                     <li>Create groups such as <em>"Acute Gastroenteritis Kit"</em>, <em>"Hypertension Starter"</em>, or <em>"Viral Fever Pack"</em>.</li>
                     <li>Each group contains pre-configured dosages, frequencies, and instructions. During consultation, picking one group populates all medicines instantly.</li>
                 </ul>
 
-                <h3>2. Clinical Master Workspace (`Opd_prescription/clinical_master_workspace`)</h3>
+                <h3>2. Clinical Master Workspace (Complaints, Profiles &amp; Advice)</h3>
                 <p><strong>Purpose:</strong> Maintain hospital-wide clinical dictionaries:</p>
                 <ul>
-                    <li><strong>Chief Complaints Master:</strong> Frequently presenting symptoms mapped to SNOMED-CT concepts.</li>
-                    <li><strong>Investigation Master (`opd_invest_master`):</strong> Master catalog of diagnostic tests.</li>
-                    <li><strong>Investigation Profile Master (`opd_invest_profile_master`):</strong> Grouping individual tests into test batteries (e.g. <em>Lipid Profile</em> containing Total Cholesterol, Triglycerides, HDL, LDL, VLDL).</li>
-                    <li><strong>OPD Advice Master (`opd_advice`):</strong> Standard dietary, physical therapy, and medication precautions.</li>
+                    <li><strong>Chief Complaints Master:</strong> Frequently presenting symptoms mapped to standard clinical concepts.</li>
+                    <li><strong>Investigation Master:</strong> Master catalog of diagnostic tests and individual laboratory parameters.</li>
+                    <li><strong>Investigation Profile Master:</strong> Grouping individual tests into test batteries (e.g. <em>Lipid Profile</em> containing Total Cholesterol, Triglycerides, HDL, LDL, VLDL).</li>
+                    <li><strong>OPD Advice Master:</strong> Standard dietary, physical therapy, and medication precautions.</li>
                 </ul>
 
-                <h3>3. Doctor Document Issue (`doctor_work/document_workspace`)</h3>
+                <h3>3. Doctor Document &amp; Certificate Issuance Desk</h3>
                 <p><strong>Purpose:</strong> Issue legal and clinical certificates directly from the patient encounter:</p>
                 <ul>
                     <li>Medical Leave &amp; Fitness Certificates</li>
@@ -614,7 +614,7 @@
                     <li>Emergency Travel Medical Clearance</li>
                 </ul>
 
-                <h3>4. Pediatric Immunization (`Immunization`)</h3>
+                <h3>4. Pediatric Immunization Tracker</h3>
                 <p><strong>Purpose:</strong> Track national vaccine schedules for infants and children:</p>
                 <ul>
                     <li>Pre-configured national immunization schedule (BCG, OPV, Hepatitis B, Pentavalent, Rotavirus, Measles, MMR).</li>
@@ -655,53 +655,47 @@
             <!-- ========================================================================= -->
             <section id="template-design" class="guide-section searchable-section">
                 <h2><span class="section-number">09</span>Template Design &amp; Configuration Guide</h2>
-                <p><strong>Sidebar Menu:</strong> <code>Admin &amp; Settings &rarr; Template</code> (URL: <code>/setting/template</code>)<br>
-                <strong>Intended Users:</strong> Radiologists, Pathologists, Chief Medical Officers, System Administrators.</p>
+                <p><strong>Sidebar Menu:</strong> <code>Admin &amp; Settings &rarr; Template</code><br>
+                <strong>Intended Users:</strong> Radiologists, Pathologists, Chief Medical Officers, Hospital Administrators.</p>
 
                 <p>Standardized templates ensure clinical precision, reduce reporting turnaround time by over 70%, and ensure medico-legal compliance across all imaging and diagnostic disciplines.</p>
 
-                <h3>1. Modality Identification Table</h3>
-                <p>In E-Atria HMIS, each diagnostic imaging modality corresponds to an internal system modality ID:</p>
+                <h3>1. Diagnostic Modality Navigation &amp; Scope</h3>
+                <p>In E-Atria HMIS, pre-configured diagnostic report templates are organized into dedicated modality tabs under <strong>Admin &amp; Settings &rarr; Template</strong>:</p>
                 <div class="table-responsive">
                     <table class="table table-bordered table-guide">
                         <thead>
                             <tr>
-                                <th>Modality Name</th>
-                                <th>Modality ID</th>
-                                <th>Template Management URL</th>
-                                <th>Default Charge Mapping Category</th>
+                                <th style="width: 25%;">Diagnostic Modality</th>
+                                <th style="width: 35%;">How to Access in System</th>
+                                <th>Clinical Scope &amp; Typical Investigations</th>
                             </tr>
                         </thead>
                         <tbody>
                             <tr>
                                 <td><strong>Ultrasound (USG)</strong></td>
-                                <td><code>1</code></td>
-                                <td><code>/Setting/Template/report_ultrasound_list/1</code></td>
-                                <td>Ultrasound Procedures (Abdomen, Pelvis, KUB, Obstetric)</td>
+                                <td>Click <strong>Admin &amp; Settings &rarr; Template</strong>, then select the <strong>Ultrasound</strong> tab.</td>
+                                <td>USG Whole Abdomen, Pelvis, KUB, Obstetric / Antenatal Scans, Thyroid, Scrotum, Venous &amp; Arterial Doppler.</td>
                             </tr>
                             <tr>
                                 <td><strong>Magnetic Resonance Imaging (MRI)</strong></td>
-                                <td><code>2</code></td>
-                                <td><code>/Setting/Template/report_ultrasound_list/2</code></td>
-                                <td>MRI Studies (Brain, Spine, Joints, Whole Body)</td>
+                                <td>Click <strong>Admin &amp; Settings &rarr; Template</strong>, then select the <strong>MRI</strong> tab.</td>
+                                <td>MRI Brain (plain &amp; contrast), Cervical/Lumbar Spine, Knee / Shoulder Joints, MRCP, Whole Body MRI.</td>
                             </tr>
                             <tr>
-                                <td><strong>X-Ray (Radiography)</strong></td>
-                                <td><code>3</code></td>
-                                <td><code>/Setting/Template/report_ultrasound_list/3</code></td>
-                                <td>Plain &amp; Contrast Radiography (Chest PA, Extremities, Spine)</td>
+                                <td><strong>Digital X-Ray (Radiography)</strong></td>
+                                <td>Click <strong>Admin &amp; Settings &rarr; Template</strong>, then select the <strong>X-Ray</strong> tab.</td>
+                                <td>Plain &amp; Contrast Radiography: Chest PA View, KUB, Extremities (Bones &amp; Joints), Spine AP/Lateral views, Barium studies.</td>
                             </tr>
                             <tr>
                                 <td><strong>Computed Tomography (CT-Scan)</strong></td>
-                                <td><code>4</code></td>
-                                <td><code>/Setting/Template/report_ultrasound_list/4</code></td>
-                                <td>CT Studies (Head, NCCT/CECT Abdomen, HRCT Chest, Angio)</td>
+                                <td>Click <strong>Admin &amp; Settings &rarr; Template</strong>, then select the <strong>CT-Scan</strong> tab.</td>
+                                <td>NCCT Head, HRCT Thorax, CECT Abdomen &amp; Pelvis, CT Angiography, PNS (Coronal/Axial views).</td>
                             </tr>
                             <tr>
-                                <td><strong>2D Echocardiography (Echo)</strong></td>
-                                <td><code>6</code></td>
-                                <td><code>/Setting/Template/report_ultrasound_list/6</code></td>
-                                <td>Cardiology 2D Echo with Doppler Studies</td>
+                                <td><strong>2D Echocardiography (Echo) &amp; Special</strong></td>
+                                <td>Click <strong>Admin &amp; Settings &rarr; Template</strong>, then select the <strong>Echocardiography / Special</strong> tab.</td>
+                                <td>Transthoracic 2D Echo, Color Doppler, Left Ventricular Ejection Fraction (LVEF), Valvular regurgitation assessment.</td>
                             </tr>
                         </tbody>
                     </table>
@@ -709,11 +703,11 @@
 
                 <h3>2. How to Design a New Radiology Template (Step-by-Step)</h3>
                 <ol class="workflow">
-                    <li><strong>Open Modality Template Workspace:</strong> Go to <strong>Admin &amp; Settings &rarr; Template</strong> and click on the desired modality tab (e.g. <em>X-Ray</em>, <em>CT-Scan</em>, or <em>MRI</em>).</li>
+                    <li><strong>Open Modality Template Workspace:</strong> Go to <strong>Admin &amp; Settings &rarr; Template</strong> and click on the desired modality tab (e.g. <em>X-Ray</em>, <em>CT-Scan</em>, <em>MRI</em>, or <em>Ultrasound</em>).</li>
                     <li><strong>Click "+ Add Template":</strong> Opens the rich-text template builder.</li>
                     <li><strong>Specify Template Title:</strong> Enter a clear, standardized name (e.g. <code>X-RAY CHEST PA VIEW - NORMAL STUDY</code> or <code>CT HEAD - NORMAL BRAIN STUDY</code>).</li>
-                    <li><strong>Link Service Charge Item (`charge_id`):</strong>
-                        <div class="note"><strong>Critical Automation Link:</strong> In the <em>"Linked Charge / Test Item"</em> dropdown, select the corresponding service charge from <code>hc_items</code>. When reception bills this service, the system will <strong>automatically inject this template</strong> into the doctor's report editor without requiring manual search!</div>
+                    <li><strong>Link Hospital Service / Billing Test:</strong>
+                        <div class="note"><strong>Automatic Template Loading:</strong> In the <em>"Linked Charge / Test Item"</em> dropdown, select the corresponding test name from the Hospital Charges Master. When reception bills this service on an OPD or IPD slip, the system will <strong>automatically inject this template</strong> into the doctor's report editor without requiring manual search!</div>
                     </li>
                     <li><strong>Structure the Clinical Content:</strong> Adhere to professional NABH reporting standards by dividing the template into 4 standard sections:
                         <div class="form-desc-card my-2">
@@ -760,7 +754,7 @@ NORMAL STUDY.
             <!-- ========================================================================= -->
             <section id="pharmacy" class="guide-section searchable-section">
                 <h2><span class="section-number">10</span>Pharmacy &amp; Medical Store Module</h2>
-                <p><strong>Sidebar Menu:</strong> <code>Pharmacy &rarr; Medical Store</code> (URL: <code>/Medical</code>)</p>
+                <p><strong>Sidebar Menu:</strong> <code>Pharmacy &rarr; Medical Store</code></p>
 
                 <h3>1. Point of Sale (POS) Dispensing</h3>
                 <ol class="workflow">
@@ -770,7 +764,7 @@ NORMAL STUDY.
                     <li><strong>Receipt &amp; Label:</strong> Prints tax invoice with dosage frequency labels and Schedule H warnings.</li>
                 </ol>
 
-                <h3>2. Medicine Returns (`Medicine Return`)</h3>
+                <h3>2. Medicine Returns &amp; Credit Notes</h3>
                 <p>Unopened and non-expired medications returned by patients are processed with credit notes or cash refunds. Returned stock instantly increments the active batch inventory.</p>
 
                 <h3>3. Pharmacy Credit Payout Workflow</h3>
@@ -787,7 +781,7 @@ NORMAL STUDY.
             <!-- ========================================================================= -->
             <section id="hospital-stock" class="guide-section searchable-section">
                 <h2><span class="section-number">11</span>Hospital Stock &amp; Inventory Management</h2>
-                <p><strong>Sidebar Menu:</strong> <code>Hospital Stock &rarr; Hospital Stock</code> (URL: <code>/Storestock</code>)</p>
+                <p><strong>Sidebar Menu:</strong> <code>Hospital Stock &rarr; Hospital Stock</code></p>
 
                 <h3>1. Stock Indent &amp; Issue Workflow</h3>
                 <ol class="workflow">
@@ -818,7 +812,7 @@ NORMAL STUDY.
                     <li><strong>IPD Billing:</strong> Running patient ledger tracking room rents, doctor visits, surgery fees, bedside medicines, and advance receipts. Supports interim provisional billing and final discharge invoice.</li>
                 </ul>
 
-                <h3>2. Shift-End Cash Statement Submission (`billing/cash-submission/create`)</h3>
+                <h3>2. Shift-End Cash Statement Submission</h3>
                 <p><strong>Purpose:</strong> Guarantee 100% financial accountability at the end of every cashier's work shift.</p>
                 <ol class="workflow">
                     <li>At the end of the shift, the billing cashier opens <strong>Cash Submission</strong>.</li>
@@ -885,17 +879,17 @@ NORMAL STUDY.
                 <ul>
                     <li><strong>Aadhaar OTP Creation:</strong> Enter 12-digit Aadhaar &rarr; healthcare worker and beneficiary declarations are collected &rarr; OTP verified &rarr; ABHA Number &amp; Address generated.</li>
                     <li><strong>ABHA Verification:</strong> Retrieve verified demographic profile and photograph from ABDM via mobile OTP or ABHA number.</li>
-                    <li><strong>Facility Scan &amp; Share:</strong> Generates hospital QR code displayed at reception. Patients scan QR via their ABHA app, populating their details directly in the <strong>ABDM OPD Queue</strong> (<code>AbdmOpdQueue</code>).</li>
+                    <li><strong>Facility Scan &amp; Share:</strong> Generates hospital QR code displayed at reception. Patients scan QR via their ABHA app, populating their details directly in the <strong>ABDM OPD Queue</strong> for 1-click token creation.</li>
                 </ul>
 
                 <h3>2. Milestone 2 (M2): Health Information Provider (HIP) Linking</h3>
                 <div class="quick-grid">
                     <div class="quick-item">
                         <strong>HIP-Initiated Linking (Method 4)</strong>
-                        <div>Hospital submits patient demographics to ABDM Gateway. Gateway returns a secure JWT Link Token to link hospital care contexts directly.</div>
+                        <div>Hospital submits patient demographics to ABDM Gateway. Gateway returns a secure Link Token to link hospital care contexts directly.</div>
                     </div>
                     <div class="quick-item">
-                        <strong>Deep Link SMS (<code>sms/notify2</code>)</strong>
+                        <strong>Deep Link SMS Notification</strong>
                         <div>Hospital dispatches an SMS containing a direct app link to the patient's smartphone for 1-tap care context linking in their ABHA app.</div>
                     </div>
                     <div class="quick-item">
@@ -912,7 +906,7 @@ NORMAL STUDY.
                             <tr>
                                 <th>Clinical Document Type</th>
                                 <th>FHIR Resource Type</th>
-                                <th>Care Context Format</th>
+                                <th>Care Context Reference</th>
                                 <th>Clinical Content Transferred</th>
                             </tr>
                         </thead>
@@ -920,19 +914,19 @@ NORMAL STUDY.
                             <tr>
                                 <td><strong>OPD Consultation</strong></td>
                                 <td><code>OPConsultRecord</code></td>
-                                <td><code>OPD-{PatientId}-S{OpdId}-{YYYYMMDD}</code></td>
+                                <td>Unique Visit Receipt Number</td>
                                 <td>Encounter, Vitals, Chief complaints, ICD-10 diagnosis, prescribed medicines with dosage, doctor advice.</td>
                             </tr>
                             <tr>
                                 <td><strong>Diagnostic &amp; Radiology</strong></td>
                                 <td><code>DiagnosticReportRecord</code></td>
-                                <td><code>RAD-{LabReqId}-{YYYYMMDD}</code> / <code>LAB-...</code></td>
+                                <td>Diagnostic Lab Requisition ID</td>
                                 <td>Laboratory values, reference ranges, radiologist imaging findings, impression, and PDF study attachments.</td>
                             </tr>
                             <tr>
                                 <td><strong>Discharge Summary</strong></td>
                                 <td><code>DischargeSummaryRecord</code></td>
-                                <td><code>DISCHARGE-{IpdId}-{YYYYMMDD}</code></td>
+                                <td>Inpatient Admission Number</td>
                                 <td>Admission/discharge dates, clinical course, procedures performed, discharge medications, follow-up advice.</td>
                             </tr>
                         </tbody>
@@ -940,7 +934,7 @@ NORMAL STUDY.
                 </div>
 
                 <h3>4. Milestone 3 (M3): Health Information User (HIU)</h3>
-                <p>Allows hospital doctors to request digital consent from arriving patients to view their previous medical history and diagnostic reports from other hospitals across India via the <strong>ABHA Patient Request List</strong> (<code>AbdmHiu</code>).</p>
+                <p>Allows hospital doctors to request digital consent from arriving patients to view their previous medical history and diagnostic reports from other hospitals across India via the <strong>ABHA Patient Request List</strong> (Digital Consent Management).</p>
                 <div class="back-top"><a href="#top"><i class="bi bi-arrow-up-circle me-1"></i>Back to Top</a></div>
             </section>
 
@@ -1011,14 +1005,14 @@ NORMAL STUDY.
                     <li>Live real-time graphical bed census showing Occupied, Vacant, Cleaning, and Maintenance beds.</li>
                 </ul>
 
-                <h3>2. User Management &amp; Permissions (`Setting/Admin/UserManagement`)</h3>
+                <h3>2. User Management &amp; Access Permissions</h3>
                 <ul>
-                    <li>Create system users with individual usernames and encrypted passwords.</li>
+                    <li>Create system users with individual usernames and secure passwords.</li>
                     <li>Assign users to system groups (Doctor, Reception, Nursing, Accounts, Pharmacy, Admin).</li>
-                    <li>Grant granular individual permissions (e.g. <code>finance.payment.edit</code>, <code>template.xray</code>, <code>billing.charges.cancel</code>).</li>
+                    <li>Grant granular operational privileges (e.g. Payment Adjustments, Radiology Template Setup, Bill Cancellation, Pharmacy Dispensing).</li>
                 </ul>
 
-                <h3>3. Charges Master (`setting/charges`)</h3>
+                <h3>3. Hospital Charges &amp; Tariff Master</h3>
                 <ul>
                     <li>Configure hospital master rate list for consultations, investigations, surgical procedures, nursing care, and consumables.</li>
                     <li>Set differential pricing tiers for Private, General, and Empanelled Corporate/TPA patients.</li>
@@ -1066,7 +1060,7 @@ NORMAL STUDY.
                             <tr>
                                 <td><strong>Care Context Not Appearing in ABHA App</strong></td>
                                 <td>Patient searched in PHR app using a mobile number different from hospital record.</td>
-                                <td>Verify that the mobile number in <code>patient_master</code> matches the mobile registered on patient's ABHA account.</td>
+                                <td>Verify that the patient's mobile number registered in hospital records matches the mobile registered on patient's ABHA account.</td>
                             </tr>
                             <tr>
                                 <td><strong>PDF Print Preview Blank or Misaligned</strong></td>
@@ -1085,9 +1079,9 @@ NORMAL STUDY.
                 <div class="safety">
                     <strong>Technical Support Escalation:</strong> When reporting an unresolved issue to technical support, include:
                     <ol class="mb-0 mt-1">
-                        <li>The exact page URL and patient UHID (or invoice number).</li>
+                        <li>The active module/screen name and patient UHID (or invoice number).</li>
                         <li>Logged-in user role (never share passwords).</li>
-                        <li>Screenshot of the error dialog and browser console output (F12 &rarr; Console).</li>
+                        <li>Screenshot of the error dialog and message.</li>
                     </ol>
                 </div>
                 <div class="back-top"><a href="#top"><i class="bi bi-arrow-up-circle me-1"></i>Back to Top</a></div>
