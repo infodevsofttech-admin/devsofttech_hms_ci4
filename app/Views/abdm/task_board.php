@@ -164,8 +164,13 @@
                                 <div class="text-muted small"><?= esc((string) ($t['entity_id'] ?? '')) ?></div>
                             </td>
                             <td>
-                                <?php if ($bridgeSubmitted && strtolower((string) ($t['bridge_push_status'] ?? '')) === 'linked'): ?>
+                                <?php
+                                    $rawTaskStatus = strtolower(trim((string) ($t['status'] ?? 'pending')));
+                                    $isTaskLinked = in_array($rawTaskStatus, ['completed', 'linked'], true) || ($bridgeSubmitted && strtolower((string) ($t['bridge_push_status'] ?? '')) === 'linked');
+                                ?>
+                                <?php if ($isTaskLinked): ?>
                                     <span class="badge bg-success status-pill">LINKED</span>
+                                    <?php if ($bridgeCareContext !== ''): ?><div class="small"><code><?= esc($bridgeCareContext) ?></code></div><?php endif; ?>
                                 <?php elseif ($bridgeSubmitted): ?>
                                     <span class="badge bg-info status-pill">BRIDGE SUBMITTED</span>
                                     <?php if ($bridgeCareContext !== ''): ?><div class="small"><code><?= esc($bridgeCareContext) ?></code></div><?php endif; ?>
@@ -3482,8 +3487,27 @@
             var abhaId = (abhaInput ? abhaInput.value : (row.getAttribute('data-abha-id') || '')).trim();
             var patientCell = row.children[2];
             var patientName = patientCell ? (patientCell.querySelector('strong') || patientCell.children[0] || {}).textContent || '' : '';
+            var taskId = parseInt(row.getAttribute('data-task-id') || '0', 10);
+            var taskType = (row.getAttribute('data-task-type') || '').trim();
+            var entityId = (row.getAttribute('data-entity-id') || '').trim();
+
             if (typeof window.openAbdmHipLinkModal === 'function') {
-                window.openAbdmHipLinkModal(patientId, abhaId, { patient_name: patientName.trim() });
+                window.openAbdmHipLinkModal(patientId, abhaId, {
+                    patient_name: patientName.trim(),
+                    task_id: taskId,
+                    task_type: taskType,
+                    entity_id: entityId,
+                    onLinked: function (res) {
+                        var statusCell = row.children[5];
+                        if (statusCell) {
+                            var refHtml = '';
+                            if (res && res.care_contexts && res.care_contexts.length > 0) {
+                                refHtml = '<div class="small"><code>' + (res.care_contexts[0].ref || '') + '</code></div>';
+                            }
+                            statusCell.innerHTML = '<span class="badge bg-success status-pill">LINKED</span>' + refHtml;
+                        }
+                    }
+                });
             }
         });
     });
@@ -3493,8 +3517,15 @@
             var patientId = parseInt(btn.getAttribute('data-patient-id') || '0', 10);
             var abhaId = (btn.getAttribute('data-abha-id') || '').trim();
             var patientName = (btn.getAttribute('data-patient-name') || '').trim();
+            var opdId = (btn.getAttribute('data-opd-id') || '').trim();
+            var taskType = opdId ? 'opd_prescription_publish' : '';
+            var entityId = opdId || '';
             if (typeof window.openAbdmHipLinkModal === 'function') {
-                window.openAbdmHipLinkModal(patientId, abhaId, { patient_name: patientName });
+                window.openAbdmHipLinkModal(patientId, abhaId, {
+                    patient_name: patientName,
+                    task_type: taskType,
+                    entity_id: entityId
+                });
             }
         });
     });

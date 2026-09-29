@@ -265,12 +265,12 @@
     var btnDeselectAll = document.getElementById('btnDeselectAllCareContexts');
     if (btnSelectAll) {
         btnSelectAll.addEventListener('click', function() {
-            document.querySelectorAll('.care-context-cb').forEach(function(cb) { cb.checked = true; });
+            document.querySelectorAll('.care-context-cb:not(:disabled)').forEach(function(cb) { cb.checked = true; });
         });
     }
     if (btnDeselectAll) {
         btnDeselectAll.addEventListener('click', function() {
-            document.querySelectorAll('.care-context-cb').forEach(function(cb) { cb.checked = false; });
+            document.querySelectorAll('.care-context-cb:not(:disabled)').forEach(function(cb) { cb.checked = false; });
         });
     }
 
@@ -279,8 +279,9 @@
     if (btnReload) {
         btnReload.addEventListener('click', function() {
             var abha = (document.getElementById('hipAbhaAddress').value || '').trim();
-            if (abha) {
-                loadPatientCareContexts(0, abha);
+            var pId = (window.currentHipTaskContext && window.currentHipTaskContext.patientId) ? window.currentHipTaskContext.patientId : 0;
+            if (abha || pId > 0) {
+                loadPatientCareContexts(pId, abha);
             } else {
                 alert('Please enter an ABHA Address first.');
             }
@@ -304,16 +305,27 @@
         var display = item.display || ref;
         var hiType = item.hi_type || 'Record';
         var isLinked = !!item.is_linked;
+        var isFhirReady = (typeof item.is_fhir_ready !== 'undefined') ? !!item.is_fhir_ready : true;
+        var isPrimary = !!item.is_primary;
 
         // Check if already in list
         var existing = container.querySelector('input[value="' + ref.replace(/"/g, '\\"') + '"]');
         if (existing) {
-            existing.checked = true;
+            if (isPrimary && !existing.disabled) {
+                existing.checked = true;
+            }
             return;
         }
 
         var wrapper = document.createElement('div');
-        wrapper.className = 'border rounded p-2 d-flex align-items-center justify-content-between bg-white';
+        var baseClass = 'border rounded p-2 d-flex align-items-center justify-content-between ';
+        if (isPrimary) {
+            wrapper.className = baseClass + 'bg-primary-subtle border-primary shadow-sm';
+        } else if (!isFhirReady) {
+            wrapper.className = baseClass + 'bg-light border-warning-subtle text-muted';
+        } else {
+            wrapper.className = baseClass + 'bg-white';
+        }
         
         var left = document.createElement('div');
         left.className = 'form-check mb-0';
@@ -324,10 +336,29 @@
         cb.id = 'cc_' + Math.random().toString(36).substring(2, 9);
         cb.value = ref;
         cb.dataset.hiType = hiType;
-        cb.checked = (typeof isChecked === 'boolean') ? isChecked : !isLinked;
+        cb.dataset.isPrimary = isPrimary ? '1' : '0';
+        cb.dataset.isFhirReady = isFhirReady ? '1' : '0';
+        cb.dataset.isLinked = isLinked ? '1' : '0';
+
+        if (isLinked) {
+            cb.disabled = true;
+            cb.checked = false;
+        } else if (!isFhirReady) {
+            cb.disabled = true;
+            cb.checked = false;
+            cb.title = 'Incomplete findings - finalize report before linking';
+        } else if (typeof isChecked === 'boolean') {
+            cb.checked = isChecked;
+        } else if (isPrimary) {
+            cb.checked = true;
+        } else {
+            // If opened for a specific task, only check the primary task context by default
+            var hasSpecificTask = !!(window.currentHipTaskContext && window.currentHipTaskContext.taskId);
+            cb.checked = !hasSpecificTask;
+        }
 
         var label = document.createElement('label');
-        label.className = 'form-check-label ms-2 small fw-semibold';
+        label.className = 'form-check-label ms-2 small fw-semibold' + (!isFhirReady ? ' text-secondary' : '');
         label.htmlFor = cb.id;
         label.textContent = display;
 
@@ -335,7 +366,14 @@
         left.appendChild(label);
 
         var badgeSpan = document.createElement('div');
-        badgeSpan.className = 'd-flex align-items-center gap-1';
+        badgeSpan.className = 'd-flex align-items-center gap-1 flex-wrap justify-content-end';
+
+        if (isPrimary) {
+            var primaryBadge = document.createElement('span');
+            primaryBadge.className = 'badge bg-primary text-white small';
+            primaryBadge.innerHTML = '<i class="bi bi-star-fill me-1"></i>Current Task';
+            badgeSpan.appendChild(primaryBadge);
+        }
 
         var typeBadge = document.createElement('span');
         typeBadge.className = 'badge bg-secondary-subtle text-secondary border small';
@@ -344,13 +382,19 @@
 
         if (isLinked) {
             var linkedBadge = document.createElement('span');
-            linkedBadge.className = 'badge bg-success-subtle text-success border border-success small';
+            linkedBadge.className = 'badge bg-success-subtle text-success border border-success small cc-badge-linked';
             linkedBadge.innerHTML = '<i class="bi bi-check-circle me-1"></i>Linked';
             badgeSpan.appendChild(linkedBadge);
+        } else if (!isFhirReady) {
+            var draftBadge = document.createElement('span');
+            draftBadge.className = 'badge bg-warning-subtle text-dark border border-warning small cc-badge-draft';
+            draftBadge.innerHTML = '<i class="bi bi-clock me-1"></i>Draft / Incomplete';
+            draftBadge.title = 'Clinical findings must be documented before linking to ABDM';
+            badgeSpan.appendChild(draftBadge);
         } else {
             var readyBadge = document.createElement('span');
-            readyBadge.className = 'badge bg-primary-subtle text-primary border border-primary small';
-            readyBadge.textContent = 'Ready to Link';
+            readyBadge.className = 'badge bg-success-subtle text-success border border-success-subtle small cc-badge-ready';
+            readyBadge.innerHTML = '<i class="bi bi-check2-circle me-1"></i>FHIR Ready';
             badgeSpan.appendChild(readyBadge);
         }
 
@@ -362,16 +406,23 @@
     /**
      * Load patient demographics and care contexts from server.
      */
-    window.loadPatientCareContexts = function(patientId, abhaAddress) {
+    window.loadPatientCareContexts = function(patientId, abhaAddress, taskType, entityId, taskId) {
         var loading = document.getElementById('hipCareContextsLoading');
         var container = document.getElementById('hipCareContextsContainer');
         if (loading) loading.classList.remove('d-none');
         if (container) container.innerHTML = '';
 
+        taskType = taskType || (window.currentHipTaskContext ? window.currentHipTaskContext.taskType : '');
+        entityId = entityId || (window.currentHipTaskContext ? window.currentHipTaskContext.entityId : '');
+        taskId = taskId || (window.currentHipTaskContext ? window.currentHipTaskContext.taskId : 0);
+
         var csrf = getCsrfData();
         var url = '<?= base_url('AbdmGateway/hip_patient_care_contexts') ?>'
             + '?patient_id=' + encodeURIComponent(patientId || 0)
-            + '&abha_address=' + encodeURIComponent(abhaAddress || '');
+            + '&abha_address=' + encodeURIComponent(abhaAddress || '')
+            + '&task_type=' + encodeURIComponent(taskType || '')
+            + '&entity_id=' + encodeURIComponent(entityId || '')
+            + '&task_id=' + encodeURIComponent(taskId || 0);
 
         fetch(url, {
             method: 'GET',
@@ -385,14 +436,20 @@
             if (loading) loading.classList.add('d-none');
             updateCsrf(data);
 
-            if (data.ok && data.patient) {
+            if (!data.ok) {
+                var errTxt = data.error_text || data.error || (data.message || 'Failed to load patient records');
+                container.innerHTML = '<div class="alert alert-warning py-2 px-3 small mb-0"><i class="bi bi-exclamation-triangle me-1"></i>' + errTxt + '</div>';
+                return;
+            }
+
+            if (data.patient) {
                 var p = data.patient;
                 if (p.abha_address) document.getElementById('hipAbhaAddress').value = p.abha_address;
                 var pAbhaNum = (p.abha_number || '').trim();
                 if (pAbhaNum.indexOf('@') !== -1 || pAbhaNum.replace(/\D/g, '').length !== 14) {
                     pAbhaNum = '';
                 }
-                document.getElementById('hipAbhaNumber').value = pAbhaNum;
+                if (pAbhaNum) document.getElementById('hipAbhaNumber').value = pAbhaNum;
                 if (p.name) document.getElementById('hipPatientName').value = p.name;
                 if (p.gender) document.getElementById('hipGender').value = p.gender;
                 if (p.year_of_birth) document.getElementById('hipYob').value = p.year_of_birth;
@@ -407,12 +464,54 @@
             }
 
             var contexts = data.care_contexts || [];
+            var currentTaskAlreadyLinked = false;
+            var currentTaskLinkedRef = '';
             if (contexts.length > 0) {
                 contexts.forEach(function(item) {
                     appendCareContextCheckbox(item);
+                    if (item.is_primary && item.is_linked) {
+                        currentTaskAlreadyLinked = true;
+                        currentTaskLinkedRef = item.ref;
+                    }
                 });
             } else {
                 container.innerHTML = '<div class="text-muted small p-3 text-center" id="hipCareContextsEmpty">No clinical visit records found for this patient. Click <b>Custom</b> to add a test context.</div>';
+            }
+
+            if (currentTaskAlreadyLinked && window.currentHipTaskContext && window.currentHipTaskContext.taskId > 0) {
+                var tId = window.currentHipTaskContext.taskId;
+                var alertBox = document.getElementById('hipLinkStatusAlert');
+                if (alertBox) {
+                    alertBox.className = 'alert alert-info py-2 px-3 small';
+                    alertBox.innerHTML = '<strong><i class="bi bi-info-circle-fill me-1"></i>Already Linked:</strong> The record for this task (<code>' + currentTaskLinkedRef + '</code>) is already linked to patient\'s ABHA in ABDM.';
+                    alertBox.classList.remove('d-none');
+                }
+                try {
+                    var csrf = getCsrfData();
+                    var markFormData = new URLSearchParams();
+                    markFormData.append('task_id', tId);
+                    markFormData.append('status', 'completed');
+                    markFormData.append('note', 'Care context already linked in ABDM: ' + currentTaskLinkedRef);
+                    markFormData.append(csrf.name || 'csrf_hms', csrf.hash);
+
+                    fetch('<?= base_url('AbdmTaskBoard/mark_status') ?>', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        },
+                        body: markFormData.toString()
+                    }).then(function(mRes) { return mRes.json(); }).then(function(mResult) {
+                        updateCsrf(mResult);
+                        if (window.currentHipTaskContext && typeof window.currentHipTaskContext.onLinked === 'function') {
+                            window.currentHipTaskContext.onLinked({
+                                task_id: tId,
+                                care_contexts: [{ ref: currentTaskLinkedRef }]
+                            });
+                        }
+                    }).catch(function() {});
+                } catch (e) {}
             }
         })
         .catch(function(err) {
@@ -426,17 +525,27 @@
      */
     window.openAbdmHipLinkModal = function(patientId, abhaAddress, prefill) {
         prefill = prefill || {};
+        window.currentHipTaskContext = {
+            patientId: patientId,
+            abhaAddress: abhaAddress,
+            taskId: prefill.task_id || 0,
+            taskType: prefill.task_type || '',
+            entityId: prefill.entity_id || '',
+            onLinked: prefill.onLinked || null
+        };
+
         var modalEl = document.getElementById('abdmHipLinkModal');
         if (!modalEl) return;
         var modal = bootstrap.Modal.getInstance(modalEl) || new bootstrap.Modal(modalEl);
 
         // Reset fields
-        document.getElementById('hipAbhaAddress').value = abhaAddress || prefill.abha_address || '';
-        var rawPrefillNum = (prefill.abha_number || prefill.abha_id || '').trim();
-        if (rawPrefillNum.indexOf('@') !== -1 || rawPrefillNum.replace(/\D/g, '').length !== 14) {
-            rawPrefillNum = '';
-        }
-        document.getElementById('hipAbhaNumber').value = rawPrefillNum;
+        var rawAbhaInput = (abhaAddress || prefill.abha_address || prefill.abha_id || '').trim();
+        var isAbhaAddress = rawAbhaInput.indexOf('@') !== -1;
+        var clean14Num = rawAbhaInput.replace(/\D/g, '');
+        var is14Num = !isAbhaAddress && clean14Num.length === 14;
+
+        document.getElementById('hipAbhaAddress').value = isAbhaAddress ? rawAbhaInput : (prefill.abha_address || '');
+        document.getElementById('hipAbhaNumber').value = is14Num ? clean14Num : ((prefill.abha_number || '').indexOf('@') === -1 ? (prefill.abha_number || '') : '');
         document.getElementById('hipPatientName').value = prefill.name || prefill.patient_name || '';
         document.getElementById('hipGender').value = prefill.gender || 'M';
         document.getElementById('hipYob').value = prefill.year_of_birth || prefill.yob || '';
@@ -458,7 +567,7 @@
 
         // Load visits
         if (patientId > 0 || (abhaAddress && abhaAddress.length > 3)) {
-            loadPatientCareContexts(patientId, abhaAddress);
+            loadPatientCareContexts(patientId, abhaAddress, prefill.task_type, prefill.entity_id, prefill.task_id);
         } else {
             var container = document.getElementById('hipCareContextsContainer');
             if (container) {
@@ -505,12 +614,23 @@
         var submitBtn   = document.getElementById('btnSubmitHipLink');
 
         var selectedContexts = [];
+        var dominantHiType = '';
+        var hasIncomplete = false;
+
         document.querySelectorAll('.care-context-cb:checked').forEach(function(cb) {
             var ref = cb.value;
             var display = cb.nextElementSibling ? cb.nextElementSibling.textContent : ref;
+            var itemHiType = cb.dataset.hiType || '';
+            if (!dominantHiType && itemHiType) {
+                dominantHiType = itemHiType;
+            }
+            if (cb.dataset.isFhirReady === '0') {
+                hasIncomplete = true;
+            }
             selectedContexts.push({
                 ref: ref,
-                display: display
+                display: display,
+                hi_type: itemHiType
             });
         });
 
@@ -530,16 +650,57 @@
             alert('Please select at least one care context to link.');
             return;
         }
+        if (hasIncomplete) {
+            alert('One or more selected records are marked as incomplete. Only finalized records with documented findings can be linked to ABDM.');
+            return;
+        }
 
         var allAlreadyLinked = selectedContexts.length > 0 && selectedContexts.every(function(c) {
             var cb = document.querySelector('.care-context-cb[value="' + c.ref.replace(/"/g, '\\"') + '"]');
-            return cb && cb.closest('.border') && cb.closest('.border').querySelector('.badge.bg-success-subtle');
+            return cb && cb.dataset.isLinked === '1';
         });
         if (allAlreadyLinked) {
             alertBox.className = 'alert alert-success py-2 px-3 small';
             alertBox.innerHTML = '<strong><i class="bi bi-check-circle-fill me-1"></i>Already Linked!</strong> '
                 + 'The selected care context(s) are already linked with this patient\'s ABHA. Patient can view and fetch the records directly in their PHR app.';
             alertBox.classList.remove('d-none');
+
+            // If initiated for a specific task board task, sync task to completed so status isn't stuck on Ready to link!
+            if (window.currentHipTaskContext && window.currentHipTaskContext.taskId > 0) {
+                var tId = window.currentHipTaskContext.taskId;
+                var taskNote = 'Care context already linked to ABHA: ' + selectedContexts.map(function(c) { return c.ref; }).join(', ');
+                try {
+                    var csrf = getCsrfData();
+                    var markFormData = new URLSearchParams();
+                    markFormData.append('task_id', tId);
+                    markFormData.append('status', 'completed');
+                    markFormData.append('note', taskNote);
+                    markFormData.append(csrf.name || 'csrf_hms', csrf.hash);
+
+                    fetch('<?= base_url('AbdmTaskBoard/mark_status') ?>', {
+                        method: 'POST',
+                        headers: {
+                            'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                            'X-Requested-With': 'XMLHttpRequest',
+                            'Accept': 'application/json'
+                        },
+                        body: markFormData.toString()
+                    }).then(function(mRes) { return mRes.json(); }).then(function(mResult) {
+                        updateCsrf(mResult);
+                        if (window.currentHipTaskContext && typeof window.currentHipTaskContext.onLinked === 'function') {
+                            window.currentHipTaskContext.onLinked({
+                                task_id: tId,
+                                care_contexts: selectedContexts
+                            });
+                        }
+                    }).catch(function() {});
+                } catch (e) {}
+            } else if (window.currentHipTaskContext && typeof window.currentHipTaskContext.onLinked === 'function') {
+                window.currentHipTaskContext.onLinked({
+                    care_contexts: selectedContexts
+                });
+            }
+
             return;
         }
 
@@ -581,10 +742,17 @@
             }
 
             var linkTokenId = tokenData.link_token_id;
-            alertBox.innerHTML = '<strong>Step 2/2:</strong> Link token acquired (ID: ' + linkTokenId + '). Linking ' + selectedContexts.length + ' care context(s)...';
+            var isReused = tokenData.status === 'reused';
+            alertBox.innerHTML = '<strong>Step 2/2:</strong> ' + (isReused ? 'Active link token verified' : 'Link token acquired') + ' (ID: ' + linkTokenId + '). Linking ' + selectedContexts.length + ' care context(s)...';
 
-            // Allow token callback buffer if needed
-            await new Promise(function(r) { setTimeout(r, 1200); });
+            // Allow token callback buffer if needed (if newly generated)
+            var waitMs = isReused ? 300 : 2000;
+            await new Promise(function(r) { setTimeout(r, waitMs); });
+
+            var hiTypeToSend = dominantHiType || 'OPConsultRecord';
+            if (hiTypeToSend === 'OPConsultation') {
+                hiTypeToSend = 'OPConsultRecord';
+            }
 
             // Step 2: Link Care Contexts
             csrf = getCsrfData();
@@ -601,7 +769,7 @@
                     link_token_id: linkTokenId,
                     patient_ref: abhaAddress,
                     display: name,
-                    hi_type: 'OPConsultation',
+                    hi_type: hiTypeToSend,
                     care_contexts: selectedContexts,
                     csrf_hms: csrf.hash
                 })
@@ -614,11 +782,97 @@
                 alertBox.className = 'alert alert-success py-2 px-3 small';
                 alertBox.innerHTML = '<strong><i class="bi bi-check-circle-fill me-1"></i>Success!</strong> '
                     + 'Care contexts successfully submitted to ABDM for linking. Patient can now discover and access them in their ABHA / PHR app.';
+
+                // If initiated for a specific task board task, mark the task as completed
+                if (window.currentHipTaskContext && window.currentHipTaskContext.taskId > 0) {
+                    var tId = window.currentHipTaskContext.taskId;
+                    var taskNote = 'Care context linked to ABHA: ' + selectedContexts.map(function(c) { return c.ref; }).join(', ');
+                    try {
+                        csrf = getCsrfData();
+                        var markFormData = new URLSearchParams();
+                        markFormData.append('task_id', tId);
+                        markFormData.append('status', 'completed');
+                        markFormData.append('note', taskNote);
+                        markFormData.append(csrf.name || 'csrf_hms', csrf.hash);
+
+                        fetch('<?= base_url('AbdmTaskBoard/mark_status') ?>', {
+                            method: 'POST',
+                            headers: {
+                                'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                                'X-Requested-With': 'XMLHttpRequest',
+                                'Accept': 'application/json'
+                            },
+                            body: markFormData.toString()
+                        }).then(function(mRes) { return mRes.json(); }).then(function(mResult) {
+                            updateCsrf(mResult);
+                            if (window.currentHipTaskContext && typeof window.currentHipTaskContext.onLinked === 'function') {
+                                window.currentHipTaskContext.onLinked({
+                                    task_id: tId,
+                                    care_contexts: selectedContexts
+                                });
+                            }
+                        }).catch(function() {});
+                    } catch (e) {}
+                } else if (window.currentHipTaskContext && typeof window.currentHipTaskContext.onLinked === 'function') {
+                    window.currentHipTaskContext.onLinked({
+                        care_contexts: selectedContexts
+                    });
+                }
                 
                 // Refresh care contexts list
-                loadPatientCareContexts(0, abhaAddress);
+                loadPatientCareContexts(
+                    window.currentHipTaskContext ? window.currentHipTaskContext.patientId : 0,
+                    abhaAddress
+                );
             } else {
                 var errDetail = linkData.error_text || linkData.error || (linkData.detail && linkData.detail.error && linkData.detail.error.message) || 'Care context linking request failed';
+                var isAlreadyLinkedErr = /already\s+(linked|registered|added|exists)/i.test(errDetail) || /1017/i.test(errDetail);
+                if (isAlreadyLinkedErr) {
+                    alertBox.className = 'alert alert-success py-2 px-3 small';
+                    alertBox.innerHTML = '<strong><i class="bi bi-check-circle-fill me-1"></i>Already Linked!</strong> '
+                        + 'ABDM reports this care context is already linked to patient\'s ABHA. Task status updated to Linked.';
+
+                    if (window.currentHipTaskContext && window.currentHipTaskContext.taskId > 0) {
+                        var tId = window.currentHipTaskContext.taskId;
+                        var taskNote = 'Care context confirmed already linked in ABDM: ' + selectedContexts.map(function(c) { return c.ref; }).join(', ');
+                        try {
+                            csrf = getCsrfData();
+                            var markFormData = new URLSearchParams();
+                            markFormData.append('task_id', tId);
+                            markFormData.append('status', 'completed');
+                            markFormData.append('note', taskNote);
+                            markFormData.append(csrf.name || 'csrf_hms', csrf.hash);
+
+                            fetch('<?= base_url('AbdmTaskBoard/mark_status') ?>', {
+                                method: 'POST',
+                                headers: {
+                                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                                    'X-Requested-With': 'XMLHttpRequest',
+                                    'Accept': 'application/json'
+                                },
+                                body: markFormData.toString()
+                            }).then(function(mRes) { return mRes.json(); }).then(function(mResult) {
+                                updateCsrf(mResult);
+                                if (window.currentHipTaskContext && typeof window.currentHipTaskContext.onLinked === 'function') {
+                                    window.currentHipTaskContext.onLinked({
+                                        task_id: tId,
+                                        care_contexts: selectedContexts
+                                    });
+                                }
+                            }).catch(function() {});
+                        } catch (e) {}
+                    } else if (window.currentHipTaskContext && typeof window.currentHipTaskContext.onLinked === 'function') {
+                        window.currentHipTaskContext.onLinked({
+                            care_contexts: selectedContexts
+                        });
+                    }
+
+                    loadPatientCareContexts(
+                        window.currentHipTaskContext ? window.currentHipTaskContext.patientId : 0,
+                        abhaAddress
+                    );
+                    return;
+                }
                 throw new Error(errDetail);
             }
         } catch (err) {

@@ -304,6 +304,31 @@
                 return false;
             }
 
+            function cleanupBootstrapModalState() {
+                try {
+                    document.querySelectorAll('.modal.show').forEach(function(modalEl) {
+                        if (window.bootstrap && window.bootstrap.Modal) {
+                            var instance = window.bootstrap.Modal.getInstance(modalEl);
+                            if (instance) {
+                                try { instance.dispose(); } catch (e) {}
+                            }
+                        }
+                        modalEl.classList.remove('show');
+                        modalEl.style.display = 'none';
+                        modalEl.setAttribute('aria-hidden', 'true');
+                    });
+                    document.querySelectorAll('.modal-backdrop').forEach(function(backdrop) {
+                        try { backdrop.remove(); } catch (e) {}
+                    });
+                    document.body.classList.remove('modal-open');
+                    document.body.style.removeProperty('overflow');
+                    document.body.style.removeProperty('padding-right');
+                } catch (e) {
+                    console.warn('cleanupBootstrapModalState failed', e);
+                }
+            }
+            window.cleanupBootstrapModalState = cleanupBootstrapModalState;
+
             window.load_form = function(ourl, top_title = '') {
                 if (!requireJquery()) return;
                 var normalizedUrl = String(ourl || '');
@@ -319,12 +344,14 @@
                         console.warn('pageCleanup failed', e);
                     }
                 }
+                cleanupBootstrapModalState();
                 $.ajax({
                     url: normalizedUrl,
                     dataType: "html",
                     async: true,
                     timeout: REQUEST_TIMEOUT_MS,
                     beforeSend: function() {
+                        cleanupBootstrapModalState();
                         $('#main').html('loading...');
                         $("#wait").css("display", "block");
                     }
@@ -338,6 +365,7 @@
                         if (mainEl) {
                             mainEl.innerHTML = html;
                         }
+                        cleanupBootstrapModalState();
                         executeInjectedScripts('main');
                         if (typeof window.showPageNotifications === 'function') {
                             window.showPageNotifications(mainEl);

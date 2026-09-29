@@ -135,10 +135,10 @@
         </div>
         <hr/>
         <div class="row">
-            <div class="col-md-6">
-                <div class="form-group">
-                    <label>Template Action</label>
-                    <button id="updatereport" type="button" class="btn btn-primary">Update</button>
+            <div class="col-md-12">
+                <div class="form-group d-flex align-items-center gap-2">
+                    <button id="updatereport" type="button" class="btn btn-primary"><?= ((int) ($repo_id ?? 0) > 0) ? 'Update Template' : 'Save Template' ?></button>
+                    <button type="button" class="btn btn-outline-secondary" data-bs-dismiss="modal" onclick="if(typeof window.closeRadiologyActionModal==='function'){window.closeRadiologyActionModal();}">Cancel</button>
                 </div>
             </div>
         </div>
@@ -177,8 +177,9 @@
     })();
 
     $('#updatereport').click(function() {
+        var btn = $(this);
         var repo_id = $('#repo_id').val();
-        var input_Reportname = $('#input_Reportname').val();
+        var input_Reportname = $.trim($('#input_Reportname').val() || '');
         var charge_id = $('#charge_id').val();
         var group_id = $('#input_Reporttitle').val();
         var keywords = $('#keywords').val();
@@ -187,6 +188,48 @@
         var Impression = (typeof CKEDITOR !== 'undefined' && CKEDITOR.instances.Impression) ? CKEDITOR.instances.Impression.getData() : $('#Impression').val();
         var csrf_value = $('input[name="<?= csrf_token() ?>"]').first().val() || '<?= csrf_hash() ?>';
         var modality = <?= (int) ($modality ?? 2) ?>;
+
+        if (input_Reportname === '') {
+            if (typeof notify === 'function') {
+                notify('danger', 'Validation', 'Template Name is required.');
+            } else {
+                alert('Template Name is required.');
+            }
+            $('#input_Reportname').focus();
+            return;
+        }
+
+        btn.prop('disabled', true);
+        var originalBtnText = btn.text();
+        btn.text('Saving...');
+
+        var finishSave = function(successMsg) {
+            if (typeof notify === 'function') {
+                notify('success', 'Saved', successMsg || 'Template saved successfully');
+            }
+            if (typeof window.refreshRadiologyTemplateList === 'function') {
+                window.refreshRadiologyTemplateList();
+                return;
+            }
+            if (typeof window.closeRadiologyActionModal === 'function') {
+                window.closeRadiologyActionModal(function() {
+                    if (typeof load_form === 'function') {
+                        load_form('<?= base_url('Lab_Admin/report_ultrasound_list') ?>/' + modality, 'Diagnosis Template');
+                    } else {
+                        window.location.reload();
+                    }
+                });
+                return;
+            }
+            if (typeof window.cleanupRadiologyModalBackdrop === 'function') {
+                window.cleanupRadiologyModalBackdrop();
+            }
+            if (typeof load_form === 'function') {
+                load_form('<?= base_url('Lab_Admin/report_ultrasound_list') ?>/' + modality, 'Diagnosis Template');
+            } else {
+                window.location.reload();
+            }
+        };
 
         if (repo_id > 0) {
             $.post('<?= base_url('Lab_Admin/report_ultrasound_update') ?>/' + modality, {
@@ -200,15 +243,25 @@
                 "Impression": Impression,
                 "<?= csrf_token() ?>": csrf_value
             }, function(data) {
-                if (data && Number(data.update_record || 0) === 1 && typeof window.refreshRadiologyTemplateList === 'function') {
-                    window.refreshRadiologyTemplateList();
+                btn.prop('disabled', false).text(originalBtnText);
+                if (data && Number(data.update_record || 0) === 1) {
+                    finishSave(data.showcontent);
                     return;
                 }
-
+                var errMsg = (data && data.showcontent) ? data.showcontent : 'Unable to update template';
                 if (typeof notify === 'function') {
-                    notify('success', 'Saved', data.showcontent || 'Saved');
+                    notify('danger', 'Error', errMsg);
+                } else {
+                    alert(errMsg);
                 }
-            }, 'json');
+            }, 'json').fail(function() {
+                btn.prop('disabled', false).text(originalBtnText);
+                if (typeof notify === 'function') {
+                    notify('danger', 'Error', 'Network or server error while updating template.');
+                } else {
+                    alert('Network or server error while updating template.');
+                }
+            });
         } else {
             $.post('<?= base_url('Lab_Admin/report_ultrasound_insert') ?>/' + modality, {
                 "repo_id": repo_id,
@@ -221,14 +274,25 @@
                 "Impression": Impression,
                 "<?= csrf_token() ?>": csrf_value
             }, function(data) {
-                if (data.insertid > 0) {
-                    if (typeof load_form === 'function') {
-                        load_form('<?= base_url('Lab_Admin/report_ultrasound_list') ?>/' + modality, 'Diagnosis Template');
-                    } else {
-                        window.location.href = '<?= base_url('Lab_Admin/report_ultrasound_list') ?>/' + modality;
-                    }
+                btn.prop('disabled', false).text(originalBtnText);
+                if (data && (Number(data.insertid || 0) > 0 || Number(data.update_record || 0) === 1)) {
+                    finishSave(data.showcontent || 'Report created successfully');
+                    return;
                 }
-            }, 'json');
+                var errMsg = (data && data.showcontent) ? data.showcontent : 'Unable to create template';
+                if (typeof notify === 'function') {
+                    notify('danger', 'Error', errMsg);
+                } else {
+                    alert(errMsg);
+                }
+            }, 'json').fail(function() {
+                btn.prop('disabled', false).text(originalBtnText);
+                if (typeof notify === 'function') {
+                    notify('danger', 'Error', 'Network or server error while saving template.');
+                } else {
+                    alert('Network or server error while saving template.');
+                }
+            });
         }
     });
 </script>

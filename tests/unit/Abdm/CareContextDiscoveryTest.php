@@ -1,0 +1,283 @@
+<?php
+
+namespace Tests\Unit\Abdm;
+
+use App\Controllers\AbdmGateway;
+use CodeIgniter\Test\CIUnitTestCase;
+use ReflectionClass;
+
+final class CareContextDiscoveryTest extends CIUnitTestCase
+{
+    private AbdmGateway $gateway;
+
+    protected function setUp(): void
+    {
+        parent::setUp();
+
+        $db = \Config\Database::connect();
+        $forge = \Config\Database::forge();
+
+        $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('lab_request') . " (
+            id INTEGER PRIMARY KEY,
+            patient_id INTEGER,
+            lab_type INTEGER,
+            charge_id INTEGER,
+            report_name TEXT,
+            Report_Data TEXT,
+            report_data_Impression TEXT,
+            status INTEGER,
+            Request_Date TEXT,
+            reported_time TEXT,
+            collected_time TEXT
+        )");
+
+        $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('charge_master') . " (
+            id INTEGER PRIMARY KEY,
+            charge_name TEXT
+        )");
+
+        $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('opd_prescription') . " (
+            id INTEGER PRIMARY KEY,
+            p_id INTEGER,
+            date_opd_visit TEXT,
+            session_id INTEGER,
+            p_datetime TEXT
+        )");
+
+        $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('health_records') . " (
+            id INTEGER PRIMARY KEY,
+            patient_id INTEGER,
+            abha_id TEXT,
+            hi_type TEXT,
+            care_context_reference TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        )");
+
+        $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('patient_master') . " (
+            id INTEGER PRIMARY KEY,
+            p_code TEXT,
+            p_fname TEXT,
+            dob TEXT,
+            age TEXT,
+            gender INTEGER,
+            abha_id TEXT,
+            abha_address TEXT,
+            mphone1 TEXT
+        )");
+
+        $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('ipd_master') . " (
+            id INTEGER PRIMARY KEY,
+            p_id INTEGER,
+            discharge_date TEXT,
+            register_date TEXT,
+            ipd_status INTEGER
+        )");
+
+        $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('immunization_records') . " (
+            id INTEGER PRIMARY KEY,
+            patient_id INTEGER,
+            vaccine_name TEXT,
+            given_date TEXT,
+            abdm_care_context_reference TEXT
+        )");
+
+        $db->table('charge_master')->emptyTable();
+        $db->table('lab_request')->emptyTable();
+        $db->table('opd_prescription')->emptyTable();
+        $db->table('health_records')->emptyTable();
+        $db->table('patient_master')->emptyTable();
+        $db->table('ipd_master')->emptyTable();
+        $db->table('immunization_records')->emptyTable();
+
+        $db->table('patient_master')->insert([
+            'id' => 12,
+            'p_code' => 'P26071000012',
+            'p_fname' => 'KESHAV SINGH',
+            'dob' => '1976-06-30',
+            'age' => null,
+            'gender' => 1,
+            'abha_id' => '91747451787143',
+            'abha_address' => 'singhkeshav301976@sbx',
+            'mphone1' => '7817828379',
+        ]);
+
+        $db->table('charge_master')->insert([
+            'id' => 19,
+            'charge_name' => 'USG WHOLE ABDOMEN',
+        ]);
+
+        $db->table('lab_request')->insert([
+            'id' => 31,
+            'patient_id' => 12,
+            'lab_type' => 6,
+            'charge_id' => 19,
+            'report_name' => 'USG WHOLE ABDOMEN',
+            'Report_Data' => 'Liver is normal. Gall bladder normal.',
+            'report_data_Impression' => 'Normal study.',
+            'status' => 1,
+            'Request_Date' => '2026-09-29',
+            'reported_time' => '2026-09-29 11:00:00',
+        ]);
+
+        $db->table('opd_prescription')->insert([
+            'id' => 101,
+            'p_id' => 12,
+            'date_opd_visit' => '2026-09-28',
+            'session_id' => 50,
+            'p_datetime' => '2026-09-28 10:00:00',
+        ]);
+
+        $this->gateway = new AbdmGateway();
+        $this->gateway->initController(
+            \Config\Services::request(),
+            \Config\Services::response(),
+            \Config\Services::logger()
+        );
+    }
+
+    public function testCareContextsDiscoveryWithTargetTask(): void
+    {
+        $reflector = new ReflectionClass($this->gateway);
+        $method = $reflector->getMethod('findCareContextsForPatient');
+        $method->setAccessible(true);
+
+        // Test with patient 12 and task_type='radiology_report_publish', entity_id='31'
+        [$v3List, $fullList] = $method->invoke(
+            $this->gateway,
+            12,
+            'P-12',
+            'KESHAV SINGH',
+            'radiology_report_publish',
+            '31',
+            591
+        );
+
+        $this->assertNotEmpty($fullList, 'Care contexts list should not be empty for patient 12');
+
+        // Verify the primary context is the radiology report #31
+        $primaryCtx = $fullList[0];
+        $this->assertTrue($primaryCtx['is_primary'] ?? false, 'First care context should be marked as primary');
+        $this->assertSame('DiagnosticReportRecord', $primaryCtx['record_type']);
+        $this->assertStringStartsWith('RAD-31-', $primaryCtx['careContextId']);
+        $this->assertTrue($primaryCtx['is_fhir_ready']);
+
+        // Verify that v3List also contains referenceNumber
+        $this->assertSame($primaryCtx['careContextId'], $v3List[0]['referenceNumber']);
+
+        // Verify secondary contexts (e.g. OPD prescription) are also discovered
+        $hasOpd = false;
+        foreach ($fullList as $ctx) {
+            if ($ctx['record_type'] === 'OPConsultRecord') {
+                $hasOpd = true;
+                $this->assertFalse($ctx['is_primary']);
+            }
+        }
+        $this->assertTrue($hasOpd, 'Patient OPD consultations should also be included in care contexts');
+    }
+
+    public function testCareContextsDiscoveryDraftStatus(): void
+    {
+        $db = \Config\Database::connect();
+        // Insert incomplete lab request (status = 0 and empty findings)
+        $db->table('lab_request')->insert([
+            'id' => 99,
+            'patient_id' => 12,
+            'lab_type' => 1,
+            'charge_id' => 0,
+            'report_name' => 'Draft Blood Test',
+            'Report_Data' => '',
+            'report_data_Impression' => '',
+            'status' => 0,
+            'Request_Date' => '2026-09-29',
+        ]);
+
+        $reflector = new ReflectionClass($this->gateway);
+        $method = $reflector->getMethod('findCareContextsForPatient');
+        $method->setAccessible(true);
+
+        [$v3List, $fullList] = $method->invoke(
+            $this->gateway,
+            12,
+            'P-12',
+            'KESHAV SINGH'
+        );
+
+        $draftCtx = null;
+        foreach ($fullList as $ctx) {
+            if (str_starts_with($ctx['careContextId'], 'LAB-99-')) {
+                $draftCtx = $ctx;
+                break;
+            }
+        }
+
+        $this->assertNotNull($draftCtx);
+        $this->assertFalse($draftCtx['is_fhir_ready'], 'Incomplete lab report should not be marked FHIR ready');
+    }
+
+    public function testHipPatientCareContextsEndpoint(): void
+    {
+        $_SERVER['HTTP_X_REQUESTED_WITH'] = 'xmlhttprequest';
+        $_REQUEST['patient_id'] = '12';
+        $_REQUEST['abha_address'] = '91747451787143';
+        $_REQUEST['task_type'] = 'radiology_report_publish';
+        $_REQUEST['entity_id'] = '31';
+        $_REQUEST['task_id'] = '591';
+
+        $req = service('request');
+        $req->setHeader('X-Requested-With', 'XMLHttpRequest');
+        $this->gateway->initController($req, service('response'), service('logger'));
+
+        $res = $this->gateway->hipPatientCareContexts();
+        $body = json_decode($res->getBody(), true);
+
+        $this->assertSame(1, $body['ok'] ?? 0);
+        $this->assertNotEmpty($body['care_contexts'] ?? []);
+    }
+
+    public function testCareContextsDiscoveryWithIpdAndImmunization(): void
+    {
+        $db = \Config\Database::connect();
+        $db->table('ipd_master')->insert([
+            'id' => 55,
+            'p_id' => 12,
+            'discharge_date' => '2026-09-20',
+            'register_date' => '2026-09-15',
+            'ipd_status' => 1,
+        ]);
+        $db->table('immunization_records')->insert([
+            'id' => 77,
+            'patient_id' => 12,
+            'vaccine_name' => 'Covaxin',
+            'given_date' => '2026-09-18',
+            'abdm_care_context_reference' => 'IMM-77-20260918',
+        ]);
+
+        $reflector = new ReflectionClass($this->gateway);
+        $method = $reflector->getMethod('findCareContextsForPatient');
+        $method->setAccessible(true);
+
+        [$v3List, $fullList] = $method->invoke(
+            $this->gateway,
+            12,
+            'P-12',
+            'KESHAV SINGH'
+        );
+
+        $foundIpd = false;
+        $foundImm = false;
+        foreach ($fullList as $ctx) {
+            if ($ctx['record_type'] === 'DischargeSummaryRecord') {
+                $foundIpd = true;
+                $this->assertStringContainsString('DISCHARGE-55-', $ctx['careContextId']);
+            }
+            if ($ctx['record_type'] === 'ImmunizationRecord') {
+                $foundImm = true;
+                $this->assertSame('IMM-77-20260918', $ctx['careContextId']);
+            }
+        }
+
+        $this->assertTrue($foundIpd, 'IPD DischargeSummaryRecord should be discovered');
+        $this->assertTrue($foundImm, 'ImmunizationRecord should be discovered');
+    }
+}

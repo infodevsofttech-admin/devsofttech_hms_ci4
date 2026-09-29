@@ -146,6 +146,16 @@ class AbdmTaskBoard extends BaseController
         }
 
         foreach ($tasks as &$task) {
+            $taskStatus = strtolower(trim((string) ($task['status'] ?? 'pending')));
+            if (in_array($taskStatus, ['completed', 'linked', 'cancelled'], true)) {
+                $task['cooling_active'] = false;
+                $task['cooling_remaining_minutes'] = 0;
+                $task['cooling_remaining_seconds'] = 0;
+                $task['auto_link_at'] = null;
+                $task['ready_for_autolink'] = false;
+                continue;
+            }
+
             $taskType = (string) ($task['task_type'] ?? '');
             $lastModified = ! empty($task['updated_at'])
                 ? (string) $task['updated_at']

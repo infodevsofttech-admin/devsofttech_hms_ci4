@@ -5990,18 +5990,126 @@ class AbdmGateway extends BaseController
         return count($common) / max(1, count($union));
     }
 
-    private function findCareContextsForPatient(int $patientId, string $patientRef, string $patientName): array
-    {
+    private function findCareContextsForPatient(
+        int $patientId,
+        string $patientRef,
+        string $patientName,
+        string $taskType = '',
+        string $entityId = '',
+        int $taskId = 0
+    ): array {
+        $this->db = $this->db ?? \Config\Database::connect();
         $careContextsV3 = [];
         $careContextsFull = [];
+        $seenRefs = [];
 
-        // 1. Query health_records table
+        $addContext = function (array $item) use (&$careContextsV3, &$careContextsFull, &$seenRefs) {
+            $ref = trim((string) ($item['referenceNumber'] ?? $item['careContextId'] ?? ''));
+            if ($ref === '' || isset($seenRefs[$ref])) {
+                return;
+            }
+            $seenRefs[$ref] = true;
+            $careContextsV3[] = [
+                'referenceNumber' => $ref,
+                'display'         => $item['display'] ?? $ref,
+            ];
+            $careContextsFull[] = $item;
+        };
+
+        // 1. If explicit task requested (e.g. from Task Board row)
+        if ($taskType !== '' && $entityId !== '') {
+            $taskEntityId = (int) $entityId;
+            if (in_array($taskType, ['radiology_report_publish', 'lab_report_publish'], true) && $this->db->tableExists('lab_request')) {
+                $labReq = $this->db->table('lab_request lr')
+                    ->select('lr.id, lr.patient_id, lr.lab_type, lr.charge_id, lr.report_name, lr.Report_Data, lr.report_data_Impression, lr.status, lr.Request_Date, lr.reported_time, lr.collected_time')
+                    ->where('lr.id', $taskEntityId)
+                    ->get(1)
+                    ->getRowArray();
+
+                if (! empty($labReq)) {
+                    $isImaging = ((int) ($labReq['lab_type'] ?? 0) === 6) || str_contains($taskType, 'radiology');
+                    $prefix = $isImaging ? 'RAD' : 'LAB';
+                    $title = trim((string) ($labReq['report_name'] ?? ''));
+                    if ($title === '' && ! empty($labReq['charge_id']) && $this->db->tableExists('radiology_ultrasound_template')) {
+                        $tpl = $this->db->table('radiology_ultrasound_template')->select('template_name')->where('id', (int) $labReq['charge_id'])->get(1)->getRowArray();
+                        if (! empty($tpl['template_name'])) {
+                            $title = trim((string) $tpl['template_name']);
+                        }
+                    }
+                    if ($title === '') {
+                        $title = $this->mapLabTypeToTitle((int) ($labReq['lab_type'] ?? 0)) ?: ($isImaging ? 'Radiology Report' : 'Lab Report');
+                    }
+                    $reportedDate = ! empty($labReq['reported_time'])
+                        ? $labReq['reported_time']
+                        : (! empty($labReq['Request_Date']) ? $labReq['Request_Date'] : date('Y-m-d'));
+                    $visitDate = date('Y-m-d', strtotime((string) $reportedDate));
+                    $dateStr = date('d M Y', strtotime($visitDate));
+                    $ccRef = $prefix . '-' . $taskEntityId . '-' . str_replace('-', '', $visitDate);
+                    $display = ($isImaging ? 'Radiology Report - ' : 'Diagnostic Report - ') . $title . ' (' . $dateStr . ')';
+
+                    $hasFindings = trim((string) ($labReq['Report_Data'] ?? '')) !== '' || trim((string) ($labReq['report_data_Impression'] ?? '')) !== '';
+                    $statusVal = (int) ($labReq['status'] ?? 0);
+                    $isReady = in_array($statusVal, [1, 2], true) || $hasFindings;
+
+                    $addContext([
+                        'careContextId'   => $ccRef,
+                        'referenceNumber' => $ccRef,
+                        'display'         => $display,
+                        'record_type'     => 'DiagnosticReportRecord',
+                        'patient_id'      => $patientId,
+                        'is_fhir_ready'   => $isReady,
+                        'is_primary'      => true,
+                    ]);
+                }
+            } elseif ($taskType === 'opd_prescription_publish' && $this->db->tableExists('opd_prescription')) {
+                $pr = $this->db->table('opd_prescription')
+                    ->where('id', $taskEntityId)
+                    ->orWhere('session_id', $taskEntityId)
+                    ->get(1)
+                    ->getRowArray();
+                if (! empty($pr)) {
+                    $visitDate = ! empty($pr['date_opd_visit']) ? $pr['date_opd_visit'] : date('Y-m-d', strtotime((string) ($pr['p_datetime'] ?? 'now')));
+                    $dateStr = date('d M Y', strtotime((string) $visitDate));
+                    $sessionId = ! empty($pr['session_id']) ? $pr['session_id'] : $pr['id'];
+                    $ccRef = 'OPD-' . $patientId . '-S' . $sessionId . '-' . str_replace('-', '', (string) $visitDate);
+                    $display = 'OPConsultRecord - ' . $dateStr;
+                    $addContext([
+                        'careContextId'   => $ccRef,
+                        'referenceNumber' => $ccRef,
+                        'display'         => $display,
+                        'record_type'     => 'OPConsultRecord',
+                        'patient_id'      => $patientId,
+                        'is_fhir_ready'   => true,
+                        'is_primary'      => true,
+                    ]);
+                }
+            } elseif ($taskType === 'ipd_discharge_publish' && $this->db->tableExists('ipd_master')) {
+                $ipd = $this->db->table('ipd_master')->where('id', $taskEntityId)->get(1)->getRowArray();
+                if (! empty($ipd)) {
+                    $disDate = ! empty($ipd['discharge_date']) ? $ipd['discharge_date'] : date('Y-m-d');
+                    $dateStr = date('d M Y', strtotime((string) $disDate));
+                    $ccRef = 'DISCHARGE-' . $taskEntityId . '-' . str_replace('-', '', (string) $disDate);
+                    $display = 'DischargeSummaryRecord - ' . $dateStr;
+                    $addContext([
+                        'careContextId'   => $ccRef,
+                        'referenceNumber' => $ccRef,
+                        'display'         => $display,
+                        'record_type'     => 'DischargeSummaryRecord',
+                        'patient_id'      => $patientId,
+                        'is_fhir_ready'   => true,
+                        'is_primary'      => true,
+                    ]);
+                }
+            }
+        }
+
+        // 2. Query health_records table (persisted FHIR bundles)
         if ($this->db->tableExists('health_records')) {
             $rows = $this->db->table('health_records')
                 ->select('id, patient_id, abha_id, hi_type, care_context_reference, created_at, updated_at')
                 ->where('patient_id', $patientId)
                 ->orderBy('id', 'DESC')
-                ->limit(200)
+                ->limit(100)
                 ->get()
                 ->getResultArray();
 
@@ -6011,71 +6119,198 @@ class AbdmGateway extends BaseController
                     $ccRef = 'HR-' . (int) ($row['id'] ?? 0);
                 }
                 $hiType = trim((string) ($row['hi_type'] ?? 'HealthDocumentRecord'));
-                $dateStr = date('d M Y', strtotime($row['created_at'] ?? $row['updated_at'] ?? 'now'));
+                $dateStr = date('d M Y', strtotime((string) ($row['created_at'] ?? $row['updated_at'] ?? 'now')));
                 $display = $hiType . ' - ' . $dateStr;
 
-                $careContextsV3[] = [
+                $addContext([
+                    'careContextId'   => $ccRef,
                     'referenceNumber' => $ccRef,
-                    'display' => $display,
-                ];
-                $careContextsFull[] = [
-                    'careContextId' => $ccRef,
-                    'referenceNumber' => $ccRef,
-                    'display' => $display,
-                    'record_type' => $hiType,
-                    'patient_id' => $patientId,
-                ];
+                    'display'         => $display,
+                    'record_type'     => $hiType,
+                    'patient_id'      => $patientId,
+                    'is_fhir_ready'   => true,
+                    'is_primary'      => false,
+                ]);
             }
         }
 
-        // 2. Fallback: query opd_prescription if health_records has no entries
-        if (empty($careContextsV3) && $this->db->tableExists('opd_prescription')) {
+        // 3. Query lab_request table (All Radiology and Lab Reports for this patient)
+        if ($this->db->tableExists('lab_request')) {
+            $labRows = $this->db->table('lab_request lr')
+                ->select('lr.id, lr.lab_type, lr.charge_id, lr.report_name, lr.Report_Data, lr.report_data_Impression, lr.status, lr.Request_Date, lr.reported_time, lr.collected_time')
+                ->where('lr.patient_id', $patientId)
+                ->orderBy('lr.id', 'DESC')
+                ->limit(30)
+                ->get()
+                ->getResultArray();
+
+            foreach ($labRows as $lr) {
+                $isImaging = ((int) ($lr['lab_type'] ?? 0) === 6);
+                $prefix = $isImaging ? 'RAD' : 'LAB';
+                $title = trim((string) ($lr['report_name'] ?? ''));
+                if ($title === '' && ! empty($lr['charge_id']) && $this->db->tableExists('radiology_ultrasound_template')) {
+                    $tpl = $this->db->table('radiology_ultrasound_template')->select('template_name')->where('id', (int) $lr['charge_id'])->get(1)->getRowArray();
+                    if (! empty($tpl['template_name'])) {
+                        $title = trim((string) $tpl['template_name']);
+                    }
+                }
+                if ($title === '') {
+                    $title = $this->mapLabTypeToTitle((int) ($lr['lab_type'] ?? 0)) ?: ($isImaging ? 'Radiology Report' : 'Lab Report');
+                }
+                $reportedDate = ! empty($lr['reported_time'])
+                    ? $lr['reported_time']
+                    : (! empty($lr['Request_Date']) ? $lr['Request_Date'] : date('Y-m-d'));
+                $visitDate = date('Y-m-d', strtotime((string) $reportedDate));
+                $dateStr = date('d M Y', strtotime($visitDate));
+                $ccRef = $prefix . '-' . $lr['id'] . '-' . str_replace('-', '', $visitDate);
+                $display = ($isImaging ? 'Radiology Report - ' : 'Diagnostic Report - ') . $title . ' (' . $dateStr . ')';
+
+                $hasFindings = trim((string) ($lr['Report_Data'] ?? '')) !== '' || trim((string) ($lr['report_data_Impression'] ?? '')) !== '';
+                $statusVal = (int) ($lr['status'] ?? 0);
+                $isReady = in_array($statusVal, [1, 2], true) || $hasFindings;
+
+                $addContext([
+                    'careContextId'   => $ccRef,
+                    'referenceNumber' => $ccRef,
+                    'display'         => $display,
+                    'record_type'     => 'DiagnosticReportRecord',
+                    'patient_id'      => $patientId,
+                    'is_fhir_ready'   => $isReady,
+                    'is_primary'      => false,
+                ]);
+            }
+        }
+
+        // 4. Query opd_prescription (OPD consultations & prescriptions)
+        if ($this->db->tableExists('opd_prescription')) {
             $prescRows = $this->db->table('opd_prescription')
                 ->select('id, p_id, date_opd_visit, session_id, p_datetime')
                 ->where('p_id', $patientId)
                 ->orderBy('id', 'DESC')
-                ->limit(50)
+                ->limit(30)
                 ->get()
                 ->getResultArray();
 
             foreach ($prescRows as $pr) {
                 $visitDate = ! empty($pr['date_opd_visit'])
                     ? $pr['date_opd_visit']
-                    : date('Y-m-d', strtotime($pr['p_datetime'] ?? 'now'));
+                    : date('Y-m-d', strtotime((string) ($pr['p_datetime'] ?? 'now')));
                 $dateStr = date('d M Y', strtotime($visitDate));
                 $sessionId = ! empty($pr['session_id']) ? $pr['session_id'] : $pr['id'];
                 $ccRef = 'OPD-' . $patientId . '-S' . $sessionId . '-' . str_replace('-', '', $visitDate);
                 $display = 'OPConsultRecord - ' . $dateStr;
 
-                $careContextsV3[] = [
+                $addContext([
+                    'careContextId'   => $ccRef,
                     'referenceNumber' => $ccRef,
-                    'display' => $display,
-                ];
-                $careContextsFull[] = [
-                    'careContextId' => $ccRef,
-                    'referenceNumber' => $ccRef,
-                    'display' => $display,
-                    'record_type' => 'OPConsultRecord',
-                    'patient_id' => $patientId,
-                ];
+                    'display'         => $display,
+                    'record_type'     => 'OPConsultRecord',
+                    'patient_id'      => $patientId,
+                    'is_fhir_ready'   => true,
+                    'is_primary'      => false,
+                ]);
             }
         }
 
-        // 3. Fallback: default registration file care context
+        // 5. Query ipd_master (Discharge summaries)
+        if ($this->db->tableExists('ipd_master')) {
+            $ipdRows = $this->db->table('ipd_master')
+                ->select('id, p_id, discharge_date, register_date, ipd_status')
+                ->where('p_id', $patientId)
+                ->where('discharge_date IS NOT NULL')
+                ->where("discharge_date != '0000-00-00'")
+                ->where("discharge_date > '1970-01-01'")
+                ->orderBy('id', 'DESC')
+                ->limit(10)
+                ->get()
+                ->getResultArray();
+
+            foreach ($ipdRows as $ipd) {
+                $disDate = date('Y-m-d', strtotime((string) $ipd['discharge_date']));
+                $dateStr = date('d M Y', strtotime($disDate));
+                $ccRef = 'DISCHARGE-' . $ipd['id'] . '-' . str_replace('-', '', $disDate);
+                $display = 'DischargeSummaryRecord - ' . $dateStr;
+
+                $addContext([
+                    'careContextId'   => $ccRef,
+                    'referenceNumber' => $ccRef,
+                    'display'         => $display,
+                    'record_type'     => 'DischargeSummaryRecord',
+                    'patient_id'      => $patientId,
+                    'is_fhir_ready'   => true,
+                    'is_primary'      => false,
+                ]);
+            }
+        }
+
+        // 6. Query immunization_records / patient_immunization if exists
+        if ($this->db->tableExists('immunization_records')) {
+            $immRows = $this->db->table('immunization_records')
+                ->select('id, patient_id, vaccine_name, given_date, abdm_care_context_reference')
+                ->where('patient_id', $patientId)
+                ->orderBy('id', 'DESC')
+                ->limit(10)
+                ->get()
+                ->getResultArray();
+
+            foreach ($immRows as $imm) {
+                $admDate = ! empty($imm['given_date']) ? date('Y-m-d', strtotime((string) $imm['given_date'])) : date('Y-m-d');
+                $dateStr = date('d M Y', strtotime($admDate));
+                $ccRef = ! empty($imm['abdm_care_context_reference'])
+                    ? trim((string) $imm['abdm_care_context_reference'])
+                    : ('IMM-' . $imm['id'] . '-' . str_replace('-', '', $admDate));
+                $display = 'ImmunizationRecord - ' . ($imm['vaccine_name'] ?? 'Vaccine') . ' (' . $dateStr . ')';
+
+                $addContext([
+                    'careContextId'   => $ccRef,
+                    'referenceNumber' => $ccRef,
+                    'display'         => $display,
+                    'record_type'     => 'ImmunizationRecord',
+                    'patient_id'      => $patientId,
+                    'is_fhir_ready'   => true,
+                    'is_primary'      => false,
+                ]);
+            }
+        } elseif ($this->db->tableExists('patient_immunization')) {
+            $immRows = $this->db->table('patient_immunization')
+                ->select('id, patient_id, vaccine_name, administration_date')
+                ->where('patient_id', $patientId)
+                ->orderBy('id', 'DESC')
+                ->limit(10)
+                ->get()
+                ->getResultArray();
+
+            foreach ($immRows as $imm) {
+                $admDate = ! empty($imm['administration_date']) ? date('Y-m-d', strtotime((string) $imm['administration_date'])) : date('Y-m-d');
+                $dateStr = date('d M Y', strtotime($admDate));
+                $ccRef = 'IMM-' . $imm['id'] . '-' . str_replace('-', '', $admDate);
+                $display = 'ImmunizationRecord - ' . ($imm['vaccine_name'] ?? 'Vaccine') . ' (' . $dateStr . ')';
+
+                $addContext([
+                    'careContextId'   => $ccRef,
+                    'referenceNumber' => $ccRef,
+                    'display'         => $display,
+                    'record_type'     => 'ImmunizationRecord',
+                    'patient_id'      => $patientId,
+                    'is_fhir_ready'   => true,
+                    'is_primary'      => false,
+                ]);
+            }
+        }
+
+        // 7. Fallback: default registration file care context
         if (empty($careContextsV3)) {
             $ccRef = 'REG-' . $patientRef;
             $display = 'Patient File - ' . $patientName;
-            $careContextsV3[] = [
+            $addContext([
+                'careContextId'   => $ccRef,
                 'referenceNumber' => $ccRef,
-                'display' => $display,
-            ];
-            $careContextsFull[] = [
-                'careContextId' => $ccRef,
-                'referenceNumber' => $ccRef,
-                'display' => $display,
-                'record_type' => 'PatientFile',
-                'patient_id' => $patientId,
-            ];
+                'display'         => $display,
+                'record_type'     => 'PatientFile',
+                'patient_id'      => $patientId,
+                'is_fhir_ready'   => true,
+                'is_primary'      => false,
+            ]);
         }
 
         return [$careContextsV3, $careContextsFull];
@@ -10629,10 +10864,16 @@ class AbdmGateway extends BaseController
         $patientId   = 0;
         $abhaAddress = '';
         $pCode       = '';
+        $taskType    = '';
+        $entityId    = '';
+        $taskId      = 0;
         if (method_exists($this->request, 'getVar')) {
             $patientId   = (int) ($this->request->getVar('patient_id') ?? 0);
             $abhaAddress = trim((string) ($this->request->getVar('abha_address') ?? ''));
             $pCode       = trim((string) ($this->request->getVar('p_code') ?? ''));
+            $taskType    = trim((string) ($this->request->getVar('task_type') ?? ''));
+            $entityId    = trim((string) ($this->request->getVar('entity_id') ?? ''));
+            $taskId      = (int) ($this->request->getVar('task_id') ?? 0);
         }
         if ($patientId <= 0 && ! empty($_REQUEST['patient_id'])) {
             $patientId = (int) $_REQUEST['patient_id'];
@@ -10642,6 +10883,15 @@ class AbdmGateway extends BaseController
         }
         if ($pCode === '' && ! empty($_REQUEST['p_code'])) {
             $pCode = trim((string) $_REQUEST['p_code']);
+        }
+        if ($taskType === '' && ! empty($_REQUEST['task_type'])) {
+            $taskType = trim((string) $_REQUEST['task_type']);
+        }
+        if ($entityId === '' && ! empty($_REQUEST['entity_id'])) {
+            $entityId = trim((string) $_REQUEST['entity_id']);
+        }
+        if ($taskId <= 0 && ! empty($_REQUEST['task_id'])) {
+            $taskId = (int) $_REQUEST['task_id'];
         }
 
         if ($patientId <= 0 && $abhaAddress === '' && $pCode === '') {
@@ -10695,7 +10945,7 @@ class AbdmGateway extends BaseController
         $rawPhone   = trim((string) ($patient['mphone1'] ?? $patient['mphone2'] ?? ''));
         $cleanPhone = substr(preg_replace('/\D/', '', $rawPhone), -10);
 
-        [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientName);
+        [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientName, $taskType, $entityId, $taskId);
 
         // Fetch already-linked care contexts from Bridge if ABHA address is present
         $linkedRefs = [];
@@ -10723,10 +10973,12 @@ class AbdmGateway extends BaseController
             $ref = $cc['referenceNumber'] ?? $cc['careContextId'] ?? '';
             $isLinked = in_array($ref, $linkedRefs, true);
             $contextsList[] = [
-                'ref'       => $ref,
-                'display'   => $cc['display'] ?? $ref,
-                'hi_type'   => $cc['record_type'] ?? 'OPConsultRecord',
-                'is_linked' => $isLinked,
+                'ref'           => $ref,
+                'display'       => $cc['display'] ?? $ref,
+                'hi_type'       => $cc['record_type'] ?? 'OPConsultRecord',
+                'is_linked'     => $isLinked,
+                'is_fhir_ready' => (bool) ($cc['is_fhir_ready'] ?? true),
+                'is_primary'    => (bool) ($cc['is_primary'] ?? false),
             ];
         }
 

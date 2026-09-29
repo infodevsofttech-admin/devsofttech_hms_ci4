@@ -18,17 +18,19 @@ namespace App\Libraries\Abdm;
  */
 class EAtriaBridgeConnector implements AbdmConnectorInterface
 {
-    private string $baseUrl;
-    private string $token;
-    private string $hfrId;
-    private string $bridgeHospitalId;
-    private int    $timeoutSec;
+    private string $baseUrl = '';
+    private string $token = '';
+    private string $hfrId = '';
+    private string $bridgeHospitalId = '';
+    private int    $timeoutSec = 30;
     private bool   $sslVerify = true;
     /** @var array<int, string> */
     private array $tokenCandidates = [];
     /** @var array<string, string> */
     private array $tokenSourceByValue = [];
     private string $tokenSource = 'config';
+    /** @var array<int, float> */
+    protected array $linkTokenRetryDelays = [1.5, 2.0, 2.5];
 
     public function __construct()
     {
@@ -259,12 +261,12 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
      * @param array<string, mixed> $body
      * @return array<string, mixed>
      */
-    private function post(string $path, array $body): array
+    protected function post(string $path, array $body): array
     {
         return $this->httpCall('POST', $path, $body);
     }
 
-    private function patch(string $path, array $body): array
+    protected function patch(string $path, array $body): array
     {
         return $this->httpCall('PATCH', $path, $body);
     }
@@ -274,7 +276,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
      * @param array<string, string> $extraHeaders
      * @return array<string, mixed>
      */
-    private function get(string $path, array $query = [], array $extraHeaders = []): array
+    protected function get(string $path, array $query = [], array $extraHeaders = []): array
     {
         // e-Atria bridge expects hfr_id alongside Bearer auth for GET endpoints too.
         if ($this->hfrId !== '' && empty($query['hfr_id'])) {
@@ -1781,7 +1783,38 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         if ($this->hfrId !== '' && empty($payload['hfr_id'])) {
             $payload['hfr_id'] = $this->hfrId;
         }
-        return $this->post('/v3/hip/link/carecontext', $payload);
+
+        $hasLinkId = ! empty($payload['link_token_id']);
+        $delaysSec = $this->linkTokenRetryDelays;
+        $maxAttempts = $hasLinkId ? count($delaysSec) + 1 : 1;
+
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            $result = $this->post('/v3/hip/link/carecontext', $payload);
+
+            if (($result['ok'] ?? 0) === 1) {
+                return $result;
+            }
+
+            // Check if error is because ABDM callback hasn't populated link_token yet on the bridge
+            $err = strtolower((string) ($result['error_text'] ?? $result['error'] ?? ''));
+            $isTokenPending = $hasLinkId && (
+                strpos($err, 'link_token') !== false &&
+                (strpos($err, 'required') !== false || strpos($err, 'link-token first') !== false)
+            );
+
+            if (! $isTokenPending || $attempt === $maxAttempts) {
+                if ($isTokenPending) {
+                    $result['error_text'] = 'ABDM authorization token callback is still pending from the gateway. Please retry in a few seconds.';
+                    $result['error'] = $result['error_text'];
+                }
+                return $result;
+            }
+
+            $sleepSec = $delaysSec[$attempt - 1] ?? 2.0;
+            usleep((int) ($sleepSec * 1000000));
+        }
+
+        return $result;
     }
 
     public function hipGetPatientLinks(array $filters = []): array

@@ -376,6 +376,70 @@ $selectedModality = (int) ($modality ?? 2);
             });
         });
 
+        function cleanupRadiologyModalBackdrop() {
+            document.querySelectorAll('.modal-backdrop').forEach(function(el) {
+                try { el.remove(); } catch (e) {}
+            });
+            document.body.classList.remove('modal-open');
+            document.body.style.removeProperty('overflow');
+            document.body.style.removeProperty('padding-right');
+        }
+        window.cleanupRadiologyModalBackdrop = cleanupRadiologyModalBackdrop;
+
+        function closeRadiologyActionModal(callback) {
+            destroyRadiologyEditors();
+            var modalEl = document.getElementById('radiologyActionModal');
+
+            if (!modalEl) {
+                cleanupRadiologyModalBackdrop();
+                if (typeof callback === 'function') callback();
+                return;
+            }
+
+            var isVisible = modalEl.classList.contains('show') || document.body.classList.contains('modal-open');
+            if (!isVisible) {
+                cleanupRadiologyModalBackdrop();
+                if (typeof callback === 'function') callback();
+                return;
+            }
+
+            var doneCalled = false;
+            function done() {
+                if (doneCalled) return;
+                doneCalled = true;
+                cleanupRadiologyModalBackdrop();
+                if (typeof callback === 'function') {
+                    callback();
+                }
+            }
+
+            modalEl.addEventListener('hidden.bs.modal', function onHidden() {
+                modalEl.removeEventListener('hidden.bs.modal', onHidden);
+                done();
+            }, { once: true });
+
+            setTimeout(done, 300);
+
+            try {
+                if (window.bootstrap && window.bootstrap.Modal) {
+                    var modalInstance = window.bootstrap.Modal.getInstance(modalEl);
+                    if (modalInstance) {
+                        modalInstance.hide();
+                    } else {
+                        new window.bootstrap.Modal(modalEl).hide();
+                    }
+                } else if (window.jQuery && $(modalEl).modal) {
+                    $(modalEl).modal('hide');
+                } else {
+                    done();
+                }
+            } catch (err) {
+                console.warn('Error hiding modal', err);
+                done();
+            }
+        }
+        window.closeRadiologyActionModal = closeRadiologyActionModal;
+
         if (actionModalEl) {
             actionModalEl.addEventListener('hidden.bs.modal', function() {
                 destroyRadiologyEditors();
@@ -383,6 +447,7 @@ $selectedModality = (int) ($modality ?? 2);
                 if (actionModalBodyEl) {
                     actionModalBodyEl.innerHTML = '<div class="text-muted">Loading...</div>';
                 }
+                cleanupRadiologyModalBackdrop();
             });
         } else if (window.jQuery && $('#radiologyActionModal').on) {
             $('#radiologyActionModal').on('hidden.bs.modal', function() {
@@ -391,15 +456,18 @@ $selectedModality = (int) ($modality ?? 2);
                 if (actionModalBodyEl) {
                     actionModalBodyEl.innerHTML = '<div class="text-muted">Loading...</div>';
                 }
+                cleanupRadiologyModalBackdrop();
             });
         }
 
         window.refreshRadiologyTemplateList = function() {
-            if (typeof load_form === 'function') {
-                load_form('<?= base_url('Lab_Admin/report_ultrasound_list') ?>/<?= $selectedModality ?>', 'Diagnosis Template');
-                return;
-            }
-            window.location.reload();
+            closeRadiologyActionModal(function() {
+                if (typeof load_form === 'function') {
+                    load_form('<?= base_url('Lab_Admin/report_ultrasound_list') ?>/<?= $selectedModality ?>', 'Diagnosis Template');
+                    return;
+                }
+                window.location.reload();
+            });
         };
     })();
 </script>
