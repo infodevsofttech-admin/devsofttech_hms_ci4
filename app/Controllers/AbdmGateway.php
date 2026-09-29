@@ -2007,11 +2007,11 @@ class AbdmGateway extends BaseController
             return $this->response->setStatusCode(403)->setJSON(['error' => 'AJAX only']);
         }
 
-        $labReqId      = (int) ($this->request->getPost('lab_req_id') ?? 0);
-        $patientId     = (int) ($this->request->getPost('patient_id') ?? 0);
-        $abhaId        = trim((string) ($this->request->getPost('abha_id') ?? ''));
-        $abhaAddressPost = trim((string) ($this->request->getPost('abha_address') ?? ''));
-        $consentHandle = trim((string) ($this->request->getPost('consent_handle') ?? ''));
+        $labReqId      = (int) ($this->request->getPost('lab_req_id') ?? $_POST['lab_req_id'] ?? 0);
+        $patientId     = (int) ($this->request->getPost('patient_id') ?? $_POST['patient_id'] ?? 0);
+        $abhaId        = trim((string) ($this->request->getPost('abha_id') ?? $_POST['abha_id'] ?? ''));
+        $abhaAddressPost = trim((string) ($this->request->getPost('abha_address') ?? $_POST['abha_address'] ?? ''));
+        $consentHandle = trim((string) ($this->request->getPost('consent_handle') ?? $_POST['consent_handle'] ?? ''));
 
         if ($labReqId <= 0 || $patientId <= 0) {
             return $this->response->setJSON(['ok' => 0, 'error' => 'lab_req_id and patient_id are required']);
@@ -2103,14 +2103,16 @@ class AbdmGateway extends BaseController
         }
 
         // -- Load LOINC code for the panel from lab_repo -----------------------
-        $labRepoRow = $this->db->table('lab_request lr')
-            ->select('lr.lab_repo_id, repo.loinc_code AS repo_loinc_code, repo.Title')
-            ->join('lab_repo repo', 'repo.mstRepoKey = lr.lab_repo_id', 'left')
-            ->where('lr.id', $labReqId)
-            ->get(1)
-            ->getRowArray() ?? [];
-
-        $repoLoincCode = trim((string) ($labRepoRow['repo_loinc_code'] ?? ''));
+        $repoLoincCode = '';
+        if ($this->db->tableExists('lab_repo')) {
+            $labRepoRow = $this->db->table('lab_request lr')
+                ->select('lr.lab_repo_id, repo.loinc_code AS repo_loinc_code, repo.Title')
+                ->join('lab_repo repo', 'repo.mstRepoKey = lr.lab_repo_id', 'left')
+                ->where('lr.id', $labReqId)
+                ->get(1)
+                ->getRowArray() ?? [];
+            $repoLoincCode = trim((string) ($labRepoRow['repo_loinc_code'] ?? ''));
+        }
         if ($repoLoincCode !== '') {
             $diagnosticReport['loinc_code'] = $repoLoincCode;
         }
@@ -2144,7 +2146,16 @@ class AbdmGateway extends BaseController
         $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         // -- Store health_record -----------------------------------------------
-        $ccRef = 'LAB-' . $labReqId . '-' . $visitDate;
+        $requestedCcRef = trim((string) ($this->request->getPost('careContextId') ?? $this->request->getPost('care_context_reference') ?? ''));
+        if ($requestedCcRef !== '') {
+            $ccRef = $requestedCcRef;
+        } else {
+            $prefix = $isImaging ? 'RAD' : 'LAB';
+            $dateClean = str_replace('-', '', $visitDate);
+            $ccRef = $prefix . '-' . $labReqId . '-' . $dateClean;
+        }
+        $careContextDisplay = ($isImaging ? 'Radiology Report - ' : 'Diagnostic Report - ') . ($testTitle !== '' ? $testTitle : ($isImaging ? 'Radiology Report' : 'Lab Report')) . ' (' . date('d M Y', strtotime($visitDate)) . ')';
+
         $healthRecordId = $this->storeHealthRecord([
             'patient_id'     => $patientId,
             'abha_id'        => $abhaId,
@@ -2181,6 +2192,7 @@ class AbdmGateway extends BaseController
                 'status' => 'local_stored',
                 'queue_id' => null,
                 'consent_handle' => null,
+                'care_context_reference' => $ccRef,
                 'message' => 'ABHA not available. Record stored locally for later discovery.',
             ]);
         }
@@ -2200,9 +2212,9 @@ class AbdmGateway extends BaseController
                 'record_type'            => 'DiagnosticReportRecord',
                 'visit_date'             => $visitDate,
                 'care_context_reference' => $ccRef,
-                'care_context_display'    => $testTitle !== '' ? $testTitle : 'Lab Report',
-                'notes'                  => $testTitle !== '' ? $testTitle : 'Lab Report',
-                'queue_id'               => 'LAB-' . $labReqId . '-' . $visitDate,
+                'care_context_display'   => $careContextDisplay,
+                'notes'                  => $careContextDisplay,
+                'queue_id'               => $ccRef,
                 'record_data'            => $bundle,
             ]);
             $this->logGatewayPushResolution('diagnostic_report', $result);
@@ -2235,13 +2247,14 @@ class AbdmGateway extends BaseController
         ]);
 
         return $this->response->setJSON([
-            'ok'             => $connectorError === null ? 1 : 0,
-            'queue_id'       => $queueId,
-            'consent_handle' => $effectiveConsent,
-            'status'         => $connectorError === null ? 'queued' : 'failed',
-            'message'        => $connectorError === null && $consentWarning !== '' ? 'Record pushed to gateway without active consent. Recheck link status in M2 ABDM Gateway.' : null,
-            'warning'        => $consentWarning !== '' ? $consentWarning : null,
-            'error'          => $connectorError,
+            'ok'                     => $connectorError === null ? 1 : 0,
+            'queue_id'               => $queueId,
+            'consent_handle'         => $effectiveConsent,
+            'care_context_reference' => $ccRef,
+            'status'                 => $connectorError === null ? 'queued' : 'failed',
+            'message'                => $connectorError === null && $consentWarning !== '' ? 'Record pushed to gateway without active consent. Recheck link status in M2 ABDM Gateway.' : null,
+            'warning'                => $consentWarning !== '' ? $consentWarning : null,
+            'error'                  => $connectorError,
         ]);
     }
 

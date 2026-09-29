@@ -596,6 +596,64 @@
         modal.show();
     };
 
+    function syncAndPushTaskFhirRecord(selectedContexts, alertBox, abhaAddress) {
+        if (!window.currentHipTaskContext || !window.currentHipTaskContext.taskType || !window.currentHipTaskContext.entityId) {
+            return;
+        }
+        var ctxTaskType = window.currentHipTaskContext.taskType;
+        var ctxEntityId = window.currentHipTaskContext.entityId;
+        var ctxPatientId = window.currentHipTaskContext.patientId || 0;
+        var firstRef = (selectedContexts && selectedContexts.length > 0) ? selectedContexts[0].ref : '';
+        var csrf = getCsrfData();
+
+        if (ctxTaskType === 'radiology_report_publish' || ctxTaskType === 'lab_report_publish') {
+            var pushData = new URLSearchParams();
+            pushData.append('lab_req_id', ctxEntityId);
+            pushData.append('patient_id', ctxPatientId);
+            pushData.append('abha_id', abhaAddress);
+            if (firstRef) pushData.append('care_context_reference', firstRef);
+            pushData.append(csrf.name || 'csrf_hms', csrf.hash);
+
+            fetch('<?= base_url('AbdmGateway/share_diagnosis_report_bundle') ?>', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                body: pushData.toString()
+            }).then(function(r) { return r.json(); }).then(function(pRes) {
+                updateCsrf(pRes);
+                if (pRes && pRes.ok === 1 && alertBox) {
+                    alertBox.innerHTML += '<div class="mt-2 pt-2 border-top border-success-subtle text-dark small"><i class="bi bi-file-earmark-medical text-success me-1"></i><strong>FHIR Document Stored on Bridge:</strong> Report bundle is active on Bridge for Care Context <code>' + (pRes.care_context_reference || firstRef) + '</code>.<br><i class="bi bi-info-circle text-primary me-1"></i><strong>To view in PHR App:</strong> Open your PHR app (e.g. ABHA App) &rarr; tap <em>Linked Facilities</em> &rarr; tap <em>"Fetch Records" / "Pull Records"</em>.</div>';
+                }
+            }).catch(function() {});
+        } else if (ctxTaskType === 'opd_prescription_publish') {
+            var pushData = new URLSearchParams();
+            pushData.append('opd_id', ctxEntityId);
+            pushData.append('patient_id', ctxPatientId);
+            pushData.append('abha_id', abhaAddress);
+            pushData.append('push_to_gateway', '1');
+            if (firstRef) pushData.append('care_context_reference', firstRef);
+            pushData.append(csrf.name || 'csrf_hms', csrf.hash);
+
+            fetch('<?= base_url('AbdmGateway/share_prescription_bundle') ?>', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                body: pushData.toString()
+            }).then(function(r) { return r.json(); }).then(function(pRes) {
+                updateCsrf(pRes);
+                if (pRes && pRes.ok === 1 && alertBox) {
+                    alertBox.innerHTML += '<div class="mt-2 pt-2 border-top border-success-subtle text-dark small"><i class="bi bi-file-earmark-medical text-success me-1"></i><strong>FHIR Document Stored on Bridge:</strong> Consultation bundle is active on Bridge for Care Context <code>' + (pRes.care_context_reference || firstRef) + '</code>.<br><i class="bi bi-info-circle text-primary me-1"></i><strong>To view in PHR App:</strong> Open your PHR app (e.g. ABHA App) &rarr; tap <em>Linked Facilities</em> &rarr; tap <em>"Fetch Records" / "Pull Records"</em>.</div>';
+                }
+            }).catch(function() {});
+        }
+    }
+
     /**
      * Execute 2-step HIP-Initiated Linking via Method 4.
      */
@@ -664,6 +722,8 @@
             alertBox.innerHTML = '<strong><i class="bi bi-check-circle-fill me-1"></i>Already Linked!</strong> '
                 + 'The selected care context(s) are already linked with this patient\'s ABHA. Patient can view and fetch the records directly in their PHR app.';
             alertBox.classList.remove('d-none');
+
+            syncAndPushTaskFhirRecord(selectedContexts, alertBox, abhaAddress);
 
             // If initiated for a specific task board task, sync task to completed so status isn't stuck on Ready to link!
             if (window.currentHipTaskContext && window.currentHipTaskContext.taskId > 0) {
@@ -783,6 +843,8 @@
                 alertBox.innerHTML = '<strong><i class="bi bi-check-circle-fill me-1"></i>Success!</strong> '
                     + 'Care contexts successfully submitted to ABDM for linking. Patient can now discover and access them in their ABHA / PHR app.';
 
+                syncAndPushTaskFhirRecord(selectedContexts, alertBox, abhaAddress);
+
                 // If initiated for a specific task board task, mark the task as completed
                 if (window.currentHipTaskContext && window.currentHipTaskContext.taskId > 0) {
                     var tId = window.currentHipTaskContext.taskId;
@@ -831,6 +893,8 @@
                     alertBox.className = 'alert alert-success py-2 px-3 small';
                     alertBox.innerHTML = '<strong><i class="bi bi-check-circle-fill me-1"></i>Already Linked!</strong> '
                         + 'ABDM reports this care context is already linked to patient\'s ABHA. Task status updated to Linked.';
+
+                    syncAndPushTaskFhirRecord(selectedContexts, alertBox, abhaAddress);
 
                     if (window.currentHipTaskContext && window.currentHipTaskContext.taskId > 0) {
                         var tId = window.currentHipTaskContext.taskId;

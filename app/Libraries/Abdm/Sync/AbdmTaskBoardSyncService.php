@@ -726,14 +726,16 @@ class AbdmTaskBoardSyncService
 
         $visitDate = date('Y-m-d');
         $prefix = match ($taskType) {
-            'lab_report_publish', 'radiology_report_publish' => 'LAB-',
+            'radiology_report_publish'    => 'RAD-',
+            'lab_report_publish'          => 'LAB-',
             'immunization_record_publish' => 'IMM-',
-            'wellness_record_publish' => 'WELLNESS-',
-            'health_document_publish' => 'DOC-',
-            'ipd_discharge_publish' => 'IPD-',
+            'wellness_record_publish'     => 'WELLNESS-',
+            'health_document_publish'     => 'DOC-',
+            'ipd_discharge_publish'       => 'DISCHARGE-',
             default => 'REC-',
         };
-        $careContextRef = $prefix . $entityId . '-' . $visitDate;
+        $cleanVisitDate = str_replace('-', '', $visitDate);
+        $careContextRef = $prefix . $entityId . '-' . $cleanVisitDate;
         $careContextDisplay = $hiType . ' ' . $visitDate;
 
         $pushData = [

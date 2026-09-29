@@ -20,6 +20,7 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
         $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('lab_request') . " (
             id INTEGER PRIMARY KEY,
             patient_id INTEGER,
+            patient_name TEXT,
             lab_type INTEGER,
             charge_id INTEGER,
             report_name TEXT,
@@ -33,7 +34,8 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
 
         $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('charge_master') . " (
             id INTEGER PRIMARY KEY,
-            charge_name TEXT
+            charge_name TEXT,
+            charge_type TEXT
         )");
 
         $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('opd_prescription') . " (
@@ -49,7 +51,12 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
             patient_id INTEGER,
             abha_id TEXT,
             hi_type TEXT,
+            entity_type TEXT,
+            entity_id TEXT,
+            fhir_bundle TEXT,
             care_context_reference TEXT,
+            consent_handle TEXT,
+            push_status TEXT,
             created_at TEXT,
             updated_at TEXT
         )");
@@ -280,4 +287,41 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
         $this->assertTrue($foundIpd, 'IPD DischargeSummaryRecord should be discovered');
         $this->assertTrue($foundImm, 'ImmunizationRecord should be discovered');
     }
+
+    public function testShareDiagnosisReportBundleFormatsRadiologyCareContext(): void
+    {
+        $_SERVER['HTTP_X_REQUESTED_WITH'] = 'xmlhttprequest';
+        $_POST['lab_req_id'] = '31';
+        $_POST['patient_id'] = '12';
+        $_POST['abha_id'] = 'singhkeshav301976@sbx';
+        $_POST['care_context_reference'] = 'RAD-31-20260929';
+
+        $req = service('request');
+        $req->setHeader('X-Requested-With', 'XMLHttpRequest');
+        $this->gateway->initController($req, service('response'), service('logger'));
+
+        $mockConnector = $this->createMock(\App\Libraries\Abdm\AbdmConnectorInterface::class);
+        $mockConnector->method('pushRecord')
+            ->willReturnCallback(function (array $data) {
+                return [
+                    'ok' => 1,
+                    'http_code' => 201,
+                    'status' => 'queued',
+                    'queue_id' => $data['care_context_reference'],
+                    'record_id' => 999,
+                ];
+            });
+
+        $refGateway = new ReflectionClass($this->gateway);
+        $prop = $refGateway->getProperty('connector');
+        $prop->setAccessible(true);
+        $prop->setValue($this->gateway, $mockConnector);
+
+        $res = $this->gateway->shareDiagnosisReportBundle();
+        $body = json_decode($res->getBody(), true);
+
+        $this->assertSame(1, $body['ok'] ?? 0);
+        $this->assertSame('RAD-31-20260929', $body['care_context_reference'] ?? '');
+    }
 }
+
