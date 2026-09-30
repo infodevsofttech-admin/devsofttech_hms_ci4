@@ -1,19 +1,26 @@
 # ABDM M2 Test Session Handover & Verification Guide
 
-**Date:** 2026-09-29  
+**Date:** 2026-09-30  
 **Branch:** `main`  
 **Latest Commits:**  
 - `6bd2430` — `fix(abdm-m1): sanitize otp error text, hide bridge request id, add beneficiary name to consent`  
 - `a33b376` — `feat(abdm-m2): add HIP link modal and care context discovery on patient registration`  
+- `ccd5909` — `docs: remove technical URLs, database fields and developer codes from user help guide`  
+- `f7c3052` — `feat(abdm-m2): enable care context discovery and direct linking for invoice records`  
 **Live Environment:** [demo.e-atria.net](https://demo.e-atria.net/) (`10.8.0.1` / `/var/www/html/hms_etria`)
 
 ---
 
 ## 1. Executive Summary
 
-This session verified and configured end-to-end readiness for **ABDM Milestone 2 (M2)** testing, starting from Patient Registration through care context discovery, HIP-initiated linking, user-initiated linking, and FHIR data sharing.
+This session verified and configured end-to-end readiness for **ABDM Milestone 2 (M2)** testing across all supported Health Information (HI) types:
+1. **OPConsultRecord** (OPD Consultations & Prescriptions)
+2. **DiagnosticReportRecord** (Laboratory & Radiology Reports)
+3. **DischargeSummaryRecord** (IPD Discharge Summaries)
+4. **ImmunizationRecord** (Vaccination Records)
+5. **InvoiceRecord** (OPD, IPD, and General Charges Invoices)
 
-All changes have been unit tested (47/47 tests passing), committed, pushed to `origin/main`, and deployed live to `https://demo.e-atria.net/`.
+All features have been unit tested (57/57 tests passing, 495 assertions), committed, pushed to `origin/main`, and deployed live to `https://demo.e-atria.net/`.
 
 ---
 
@@ -38,7 +45,17 @@ All changes have been unit tested (47/47 tests passing), committed, pushed to `o
 - **File:** [AbdmGateway.php](file:///d:/Workplace/HMS_CI4_OLD/app/Controllers/AbdmGateway.php)
   - Enhanced `hipPatientCareContexts()` so that if an ABHA address field contains a 14-digit numeric ABHA ID (or formatted `XX-XXXX-XXXX-XXXX`), it queries both `abha_address` and `abha_id` in `patient_master`.
 
-### D. M1 Feedback Updates (Retained & Verified)
+### D. Invoice Care Context Discovery & Direct Linking
+- **Files:** [AbdmTaskBoard.php](file:///d:/Workplace/HMS_CI4_OLD/app/Controllers/AbdmTaskBoard.php), [task_board.php](file:///d:/Workplace/HMS_CI4_OLD/app/Views/abdm/task_board.php), [AbdmGateway.php](file:///d:/Workplace/HMS_CI4_OLD/app/Controllers/AbdmGateway.php), [abdm_hip_link_modal.php](file:///d:/Workplace/HMS_CI4_OLD/app/Views/partials/abdm_hip_link_modal.php)
+  - Integrated `HI Type: InvoiceRecord` care contexts on the ABDM Work Task Board Invoice panel.
+  - Linked `patient_master` to retrieve `abha_id` / `abha_address` across OPD, IPD, and Charges invoices.
+  - Auto-generated standard care contexts: `INVOICE-OPD-{billId}-{date}`, `INVOICE-CHG-{billId}-{date}`, `INVOICE-IPD-{billId}-{date}`.
+  - Enabled the **Link Context** button on invoice rows with complete task context (`task_type: 'invoice_publish'`, `source: invoiceSource`, `entity_id: billId`).
+  - Added NRCES-compliant Invoice FHIR Bundle bridge push (`share_invoice_source_bundle`) directly upon linking from the modal.
+  - Added dynamic DOM updates on the Task Board table row to reflect `LINKED` status, update badges, and show care context references immediately upon link confirmation.
+  - Added unit test `testDiscoversInvoiceCareContextWhenInvoiceTaskRequested` in [CareContextDiscoveryTest.php](file:///d:/Workplace/HMS_CI4_OLD/tests/unit/Abdm/CareContextDiscoveryTest.php).
+
+### E. M1 Feedback Updates (Retained & Verified)
 - Normalized invalid OTP error alerts strictly to `"Incorrect OTP"` (or attempts exceeded message).
 - Removed internal `Bridge Request ID: REQ-...` from user-facing screens.
 - Added healthcare worker declaration and beneficiary name consent input field before Aadhaar OTP dispatch.
@@ -54,10 +71,10 @@ All changes have been unit tested (47/47 tests passing), committed, pushed to `o
 4. Care context `OPD-{patientId}-S{opdId}-{YYYYMMDD}` is now live and linkable.
 
 ### Step 2: Test HIP-Initiated Linking (Method 4 Demographic Auth)
-1. In patient profile or **ABHA Management**, click **Link Records to ABHA (HIP)**.
+1. In patient profile or **ABHA Management**, click **Link Records to ABHA (HIP)** (or click **Link Context** on any Task Board card).
 2. Enter the patient's ABHA address (e.g., `user@sbx`).
 3. Patient demographics (Full Name, Gender, YOB) are pre-filled/verified.
-4. Select the OPD visit care context.
+4. Select the care contexts (OPD consultation, invoice, lab/radiology, discharge summary).
 5. Click **Link Selected Records (Demographic Auth)**.
 6. The gateway returns a JWT Link Token and links the care context to the ABHA account.
 
@@ -74,21 +91,22 @@ All changes have been unit tested (47/47 tests passing), committed, pushed to `o
 5. Verify OTP to confirm the linking.
 
 ### Step 5: Test Health Record View (FHIR Bundles in PHR App)
-1. Doctor submits clinical notes/prescription in **OPD Prescription** editor (or saves findings in **Radiology Report Editor**).
+1. Doctor submits clinical notes/prescription in **OPD Prescription** editor (or saves findings in **Radiology Report Editor**, or prints/generates an **Invoice**).
 2. In the PHR app, tap on the linked hospital and tap **Fetch Records** / **Pull Records**.
-3. The HMS generates and transfers the encrypted FHIR bundle (`OPConsultRecord` or `DiagnosticReportRecord`).
-4. Patient views findings and medications directly in the PHR app.
+3. The HMS generates and transfers the encrypted FHIR bundle (`OPConsultRecord`, `DiagnosticReportRecord`, or `InvoiceRecord`).
+4. Patient views findings, medications, and invoices directly in the PHR app.
 
 ---
 
 ## 4. Test Suite & Verification Results
 
 ```bash
-# Local Unit Test Execution
-vendor/bin/phpunit tests/unit/Abdm/
+# Full PHPUnit Suite Execution
+php vendor/phpunit/phpunit/phpunit --no-coverage
 
 # Result
-Tests: 47, Assertions: 472, PHPUnit Warnings: 1 (Xdebug coverage). 100% PASS.
+OK (57 tests, 495 assertions)
+Tests: 57, Assertions: 495, Failures: 0. 100% PASS.
 ```
 
 ---
