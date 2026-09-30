@@ -245,8 +245,7 @@ if (function_exists('auth') && auth()->loggedIn()) {
                         </div>
                     </div>
 
-                    <div class="d-flex justify-content-between align-items-center mt-3 gap-2">
-                        <button type="button" class="btn btn-outline-secondary" id="abhaCreateSkipMobileBtn">Use Aadhaar-linked Mobile</button>
+                    <div class="d-flex justify-content-end align-items-center mt-3">
                         <button type="button" class="btn btn-warning text-white fw-bold px-4" id="abhaCreateVerifyMobileBtn" style="background-color: #f05a28; border-color: #f05a28;"><i class="bi bi-check2-circle me-1"></i>Validate</button>
                     </div>
                 </section>
@@ -1025,15 +1024,6 @@ window.AbhaCreateModal = (function () {
 
         $('#abhaCreateVerifyMobileBtn').on('click', verifyMobileOtp);
         $('#abhaCreateMobileResendBtn').on('click', function () { requestMobileOtp(true); });
-        $('#abhaCreateSkipMobileBtn').on('click', function () {
-            stopTimers();
-            if (createdProfile && createdProfile.already_exists) {
-                showAbhaAccountExistDialog(createdProfile);
-            } else {
-                loadAddressSuggestions();
-                alertBox('info', 'Proceeding with Aadhaar-linked mobile for ABHA.');
-            }
-        });
         $('#abhaCreateMobileOtp').on('keydown', function (event) { if (event.key === 'Enter') { event.preventDefault(); verifyMobileOtp(); } });
 
         $('#abhaCreateChooseAddressBtn').on('click', loadAddressSuggestions);
