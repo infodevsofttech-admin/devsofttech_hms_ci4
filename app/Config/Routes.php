@@ -837,6 +837,7 @@ $routes->post('AbdmGateway/abha_mobile_verify_otp', 'AbdmGateway::abhaMobileVeri
 $routes->post('abha/create/initiate', 'Abha::initiate', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/create/verify_otp', 'Abha::verifyOtp', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/create/communication', 'Abha::communication', ['filter' => 'permission:abdm.abha.create']);
+$routes->post('abha/create/verify_comm_otp', 'Abha::verifyCommOtp', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/find/mobile/search', 'Abha::findMobileSearch', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/find/mobile/request-otp', 'Abha::findMobileRequestOtp', ['filter' => 'permission:abdm.abha.create']);
 $routes->post('abha/find/mobile/verify-otp', 'Abha::findMobileVerifyOtp', ['filter' => 'permission:abdm.abha.create']);

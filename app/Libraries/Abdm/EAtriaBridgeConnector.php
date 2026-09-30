@@ -1059,6 +1059,10 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             'txnId' => (string) ($payload['txnId'] ?? $payload['txn_id'] ?? ''),
             'otp' => (string) ($payload['otp'] ?? ''),
         ];
+        $mobile = trim((string) ($payload['mobile'] ?? ''));
+        if ($mobile !== '') {
+            $body['mobile'] = $mobile;
+        }
         if ($this->hfrId !== '') {
             $body['hfr_id'] = $this->hfrId;
         }

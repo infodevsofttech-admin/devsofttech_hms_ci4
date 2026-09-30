@@ -221,18 +221,24 @@ class Abha extends BaseController
             $isCommMobileSame = (substr($requestMobileClean, -4) === substr($maskedDigits, -4));
         }
 
+        if ($newTxnId) {
+            session()->set('abha_already_exists_' . $newTxnId, $alreadyExists);
+            session()->set('abha_existing_number_' . $newTxnId, $abhaNum);
+            session()->set('abha_comm_mobile_' . $newTxnId, $requestMobileClean);
+        }
+
         $patientInfo = $this->tryAutoLinkByDirectMatch($abhaNum, $name, $mobile, $profileGender, $profileDob, $abhaMeta);
 
         $responseBase = [
             'ok'                         => 1,
             'txn_id'                     => $newTxnId,
-            'skip_mobile'                => true,
+            'skip_mobile'                => $isCommMobileSame,
             'abha_created'               => $abhaCreated,
             'already_exists'             => $alreadyExists,
             'is_new_abha'                => ! $alreadyExists,
             'is_comm_mobile_same'        => $isCommMobileSame,
             'comm_mobile'                => $requestMobileClean,
-            'aadhaar_mobile_masked'      => $maskedMobileRaw,
+            'aadhaar_mobile_masked'      => $maskedMobileRaw ?: ($maskedDigits ? ('******' . $maskedDigits) : ''),
             'card_base64'                => $this->extractAbhaCardData($result),
             'card_content_type'          => $this->resolveAbhaCardContentType($result),
             'card_source'                => $this->resolveAbhaCardSource($result),
@@ -316,10 +322,21 @@ class Abha extends BaseController
             if ($expectedAbha !== '') {
                 session()->set('abha_enrol_identity_' . $newTxnId, $expectedAbha);
             }
+            $existingFlag = session()->get('abha_already_exists_' . $txnId);
+            if ($existingFlag !== null) {
+                session()->set('abha_already_exists_' . $newTxnId, (bool) $existingFlag);
+            }
+            $existingNum = session()->get('abha_existing_number_' . $txnId);
+            if ($existingNum !== null) {
+                session()->set('abha_existing_number_' . $newTxnId, $existingNum);
+            }
+            session()->set('abha_comm_mobile_' . $newTxnId, $mobile);
+
             return $this->response->setJSON([
                 'ok' => 1,
                 'txn_id' => $newTxnId,
                 'message' => (string) ($result['message'] ?? $result['data']['message'] ?? 'OTP sent to alternate mobile.'),
+                'masked_mobile' => (string) ($result['masked_mobile'] ?? $result['data']['masked_mobile'] ?? ('******' . substr($mobile, -4))),
                 'request_id' => (string) ($result['request_id'] ?? ''),
             ]);
         }
@@ -348,6 +365,9 @@ class Abha extends BaseController
         // on the bridge side), but the caller may resend it so we can persist it even
         // if the gateway response doesn't echo it back.
         $requestMobile = trim((string) ($this->request->getPost('mobile') ?? ''));
+        if ($requestMobile === '') {
+            $requestMobile = (string) (session()->get('abha_comm_mobile_' . $txnId) ?? '');
+        }
 
         if ($txnId === '' || $otp === '') {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'txn_id and otp are required']);
@@ -355,8 +375,8 @@ class Abha extends BaseController
 
         try {
             $result = $isMobileDiscovery
-                ? AbdmConnectorFactory::make()->abhaMobileVerifyOtp(['txnId' => $txnId, 'otp' => $otp])
-                : AbdmConnectorFactory::make()->abhaEnrolMobileVerifyOtp(['txnId' => $txnId, 'otp' => $otp]);
+                ? AbdmConnectorFactory::make()->abhaMobileVerifyOtp(['txnId' => $txnId, 'otp' => $otp, 'mobile' => $requestMobile])
+                : AbdmConnectorFactory::make()->abhaEnrolMobileVerifyOtp(['txnId' => $txnId, 'otp' => $otp, 'mobile' => $requestMobile]);
         } catch (\Throwable $e) {
             return $this->response->setStatusCode(500)->setJSON(['ok' => 0, 'error_text' => $e->getMessage()]);
         }
@@ -441,6 +461,15 @@ class Abha extends BaseController
         $txnIdOut = (string) ($payload['txnId'] ?? $payload['txn_id'] ?? $result['txn_id'] ?? $result['data']['txnId'] ?? $txnId);
         $tokenOut = (string) ($payload['token'] ?? $result['data']['token'] ?? $result['token'] ?? '');
 
+        $savedExistingNum = (string) (session()->get('abha_existing_number_' . $txnId) ?? '');
+        if ($abhaNum === '' && $savedExistingNum !== '') {
+            $abhaNum = $savedExistingNum;
+        }
+        $alreadyExists = (bool) (session()->get('abha_already_exists_' . $txnId) ?? false);
+        if (! $alreadyExists && strlen(preg_replace('/\D/', '', $abhaNum)) === 14 && $abhaAddress !== '') {
+            $alreadyExists = true;
+        }
+
         $patientInfo = $this->tryAutoLinkByDirectMatch($abhaNum, $name, $mobile, $gender, $dob, $abhaMeta);
 
         $responseBase = [
@@ -448,6 +477,9 @@ class Abha extends BaseController
             'txn_id'            => $txnIdOut,
             'token'             => $tokenOut,
             'accounts'          => $rawAccounts,
+            'already_exists'    => $alreadyExists,
+            'is_new_abha'       => ! $alreadyExists,
+            'abha_created'      => (strlen(preg_replace('/\D/', '', $abhaNum)) === 14),
             'card_base64'       => $this->extractAbhaCardData($result),
             'card_content_type' => $this->resolveAbhaCardContentType($result),
             'card_source'       => $this->resolveAbhaCardSource($result),
@@ -456,6 +488,8 @@ class Abha extends BaseController
             'name'              => $name,
             'photo'             => $photo,
             'mobile'            => $mobile,
+            'mobile_source'     => 'communication_verified',
+            'comm_mobile'       => $mobile,
             'gender'            => $gender,
             'dob'               => $dob,
             'abha_address'      => $abhaAddress,
