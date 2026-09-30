@@ -695,9 +695,13 @@ class AbdmTaskBoard extends BaseController
         $rows = [];
 
         if ($this->db->tableExists('opd_master')) {
-            foreach ($this->db->table('opd_master')
-                ->select('opd_id AS bill_id, opd_code AS bill_code, p_id AS patient_id, P_name AS patient_name, apointment_date AS bill_date, opd_fee_amount AS amount')
-                ->orderBy('opd_id', 'DESC')
+            $builder = $this->db->table('opd_master o')
+                ->select("o.opd_id AS bill_id, o.opd_code AS bill_code, o.p_id AS patient_id, COALESCE(NULLIF(o.P_name, ''), p.p_fname, '') AS patient_name, o.apointment_date AS bill_date, o.opd_fee_amount AS amount, COALESCE(NULLIF(p.abha_address, ''), NULLIF(p.abha_id, ''), '') AS abha_id", false);
+            if ($this->db->tableExists('patient_master')) {
+                $builder->join('patient_master p', 'p.id = o.p_id', 'left');
+            }
+            foreach ($builder
+                ->orderBy('o.opd_id', 'DESC')
                 ->limit(100)
                 ->get()
                 ->getResultArray() as $row) {
@@ -706,9 +710,12 @@ class AbdmTaskBoard extends BaseController
         }
 
         if ($this->db->tableExists('invoice_master')) {
-            foreach ($this->db->table('invoice_master i')
-                ->select('i.id AS bill_id, i.invoice_code AS bill_code, i.attach_id AS patient_id, COALESCE(NULLIF(i.inv_name, ""), p.p_fname) AS patient_name, i.inv_date AS bill_date, i.net_amount AS amount')
-                ->join('patient_master p', 'p.id = i.attach_id AND i.attach_type = 0', 'left')
+            $builder = $this->db->table('invoice_master i')
+                ->select("i.id AS bill_id, i.invoice_code AS bill_code, i.attach_id AS patient_id, COALESCE(NULLIF(i.inv_name, ''), p.p_fname, '') AS patient_name, i.inv_date AS bill_date, i.net_amount AS amount, COALESCE(NULLIF(p.abha_address, ''), NULLIF(p.abha_id, ''), '') AS abha_id", false);
+            if ($this->db->tableExists('patient_master')) {
+                $builder->join('patient_master p', 'p.id = i.attach_id AND i.attach_type = 0', 'left');
+            }
+            foreach ($builder
                 ->orderBy('i.id', 'DESC')
                 ->limit(100)
                 ->get()
@@ -718,9 +725,12 @@ class AbdmTaskBoard extends BaseController
         }
 
         if ($this->db->tableExists('ipd_master')) {
-            foreach ($this->db->table('ipd_master i')
-                ->select("i.id AS bill_id, i.ipd_code AS bill_code, i.p_id AS patient_id, COALESCE(NULLIF(NULLIF(TRIM(i.P_name), ''), '0'), NULLIF(TRIM(p.p_fname), '')) AS patient_name, COALESCE(i.discharge_date, i.register_date) AS bill_date, i.net_amount AS amount", false)
-                ->join('patient_master p', 'p.id = i.p_id', 'left')
+            $builder = $this->db->table('ipd_master i')
+                ->select("i.id AS bill_id, i.ipd_code AS bill_code, i.p_id AS patient_id, COALESCE(NULLIF(NULLIF(TRIM(i.P_name), ''), '0'), NULLIF(TRIM(p.p_fname), ''), '') AS patient_name, COALESCE(i.discharge_date, i.register_date) AS bill_date, i.net_amount AS amount, COALESCE(NULLIF(p.abha_address, ''), NULLIF(p.abha_id, ''), '') AS abha_id", false);
+            if ($this->db->tableExists('patient_master')) {
+                $builder->join('patient_master p', 'p.id = i.p_id', 'left');
+            }
+            foreach ($builder
                 ->orderBy('i.id', 'DESC')
                 ->limit(100)
                 ->get()
@@ -819,13 +829,17 @@ class AbdmTaskBoard extends BaseController
                 $statusTone = 'danger';
             }
 
+            $billDate = ! empty($row['bill_date']) ? date('Y-m-d', strtotime((string) $row['bill_date'])) : date('Y-m-d');
+            $sourcePrefix = $row['source_key'] === 'opd_invoice' ? 'OPD' : ($row['source_key'] === 'ipd_invoice' ? 'IPD' : 'CHG');
+            $defaultCareContext = 'INVOICE-' . $sourcePrefix . '-' . $billId . '-' . $billDate;
+
             $row['record_status_label'] = $statusLabel;
             $row['record_status_tone'] = $statusTone;
             $row['push_status'] = $pushStatus;
             $row['link_status'] = $linkStatus;
             $row['queue_id'] = trim((string) ($hr['abdm_txn_id'] ?? ''));
             $row['bridge_record_id'] = (int) ($hr['bridge_record_id'] ?? 0);
-            $row['care_context_reference'] = trim((string) ($hr['care_context_reference'] ?? ''));
+            $row['care_context_reference'] = trim((string) ($hr['care_context_reference'] ?? '')) ?: $defaultCareContext;
         }
         unset($row);
 

@@ -474,6 +474,8 @@
                                 data-invoice-source="<?= esc((string) ($invoice['source_key'] ?? '')) ?>"
                                 data-bill-id="<?= (int) ($invoice['bill_id'] ?? 0) ?>"
                                 data-patient-id="<?= (int) ($invoice['patient_id'] ?? 0) ?>"
+                                data-abha-id="<?= esc((string) ($invoice['abha_id'] ?? '')) ?>"
+                                data-care-context="<?= esc((string) ($invoice['care_context_reference'] ?? '')) ?>"
                                 data-push-status="<?= esc($pushStatus) ?>"
                             >
                                 <td><?= esc((string) ($invoice['source'] ?? '')) ?></td>
@@ -481,6 +483,9 @@
                                 <td>
                                     <div><?= esc((string) ($invoice['patient_name'] ?? '')) ?></div>
                                     <small class="text-muted">#<?= (int) ($invoice['patient_id'] ?? 0) ?></small>
+                                    <?php if (! empty($invoice['abha_id'])): ?>
+                                        <div><span class="text-primary small" title="ABHA"><i class="bi bi-person-check me-1"></i><?= esc((string) $invoice['abha_id']) ?></span></div>
+                                    <?php endif; ?>
                                 </td>
                                 <td><?= esc(substr((string) ($invoice['bill_date'] ?? ''), 0, 16)) ?></td>
                                 <td class="text-end"><?= number_format((float) ($invoice['amount'] ?? 0), 2) ?></td>
@@ -497,7 +502,17 @@
                                     <?php if ($alreadySubmitted): ?>
                                         <span class="badge bg-success ms-1"><i class="bi bi-check-circle"></i> Linked</span>
                                     <?php else: ?>
-                                        <button type="button" class="btn btn-sm btn-outline-success btn-invoice-care-link ms-1" data-patient-id="<?= (int) ($invoice['patient_id'] ?? 0) ?>" data-abha-id="<?= esc((string) ($invoice['abha_id'] ?? '')) ?>" data-patient-name="<?= esc((string) ($invoice['patient_name'] ?? '')) ?>" title="Link Care Context with patient ABHA"><i class="bi bi-link-45deg"></i> Link Context</button>
+                                        <button
+                                            type="button"
+                                            class="btn btn-sm btn-outline-success btn-invoice-care-link ms-1"
+                                            data-bill-id="<?= (int) ($invoice['bill_id'] ?? 0) ?>"
+                                            data-invoice-source="<?= esc((string) ($invoice['source_key'] ?? '')) ?>"
+                                            data-patient-id="<?= (int) ($invoice['patient_id'] ?? 0) ?>"
+                                            data-abha-id="<?= esc((string) ($invoice['abha_id'] ?? '')) ?>"
+                                            data-patient-name="<?= esc((string) ($invoice['patient_name'] ?? '')) ?>"
+                                            data-care-context="<?= esc((string) ($invoice['care_context_reference'] ?? '')) ?>"
+                                            title="Link Care Context with patient ABHA"
+                                        ><i class="bi bi-link-45deg"></i> Link Context</button>
                                     <?php endif; ?>
                                 </td>
                             </tr>
@@ -3512,19 +3527,82 @@
         });
     });
 
-    document.querySelectorAll('.btn-opd-care-context-link, .btn-invoice-care-link').forEach(function (btn) {
+    document.querySelectorAll('.btn-opd-care-context-link').forEach(function (btn) {
         btn.addEventListener('click', function () {
+            var row = btn.closest('tr');
             var patientId = parseInt(btn.getAttribute('data-patient-id') || '0', 10);
             var abhaId = (btn.getAttribute('data-abha-id') || '').trim();
             var patientName = (btn.getAttribute('data-patient-name') || '').trim();
             var opdId = (btn.getAttribute('data-opd-id') || '').trim();
-            var taskType = opdId ? 'opd_prescription_publish' : '';
-            var entityId = opdId || '';
             if (typeof window.openAbdmHipLinkModal === 'function') {
                 window.openAbdmHipLinkModal(patientId, abhaId, {
                     patient_name: patientName,
-                    task_type: taskType,
-                    entity_id: entityId
+                    task_type: 'opd_prescription_publish',
+                    entity_id: opdId,
+                    onLinked: function (res) {
+                        if (!row) return;
+                        var actionCell = btn.parentNode;
+                        if (actionCell) {
+                            btn.outerHTML = '<span class="badge bg-success ms-1"><i class="bi bi-check-circle"></i> Linked</span>';
+                        }
+                        var statusBadge = row.querySelector('.opd-consult-status-badge');
+                        if (statusBadge) {
+                            statusBadge.className = 'badge bg-success opd-consult-status-badge';
+                            statusBadge.textContent = 'Linked';
+                        }
+                    }
+                });
+            }
+        });
+    });
+
+    document.querySelectorAll('.btn-invoice-care-link').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            var row = btn.closest('tr');
+            var patientId = parseInt(btn.getAttribute('data-patient-id') || (row ? row.getAttribute('data-patient-id') : '0') || '0', 10);
+            var abhaId = (btn.getAttribute('data-abha-id') || (row ? row.getAttribute('data-abha-id') : '') || '').trim();
+            var patientName = (btn.getAttribute('data-patient-name') || '').trim();
+            var billId = (btn.getAttribute('data-bill-id') || (row ? row.getAttribute('data-bill-id') : '') || '').trim();
+            var invoiceSource = (btn.getAttribute('data-invoice-source') || (row ? row.getAttribute('data-invoice-source') : '') || '').trim();
+            var careContextRef = (btn.getAttribute('data-care-context') || (row ? row.getAttribute('data-care-context') : '') || '').trim();
+
+            if (typeof window.openAbdmHipLinkModal === 'function') {
+                window.openAbdmHipLinkModal(patientId, abhaId, {
+                    patient_name: patientName,
+                    task_type: 'invoice_publish',
+                    entity_id: billId,
+                    source: invoiceSource,
+                    care_context: careContextRef,
+                    onLinked: function (res) {
+                        if (!row) return;
+                        // Update Link Status cell (cell 6)
+                        var linkStatusCell = row.children[6];
+                        if (linkStatusCell) {
+                            linkStatusCell.innerHTML = '<span class="badge bg-success">LINKED</span>';
+                        }
+                        // Update Status badge (cell 5)
+                        var pushStatusBadge = row.querySelector('.invoice-status-badge');
+                        if (pushStatusBadge) {
+                            pushStatusBadge.className = 'badge bg-success invoice-status-badge';
+                            pushStatusBadge.textContent = 'Linked';
+                        }
+                        // Update Gateway Reference cell (cell 7)
+                        var gatewayCell = row.querySelector('.invoice-details');
+                        if (gatewayCell && res && res.care_contexts && res.care_contexts.length > 0) {
+                            var firstCc = res.care_contexts[0].ref || '';
+                            if (firstCc) {
+                                gatewayCell.innerHTML = '<div class="text-truncate" title="' + firstCc + '"><strong>CC:</strong> ' + firstCc + '</div>';
+                            }
+                        }
+                        // Update Action button in Action cell (cell 8)
+                        var actionCell = row.children[8];
+                        if (actionCell) {
+                            var linkBtn = actionCell.querySelector('.btn-invoice-care-link');
+                            if (linkBtn) {
+                                linkBtn.outerHTML = '<span class="badge bg-success ms-1"><i class="bi bi-check-circle"></i> Linked</span>';
+                            }
+                        }
+                    }
                 });
             }
         });

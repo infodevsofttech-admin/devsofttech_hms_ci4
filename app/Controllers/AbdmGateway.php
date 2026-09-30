@@ -6009,7 +6009,8 @@ class AbdmGateway extends BaseController
         string $patientName,
         string $taskType = '',
         string $entityId = '',
-        int $taskId = 0
+        int $taskId = 0,
+        string $source = ''
     ): array {
         $this->db = $this->db ?? \Config\Database::connect();
         $careContextsV3 = [];
@@ -6108,6 +6109,36 @@ class AbdmGateway extends BaseController
                         'referenceNumber' => $ccRef,
                         'display'         => $display,
                         'record_type'     => 'DischargeSummaryRecord',
+                        'patient_id'      => $patientId,
+                        'is_fhir_ready'   => true,
+                        'is_primary'      => true,
+                    ]);
+                }
+            } elseif (in_array($taskType, ['invoice_publish', 'invoice_record_publish'], true)) {
+                $invoicePayload = null;
+                $candidateSources = [];
+                if ($source !== '' && in_array($source, ['opd_invoice', 'charges_invoice', 'ipd_invoice'], true)) {
+                    $candidateSources[] = $source;
+                }
+                $candidateSources = array_values(array_unique(array_merge($candidateSources, ['opd_invoice', 'charges_invoice', 'ipd_invoice'])));
+
+                foreach ($candidateSources as $candSource) {
+                    try {
+                        $invoicePayload = $this->buildInvoiceSourceRecordPayload($candSource, $taskEntityId, $patientId, '');
+                        if ($invoicePayload !== null) {
+                            break;
+                        }
+                    } catch (\Throwable $e) {
+                        // ignore and try next candidate source
+                    }
+                }
+
+                if ($invoicePayload !== null) {
+                    $addContext([
+                        'careContextId'   => (string) $invoicePayload['care_context_reference'],
+                        'referenceNumber' => (string) $invoicePayload['care_context_reference'],
+                        'display'         => (string) $invoicePayload['care_context_display'],
+                        'record_type'     => 'InvoiceRecord',
                         'patient_id'      => $patientId,
                         'is_fhir_ready'   => true,
                         'is_primary'      => true,
@@ -6341,6 +6372,98 @@ class AbdmGateway extends BaseController
                     'is_fhir_ready'   => true,
                     'is_primary'      => false,
                 ]);
+            }
+        }
+
+        // 6b. Query recent invoices / billing records for this patient
+        if ($this->db->tableExists('opd_master')) {
+            $opdFields = $this->db->getFieldNames('opd_master') ?? [];
+            if (in_array('opd_fee_amount', $opdFields, true)) {
+                $codeCol = in_array('opd_code', $opdFields, true) ? 'opd_code' : 'opd_id';
+                $opdInvoices = $this->db->table('opd_master')
+                    ->select('opd_id, ' . $codeCol . ' as opd_code, p_id, apointment_date, opd_book_date, opd_fee_amount')
+                    ->where('p_id', $patientId)
+                    ->where('opd_fee_amount >', 0)
+                    ->orderBy('opd_id', 'DESC')
+                    ->limit(10)
+                    ->get()
+                    ->getResultArray();
+                foreach ($opdInvoices as $oi) {
+                    $rawDate = ! empty($oi['apointment_date']) && $oi['apointment_date'] !== '0000-00-00 00:00:00'
+                        ? $oi['apointment_date']
+                        : (! empty($oi['opd_book_date']) ? $oi['opd_book_date'] : date('Y-m-d'));
+                    $visitDate = date('Y-m-d', strtotime((string) $rawDate));
+                    $ccRef = 'INVOICE-OPD-' . $oi['opd_id'] . '-' . $visitDate;
+                    $display = 'Invoice ' . ((string) ($oi['opd_code'] ?: $oi['opd_id'])) . ' (OPD - Rs ' . number_format((float) $oi['opd_fee_amount'], 2) . ')';
+                    $addContext([
+                        'careContextId'   => $ccRef,
+                        'referenceNumber' => $ccRef,
+                        'display'         => $display,
+                        'record_type'     => 'InvoiceRecord',
+                        'patient_id'      => $patientId,
+                        'is_fhir_ready'   => true,
+                        'is_primary'      => false,
+                    ]);
+                }
+            }
+        }
+        if ($this->db->tableExists('invoice_master')) {
+            $chgFields = $this->db->getFieldNames('invoice_master') ?? [];
+            if (in_array('net_amount', $chgFields, true) && in_array('attach_id', $chgFields, true)) {
+                $invCodeCol = in_array('invoice_code', $chgFields, true) ? 'invoice_code' : 'id';
+                $dateCol = in_array('inv_date', $chgFields, true) ? 'inv_date' : 'id';
+                $attachTypeClause = in_array('attach_type', $chgFields, true);
+                $builder = $this->db->table('invoice_master')
+                    ->select('id, ' . $invCodeCol . ' as invoice_code, attach_id, ' . $dateCol . ' as inv_date, net_amount')
+                    ->where('attach_id', $patientId);
+                if ($attachTypeClause) {
+                    $builder->where('attach_type', 0);
+                }
+                $chgInvoices = $builder->orderBy('id', 'DESC')->limit(10)->get()->getResultArray();
+                foreach ($chgInvoices as $ci) {
+                    $rawDate = ! empty($ci['inv_date']) ? $ci['inv_date'] : date('Y-m-d');
+                    $visitDate = date('Y-m-d', strtotime((string) $rawDate));
+                    $ccRef = 'INVOICE-CHG-' . $ci['id'] . '-' . $visitDate;
+                    $display = 'Invoice ' . ((string) ($ci['invoice_code'] ?: $ci['id'])) . ' (Charges - Rs ' . number_format((float) $ci['net_amount'], 2) . ')';
+                    $addContext([
+                        'careContextId'   => $ccRef,
+                        'referenceNumber' => $ccRef,
+                        'display'         => $display,
+                        'record_type'     => 'InvoiceRecord',
+                        'patient_id'      => $patientId,
+                        'is_fhir_ready'   => true,
+                        'is_primary'      => false,
+                    ]);
+                }
+            }
+        }
+        if ($this->db->tableExists('ipd_master')) {
+            $ipdFields = $this->db->getFieldNames('ipd_master') ?? [];
+            if (in_array('net_amount', $ipdFields, true)) {
+                $ipdCodeCol = in_array('ipd_code', $ipdFields, true) ? 'ipd_code' : 'id';
+                $ipdInvoices = $this->db->table('ipd_master')
+                    ->select('id, ' . $ipdCodeCol . ' as ipd_code, p_id, discharge_date, register_date, net_amount')
+                    ->where('p_id', $patientId)
+                    ->where('net_amount >', 0)
+                    ->orderBy('id', 'DESC')
+                    ->limit(5)
+                    ->get()
+                    ->getResultArray();
+                foreach ($ipdInvoices as $ii) {
+                    $rawDate = ! empty($ii['discharge_date']) ? $ii['discharge_date'] : (! empty($ii['register_date']) ? $ii['register_date'] : date('Y-m-d'));
+                    $visitDate = date('Y-m-d', strtotime((string) $rawDate));
+                    $ccRef = 'INVOICE-IPD-' . $ii['id'] . '-' . $visitDate;
+                    $display = 'Invoice ' . ((string) ($ii['ipd_code'] ?: $ii['id'])) . ' (IPD - Rs ' . number_format((float) $ii['net_amount'], 2) . ')';
+                    $addContext([
+                        'careContextId'   => $ccRef,
+                        'referenceNumber' => $ccRef,
+                        'display'         => $display,
+                        'record_type'     => 'InvoiceRecord',
+                        'patient_id'      => $patientId,
+                        'is_fhir_ready'   => true,
+                        'is_primary'      => false,
+                    ]);
+                }
             }
         }
 
@@ -10913,6 +11036,7 @@ class AbdmGateway extends BaseController
         $taskType    = '';
         $entityId    = '';
         $taskId      = 0;
+        $source      = '';
         if (method_exists($this->request, 'getVar')) {
             $patientId   = (int) ($this->request->getVar('patient_id') ?? 0);
             $abhaAddress = trim((string) ($this->request->getVar('abha_address') ?? ''));
@@ -10920,6 +11044,7 @@ class AbdmGateway extends BaseController
             $taskType    = trim((string) ($this->request->getVar('task_type') ?? ''));
             $entityId    = trim((string) ($this->request->getVar('entity_id') ?? ''));
             $taskId      = (int) ($this->request->getVar('task_id') ?? 0);
+            $source      = trim((string) ($this->request->getVar('source') ?? ''));
         }
         if ($patientId <= 0 && ! empty($_REQUEST['patient_id'])) {
             $patientId = (int) $_REQUEST['patient_id'];
@@ -10938,6 +11063,9 @@ class AbdmGateway extends BaseController
         }
         if ($taskId <= 0 && ! empty($_REQUEST['task_id'])) {
             $taskId = (int) $_REQUEST['task_id'];
+        }
+        if ($source === '' && ! empty($_REQUEST['source'])) {
+            $source = trim((string) $_REQUEST['source']);
         }
 
         if ($patientId <= 0 && $abhaAddress === '' && $pCode === '') {
@@ -11000,7 +11128,7 @@ class AbdmGateway extends BaseController
         $rawPhone   = trim((string) ($patient['mphone1'] ?? $patient['mphone2'] ?? ''));
         $cleanPhone = substr(preg_replace('/\D/', '', $rawPhone), -10);
 
-        [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientName, $taskType, $entityId, $taskId);
+        [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientName, $taskType, $entityId, $taskId, $source);
 
         // Fetch already-linked care contexts from Bridge if ABHA address is present
         $linkedRefs = [];

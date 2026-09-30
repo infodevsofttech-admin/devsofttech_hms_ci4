@@ -406,7 +406,7 @@
     /**
      * Load patient demographics and care contexts from server.
      */
-    window.loadPatientCareContexts = function(patientId, abhaAddress, taskType, entityId, taskId) {
+    window.loadPatientCareContexts = function(patientId, abhaAddress, taskType, entityId, taskId, source) {
         var loading = document.getElementById('hipCareContextsLoading');
         var container = document.getElementById('hipCareContextsContainer');
         if (loading) loading.classList.remove('d-none');
@@ -415,6 +415,7 @@
         taskType = taskType || (window.currentHipTaskContext ? window.currentHipTaskContext.taskType : '');
         entityId = entityId || (window.currentHipTaskContext ? window.currentHipTaskContext.entityId : '');
         taskId = taskId || (window.currentHipTaskContext ? window.currentHipTaskContext.taskId : 0);
+        source = source || (window.currentHipTaskContext ? window.currentHipTaskContext.source : '');
 
         var csrf = getCsrfData();
         var url = '<?= base_url('AbdmGateway/hip_patient_care_contexts') ?>'
@@ -422,7 +423,8 @@
             + '&abha_address=' + encodeURIComponent(abhaAddress || '')
             + '&task_type=' + encodeURIComponent(taskType || '')
             + '&entity_id=' + encodeURIComponent(entityId || '')
-            + '&task_id=' + encodeURIComponent(taskId || 0);
+            + '&task_id=' + encodeURIComponent(taskId || 0)
+            + '&source=' + encodeURIComponent(source || '');
 
         fetch(url, {
             method: 'GET',
@@ -531,6 +533,8 @@
             taskId: prefill.task_id || 0,
             taskType: prefill.task_type || '',
             entityId: prefill.entity_id || '',
+            source: prefill.source || '',
+            careContext: prefill.care_context || '',
             onLinked: prefill.onLinked || null
         };
 
@@ -567,7 +571,7 @@
 
         // Load visits
         if (patientId > 0 || (abhaAddress && abhaAddress.length > 3)) {
-            loadPatientCareContexts(patientId, abhaAddress, prefill.task_type, prefill.entity_id, prefill.task_id);
+            loadPatientCareContexts(patientId, abhaAddress, prefill.task_type, prefill.entity_id, prefill.task_id, prefill.source);
         } else {
             var container = document.getElementById('hipCareContextsContainer');
             if (container) {
@@ -649,6 +653,29 @@
                 updateCsrf(pRes);
                 if (pRes && pRes.ok === 1 && alertBox) {
                     alertBox.innerHTML += '<div class="mt-2 pt-2 border-top border-success-subtle text-dark small"><i class="bi bi-file-earmark-medical text-success me-1"></i><strong>FHIR Document Stored on Bridge:</strong> Consultation bundle is active on Bridge for Care Context <code>' + (pRes.care_context_reference || firstRef) + '</code>.<br><i class="bi bi-info-circle text-primary me-1"></i><strong>To view in PHR App:</strong> Open your PHR app (e.g. ABHA App) &rarr; tap <em>Linked Facilities</em> &rarr; tap <em>"Fetch Records" / "Pull Records"</em>.</div>';
+                }
+            }).catch(function() {});
+        } else if (ctxTaskType === 'invoice_publish') {
+            var pushData = new URLSearchParams();
+            pushData.append('source', (window.currentHipTaskContext ? window.currentHipTaskContext.source : '') || '');
+            pushData.append('bill_id', ctxEntityId);
+            pushData.append('patient_id', ctxPatientId);
+            pushData.append('abha_id', abhaAddress);
+            if (firstRef) pushData.append('care_context_reference', firstRef);
+            pushData.append(csrf.name || 'csrf_hms', csrf.hash);
+
+            fetch('<?= base_url('AbdmGateway/share_invoice_source_bundle') ?>', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                body: pushData.toString()
+            }).then(function(r) { return r.json(); }).then(function(pRes) {
+                updateCsrf(pRes);
+                if (pRes && pRes.ok === 1 && alertBox) {
+                    alertBox.innerHTML += '<div class="mt-2 pt-2 border-top border-success-subtle text-dark small"><i class="bi bi-file-earmark-medical text-success me-1"></i><strong>FHIR Document Stored on Bridge:</strong> Invoice bundle is active on Bridge for Care Context <code>' + (pRes.care_context_reference || firstRef) + '</code>.<br><i class="bi bi-info-circle text-primary me-1"></i><strong>To view in PHR App:</strong> Open your PHR app (e.g. ABHA App) &rarr; tap <em>Linked Facilities</em> &rarr; tap <em>"Fetch Records" / "Pull Records"</em>.</div>';
                 }
             }).catch(function() {});
         }

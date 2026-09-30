@@ -97,6 +97,17 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
             abdm_care_context_reference TEXT
         )");
 
+        $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('invoice_master') . " (
+            id INTEGER PRIMARY KEY,
+            invoice_code TEXT,
+            attach_id INTEGER,
+            attach_type INTEGER,
+            inv_date TEXT,
+            net_amount REAL
+        )");
+
+        $db->resetDataCache();
+
         $db->table('charge_master')->emptyTable();
         $db->table('lab_request')->emptyTable();
         $db->table('opd_prescription')->emptyTable();
@@ -105,6 +116,7 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
         $db->table('patient_master')->emptyTable();
         $db->table('ipd_master')->emptyTable();
         $db->table('immunization_records')->emptyTable();
+        $db->table('invoice_master')->emptyTable();
 
         $db->table('patient_master')->insert([
             'id' => 12,
@@ -352,6 +364,50 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
 
         $refs = array_column($v3, 'referenceNumber');
         $this->assertContains('OPD-12-S77-20260929', $refs);
+    }
+
+    public function testDiscoversInvoiceCareContextWhenInvoiceTaskRequested(): void
+    {
+        $db = \Config\Database::connect();
+        $db->table('invoice_master')->emptyTable();
+        $db->table('invoice_master')->insert([
+            'id' => 88,
+            'invoice_code' => 'INV-88',
+            'attach_id' => 12,
+            'attach_type' => 0,
+            'inv_date' => '2026-09-30',
+            'net_amount' => 450.00,
+        ]);
+
+        $refGateway = new ReflectionClass($this->gateway);
+        $method = $refGateway->getMethod('findCareContextsForPatient');
+        $method->setAccessible(true);
+
+        [$v3, $full] = $method->invoke(
+            $this->gateway,
+            12,
+            'P26071000012',
+            'KESHAV SINGH',
+            'invoice_publish',
+            '88',
+            0,
+            'charges_invoice'
+        );
+
+        $refs = array_column($v3, 'referenceNumber');
+        $this->assertContains('INVOICE-CHG-88-2026-09-30', $refs);
+
+        $invoiceCtx = null;
+        foreach ($full as $ctx) {
+            if ($ctx['careContextId'] === 'INVOICE-CHG-88-2026-09-30') {
+                $invoiceCtx = $ctx;
+                break;
+            }
+        }
+        $this->assertNotNull($invoiceCtx);
+        $this->assertSame('InvoiceRecord', $invoiceCtx['record_type']);
+        $this->assertTrue($invoiceCtx['is_primary']);
+        $this->assertTrue($invoiceCtx['is_fhir_ready']);
     }
 }
 
