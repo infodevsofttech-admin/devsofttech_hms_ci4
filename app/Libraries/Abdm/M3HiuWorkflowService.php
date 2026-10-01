@@ -243,11 +243,11 @@ class M3HiuWorkflowService
 
             $consentRowId = (int) ($row['id'] ?? 0);
 
-            // Fast-check: if a child reconcile/data_fetch workflow for this request_id has already reached terminal state
+            // Fast-check: if a child reconcile/data_fetch workflow for this request_id has reached terminal state (EXPIRED, REVOKED, DENIED)
             $terminalCheck = $this->db->table('abdm_hiu_workflows')
                 ->select('id, workflow_state, operation')
                 ->where('request_id', $requestId)
-                ->whereIn('workflow_state', ['COMPLETED', 'EXPIRED', 'REVOKED', 'DENIED'])
+                ->whereIn('workflow_state', ['EXPIRED', 'REVOKED', 'DENIED'])
                 ->orderBy('id', 'DESC')
                 ->get(1)
                 ->getRowArray();
@@ -289,9 +289,27 @@ class M3HiuWorkflowService
                     ?? ''
                 )));
 
+                $allArtifactsReceived = true;
+                $resolvedConsentId = trim((string) (
+                    $consentResult['abdm_consent_request_id']
+                    ?? $consentResult['consent_request_id']
+                    ?? $consentResult['abdm_consent_artifact_id']
+                    ?? $consentResult['consent_id']
+                    ?? ''
+                ));
+                if ($resolvedConsentId !== '' && $this->db->tableExists('abdm_hiu_consent_artifacts')) {
+                    $unreceived = $this->db->table('abdm_hiu_consent_artifacts')
+                        ->where('consent_request_id', $resolvedConsentId)
+                        ->whereNotIn('last_status', ['RECEIVED', 'DATA_RECEIVED', 'EXPIRED', 'REVOKED', 'DENIED', 'COMPLETED'])
+                        ->countAllResults();
+                    if ($unreceived > 0) {
+                        $allArtifactsReceived = false;
+                    }
+                }
+
                 if (in_array($consentState, ['revoked', 'denied', 'expired'], true)) {
                     $this->markConsentRequestTerminal($consentRowId, strtoupper($consentState));
-                } elseif ($cascade['granted'] && $cascade['failed'] === 0 && $cascade['data_updates'] > 0) {
+                } elseif ($cascade['granted'] && $cascade['failed'] === 0 && $cascade['data_updates'] > 0 && $allArtifactsReceived) {
                     $this->markConsentRequestTerminal($consentRowId, 'COMPLETED');
                 }
             } else {
@@ -432,7 +450,8 @@ class M3HiuWorkflowService
             $artifactResult = $this->runOperation('data_fetch', $artifactPayload);
             if ((int) ($artifactResult['ok'] ?? 0) === 1) {
                 $result['data_updates']++;
-                $this->markArtifactPolled($resolvedConsentId, $artifactId, (string) ($artifactResult['consent_status'] ?? ''));
+                $status = (string) ($artifactResult['workflow_state'] ?? $artifactResult['status'] ?? $artifactResult['consent_status'] ?? '');
+                $this->markArtifactPolled($resolvedConsentId, $artifactId, $status);
             } else {
                 $result['failed']++;
             }

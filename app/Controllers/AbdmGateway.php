@@ -4942,8 +4942,13 @@ class AbdmGateway extends BaseController
                     $targetOpdId = (int) ($pRow['opd_id'] ?? 0);
                 }
                 if ($targetOpdId <= 0 && $targetPatientId > 0 && $db->tableExists('opd_master')) {
-                    $opdRow = $db->table('opd_master')->select('opd_id')->where('p_id', $targetPatientId)->orderBy('opd_id', 'DESC')->get(1)->getRowArray();
-                    $targetOpdId = (int) ($opdRow['opd_id'] ?? 0);
+                    $opdRow = $db->table('opd_master')->select('opd_id')->where('opd_id', $targetPatientId)->get(1)->getRowArray();
+                    if ($opdRow) {
+                        $targetOpdId = (int) $opdRow['opd_id'];
+                    } else {
+                        $opdRow = $db->table('opd_master')->select('opd_id')->where('p_id', $targetPatientId)->orderBy('opd_id', 'DESC')->get(1)->getRowArray();
+                        $targetOpdId = (int) ($opdRow['opd_id'] ?? 0);
+                    }
                 }
 
                 if ($targetOpdId > 0) {
@@ -4963,6 +4968,30 @@ class AbdmGateway extends BaseController
                     } catch (\Throwable $ex) {
                         log_message('warning', 'Live FHIR bundle generation in recordsFetch failed: ' . $ex->getMessage());
                     }
+                }
+            }
+
+            // Strategy 0b: Live On-Demand Fresh Generation for Invoice Record
+            if (preg_match('/^INVOICE-(CHG|OPD|IPD)-(\d+)/i', $ref, $invM)) {
+                $invSource = match(strtoupper($invM[1])) {
+                    'CHG' => 'charges_invoice',
+                    'OPD' => 'opd_invoice',
+                    'IPD' => 'ipd_invoice',
+                };
+                $invId = (int) $invM[2];
+                try {
+                    $invPayload = $this->buildInvoiceSourceRecordPayload($invSource, $invId, 0, '');
+                    if ($invPayload !== null && !empty($invPayload['bundle'])) {
+                        $records[] = [
+                            'careContextReference' => $ref,
+                            'hiType'               => 'InvoiceRecord',
+                            'display'              => $invPayload['care_context_display'] ?? 'Invoice Record',
+                            'bundle'               => $invPayload['bundle'],
+                        ];
+                        continue;
+                    }
+                } catch (\Throwable $ex) {
+                    log_message('warning', 'Live Invoice FHIR generation in recordsFetch failed: ' . $ex->getMessage());
                 }
             }
 
@@ -5017,14 +5046,18 @@ class AbdmGateway extends BaseController
 
 
             // Strategy B: Build compliant FHIR Document Bundle from patient_master & OPD
-            $bundle = $this->assembleFhirBundleForCareContext($ref);
-            if ($bundle !== null) {
-                $records[] = [
-                    'careContextReference' => $ref,
-                    'hiType'               => 'OPConsultRecord',
-                    'display'              => 'OPConsultRecord - ' . date('d M Y'),
-                    'bundle'               => $bundle,
-                ];
+            // STRICTLY restricted to OPD/consultation care contexts.
+            // NEVER synthesize dummy consultation records for invoices, discharge, labs, radiology, etc.
+            if (preg_match('/^(?:OPD|PRESCRIPTION|CONSULT)/i', $ref)) {
+                $bundle = $this->assembleFhirBundleForCareContext($ref);
+                if ($bundle !== null) {
+                    $records[] = [
+                        'careContextReference' => $ref,
+                        'hiType'               => 'OPConsultRecord',
+                        'display'              => 'OPConsultRecord - ' . date('d M Y'),
+                        'bundle'               => $bundle,
+                    ];
+                }
             }
         }
 
@@ -5049,10 +5082,25 @@ class AbdmGateway extends BaseController
     {
         $db = \Config\Database::connect();
 
-        // Extract patient ID from reference (e.g. "OPD-16-S1-20260909" -> patient_id 16)
+        // Extract patient ID and doctor from reference (e.g. "OPD-16-S1-20260909" -> patient_id 16 or opd_id)
         $patientId = 0;
+        $doctorName = 'Treating Doctor';
         if (preg_match('/OPD-(\d+)/i', $careContextRef, $matches)) {
-            $patientId = (int) $matches[1];
+            $extractedId = (int) $matches[1];
+            if ($db->tableExists('opd_master')) {
+                $opd = $db->table('opd_master')->where('opd_id', $extractedId)->get(1)->getRowArray();
+                if (!empty($opd)) {
+                    if (!empty($opd['p_id'])) {
+                        $patientId = (int) $opd['p_id'];
+                    }
+                    if (!empty($opd['doc_name'])) {
+                        $doctorName = trim((string) $opd['doc_name']);
+                    }
+                }
+            }
+            if ($patientId === 0) {
+                $patientId = $extractedId;
+            }
         } elseif (preg_match('/(?:HR|PAT|REG|P)-(\d+)/i', $careContextRef, $matches)) {
             $patientId = (int) $matches[1];
         }
@@ -5121,7 +5169,7 @@ class AbdmGateway extends BaseController
                         ],
                         'date'         => $nowIso,
                         'author'       => [
-                            ['reference' => 'Practitioner/prac-1', 'display' => 'Treating Doctor'],
+                            ['reference' => 'Practitioner/prac-1', 'display' => $doctorName],
                         ],
                         'title'        => 'Consultation Record',
                         'section'      => [
@@ -5155,7 +5203,7 @@ class AbdmGateway extends BaseController
                     'resource' => [
                         'resourceType' => 'Practitioner',
                         'id'           => 'prac-1',
-                        'name'         => [['text' => 'Treating Doctor']],
+                        'name'         => [['text' => $doctorName]],
                     ],
                 ],
             ],

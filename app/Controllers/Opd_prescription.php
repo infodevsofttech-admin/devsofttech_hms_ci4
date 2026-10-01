@@ -4936,8 +4936,15 @@ class Opd_prescription extends BaseController
             $bundle          = $this->fhirR4Builder->buildOpConsultBundle($patient, $encounter, $medications, $conditions, $clinicalContext);
             $bundleJson      = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
-            $user        = function_exists('auth') ? auth()->user() : null;
-            $generatedBy = (string) ($user->id ?? session('user_id') ?? 'system');
+            $generatedBy = 'system';
+            try {
+                if (session_status() === PHP_SESSION_ACTIVE) {
+                    $user = function_exists('auth') ? auth()->user() : null;
+                    $generatedBy = (string) ($user->id ?? session('user_id') ?? 'system');
+                }
+            } catch (\Throwable) {
+                $generatedBy = 'system';
+            }
             $generatedAt = Time::now('Asia/Kolkata')->toDateTimeString();
 
             // Overwrite the latest stored bundle for this opd_id / session
@@ -4975,6 +4982,7 @@ class Opd_prescription extends BaseController
                 'ok'           => 1,
                 'message'      => 'FHIR bundle regenerated successfully',
                 'document_id'  => $documentId,
+                'bundle'       => $bundle,
                 'generated_at' => $generatedAt,
                 'entry_count'  => isset($bundle['entry']) ? count($bundle['entry']) : 0,
             ];
