@@ -557,6 +557,9 @@ class AbdmTaskBoardSyncService
             return $summary;
         }
 
+        // Auto-discover any newly completed clinical records with ABHA
+        $this->backfillMissingWorkTasks(30, 100);
+
         $supportedTaskTypes = [
             'opd_prescription_publish',
             'lab_report_publish',
@@ -567,17 +570,20 @@ class AbdmTaskBoardSyncService
             'ipd_discharge_publish',
         ];
 
+        // Fetch candidate batch wider than $limit to bypass cooling or retrying items without queue starvation
         $tasks = $this->db->table('abdm_work_tasks')
             ->whereIn('task_type', $supportedTaskTypes)
             ->whereIn('status', ['pending', 'in_progress'])
             ->orderBy('id', 'ASC')
-            ->limit(max(1, $limit))
+            ->limit(max(60, $limit * 3))
             ->get()
             ->getResultArray();
 
         if (empty($tasks)) {
             return $summary;
         }
+
+        $processedCount = 0;
 
         foreach ($tasks as $task) {
             $taskId = (int) $task['id'];
@@ -586,8 +592,8 @@ class AbdmTaskBoardSyncService
             $patientId = (int) ($task['patient_id'] ?? 0);
             $abhaId = trim((string) ($task['abha_id'] ?? ''));
 
-            // Check cooling period from the latest modification/refresh timestamp
-            $lastModified = ! empty($task['updated_at']) ? $task['updated_at'] : ($task['created_at'] ?? date('Y-m-d H:i:s'));
+            // Check cooling period from the actual clinical event/modification timestamp
+            $lastModified = self::resolveTaskClinicalTimestamp($task, $this->db);
             $cooling = self::calculateCooling($taskType, $lastModified);
 
             if ($cooling['is_cooling_active']) {
@@ -614,6 +620,10 @@ class AbdmTaskBoardSyncService
                     'patient'   => $task['patient_name'] ?? '',
                     'status'    => 'dry_run_eligible',
                 ];
+                $processedCount++;
+                if ($processedCount >= $limit) {
+                    break;
+                }
                 continue;
             }
 
@@ -636,11 +646,29 @@ class AbdmTaskBoardSyncService
                 ];
             } else {
                 $summary['failed']++;
-                $this->taskService->markTaskStatus(
-                    $taskId,
-                    'pending', // remain pending for retry on next cron tick
-                    'Cron retry pending: ' . ($result['error'] ?? 'Sync failed')
-                );
+                $payload = ! empty($task['payload_json']) ? json_decode((string) $task['payload_json'], true) : [];
+                $retryCount = (int) ($payload['retry_count'] ?? 0) + 1;
+                $payload['retry_count'] = $retryCount;
+                $payload['last_error'] = (string) ($result['error'] ?? 'Sync failed');
+                $payload['last_failed_at'] = Time::now('Asia/Kolkata')->toDateTimeString();
+
+                $errJson = (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                $this->db->table('abdm_work_tasks')->where('id', $taskId)->update(['payload_json' => $errJson]);
+
+                if ($retryCount >= 5) {
+                    $this->taskService->markTaskStatus(
+                        $taskId,
+                        'failed',
+                        'Max cron retries (5) exceeded: ' . ($result['error'] ?? 'Sync failed')
+                    );
+                } else {
+                    $this->taskService->markTaskStatus(
+                        $taskId,
+                        'pending', // remain pending for retry on next cron tick
+                        'Cron retry #' . $retryCount . ' pending: ' . ($result['error'] ?? 'Sync failed')
+                    );
+                }
+
                 $summary['details'][] = [
                     'task_id'   => $taskId,
                     'task_type' => $taskType,
@@ -648,6 +676,11 @@ class AbdmTaskBoardSyncService
                     'status'    => 'failed',
                     'error'     => $result['error'] ?? 'Sync failed',
                 ];
+            }
+
+            $processedCount++;
+            if ($processedCount >= $limit) {
+                break;
             }
         }
 
@@ -724,7 +757,8 @@ class AbdmTaskBoardSyncService
             $abhaNumber = trim((string) $patientRow['abha_id']);
         }
 
-        $visitDate = date('Y-m-d');
+        $clinTs = self::resolveTaskClinicalTimestamp($task, $this->db);
+        $visitDate = ! empty($clinTs) && strtotime($clinTs) > 0 ? date('Y-m-d', strtotime($clinTs)) : date('Y-m-d');
         $prefix = match ($taskType) {
             'radiology_report_publish'    => 'RAD-',
             'lab_report_publish'          => 'LAB-',
@@ -941,6 +975,287 @@ class AbdmTaskBoardSyncService
     public function resolveCoolingState(string $taskType, ?string $lastModified): array
     {
         return self::calculateCooling($taskType, $lastModified);
+    }
+
+    /**
+     * Resolves the actual clinical / event timestamp for a task to accurately measure cooling.
+     * Checks task payload meta, underlying clinical record tables, and falls back to created_at.
+     *
+     * @param array<string, mixed> $task
+     */
+    public static function resolveTaskClinicalTimestamp(array $task, ?BaseConnection $db = null): string
+    {
+        $payload = ! empty($task['payload_json']) ? json_decode((string) $task['payload_json'], true) : [];
+        $meta = is_array($payload) ? ($payload['meta'] ?? []) : [];
+
+        // 1. Direct meta timestamps
+        foreach (['clinical_timestamp', 'event_date', 'reported_time', 'collected_time', 'given_date', 'date_opd_visit', 'discharge_date'] as $key) {
+            if (! empty($meta[$key]) && strtotime((string) $meta[$key]) > 0) {
+                return (string) $meta[$key];
+            }
+        }
+
+        $taskType = (string) ($task['task_type'] ?? '');
+        $entityType = (string) ($task['entity_type'] ?? '');
+        $entityId = (int) ($task['entity_id'] ?? 0);
+
+        if ($entityId > 0) {
+            try {
+                $dbConn = $db ?? db_connect();
+
+                // 2. Health Documents: file_upload_data or patient_doc
+                if (in_array($entityType, ['patient_document', 'file_upload_data'], true) || $taskType === 'health_document_publish') {
+                    if ($dbConn->tableExists('file_upload_data')) {
+                        $fRow = $dbConn->table('file_upload_data')->select('insert_date')->where('id', $entityId)->get(1)->getRowArray();
+                        if (! empty($fRow['insert_date']) && strtotime((string) $fRow['insert_date']) > 0) {
+                            return (string) $fRow['insert_date'];
+                        }
+                    }
+                    if ($dbConn->tableExists('patient_doc')) {
+                        $pRow = $dbConn->table('patient_doc')->select('created_at, date_issue')->where('id', $entityId)->get(1)->getRowArray();
+                        $date = ! empty($pRow['created_at']) ? $pRow['created_at'] : ($pRow['date_issue'] ?? null);
+                        if (! empty($date) && strtotime((string) $date) > 0) {
+                            return (string) $date;
+                        }
+                    }
+                }
+
+                // 3. Lab / Radiology: lab_request
+                if ($entityType === 'lab_request' || in_array($taskType, ['lab_report_publish', 'radiology_report_publish'], true)) {
+                    if ($dbConn->tableExists('lab_request')) {
+                        $fields = $dbConn->getFieldNames('lab_request');
+                        $selectCols = array_intersect(['reported_time', 'collected_time', 'Request_Date'], $fields);
+                        if (! empty($selectCols)) {
+                            $lRow = $dbConn->table('lab_request')->select(implode(', ', $selectCols))->where('id', $entityId)->get(1)->getRowArray();
+                            foreach (['reported_time', 'collected_time', 'Request_Date'] as $col) {
+                                if (! empty($lRow[$col]) && strtotime((string) $lRow[$col]) > 0) {
+                                    return (string) $lRow[$col];
+                                }
+                            }
+                        }
+                    }
+                }
+
+                // 4. Immunization: immunization_records
+                if ($entityType === 'immunization' || $taskType === 'immunization_record_publish') {
+                    if ($dbConn->tableExists('immunization_records')) {
+                        $iRow = $dbConn->table('immunization_records')->select('given_date, created_at')->where('id', $entityId)->get(1)->getRowArray();
+                        $date = ! empty($iRow['given_date']) ? $iRow['given_date'] : ($iRow['created_at'] ?? null);
+                        if (! empty($date) && strtotime((string) $date) > 0) {
+                            return (string) $date;
+                        }
+                    }
+                }
+
+                // 5. Wellness: opd_prescription
+                if ($entityType === 'opd_prescription' || $entityType === 'opd_vitals' || $taskType === 'wellness_record_publish') {
+                    if ($dbConn->tableExists('opd_prescription')) {
+                        $fields = $dbConn->getFieldNames('opd_prescription');
+                        $dateCol = in_array('date_opd_visit', $fields, true) ? 'date_opd_visit' : 'id';
+                        $rxRow = $dbConn->table('opd_prescription')->select($dateCol)->where('id', $entityId)->get(1)->getRowArray();
+                        if (! empty($rxRow['date_opd_visit']) && strtotime((string) $rxRow['date_opd_visit']) > 0) {
+                            return (string) $rxRow['date_opd_visit'];
+                        }
+                    }
+                }
+
+                // 6. IPD Discharge: ipd_discharge
+                if ($entityType === 'ipd_discharge' || $taskType === 'ipd_discharge_publish') {
+                    if ($dbConn->tableExists('ipd_discharge')) {
+                        $dRow = $dbConn->table('ipd_discharge')->select('discharge_date, created_at')->where('id', $entityId)->get(1)->getRowArray();
+                        $date = ! empty($dRow['discharge_date']) ? $dRow['discharge_date'] : ($dRow['created_at'] ?? null);
+                        if (! empty($date) && strtotime((string) $date) > 0) {
+                            return (string) $date;
+                        }
+                    }
+                }
+            } catch (\Throwable) {
+                // Silently fallback
+            }
+        }
+
+        // Fallback to task's created_at, or updated_at
+        return ! empty($task['created_at'])
+            ? (string) $task['created_at']
+            : (! empty($task['updated_at']) ? (string) $task['updated_at'] : date('Y-m-d H:i:s'));
+    }
+
+    /**
+     * Backfill missing work tasks for finalized clinical records with ABHA.
+     * Ensures cron discovers and queues tasks even if staff haven't opened the web Task Board.
+     */
+    public function backfillMissingWorkTasks(int $days = 30, int $limit = 100): void
+    {
+        if (! $this->db->tableExists('abdm_work_tasks') || ! $this->db->tableExists('patient_master')) {
+            return;
+        }
+
+        $patientFields = $this->db->getFieldNames('patient_master') ?? [];
+        $abhaCol = $this->resolveFirstExistingColumn($patientFields, ['abha_id', 'abha_no', 'abha_address', 'abha']);
+        if ($abhaCol === null) {
+            return;
+        }
+
+        $sinceDate = date('Y-m-d H:i:s', strtotime("-{$days} days"));
+
+        // 1. Health Documents: file_upload_data
+        if ($this->db->tableExists('file_upload_data')) {
+            $fileRows = $this->db->table('file_upload_data f')
+                ->select('f.id, f.pid, f.insert_date, p.p_fname, p.' . $abhaCol . ' as abha_id', false)
+                ->join('patient_master p', 'p.id = f.pid', 'inner')
+                ->where('p.' . $abhaCol . ' !=', '')
+                ->where('f.insert_date >=', $sinceDate)
+                ->orderBy('f.id', 'DESC')
+                ->limit($limit)
+                ->get()
+                ->getResultArray();
+
+            foreach ($fileRows as $fRow) {
+                $fileId = (int) ($fRow['id'] ?? 0);
+                $patientId = (int) ($fRow['pid'] ?? 0);
+                $abhaId = trim((string) ($fRow['abha_id'] ?? ''));
+                if ($fileId <= 0 || $patientId <= 0 || preg_match('/^\d{14}$/', $abhaId) !== 1) {
+                    continue;
+                }
+
+                $exists = $this->db->table('abdm_work_tasks')
+                    ->select('id')
+                    ->where('task_type', 'health_document_publish')
+                    ->where('entity_type', 'patient_document')
+                    ->where('entity_id', (string) $fileId)
+                    ->get(1)
+                    ->getRowArray();
+                if (! empty($exists)) {
+                    continue;
+                }
+
+                $this->taskService->createOrRefreshTask(
+                    'health_document_publish',
+                    'file_upload_data',
+                    'patient_document',
+                    (string) $fileId,
+                    $patientId,
+                    trim((string) ($fRow['p_fname'] ?? '')),
+                    $abhaId,
+                    'submit',
+                    [
+                        'file_upload_id'     => $fileId,
+                        'clinical_timestamp' => (string) ($fRow['insert_date'] ?? ''),
+                        'trigger'            => 'cron.backfill',
+                    ]
+                );
+            }
+        }
+
+        // 2. Health Documents: patient_doc
+        if ($this->db->tableExists('patient_doc')) {
+            $docRows = $this->db->table('patient_doc pd')
+                ->select('pd.id, pd.p_id, pd.date_issue, pd.created_at, p.p_fname, p.' . $abhaCol . ' as abha_id', false)
+                ->join('patient_master p', 'p.id = pd.p_id', 'inner')
+                ->where('p.' . $abhaCol . ' !=', '')
+                ->where('pd.created_at >=', $sinceDate)
+                ->orderBy('pd.id', 'DESC')
+                ->limit($limit)
+                ->get()
+                ->getResultArray();
+
+            foreach ($docRows as $dRow) {
+                $docId = (int) ($dRow['id'] ?? 0);
+                $patientId = (int) ($dRow['p_id'] ?? 0);
+                $abhaId = trim((string) ($dRow['abha_id'] ?? ''));
+                if ($docId <= 0 || $patientId <= 0 || preg_match('/^\d{14}$/', $abhaId) !== 1) {
+                    continue;
+                }
+
+                $exists = $this->db->table('abdm_work_tasks')
+                    ->select('id')
+                    ->where('task_type', 'health_document_publish')
+                    ->where('entity_type', 'doctor_document')
+                    ->where('entity_id', (string) $docId)
+                    ->get(1)
+                    ->getRowArray();
+                if (! empty($exists)) {
+                    continue;
+                }
+
+                $this->taskService->createOrRefreshTask(
+                    'health_document_publish',
+                    'patient_doc',
+                    'doctor_document',
+                    (string) $docId,
+                    $patientId,
+                    trim((string) ($dRow['p_fname'] ?? '')),
+                    $abhaId,
+                    'submit',
+                    [
+                        'patient_doc_id'     => $docId,
+                        'clinical_timestamp' => (string) (! empty($dRow['created_at']) ? $dRow['created_at'] : ($dRow['date_issue'] ?? '')),
+                        'trigger'            => 'cron.backfill',
+                    ]
+                );
+            }
+        }
+
+        // 3. Lab & Radiology: lab_request
+        if ($this->db->tableExists('lab_request')) {
+            $labFields = $this->db->getFieldNames('lab_request') ?? [];
+            $dateFields = array_intersect(['reported_time', 'collected_time', 'Request_Date'], $labFields);
+            $dateSelect = ! empty($dateFields) ? (', r.' . implode(', r.', $dateFields)) : '';
+
+            $labRows = $this->db->table('lab_request r')
+                ->select('r.id, r.patient_id, r.patient_name, r.lab_type, r.charge_id, r.status' . $dateSelect . ', p.' . $abhaCol . ' as abha_id', false)
+                ->join('patient_master p', 'p.id = r.patient_id', 'inner')
+                ->where('r.status >=', 2)
+                ->where('p.' . $abhaCol . ' !=', '')
+                ->orderBy('r.id', 'DESC')
+                ->limit($limit)
+                ->get()
+                ->getResultArray();
+
+            foreach ($labRows as $lRow) {
+                $labReqId = (int) ($lRow['id'] ?? 0);
+                $patientId = (int) ($lRow['patient_id'] ?? 0);
+                $abhaId = trim((string) ($lRow['abha_id'] ?? ''));
+                if ($labReqId <= 0 || $patientId <= 0 || preg_match('/^\d{14}$/', $abhaId) !== 1) {
+                    continue;
+                }
+
+                $labType = (int) ($lRow['lab_type'] ?? 0);
+                $taskType = in_array($labType, [1, 2, 3, 4, 6], true) ? 'radiology_report_publish' : 'lab_report_publish';
+
+                $exists = $this->db->table('abdm_work_tasks')
+                    ->select('id')
+                    ->where('task_type', $taskType)
+                    ->where('entity_type', 'lab_request')
+                    ->where('entity_id', (string) $labReqId)
+                    ->get(1)
+                    ->getRowArray();
+                if (! empty($exists)) {
+                    continue;
+                }
+
+                $clinTs = ! empty($lRow['reported_time'])
+                    ? $lRow['reported_time']
+                    : (! empty($lRow['collected_time']) ? $lRow['collected_time'] : ($lRow['Request_Date'] ?? ''));
+
+                $this->taskService->createOrRefreshTask(
+                    $taskType,
+                    'diagnosis',
+                    'lab_request',
+                    (string) $labReqId,
+                    $patientId,
+                    trim((string) ($lRow['patient_name'] ?? '')),
+                    $abhaId,
+                    'submit',
+                    [
+                        'lab_type'           => $labType,
+                        'invoice_id'         => (int) ($lRow['charge_id'] ?? 0),
+                        'clinical_timestamp' => (string) $clinTs,
+                        'trigger'            => 'cron.backfill',
+                    ]
+                );
+            }
+        }
     }
 }
 

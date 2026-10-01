@@ -59,28 +59,54 @@ class AbdmWorkTaskService
             ->get(1)
             ->getRowArray();
 
-        $row = [
-            'source_module' => $sourceModule,
-            'patient_id' => $patientId > 0 ? $patientId : null,
-            'patient_name' => $patientName !== '' ? $patientName : null,
-            'abha_id' => $abhaId !== '' ? $abhaId : null,
-            'action_mode' => $actionMode !== '' ? $actionMode : null,
-            'payload_json' => (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'updated_at' => $now,
-        ];
+        $encodedPayload = (string) json_encode($payload, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         if (! empty($existing)) {
-            $this->db->table('abdm_work_tasks')->where('id', (int) $existing['id'])->update($row);
+            $existingPayload = (string) ($existing['payload_json'] ?? '');
+            $existingAbha = trim((string) ($existing['abha_id'] ?? ''));
+            $existingPatientId = (int) ($existing['patient_id'] ?? 0);
+
+            // Only update if meaningful data changed (avoids cooling period reset on idempotent refresh)
+            $needsUpdate = ($existingAbha !== $abhaId)
+                || ($existingPatientId !== $patientId)
+                || ($existingPayload !== $encodedPayload);
+
+            if ($needsUpdate) {
+                $updateRow = [
+                    'source_module' => $sourceModule,
+                    'patient_id'    => $patientId > 0 ? $patientId : null,
+                    'patient_name'  => $patientName !== '' ? $patientName : null,
+                    'abha_id'       => $abhaId !== '' ? $abhaId : null,
+                    'action_mode'   => $actionMode !== '' ? $actionMode : null,
+                    'payload_json'  => $encodedPayload,
+                    'updated_at'    => $now,
+                ];
+                $this->db->table('abdm_work_tasks')->where('id', (int) $existing['id'])->update($updateRow);
+            }
+
             return (int) $existing['id'];
         }
 
-        $row['task_code'] = $this->generateTaskCode();
-        $row['task_type'] = $taskType;
-        $row['entity_type'] = $entityType;
-        $row['entity_id'] = $entityId;
-        $row['status'] = 'pending';
-        $row['priority'] = 'normal';
-        $row['created_at'] = $now;
+        $createdAt = ! empty($meta['clinical_timestamp']) && strtotime((string) $meta['clinical_timestamp']) > 0
+            ? date('Y-m-d H:i:s', strtotime((string) $meta['clinical_timestamp']))
+            : $now;
+
+        $row = [
+            'task_code'     => $this->generateTaskCode(),
+            'task_type'     => $taskType,
+            'source_module' => $sourceModule,
+            'entity_type'   => $entityType,
+            'entity_id'     => $entityId,
+            'patient_id'    => $patientId > 0 ? $patientId : null,
+            'patient_name'  => $patientName !== '' ? $patientName : null,
+            'abha_id'       => $abhaId !== '' ? $abhaId : null,
+            'action_mode'   => $actionMode !== '' ? $actionMode : null,
+            'payload_json'  => $encodedPayload,
+            'status'        => 'pending',
+            'priority'      => 'normal',
+            'created_at'    => $createdAt,
+            'updated_at'    => $now,
+        ];
 
         $this->db->table('abdm_work_tasks')->insert($row);
         $insertId = (int) $this->db->insertID();

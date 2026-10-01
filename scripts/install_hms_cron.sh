@@ -34,6 +34,7 @@ crontab -l 2>/dev/null | awk -v start="$BLOCK_START" -v end="$BLOCK_END" '
 cat >> "$TMP_CRON" <<EOF
 $BLOCK_START
 * * * * * cd $PROJECT_DIR && $PHP_BIN spark abdm:push-sync --limit=20 --worker=cron-abdm-m2 >> $LOG_DIR/abdm_push_sync.log 2>&1
+* * * * * cd $PROJECT_DIR && $PHP_BIN spark abdm:taskboard-sync --limit=20 >> $LOG_DIR/abdm_taskboard_sync.log 2>&1
 * * * * * cd $PROJECT_DIR && $PHP_BIN spark abdm:sms-notify --limit=20 >> $LOG_DIR/abdm_sms_notify.log 2>&1
 * * * * * cd $PROJECT_DIR && $PHP_BIN spark bridge:sync --limit 10 >> $LOG_DIR/bridge_sync.log 2>&1
 * * * * * cd $PROJECT_DIR && $PHP_BIN spark snomed:process-coding >> $LOG_DIR/snomed_process.log 2>&1

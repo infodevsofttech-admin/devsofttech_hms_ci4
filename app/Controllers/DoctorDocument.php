@@ -2540,9 +2540,9 @@ class DoctorDocument extends BaseController
         $visitDate = (string) ($source['visit_date'] ?? date('Y-m-d'));
         $doctorName = (string) ($source['doctor_name'] ?? '');
 
-        if ($patientId > 0 && preg_match('/^\d{14}$/', $abhaDigits) === 1 && class_exists('\App\Libraries\Abdm\Task\AbdmTaskService')) {
+        if ($patientId > 0 && preg_match('/^\d{14}$/', $abhaDigits) === 1 && class_exists('\App\Libraries\AbdmWorkTaskService')) {
             try {
-                $taskService = new \App\Libraries\Abdm\Task\AbdmTaskService();
+                $taskService = new \App\Libraries\AbdmWorkTaskService();
                 $taskService->createOrRefreshTask(
                     'health_document_publish',
                     'patient_doc',
@@ -2554,6 +2554,7 @@ class DoctorDocument extends BaseController
                     'submit',
                     [
                         'patient_doc_id' => $patientDocId,
+                        'clinical_timestamp' => (string) ($source['visit_date'] ?? date('Y-m-d H:i:s')),
                         'trigger' => 'patient_doc.compiled',
                     ]
                 );

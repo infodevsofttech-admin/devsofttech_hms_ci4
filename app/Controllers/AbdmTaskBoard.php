@@ -157,10 +157,7 @@ class AbdmTaskBoard extends BaseController
             }
 
             $taskType = (string) ($task['task_type'] ?? '');
-            $lastModified = ! empty($task['updated_at'])
-                ? (string) $task['updated_at']
-                : (! empty($task['created_at']) ? (string) $task['created_at'] : null);
-
+            $lastModified = AbdmTaskBoardSyncService::resolveTaskClinicalTimestamp($task, $this->db);
             $cooling = AbdmTaskBoardSyncService::calculateCooling($taskType, $lastModified);
 
             $task['cooling_active'] = ! empty($cooling['is_cooling_active']);
@@ -428,7 +425,10 @@ class AbdmTaskBoard extends BaseController
             return;
         }
 
-        $select = 'r.id, r.patient_id, r.patient_name, r.lab_type, r.charge_id, r.status, ' . implode(', ', $abhaSelectParts);
+        $labFields = $this->db->getFieldNames('lab_request') ?? [];
+        $dateFields = array_intersect(['reported_time', 'collected_time', 'Request_Date'], $labFields);
+        $dateSelect = ! empty($dateFields) ? (', r.' . implode(', r.', $dateFields)) : '';
+        $select = 'r.id, r.patient_id, r.patient_name, r.lab_type, r.charge_id, r.status' . $dateSelect . ', ' . implode(', ', $abhaSelectParts);
 
         $rows = $this->db->table('lab_request r')
             ->select($select)
@@ -466,6 +466,10 @@ class AbdmTaskBoard extends BaseController
                 continue;
             }
 
+            $clinTs = ! empty($row['reported_time'])
+                ? $row['reported_time']
+                : (! empty($row['collected_time']) ? $row['collected_time'] : ($row['Request_Date'] ?? ''));
+
             $this->taskService->createOrRefreshTask(
                 $taskType,
                 'diagnosis',
@@ -476,9 +480,10 @@ class AbdmTaskBoard extends BaseController
                 $abha,
                 'submit',
                 [
-                    'lab_type' => $labType,
-                    'invoice_id' => (int) ($row['charge_id'] ?? 0),
-                    'trigger' => 'task_board.backfill',
+                    'lab_type'           => $labType,
+                    'invoice_id'         => (int) ($row['charge_id'] ?? 0),
+                    'clinical_timestamp' => (string) $clinTs,
+                    'trigger'            => 'task_board.backfill',
                 ]
             );
         }
@@ -1217,6 +1222,18 @@ class AbdmTaskBoard extends BaseController
                 continue;
             }
 
+            $exists = $this->db->table('abdm_work_tasks')
+                ->select('id')
+                ->where('task_type', 'health_document_publish')
+                ->where('entity_type', 'doctor_document')
+                ->where('entity_id', (string) $docId)
+                ->whereIn('status', ['pending', 'in_progress', 'completed'])
+                ->get(1)
+                ->getRowArray();
+            if (! empty($exists)) {
+                continue;
+            }
+
             $patientName = trim((string) ($row['p_fname'] ?? ''));
             $this->taskService->createOrRefreshTask(
                 'health_document_publish',
@@ -1228,8 +1245,9 @@ class AbdmTaskBoard extends BaseController
                 $abhaId,
                 'submit',
                 [
-                    'patient_doc_id' => $docId,
-                    'trigger' => 'patient_doc.compiled',
+                    'patient_doc_id'     => $docId,
+                    'clinical_timestamp' => (string) (! empty($row['created_at']) ? $row['created_at'] : ($row['date_issue'] ?? '')),
+                    'trigger'            => 'patient_doc.compiled',
                 ]
             );
         }
@@ -1253,6 +1271,18 @@ class AbdmTaskBoard extends BaseController
                     continue;
                 }
 
+                $exists = $this->db->table('abdm_work_tasks')
+                    ->select('id')
+                    ->where('task_type', 'health_document_publish')
+                    ->where('entity_type', 'patient_document')
+                    ->where('entity_id', (string) $fileId)
+                    ->whereIn('status', ['pending', 'in_progress', 'completed'])
+                    ->get(1)
+                    ->getRowArray();
+                if (! empty($exists)) {
+                    continue;
+                }
+
                 $patientName = trim((string) ($fRow['p_fname'] ?? ''));
                 $this->taskService->createOrRefreshTask(
                     'health_document_publish',
@@ -1264,8 +1294,9 @@ class AbdmTaskBoard extends BaseController
                     $abhaId,
                     'submit',
                     [
-                        'file_upload_id' => $fileId,
-                        'trigger' => 'file_upload_data.created',
+                        'file_upload_id'     => $fileId,
+                        'clinical_timestamp' => (string) ($fRow['insert_date'] ?? ''),
+                        'trigger'            => 'file_upload_data.created',
                     ]
                 );
             }
@@ -1317,6 +1348,18 @@ class AbdmTaskBoard extends BaseController
                 continue;
             }
 
+            $exists = $this->db->table('abdm_work_tasks')
+                ->select('id')
+                ->where('task_type', 'wellness_record_publish')
+                ->where('entity_type', 'opd_vitals')
+                ->where('entity_id', (string) $rxId)
+                ->whereIn('status', ['pending', 'in_progress', 'completed'])
+                ->get(1)
+                ->getRowArray();
+            if (! empty($exists)) {
+                continue;
+            }
+
             $patientName = trim((string) ($row['p_fname'] ?? ''));
             $this->taskService->createOrRefreshTask(
                 'wellness_record_publish',
@@ -1329,8 +1372,9 @@ class AbdmTaskBoard extends BaseController
                 'submit',
                 [
                     'opd_prescription_id' => $rxId,
-                    'opd_session_id' => $opdId,
-                    'trigger' => 'vitals.backfilled',
+                    'opd_session_id'      => $opdId,
+                    'clinical_timestamp'  => (string) ($row['date_opd_visit'] ?? ''),
+                    'trigger'             => 'vitals.backfilled',
                 ]
             );
         }

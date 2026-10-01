@@ -104,6 +104,8 @@ cmd_install() {
 $BLOCK_START
 # ABDM M2 Care Context Push Sync (Every 1 minute)
 * * * * * cd $project_dir && $php_bin spark abdm:push-sync --limit=20 --worker=cron-abdm-m2 >> $log_dir/abdm_push_sync.log 2>&1
+# ABDM Work Task Board Auto-Link Sync (Every 1 minute)
+* * * * * cd $project_dir && $php_bin spark abdm:taskboard-sync --limit=20 >> $log_dir/abdm_taskboard_sync.log 2>&1
 # ABDM Deep-Link SMS Notification Sync (Every 1 minute)
 * * * * * cd $project_dir && $php_bin spark abdm:sms-notify --limit=20 >> $log_dir/abdm_sms_notify.log 2>&1
 # ABDM Bridge Records Sync (Every 1 minute)

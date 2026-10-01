@@ -6043,9 +6043,9 @@ class Patient extends BaseController
 		$adapter = new \App\Libraries\Abdm\Fhir\Support\GatewayPayloadAdapter();
 		$gatewayPayload = $adapter->toGatewayPayload($generatorOutput, $source, $hfrId);
 
-		if ($pid > 0 && preg_match('/^\d{14}$/', $abhaDigits) === 1 && class_exists('\App\Libraries\Abdm\Task\AbdmTaskService')) {
+		if ($pid > 0 && preg_match('/^\d{14}$/', $abhaDigits) === 1 && class_exists('\App\Libraries\AbdmWorkTaskService')) {
 			try {
-				$taskService = new \App\Libraries\Abdm\Task\AbdmTaskService();
+				$taskService = new \App\Libraries\AbdmWorkTaskService();
 				$taskService->createOrRefreshTask(
 					'health_document_publish',
 					'file_upload_data',
@@ -6057,6 +6057,7 @@ class Patient extends BaseController
 					'submit',
 					[
 						'file_upload_id' => $fileUploadId,
+						'clinical_timestamp' => date('Y-m-d H:i:s'),
 						'trigger' => 'file_upload_data.created',
 					]
 				);
@@ -6167,9 +6168,9 @@ class Patient extends BaseController
 		$patientName = (string) ($source['patient']['name'] ?? 'Patient');
 		$abhaDigits = (string) ($source['patient']['abha_id'] ?? '');
 
-		if ($patientId > 0 && preg_match('/^\d{14}$/', $abhaDigits) === 1 && class_exists('\App\Libraries\Abdm\Task\AbdmTaskService')) {
+		if ($patientId > 0 && preg_match('/^\d{14}$/', $abhaDigits) === 1 && class_exists('\App\Libraries\AbdmWorkTaskService')) {
 			try {
-				$taskService = new \App\Libraries\Abdm\Task\AbdmTaskService();
+				$taskService = new \App\Libraries\AbdmWorkTaskService();
 				$taskService->createOrRefreshTask(
 					'wellness_record_publish',
 					'opd_prescription',
@@ -6181,6 +6182,7 @@ class Patient extends BaseController
 					'submit',
 					[
 						'opd_session_id' => $opdSessionId,
+						'clinical_timestamp' => (string) ($source['visit_date'] ?? date('Y-m-d H:i:s')),
 						'trigger' => 'vitals.saved',
 					]
 				);
