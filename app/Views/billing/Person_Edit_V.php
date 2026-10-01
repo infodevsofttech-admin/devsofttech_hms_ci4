@@ -17,8 +17,10 @@
     $abhaKycVerified = (int) ($data[0]->abha_kyc_verified ?? 0) === 1;
     $abhaMobileVerified = (int) ($data[0]->abha_mobile_verified ?? 0) === 1;
     $abhaLinkedAt = trim((string) ($data[0]->abdm_linked_at ?? ''));
-    $abhaPhotoAvailable = trim((string) ($data[0]->abha_profile_photo_base64 ?? '')) !== '';
-    $abhaVerifiedLocked = $patientAbhaId !== '' && strtoupper($abhaVerifiedStatus) === 'VERIFIED';
+    $isAbhaVerified = in_array(strtoupper($abhaVerifiedStatus), ['VERIFIED', 'ACTIVE', 'LINKED', '1', 'YES', 'Y', 'TRUE'], true)
+        || strtoupper($abhaVerificationType) === 'VERIFIED'
+        || ($abhaKycVerified && $abhaMobileVerified);
+    $abhaVerifiedLocked = $patientAbhaId !== '' && $isAbhaVerified;
     $canEditNameAnytime = is_object($user) && method_exists($user, 'can') ? $user->can('billing.patient.edit-name-anytime') : false;
     $isAdmin = is_object($user) && method_exists($user, 'inGroup') ? $user->inGroup('admin') : false;
     $abhaLockNotice = $abhaVerifiedLocked ? 'ABHA verified: name, gender, ABHA ID, and date of birth are locked.' : '';

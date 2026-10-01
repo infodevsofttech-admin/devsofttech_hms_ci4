@@ -57,7 +57,11 @@
             $abhaMobileVerified = (int) ($data[0]->abha_mobile_verified ?? 0) === 1;
             $abhaLinkedAt = trim((string) ($data[0]->abdm_linked_at ?? ''));
             $abhaPhotoAvailable = trim((string) ($data[0]->abha_profile_photo_base64 ?? '')) !== '';
-            $isAbhaLinkedAndVerified = $patientAbhaId !== '' && in_array(strtoupper($abhaVerifiedStatus), ['VERIFIED', 'LINKED'], true);
+            $hasExistingAbha = ($patientAbhaId !== '' || $abhaAddress !== '' || $abhaLinkedAt !== '');
+            $isAbhaStatusVerified = in_array(strtoupper($abhaVerifiedStatus), ['VERIFIED', 'LINKED', 'ACTIVE', '1', 'YES', 'Y', 'TRUE'], true)
+                || strtoupper($abhaVerificationType) === 'VERIFIED'
+                || ($abhaKycVerified && $abhaMobileVerified);
+            $isAbhaLinkedAndVerified = $hasExistingAbha && ($isAbhaStatusVerified || $abhaLinkedAt !== '');
         ?>
         <?php
             $user = auth()->user();
@@ -141,7 +145,7 @@
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link" data-bs-toggle="tab" data-bs-target="#profile-insurance" type="button" role="tab">Insurance</button>
                             </li>
-                            <?php if (!$isAbhaLinkedAndVerified) : ?>
+                            <?php if (!$hasExistingAbha && !$isAbhaLinkedAndVerified) : ?>
                             <li class="nav-item" role="presentation">
                                 <button class="nav-link" data-bs-toggle="tab" data-bs-target="#profile-abha" type="button" role="tab">
                                     <i class="bi bi-person-check me-1"></i>ABHA Create/Verify
@@ -492,7 +496,7 @@
                                 </div>
                             </div>
 
-                            <?php if (!$isAbhaLinkedAndVerified) : ?>
+                            <?php if (!$hasExistingAbha && !$isAbhaLinkedAndVerified) : ?>
                             <div class="tab-pane fade pt-3" id="profile-abha" role="tabpanel">
                                 <h5 class="card-title mb-1">ABHA Number Create and Verify</h5>
                                 <p class="text-muted small mb-3">Create a new ABHA or link an existing ABHA profile to this patient.</p>
@@ -510,7 +514,7 @@
     </form>
 </section>
 
-<?php if (!$isAbhaLinkedAndVerified) : ?>
+<?php if (!$hasExistingAbha && !$isAbhaLinkedAndVerified) : ?>
 <?= view('partials/abha_patient_match_modal') ?>
 <?= view('partials/abha_create_modal') ?>
 <?php endif; ?>

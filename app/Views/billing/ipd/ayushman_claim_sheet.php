@@ -8,7 +8,7 @@ $patientId = (int) (($person->id ?? null) ?: ($ipd->p_id ?? 0));
 $abhaNumber = trim((string) (($person->abha_id ?? '') ?: ($person->abha_no ?? '') ?: ($person->abha ?? '')));
 $abhaAddress = trim((string) ($person->abha_address ?? ''));
 $abhaVerifiedRaw = strtolower(trim((string) (($person->abha_verified_status ?? '') ?: ($person->abha_status ?? '') ?: ($person->abha_verified ?? ''))));
-$abhaLooksVerified = in_array($abhaVerifiedRaw, ['1', 'verified', 'yes', 'y', 'true'], true);
+$abhaLooksVerified = in_array($abhaVerifiedRaw, ['1', 'verified', 'yes', 'y', 'true', 'active', 'linked'], true);
 $canUseM3 = $patientId > 0 && $abhaAddress !== '' && $abhaLooksVerified;
 ?>
 

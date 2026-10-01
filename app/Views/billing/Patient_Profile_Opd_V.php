@@ -17,8 +17,9 @@ if ($patientAbhaAddress === '' && preg_match('/abha_address\s*:\s*([A-Za-z0-9._-
 }
 $abhaVerifiedStatus = strtoupper(trim((string) ($patient->abha_verified_status ?? '')));
 $abhaKycVerified = (int) ($patient->abha_kyc_verified ?? 0) === 1;
-$abhaMobileVerified = (int) ($patient->abha_mobile_verified ?? 0) === 1;
-$abhaIsVerified = $abhaVerifiedStatus === 'VERIFIED' || ($abhaKycVerified && $abhaMobileVerified);
+$abhaIsVerified = in_array($abhaVerifiedStatus, ['VERIFIED', 'ACTIVE', 'LINKED', '1', 'YES', 'Y', 'TRUE'], true)
+    || strtoupper(trim((string) ($patient->abha_verification_type ?? ''))) === 'VERIFIED'
+    || ($abhaKycVerified && $abhaMobileVerified);
 $hasAbhaIdentity = $patientAbhaAddress !== '' || $patientAbhaId !== '' || $abhaIsVerified;
 $totalOpdVisits = (int) ($totalOpdVisits ?? 0);
 $lastVisitDateRaw = trim((string) ($lastVisitDate ?? ''));
