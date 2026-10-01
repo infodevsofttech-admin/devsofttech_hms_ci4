@@ -2057,13 +2057,31 @@ class AbdmGateway extends BaseController
 
         // -- Load test / charge name --------------------------------------------
         $testTitle = '';
-        $chargeId  = (int) ($labReq->charge_id ?? 0);
-        if ($chargeId > 0 && $this->db->tableExists('charge_master')) {
-            $chargeRow = $this->db->table('charge_master')->select('charge_name, charge_type')->where('id', $chargeId)->get(1)->getRowArray() ?? [];
-            $testTitle = trim((string) ($chargeRow['charge_name'] ?? ''));
+        $labType   = (int) ($labReq->lab_type ?? 0);
+        $isImaging = in_array($labType, [1, 2, 3, 4, 6], true);
+
+        // Check lab_repo first
+        $labRepoId = (int) ($labReq->lab_repo_id ?? 0);
+        if ($labRepoId > 0 && $this->db->tableExists('lab_repo')) {
+            $repoRow = $this->db->table('lab_repo')->select('Repo, RepoName')->where('mstRepoKey', $labRepoId)->get(1)->getRowArray() ?? [];
+            $testTitle = trim((string) ($repoRow['RepoName'] ?? $repoRow['Repo'] ?? ''));
         }
+
+        // Fallback: check charge_id in invoice_item or item_master
+        $chargeId = (int) ($labReq->charge_id ?? 0);
+        if ($testTitle === '' && $chargeId > 0) {
+            if ($this->db->tableExists('invoice_item')) {
+                $invItem = $this->db->table('invoice_item')->select('item_name')->where('id', $chargeId)->get(1)->getRowArray() ?? [];
+                $testTitle = trim((string) ($invItem['item_name'] ?? ''));
+            }
+            if ($testTitle === '' && $this->db->tableExists('item_master')) {
+                $itRow = $this->db->table('item_master')->select('item_name')->where('id', $chargeId)->get(1)->getRowArray() ?? [];
+                $testTitle = trim((string) ($itRow['item_name'] ?? ''));
+            }
+        }
+
         if ($testTitle === '') {
-            $testTitle = $this->mapLabTypeToTitle((int) ($labReq->lab_type ?? 0));
+            $testTitle = $isImaging ? 'Radiology Report' : $this->mapLabTypeToTitle($labType);
         }
 
         // -- Load hospital profile ---------------------------------------------
@@ -2087,19 +2105,18 @@ class AbdmGateway extends BaseController
 
         $diagnosticReport = [
             'id'           => (string) $labReqId,
-            'title'        => $testTitle ?: 'Laboratory Report',
+            'title'        => $testTitle ?: ($isImaging ? 'Radiology Report' : 'Laboratory Report'),
             'status'       => $labReq->status == 1 ? 'final' : 'preliminary',
             'conclusion'   => trim((string) ($labReq->report_data_Impression ?? '')),
             'reported_at'  => $reportedAt,
             'report_html'  => trim((string) ($labReq->Report_Data ?? '')),
         ];
-        $isImaging = (int) ($labReq->lab_type ?? 0) === 6;
         if ($isImaging) {
             $diagnosticReport['is_imaging'] = true;
             $diagnosticReport['report_domain'] = 'imaging';
-            $diagnosticReport['section_title'] = 'Computed tomography imaging report';
+            $diagnosticReport['section_title'] = 'Diagnostic imaging report';
             $diagnosticReport['section_snomed_code'] = '371531008';
-            $diagnosticReport['section_snomed_display'] = 'Computed tomography imaging report';
+            $diagnosticReport['section_snomed_display'] = 'Diagnostic imaging report';
         }
 
         // -- Load LOINC code for the panel from lab_repo -----------------------

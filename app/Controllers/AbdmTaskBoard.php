@@ -454,12 +454,29 @@ class AbdmTaskBoard extends BaseController
             $labType = (int) ($row['lab_type'] ?? 0);
             $taskType = in_array($labType, [1, 2, 3, 4, 6], true) ? 'radiology_report_publish' : 'lab_report_publish';
 
+            // Skip if already linked in health_records
+            if ($this->db->tableExists('health_records')) {
+                $alreadyLinked = $this->db->table('health_records')
+                    ->select('id')
+                    ->where('patient_id', $patientId)
+                    ->groupStart()
+                        ->where('entity_id', (string) $labReqId)
+                        ->orLike('care_context_reference', 'RAD-' . $labReqId . '-', 'after')
+                        ->orLike('care_context_reference', 'LAB-' . $labReqId . '-', 'after')
+                    ->groupEnd()
+                    ->whereIn('push_status', ['linked', 'pushed', 'shared'])
+                    ->get(1)
+                    ->getRowArray();
+                if (! empty($alreadyLinked)) {
+                    continue;
+                }
+            }
+
             $exists = $this->db->table('abdm_work_tasks')
                 ->select('id')
                 ->where('task_type', $taskType)
                 ->where('entity_type', 'lab_request')
                 ->where('entity_id', (string) $labReqId)
-                ->whereIn('status', ['pending', 'in_progress'])
                 ->get(1)
                 ->getRowArray();
             if (! empty($exists)) {
