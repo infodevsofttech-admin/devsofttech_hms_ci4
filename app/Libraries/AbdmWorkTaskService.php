@@ -115,22 +115,49 @@ class AbdmWorkTaskService
     }
 
     /**
+     * @param string $status 'all' (default), 'open', 'completed', or 'failed'
+     * @param int $limit Max rows to fetch
+     * @param string|null $taskType Optional task type filter
      * @return array<int, array<string, mixed>>
      */
-    public function getOpenTasks(int $limit = 200): array
+    public function getTasks(string $status = 'all', int $limit = 500, ?string $taskType = null): array
     {
         if (! $this->db->tableExists('abdm_work_tasks')) {
             return [];
         }
 
-        $this->syncPatientAbhaBacklog(max(200, $limit));
+        $status = strtolower(trim($status));
+        if (in_array($status, ['open', 'all'], true)) {
+            $this->syncPatientAbhaBacklog(max(200, min(500, $limit)));
+        }
 
-        return $this->db->table('abdm_work_tasks')
-            ->whereIn('status', ['pending', 'in_progress'])
+        $builder = $this->db->table('abdm_work_tasks');
+
+        if ($status === 'open') {
+            $builder->whereIn('status', ['pending', 'in_progress']);
+        } elseif ($status === 'completed') {
+            $builder->whereIn('status', ['completed', 'linked']);
+        } elseif ($status === 'failed') {
+            $builder->whereIn('status', ['failed', 'cancelled']);
+        }
+
+        if (! empty($taskType)) {
+            $builder->where('task_type', trim($taskType));
+        }
+
+        return $builder
             ->orderBy('id', 'DESC')
             ->limit(max(1, $limit))
             ->get()
             ->getResultArray();
+    }
+
+    /**
+     * @return array<int, array<string, mixed>>
+     */
+    public function getOpenTasks(int $limit = 200): array
+    {
+        return $this->getTasks('open', $limit);
     }
 
     public function markTaskStatus(int $taskId, string $status, string $resultText = ''): bool

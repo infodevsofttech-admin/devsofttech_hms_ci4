@@ -13,6 +13,7 @@ class AbdmTaskBoard extends BaseController
     public function __construct()
     {
         $this->taskService = new AbdmWorkTaskService();
+        $this->db = db_connect();
     }
 
     public function index()
@@ -22,7 +23,14 @@ class AbdmTaskBoard extends BaseController
         $this->backfillImmunizationTasks();
         $this->backfillHealthDocumentTasks();
         $this->backfillWellnessTasks();
-        $tasks = $this->enrichTasksWithCoolingState($this->enrichImmunizationPushState($this->taskService->getOpenTasks(300)));
+
+        $taskStatus = strtolower(trim((string) ($this->request->getGet('task_status') ?? 'all')));
+        if (! in_array($taskStatus, ['all', 'open', 'completed', 'failed'], true)) {
+            $taskStatus = 'all';
+        }
+
+        $rawTasks = $this->taskService->getTasks($taskStatus, 600);
+        $tasks = $this->enrichTasksWithCoolingState($this->enrichTasksWithHealthRecordState($rawTasks));
 
         $dateFrom = trim((string) ($this->request->getGet('date_from') ?? date('Y-m-d')));
         $dateTo = trim((string) ($this->request->getGet('date_to') ?? date('Y-m-d')));
@@ -38,6 +46,7 @@ class AbdmTaskBoard extends BaseController
 
         return view('abdm/task_board', [
             'tasks'                  => $tasks,
+            'task_status'            => $taskStatus,
             'dashboard_metrics'      => $this->getDashboardMetrics($dateFrom, $dateTo),
             'dashboard_date_from'    => $dateFrom,
             'dashboard_date_to'      => $dateTo,
@@ -55,9 +64,17 @@ class AbdmTaskBoard extends BaseController
         $this->backfillImmunizationTasks();
         $this->backfillHealthDocumentTasks();
         $this->backfillWellnessTasks();
+
+        $taskStatus = strtolower(trim((string) ($this->request->getGet('task_status') ?? 'all')));
+        if (! in_array($taskStatus, ['all', 'open', 'completed', 'failed'], true)) {
+            $taskStatus = 'all';
+        }
+
+        $rawTasks = $this->taskService->getTasks($taskStatus, 600);
         return $this->response->setJSON([
             'ok' => 1,
-            'tasks' => $this->enrichTasksWithCoolingState($this->enrichImmunizationPushState($this->taskService->getOpenTasks(300))),
+            'task_status' => $taskStatus,
+            'tasks' => $this->enrichTasksWithCoolingState($this->enrichTasksWithHealthRecordState($rawTasks)),
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
@@ -89,53 +106,102 @@ class AbdmTaskBoard extends BaseController
     }
 
     /** @param array<int,array<string,mixed>> $tasks */
-    private function enrichImmunizationPushState(array $tasks): array
+    private function enrichTasksWithHealthRecordState(array $tasks): array
     {
-        if ($tasks === [] || ! $this->db->tableExists('health_records')) {
-            return $tasks;
+        if ($tasks === []) {
+            return [];
         }
 
-        $entityIds = [];
-        foreach ($tasks as $task) {
-            if (($task['task_type'] ?? '') === 'immunization_record_publish') {
-                $entityIds[] = (string) ($task['entity_id'] ?? '');
+        // 1. Extract invoice metadata and resolve invoice_code
+        $invoiceIds = [];
+        foreach ($tasks as &$task) {
+            $payload = json_decode((string) ($task['payload_json'] ?? ''), true);
+            $meta = (is_array($payload) && isset($payload['meta']) && is_array($payload['meta'])) ? $payload['meta'] : [];
+            if (! empty($meta['invoice_id'])) {
+                $task['invoice_id'] = (int) $meta['invoice_id'];
+                $invoiceIds[] = (int) $meta['invoice_id'];
+            }
+            if (! empty($meta['invoice_code'])) {
+                $task['invoice_code'] = (string) $meta['invoice_code'];
             }
         }
-        $entityIds = array_values(array_filter(array_unique($entityIds), static fn (string $id): bool => $id !== ''));
-        if ($entityIds === []) {
-            return $tasks;
+        unset($task);
+
+        $db = $this->db ?? db_connect();
+
+        if (! empty($invoiceIds) && $db->tableExists('invoice_master')) {
+            $invRows = $db->table('invoice_master')
+                ->select('id, invoice_code')
+                ->whereIn('id', array_unique($invoiceIds))
+                ->get()
+                ->getResultArray();
+            $codeMap = [];
+            foreach ($invRows as $ir) {
+                $codeMap[(int) $ir['id']] = (string) ($ir['invoice_code'] ?? '');
+            }
+            foreach ($tasks as &$task) {
+                if (! empty($task['invoice_id']) && empty($task['invoice_code']) && isset($codeMap[(int) $task['invoice_id']])) {
+                    $task['invoice_code'] = $codeMap[(int) $task['invoice_id']];
+                }
+            }
+            unset($task);
         }
 
-        $latest = [];
-        $rows = $this->db->table('health_records')
-            ->select('id, entity_id, push_status, care_context_reference, linked_at')
-            ->where('hi_type', 'ImmunizationRecord')
-            ->where('entity_type', 'immunization')
-            ->whereIn('entity_id', $entityIds)
-            ->orderBy('id', 'DESC')
-            ->get()
-            ->getResultArray();
-        foreach ($rows as $row) {
-            $entityId = (string) ($row['entity_id'] ?? '');
-            if ($entityId !== '' && ! isset($latest[$entityId])) {
-                $latest[$entityId] = $row;
+        // 2. Lookup health_records by entity_id
+        $latestHr = [];
+        if ($db->tableExists('health_records')) {
+            $entityIds = [];
+            foreach ($tasks as $task) {
+                $entityId = trim((string) ($task['entity_id'] ?? ''));
+                if ($entityId !== '') {
+                    $entityIds[] = $entityId;
+                }
+            }
+            $entityIds = array_values(array_filter(array_unique($entityIds)));
+
+            if ($entityIds !== []) {
+                $rows = $db->table('health_records')
+                    ->select('id, entity_type, entity_id, push_status, care_context_reference, linked_at, abdm_txn_id')
+                    ->whereIn('entity_id', $entityIds)
+                    ->orderBy('id', 'DESC')
+                    ->get()
+                    ->getResultArray();
+                foreach ($rows as $row) {
+                    $eid = (string) ($row['entity_id'] ?? '');
+                    if ($eid !== '' && ! isset($latestHr[$eid])) {
+                        $latestHr[$eid] = $row;
+                    }
+                }
             }
         }
 
         foreach ($tasks as &$task) {
-            if (($task['task_type'] ?? '') !== 'immunization_record_publish') {
-                continue;
-            }
-            $healthRecord = $latest[(string) ($task['entity_id'] ?? '')] ?? null;
-            $pushStatus = strtolower(trim((string) ($healthRecord['push_status'] ?? '')));
-            $task['bridge_health_record_id'] = (int) ($healthRecord['id'] ?? 0);
+            $eid = (string) ($task['entity_id'] ?? '');
+            $hr = $latestHr[$eid] ?? null;
+            $pushStatus = strtolower(trim((string) ($hr['push_status'] ?? '')));
+            $task['bridge_health_record_id'] = (int) ($hr['id'] ?? 0);
             $task['bridge_push_status'] = $pushStatus;
-            $task['bridge_care_context_reference'] = trim((string) ($healthRecord['care_context_reference'] ?? ''));
+
+            $careContext = trim((string) ($hr['care_context_reference'] ?? ''));
+            if ($careContext === '') {
+                $resultText = (string) ($task['last_action_result'] ?? '');
+                if (preg_match('/(RAD-\d+-\d+|LAB-\d+-\d+|OPD-\d+-\d+|INVOICE-\w+-\d+-\d+|IMM-\d+-\d+|DIS-\d+-\d+)/i', $resultText, $ccm)) {
+                    $careContext = $ccm[1];
+                }
+            }
+
+            $task['bridge_care_context_reference'] = $careContext;
             $task['bridge_submitted'] = in_array($pushStatus, ['queued', 'pushed', 'linked'], true) ? 1 : 0;
         }
         unset($task);
 
         return $tasks;
+    }
+
+    /** @param array<int,array<string,mixed>> $tasks */
+    private function enrichImmunizationPushState(array $tasks): array
+    {
+        return $this->enrichTasksWithHealthRecordState($tasks);
     }
 
     /** @param array<int,array<string,mixed>> $tasks */

@@ -104,6 +104,20 @@
     </div>
 
     <div class="card shadow-sm" id="taskTableCard">
+        <div class="card-header py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2">
+                <strong id="taskTableTitle">Work Queue</strong>
+                <span class="badge bg-primary" id="taskTableCount"><?= count($tasks ?? []) ?></span>
+            </div>
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <input type="search" class="form-control form-control-sm" id="taskTableSearch" placeholder="Search invoice, patient, code..." style="width: 230px;">
+                <div class="btn-group btn-group-sm" role="group" id="statusFilterGroup">
+                    <button type="button" class="btn btn-sm btn-primary status-filter-btn active" data-status="all">All <span class="badge bg-light text-dark ms-1" id="countAll">0</span></button>
+                    <button type="button" class="btn btn-sm btn-outline-primary status-filter-btn" data-status="open">Open <span class="badge bg-light text-dark ms-1" id="countOpen">0</span></button>
+                    <button type="button" class="btn btn-sm btn-outline-primary status-filter-btn" data-status="completed">Completed <span class="badge bg-light text-dark ms-1" id="countCompleted">0</span></button>
+                </div>
+            </div>
+        </div>
         <div class="card-body p-0">
             <div class="table-responsive">
                 <table class="table table-sm table-striped mb-0" id="taskTable">
@@ -132,15 +146,37 @@
                             $meta = (isset($payload['meta']) && is_array($payload['meta'])) ? $payload['meta'] : [];
                             $opdId = (int) ($meta['opd_id'] ?? 0);
                             $opdSessionId = (int) ($meta['opd_session_id'] ?? 0);
+                            $invoiceId = (int) ($t['invoice_id'] ?? ($meta['invoice_id'] ?? 0));
+                            $invoiceCode = trim((string) ($t['invoice_code'] ?? ($meta['invoice_code'] ?? '')));
+                            $invoiceDisplay = $invoiceCode !== '' ? $invoiceCode : ($invoiceId > 0 ? ('#' . $invoiceId) : '');
+
                             $showSandbox = ($type === 'opd_prescription_publish' && $opdId > 0);
                             $showPreview = ($type === 'opd_prescription_publish' && $opdId > 0)
                                 || in_array($type, ['lab_report_publish', 'radiology_report_publish', 'ipd_discharge_publish', 'immunization_record_publish', 'health_document_publish', 'wellness_record_publish'], true);
                             $bridgeSubmitted = (int) ($t['bridge_submitted'] ?? 0) === 1;
                             $bridgeCareContext = trim((string) ($t['bridge_care_context_reference'] ?? ''));
+
+                            $rawTaskStatus = strtolower(trim((string) ($t['status'] ?? 'pending')));
+                            $isTaskLinked = in_array($rawTaskStatus, ['completed', 'linked'], true) || ($bridgeSubmitted && strtolower((string) ($t['bridge_push_status'] ?? '')) === 'linked');
+
+                            $searchText = strtolower(implode(' ', array_filter([
+                                (string) ($t['task_code'] ?? ''),
+                                (string) ($t['task_type'] ?? ''),
+                                (string) ($t['patient_name'] ?? ''),
+                                (string) ($t['patient_id'] ?? ''),
+                                (string) ($t['abha_id'] ?? ''),
+                                (string) ($t['entity_id'] ?? ''),
+                                $invoiceCode,
+                                $invoiceId > 0 ? (string) $invoiceId : '',
+                                $bridgeCareContext,
+                                (string) ($t['last_action_result'] ?? ''),
+                            ])));
                         ?>
                         <tr
                             data-task-id="<?= (int) ($t['id'] ?? 0) ?>"
                             data-task-type="<?= esc((string) ($t['task_type'] ?? '')) ?>"
+                            data-task-status="<?= esc($rawTaskStatus) ?>"
+                            data-is-linked="<?= $isTaskLinked ? '1' : '0' ?>"
                             data-entity-id="<?= esc((string) ($t['entity_id'] ?? '')) ?>"
                             data-patient-id="<?= (int) ($t['patient_id'] ?? 0) ?>"
                             data-abha-id="<?= esc($abhaId) ?>"
@@ -148,32 +184,44 @@
                             data-opd-session-id="<?= $opdSessionId ?>"
                             data-sandbox-eligible="<?= $showSandbox ? '1' : '0' ?>"
                             data-bridge-submitted="<?= $bridgeSubmitted ? '1' : '0' ?>"
+                            data-search="<?= esc($searchText) ?>"
                         >
                             <td><?= (int) ($t['id'] ?? 0) ?></td>
                             <td>
                                 <div><strong><?= esc((string) ($t['task_code'] ?? '')) ?></strong></div>
                                 <div class="text-muted small"><?= esc((string) ($t['task_type'] ?? '')) ?></div>
+                                <?php if ($invoiceDisplay !== ''): ?>
+                                    <div class="small text-primary fw-semibold"><i class="bi bi-receipt me-1"></i>Inv: <?= esc($invoiceDisplay) ?></div>
+                                <?php endif; ?>
                             </td>
                             <td>
                                 <div><?= esc((string) ($t['patient_name'] ?? '')) ?></div>
                                 <div class="text-muted small">#<?= (int) ($t['patient_id'] ?? 0) ?></div>
                             </td>
-                            <td><input type="text" class="form-control form-control-sm abha-input" value="<?= esc((string) ($t['abha_id'] ?? '')) ?>" placeholder="14-digit ABHA"></td>
+                            <td>
+                                <?php if ($isTaskLinked): ?>
+                                    <div class="small"><span class="badge bg-light text-dark border"><i class="bi bi-person-check text-success me-1"></i><?= esc((string) ($t['abha_id'] ?? '')) ?></span></div>
+                                <?php else: ?>
+                                    <input type="text" class="form-control form-control-sm abha-input" value="<?= esc((string) ($t['abha_id'] ?? '')) ?>" placeholder="14-digit ABHA">
+                                <?php endif; ?>
+                            </td>
                             <td>
                                 <div><?= esc((string) ($t['entity_type'] ?? '')) ?></div>
                                 <div class="text-muted small"><?= esc((string) ($t['entity_id'] ?? '')) ?></div>
                             </td>
                             <td>
-                                <?php
-                                    $rawTaskStatus = strtolower(trim((string) ($t['status'] ?? 'pending')));
-                                    $isTaskLinked = in_array($rawTaskStatus, ['completed', 'linked'], true) || ($bridgeSubmitted && strtolower((string) ($t['bridge_push_status'] ?? '')) === 'linked');
-                                ?>
                                 <?php if ($isTaskLinked): ?>
-                                    <span class="badge bg-success status-pill">LINKED</span>
-                                    <?php if ($bridgeCareContext !== ''): ?><div class="small"><code><?= esc($bridgeCareContext) ?></code></div><?php endif; ?>
+                                    <span class="badge bg-success status-pill"><i class="bi bi-check-circle me-1"></i>LINKED</span>
+                                    <?php if ($bridgeCareContext !== ''): ?>
+                                        <div class="small mt-1"><code><?= esc($bridgeCareContext) ?></code></div>
+                                    <?php elseif (! empty($t['last_action_result'])): ?>
+                                        <div class="small text-muted mt-1" style="font-size:10px; max-width: 200px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis;" title="<?= esc((string) $t['last_action_result']) ?>">
+                                            <?= esc((string) $t['last_action_result']) ?>
+                                        </div>
+                                    <?php endif; ?>
                                 <?php elseif ($bridgeSubmitted): ?>
                                     <span class="badge bg-info status-pill">BRIDGE SUBMITTED</span>
-                                    <?php if ($bridgeCareContext !== ''): ?><div class="small"><code><?= esc($bridgeCareContext) ?></code></div><?php endif; ?>
+                                    <?php if ($bridgeCareContext !== ''): ?><div class="small mt-1"><code><?= esc($bridgeCareContext) ?></code></div><?php endif; ?>
                                 <?php elseif (! empty($t['cooling_active'])): ?>
                                     <span class="badge bg-warning text-dark status-pill" title="<?= esc((string) ($t['cooling_tooltip'] ?? '')) ?>"><i class="bi bi-clock-history"></i> <?= esc((string) ($t['cooling_label'] ?? 'COOLING')) ?></span>
                                     <?php if (! empty($t['auto_link_at']) && $t['auto_link_at'] !== 'disabled'): ?>
@@ -186,24 +234,37 @@
                                 <?php endif; ?>
                             </td>
                             <td>
-                                <div class="d-flex gap-1 flex-wrap">
-                                    <?php if ($type === 'patient_abha_create' || $type === 'patient_abha_link'): ?>
-                                        <button type="button" class="btn btn-sm btn-outline-success action-btn" data-action="create_abha">Create ABHA</button>
-                                    <?php elseif ($type === 'patient_abha_update'): ?>
-                                        <button type="button" class="btn btn-sm btn-outline-primary action-btn" data-action="update_abha">Update ABHA</button>
+                                <div class="d-flex gap-1 flex-wrap align-items-center">
+                                    <?php if ($isTaskLinked): ?>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2"><i class="bi bi-check2-all me-1"></i>Done</span>
+                                        <?php if ($showPreview): ?>
+                                            <button type="button" class="btn btn-sm btn-outline-primary preview-fhir-btn"><i class="bi bi-eye me-1"></i>Preview FHIR</button>
+                                        <?php endif; ?>
+                                    <?php else: ?>
+                                        <?php if ($type === 'patient_abha_create' || $type === 'patient_abha_link'): ?>
+                                            <button type="button" class="btn btn-sm btn-outline-success action-btn" data-action="create_abha">Create ABHA</button>
+                                        <?php elseif ($type === 'patient_abha_update'): ?>
+                                            <button type="button" class="btn btn-sm btn-outline-primary action-btn" data-action="update_abha">Update ABHA</button>
+                                        <?php endif; ?>
+                                        <button type="button" class="btn btn-sm btn-outline-success btn-row-hip-link" title="HIP-Initiated Care Context Linking"><i class="bi bi-link-45deg"></i> Link Care Context</button>
+                                        <?php if ($showPreview): ?>
+                                            <button type="button" class="btn btn-sm btn-outline-primary preview-fhir-btn">Preview FHIR</button>
+                                        <?php endif; ?>
+                                        <?php if ($showSandbox): ?>
+                                            <button type="button" class="btn btn-sm btn-outline-info sandbox-btn">Sandbox</button>
+                                        <?php endif; ?>
+                                        <button type="button" class="btn btn-sm btn-outline-dark close-btn">Close</button>
                                     <?php endif; ?>
-                                    <button type="button" class="btn btn-sm btn-outline-success btn-row-hip-link" title="HIP-Initiated Care Context Linking"><i class="bi bi-link-45deg"></i> Link Care Context</button>
-                                    <?php if ($showPreview): ?>
-                                        <button type="button" class="btn btn-sm btn-outline-primary preview-fhir-btn">Preview FHIR</button>
-                                    <?php endif; ?>
-                                    <?php if ($showSandbox): ?>
-                                        <button type="button" class="btn btn-sm btn-outline-info sandbox-btn">Sandbox</button>
-                                    <?php endif; ?>
-                                    <button type="button" class="btn btn-sm btn-outline-dark close-btn">Close</button>
                                 </div>
                             </td>
                         </tr>
                     <?php endforeach; ?>
+                        <tr id="taskTableEmptyRow" class="d-none">
+                            <td colspan="7" class="text-center py-4 text-muted">
+                                <i class="bi bi-inbox fs-4 d-block mb-1"></i>
+                                <span>No tasks match the selected filter.</span>
+                            </td>
+                        </tr>
                     </tbody>
                 </table>
             </div>
@@ -665,7 +726,82 @@
     var taskTableCard  = document.getElementById('taskTableCard');
     var dashboardCard  = document.getElementById('dashboardCard');
 
+    var currentCategoryFilter = 'dashboard';
+    var currentStatusFilter   = 'all';
+    var currentSearchQuery    = '';
+
+    function updateTaskTableDisplay() {
+        var rows = document.querySelectorAll('#taskTable tbody tr:not(#taskTableEmptyRow)');
+        var emptyRow = document.getElementById('taskTableEmptyRow');
+        var q = currentSearchQuery.trim().toLowerCase();
+
+        var visibleCount = 0;
+        var countAll = 0;
+        var countOpen = 0;
+        var countCompleted = 0;
+
+        rows.forEach(function (row) {
+            var type = (row.getAttribute('data-task-type') || '').toLowerCase();
+            var status = (row.getAttribute('data-task-status') || '').toLowerCase();
+            var isLinked = row.getAttribute('data-is-linked') === '1' || status === 'completed' || status === 'linked';
+            var searchData = (row.getAttribute('data-search') || '').toLowerCase();
+
+            // Check if matches current category
+            var categoryMatch = (currentCategoryFilter === 'all' || type === currentCategoryFilter.toLowerCase());
+            if (!categoryMatch) {
+                row.style.display = 'none';
+                return;
+            }
+
+            // Tally status counts for this category
+            countAll++;
+            if (isLinked) {
+                countCompleted++;
+            } else {
+                countOpen++;
+            }
+
+            // Check status match
+            var statusMatch = false;
+            if (currentStatusFilter === 'all') {
+                statusMatch = true;
+            } else if (currentStatusFilter === 'completed') {
+                statusMatch = isLinked;
+            } else if (currentStatusFilter === 'open') {
+                statusMatch = !isLinked;
+            } else if (currentStatusFilter === status) {
+                statusMatch = true;
+            }
+
+            // Check search match
+            var searchMatch = !q || searchData.indexOf(q) !== -1;
+
+            if (statusMatch && searchMatch) {
+                row.style.display = '';
+                visibleCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        // Update counts in UI
+        var elCountAll = document.getElementById('countAll');
+        var elCountOpen = document.getElementById('countOpen');
+        var elCountCompleted = document.getElementById('countCompleted');
+        var elTableCount = document.getElementById('taskTableCount');
+        if (elCountAll) elCountAll.textContent = countAll;
+        if (elCountOpen) elCountOpen.textContent = countOpen;
+        if (elCountCompleted) elCountCompleted.textContent = countCompleted;
+        if (elTableCount) elTableCount.textContent = visibleCount;
+
+        if (emptyRow) {
+            emptyRow.classList.toggle('d-none', visibleCount > 0);
+        }
+    }
+
     function applyFilter(filter) {
+        currentCategoryFilter = filter;
+
         // Hide dedicated section cards
         if (opdBookCard)    opdBookCard.classList.add('d-none');
         if (opdConsultCard) opdConsultCard.classList.add('d-none');
@@ -686,11 +822,12 @@
             if (invoiceCard)   invoiceCard.classList.remove('d-none');
         } else {
             if (taskTableCard) taskTableCard.classList.remove('d-none');
-            var rows = document.querySelectorAll('#taskTable tbody tr');
-            rows.forEach(function (row) {
-                var type = (row.getAttribute('data-task-type') || '').toLowerCase();
-                row.style.display = (type === filter.toLowerCase()) ? '' : 'none';
-            });
+            var titleEl = document.getElementById('taskTableTitle');
+            if (titleEl) {
+                var btn = document.querySelector('.filter-btn[data-filter="' + filter + '"]');
+                titleEl.textContent = btn ? btn.textContent.trim() : 'Work Queue';
+            }
+            updateTaskTableDisplay();
         }
 
         document.querySelectorAll('.filter-btn').forEach(function (btn) {
@@ -1269,6 +1406,27 @@
             applyFilter(btn.getAttribute('data-filter') || 'all');
         });
     });
+
+    document.querySelectorAll('.status-filter-btn').forEach(function (btn) {
+        btn.addEventListener('click', function () {
+            document.querySelectorAll('.status-filter-btn').forEach(function (b) {
+                b.classList.remove('btn-primary', 'active');
+                b.classList.add('btn-outline-primary');
+            });
+            btn.classList.remove('btn-outline-primary');
+            btn.classList.add('btn-primary', 'active');
+            currentStatusFilter = (btn.getAttribute('data-status') || 'all').toLowerCase();
+            updateTaskTableDisplay();
+        });
+    });
+
+    var searchInput = document.getElementById('taskTableSearch');
+    if (searchInput) {
+        searchInput.addEventListener('input', function () {
+            currentSearchQuery = searchInput.value || '';
+            updateTaskTableDisplay();
+        });
+    }
 
     document.querySelectorAll('.sandbox-btn').forEach(function (btn) {
         btn.addEventListener('click', function () {
