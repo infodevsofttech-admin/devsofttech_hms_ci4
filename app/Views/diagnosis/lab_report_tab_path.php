@@ -27,8 +27,8 @@
                     <tr>
                         <td><?= esc($row->invoice_code ?? '-') ?></td>
                         <td><?= esc($row->daily_sr_no ?? '-') ?></td>
-                        <td><?= esc($row->lab_test_no ?? '-') ?></td>
-                        <td><?= esc($row->inv_name ?? '-') ?> | <?= esc($row->age ?? '-') ?></td>
+                        <?php $displayName = (!empty($row->inv_name) && trim((string) $row->inv_name) !== '-') ? $row->inv_name : (!empty($row->p_fname) ? $row->p_fname : '-'); ?>
+                        <td><?= esc($displayName) ?> | <?= esc($row->age ?? '-') ?></td>
                         <td><?= esc($row->inv_date ?? '-') ?></td>
                         <td>
                             <?php

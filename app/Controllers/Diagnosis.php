@@ -111,7 +111,7 @@ class Diagnosis extends BaseController
         if (trim($searchText) == '') {
             // Get recent 200 records
             $sql = "SELECT m.id as inv_id, m.invoice_code, m.inv_date,
-                CONCAT(p.p_fname, '/', IF(p.gender=1,'M','F'), '/', p.p_rname) as inv_name,
+                COALESCE(NULLIF(CONCAT_WS('/', NULLIF(TRIM(p.p_fname), ''), IF(p.gender=1,'M',IF(p.gender=2,'F',NULL)), NULLIF(TRIM(CONCAT_WS(' ', p.p_relative, p.p_rname)), '')), ''), NULLIF(TRIM(m.inv_name), ''), NULLIF(TRIM(p.p_fname), ''), '-') as inv_name,
                 p.dob, p.age, p.age_in_month, p.estimate_dob,
                 GROUP_CONCAT(CONCAT_WS(';', i.item_name, i.item_name, i.id, 
                     check_item_request(m.id, i.id)) SEPARATOR '#') as data_array,
@@ -130,7 +130,7 @@ class Diagnosis extends BaseController
         } else {
             // Search with criteria
             $sql = "SELECT m.id as inv_id, m.invoice_code, m.inv_date,
-                CONCAT(p.p_fname, '/', IF(p.gender=1,'M','F'), '/', p.p_rname) as inv_name,
+                COALESCE(NULLIF(CONCAT_WS('/', NULLIF(TRIM(p.p_fname), ''), IF(p.gender=1,'M',IF(p.gender=2,'F',NULL)), NULLIF(TRIM(CONCAT_WS(' ', p.p_relative, p.p_rname)), '')), ''), NULLIF(TRIM(m.inv_name), ''), NULLIF(TRIM(p.p_fname), ''), '-') as inv_name,
                 p.dob, p.age, p.age_in_month, p.estimate_dob,
                 GROUP_CONCAT(CONCAT_WS(';', i.item_name, i.item_name, i.id, 
                     check_item_request(m.id, i.id)) SEPARATOR '#') as data_array,
@@ -180,7 +180,7 @@ class Diagnosis extends BaseController
         if (trim($srNo) == '') {
             // Get recent 3 days records with serial number
             $sql = "SELECT m.id as inv_id, m.invoice_code, m.inv_date,
-                CONCAT(p.p_fname, '/', IF(p.gender=1,'M','F'), '/', p.p_rname) as inv_name,
+                COALESCE(NULLIF(CONCAT_WS('/', NULLIF(TRIM(p.p_fname), ''), IF(p.gender=1,'M',IF(p.gender=2,'F',NULL)), NULLIF(TRIM(CONCAT_WS(' ', p.p_relative, p.p_rname)), '')), ''), NULLIF(TRIM(m.inv_name), ''), NULLIF(TRIM(p.p_fname), ''), '-') as inv_name,
                 p.dob, p.age, p.age_in_month, p.estimate_dob,
                 GROUP_CONCAT(CONCAT_WS(';', i.item_name, i.item_name, i.id, 
                     check_item_request(m.id, i.id)) SEPARATOR '#') as data_array,
@@ -200,7 +200,7 @@ class Diagnosis extends BaseController
         } else {
             // Search by specific serial number
             $sql = "SELECT m.id as inv_id, m.invoice_code, m.inv_date,
-                CONCAT(p.p_fname, '/', IF(p.gender=1,'M','F'), '/', p.p_rname) as inv_name,
+                COALESCE(NULLIF(CONCAT_WS('/', NULLIF(TRIM(p.p_fname), ''), IF(p.gender=1,'M',IF(p.gender=2,'F',NULL)), NULLIF(TRIM(CONCAT_WS(' ', p.p_relative, p.p_rname)), '')), ''), NULLIF(TRIM(m.inv_name), ''), NULLIF(TRIM(p.p_fname), ''), '-') as inv_name,
                 p.dob, p.age, p.age_in_month, p.estimate_dob,
                 GROUP_CONCAT(CONCAT_WS(';', i.item_name, i.item_name, i.id, 
                     check_item_request(m.id, i.id)) SEPARATOR '#') as data_array,
@@ -243,7 +243,7 @@ class Diagnosis extends BaseController
         if (trim($labNo) == '') {
             // Get recent 3 days records with lab number
             $sql = "SELECT m.id as inv_id, m.invoice_code, m.inv_date,
-                CONCAT(p.p_fname, '/', IF(p.gender=1,'M','F'), '/', p.p_rname) as inv_name,
+                COALESCE(NULLIF(CONCAT_WS('/', NULLIF(TRIM(p.p_fname), ''), IF(p.gender=1,'M',IF(p.gender=2,'F',NULL)), NULLIF(TRIM(CONCAT_WS(' ', p.p_relative, p.p_rname)), '')), ''), NULLIF(TRIM(m.inv_name), ''), NULLIF(TRIM(p.p_fname), ''), '-') as inv_name,
                 p.dob, p.age, p.age_in_month, p.estimate_dob,
                 GROUP_CONCAT(CONCAT_WS(';', i.item_name, i.item_name, i.id, 
                     check_item_request(m.id, i.id)) SEPARATOR '#') as data_array,
@@ -263,7 +263,7 @@ class Diagnosis extends BaseController
         } else {
             // Search by specific lab number
             $sql = "SELECT m.id as inv_id, m.invoice_code, m.inv_date,
-                CONCAT(p.p_fname, '/', IF(p.gender=1,'M','F'), '/', p.p_rname) as inv_name,
+                COALESCE(NULLIF(CONCAT_WS('/', NULLIF(TRIM(p.p_fname), ''), IF(p.gender=1,'M',IF(p.gender=2,'F',NULL)), NULLIF(TRIM(CONCAT_WS(' ', p.p_relative, p.p_rname)), '')), ''), NULLIF(TRIM(m.inv_name), ''), NULLIF(TRIM(p.p_fname), ''), '-') as inv_name,
                 p.dob, p.age, p.age_in_month, p.estimate_dob,
                 GROUP_CONCAT(CONCAT_WS(';', i.item_name, i.item_name, i.id, 
                     check_item_request(m.id, i.id)) SEPARATOR '#') as data_array,
@@ -344,6 +344,7 @@ class Diagnosis extends BaseController
 
         $data = [
             'invoice' => $invoice,
+            'invoice_id' => (int) $invoiceId,
             'tests' => $tests ?? [],
             'items' => $items ?? [],
             'lab_invoice' => $labInvoice,
@@ -395,7 +396,7 @@ class Diagnosis extends BaseController
 
             // Get test list with all details - matching old code structure
             $sql = "SELECT m.id as inv_id, m.invoice_code, m.inv_date,
-                    CONCAT(p.p_fname, '/', IF(p.gender=1,'M','F'), '/', p.p_rname) as inv_name,
+                    COALESCE(NULLIF(CONCAT_WS('/', NULLIF(TRIM(p.p_fname), ''), IF(p.gender=1,'M',IF(p.gender=2,'F',NULL)), NULLIF(TRIM(CONCAT_WS(' ', p.p_relative, p.p_rname)), '')), ''), NULLIF(TRIM(m.inv_name), ''), NULLIF(TRIM(p.p_fname), ''), '-') as inv_name,
                     i.item_name, i.id as test_id, i.item_id,
                     r.lab_repo_id, y.group_desc as item_type_desc, r.status,
                     r.id as req_id, r.charge_item_id, r.print_combine
@@ -3103,15 +3104,37 @@ class Diagnosis extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
         }
 
+        // Detect PHP post_max_size overflow (when upload exceeds post_max_size, PHP discards $_POST & $_FILES)
+        if (empty($_POST) && empty($_FILES) && isset($_SERVER['CONTENT_LENGTH']) && (int) $_SERVER['CONTENT_LENGTH'] > 0) {
+            $maxPost = ini_get('post_max_size') ?: 'server limit';
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => "Uploaded file exceeds server post limit ({$maxPost}). Please increase PHP post_max_size or upload a smaller file."
+            ]);
+        }
+
         if (! $this->db->tableExists('file_upload_data')) {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'file_upload_data table not found']);
         }
 
-        $invoiceId = (int) $this->request->getPost('invoice_id');
-        $labType = (int) $this->request->getPost('lab_type');
-        $reqId = (int) $this->request->getPost('req_id');
-        $fileDesc = trim((string) $this->request->getPost('file_desc'));
-        $scanType = trim((string) $this->request->getPost('scan_type'));
+        $invoiceId = (int) ($this->request->getPost('invoice_id') ?: $this->request->getGet('invoice_id') ?: $this->request->getHeaderLine('X-Invoice-Id'));
+        $labType = (int) ($this->request->getPost('lab_type') ?: $this->request->getGet('lab_type') ?: $this->request->getHeaderLine('X-Lab-Type'));
+        $reqId = (int) ($this->request->getPost('req_id') ?: $this->request->getGet('req_id') ?: $this->request->getHeaderLine('X-Req-Id'));
+        $fileDesc = trim((string) ($this->request->getPost('file_desc') ?: $this->request->getGet('file_desc')));
+        $scanType = trim((string) ($this->request->getPost('scan_type') ?: $this->request->getGet('scan_type')));
+
+        // If req_id is provided, resolve missing invoice_id or lab_type from lab_request
+        if ($reqId > 0 && ($invoiceId <= 0 || $labType <= 0)) {
+            $lr = $this->db->table('lab_request')->select('charge_id, lab_type, invoice_code')->where('id', $reqId)->get(1)->getRowArray();
+            if (!empty($lr)) {
+                if ($invoiceId <= 0) {
+                    $invoiceId = (int) ($lr['charge_id'] ?? 0);
+                }
+                if ($labType <= 0) {
+                    $labType = (int) ($lr['lab_type'] ?? 0);
+                }
+            }
+        }
 
         if ($invoiceId <= 0 || $labType <= 0) {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Missing invoice/lab context']);
@@ -3119,7 +3142,13 @@ class Diagnosis extends BaseController
 
         $upload = $this->request->getFile('report_file');
         if (! $upload || ! $upload->isValid()) {
-            return $this->response->setJSON(['update' => 0, 'error_text' => 'No valid file uploaded']);
+            $errCode = $upload ? $upload->getError() : UPLOAD_ERR_NO_FILE;
+            $msg = 'No valid file uploaded';
+            if ($errCode === UPLOAD_ERR_INI_SIZE || $errCode === UPLOAD_ERR_FORM_SIZE) {
+                $maxUpload = ini_get('upload_max_filesize') ?: 'server limit';
+                $msg = "Uploaded file exceeds maximum allowed file size ({$maxUpload}).";
+            }
+            return $this->response->setJSON(['update' => 0, 'error_text' => $msg]);
         }
 
         $ext = strtolower((string) $upload->getExtension());

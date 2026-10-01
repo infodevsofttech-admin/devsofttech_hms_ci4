@@ -296,8 +296,8 @@ if ($ageLabel === '') {
 
 <script>
 var baseUrl = '<?php echo rtrim(base_url(), '/'); ?>/';
-var invoiceId = '<?php echo htmlspecialchars($invoice->inv_id ?? $invoice->id ?? '0'); ?>';
-var labType = '<?php echo htmlspecialchars($lab_type ?? '5'); ?>';
+var invoiceId = '<?php echo htmlspecialchars((string) ($invoice_id ?? $invoice->inv_id ?? $invoice->id ?? '0')); ?>';
+var labType = '<?php echo htmlspecialchars((string) ($lab_type ?? '5')); ?>';
 
 console.log('Page loaded - Invoice ID:', invoiceId, 'Lab Type:', labType);
 
@@ -886,7 +886,14 @@ function diagnosisUploadFromEditor(mode) {
 }
 
 function diagnosisUploadForReq(reqId, testName, mode) {
-    if (!invoiceId || !labType) {
+    var invId = (typeof invoiceId !== 'undefined' && invoiceId && invoiceId !== '0')
+        ? invoiceId
+        : (document.getElementById('invoiceId') ? document.getElementById('invoiceId').value : '');
+    var lType = (typeof labType !== 'undefined' && labType && labType !== '0')
+        ? labType
+        : (document.getElementById('labType') ? document.getElementById('labType').value : '');
+
+    if (!invId || !lType) {
         alert('Invoice context missing');
         return;
     }
@@ -905,13 +912,18 @@ function diagnosisUploadForReq(reqId, testName, mode) {
             return;
         }
 
+        if (file.size > 150 * 1024 * 1024) {
+            alert('File is too large (' + (file.size / (1024 * 1024)).toFixed(1) + ' MB). Maximum allowed size is 128 MB.');
+            return;
+        }
+
         const modalBody = document.getElementById('testDataEntryBody');
         const csrfField = modalBody ? modalBody.querySelector('input[name]') : null;
 
         const formData = new FormData();
         formData.append('report_file', file);
-        formData.append('invoice_id', String(invoiceId));
-        formData.append('lab_type', String(labType));
+        formData.append('invoice_id', String(invId));
+        formData.append('lab_type', String(lType));
         formData.append('req_id', String(reqId || 0));
         formData.append('file_desc', (testName || 'Imaging Report') + ((mode === 'camera') ? ' (Camera)' : ' (Upload)'));
         formData.append('scan_type', (mode === 'camera') ? 'camera' : 'upload');
@@ -919,11 +931,19 @@ function diagnosisUploadForReq(reqId, testName, mode) {
             formData.append(csrfField.name, csrfField.value);
         }
 
-        fetch(baseUrl + 'diagnosis/upload-report-file', {
+        const uploadUrl = baseUrl + 'diagnosis/upload-report-file'
+            + '?invoice_id=' + encodeURIComponent(invId)
+            + '&lab_type=' + encodeURIComponent(lType)
+            + '&req_id=' + encodeURIComponent(reqId || 0);
+
+        fetch(uploadUrl, {
             method: 'POST',
             body: formData,
             headers: {
-                'X-Requested-With': 'XMLHttpRequest'
+                'X-Requested-With': 'XMLHttpRequest',
+                'X-Invoice-Id': String(invId),
+                'X-Lab-Type': String(lType),
+                'X-Req-Id': String(reqId || 0)
             }
         })
         .then(response => response.json())
@@ -937,7 +957,7 @@ function diagnosisUploadForReq(reqId, testName, mode) {
         })
         .catch(error => {
             console.error('Upload error:', error);
-            alert('Upload request failed');
+            alert('Upload request failed: ' + (error && error.message ? error.message : 'Please check file size and server connection'));
         });
     };
 
