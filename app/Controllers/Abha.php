@@ -1680,12 +1680,14 @@ class Abha extends BaseController
     {
         $candidates = [
             $result['error_text'] ?? null,
+            is_string($result['error'] ?? null) ? $result['error'] : null,
             $result['message'] ?? null,
             $result['error']['message'] ?? null,
             $result['error']['description'] ?? null,
             $result['error']['code'] ?? null,
             $result['error']['error'] ?? null,
             $result['error']['error_description'] ?? null,
+            is_string($result['data']['error'] ?? null) ? $result['data']['error'] : null,
             $result['data']['message'] ?? null,
             $result['data']['error']['message'] ?? null,
             $result['data']['error']['description'] ?? null,
@@ -1711,6 +1713,9 @@ class Abha extends BaseController
         foreach ($candidates as $candidate) {
             if (is_string($candidate) && trim($candidate) !== '') {
                 $trimmed = trim($candidate);
+                if (stripos($trimmed, 'preferredAbhaAddress') !== false || (stripos($trimmed, 'Unknown column') !== false && stripos($trimmed, 'where clause') !== false)) {
+                    return 'ABHA Address does not exist or was not found in the ABDM registry.';
+                }
                 if (stripos($trimmed, 'loginHint') !== false && stripos($trimmed, 'invalid') !== false) {
                     return 'ABDM gateway rejected login hint: OTP verification by ABHA Address is not supported directly by ABDM. Please verify using the 14-digit ABHA Number or Find ABHA via Mobile.';
                 }

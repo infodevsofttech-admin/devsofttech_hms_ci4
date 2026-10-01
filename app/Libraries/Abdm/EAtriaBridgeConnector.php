@@ -469,10 +469,49 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             $ok = 0;
         }
 
-        if ($ok === 0 && empty($decoded['error_text'])) {
-            $errMsg = trim((string) ($decoded['message'] ?? $decoded['data']['message'] ?? $decoded['error']['message'] ?? (is_string($decoded['error'] ?? null) ? $decoded['error'] : '')));
-            if ($errMsg !== '') {
-                $decoded['error_text'] = $errMsg;
+        if ($ok === 0) {
+            $extractedErr = '';
+
+            // Check for specific rejection data inside data (e.g. loginHint, details)
+            if (isset($decoded['data']) && is_array($decoded['data'])) {
+                if (!empty($decoded['data']['loginHint'])) {
+                    $hint = trim((string) $decoded['data']['loginHint']);
+                    $extractedErr = 'ABDM gateway rejected login hint: ' . $hint . ' (ABHA Address or number not found)';
+                } elseif (!empty($decoded['data']['details'][0]['message'])) {
+                    $extractedErr = trim((string) $decoded['data']['details'][0]['message']);
+                } elseif (!empty($decoded['data']['message'])) {
+                    $extractedErr = trim((string) $decoded['data']['message']);
+                }
+            }
+
+            if ($extractedErr === '' && isset($decoded['error']) && is_array($decoded['error'])) {
+                if (!empty($decoded['error']['details'][0]['message'])) {
+                    $extractedErr = trim((string) $decoded['error']['details'][0]['message']);
+                } elseif (!empty($decoded['error']['message']) && $decoded['error']['message'] !== 'ABDM gateway returned an error.') {
+                    $extractedErr = trim((string) $decoded['error']['message']);
+                }
+            }
+
+            if ($extractedErr === '') {
+                $rawMsg = trim((string) ($decoded['message'] ?? $decoded['data']['message'] ?? $decoded['error']['message'] ?? (is_string($decoded['error'] ?? null) ? $decoded['error'] : '')));
+                if ($rawMsg !== '') {
+                    $extractedErr = $rawMsg;
+                }
+            }
+
+            // Normalise technical MySQL database errors from the bridge when an ABHA is not found
+            if (stripos($extractedErr, 'preferredAbhaAddress') !== false ||
+                (stripos($extractedErr, 'Unknown column') !== false && stripos($extractedErr, 'where clause') !== false)) {
+                $targetVal = (string) ($body['value'] ?? $body['abha_address'] ?? $body['abha_id'] ?? '');
+                $decoded['raw_bridge_error'] = $extractedErr;
+                $extractedErr = 'ABHA Address does not exist or was not found in ABDM registry' . ($targetVal !== '' ? ' (' . $targetVal . ')' : '');
+            } elseif (stripos($extractedErr, 'Invalid Login Hint') !== false && stripos($extractedErr, 'ABHA Address') === false) {
+                $targetVal = (string) ($body['value'] ?? $body['abha_address'] ?? $body['abha_id'] ?? '');
+                $extractedErr = 'ABHA Address does not exist or was not found in ABDM registry' . ($targetVal !== '' ? ' (' . $targetVal . ')' : '');
+            }
+
+            if ($extractedErr !== '') {
+                $decoded['error_text'] = $extractedErr;
             }
         }
         $logErr = $ok === 0 ? (string) ($decoded['error_text'] ?? $decoded['message'] ?? '') : '';
