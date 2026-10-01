@@ -5015,36 +5015,6 @@ class AbdmGateway extends BaseController
                 }
             }
 
-            // Strategy A.2: Check if opd_fhir_documents has stored FHIR bundle
-            if ($db->tableExists('opd_fhir_documents')) {
-                $targetPatientId = 0;
-                $targetSessionId = 0;
-                if (preg_match('/(?:OPD|PRESCRIPTION)-(\d+)(?:-S(\d+))?/i', $ref, $m)) {
-                    $targetPatientId = (int) $m[1];
-                    $targetSessionId = (int) ($m[2] ?? 0);
-                }
-                if ($targetSessionId > 0 || $targetPatientId > 0) {
-                    $docBuilder = $db->table('opd_fhir_documents');
-                    if ($targetSessionId > 0) {
-                        $docBuilder->where('opd_session_id', $targetSessionId);
-                    } else {
-                        $docBuilder->where('opd_id', $targetPatientId);
-                    }
-                    $docRow = $docBuilder->orderBy('id', 'DESC')->get(1)->getRowArray();
-                    if (! empty($docRow['bundle_json'])) {
-                        $bundleData = json_decode((string) $docRow['bundle_json'], true);
-                        if (is_array($bundleData)) {
-                            $records[] = [
-                                'careContextReference' => $ref,
-                                'hiType'               => $docRow['bundle_type'] ?? 'OPConsultRecord',
-                                'display'              => 'Consultation Record - ' . date('d M Y', strtotime($docRow['generated_at'] ?? 'now')),
-                                'bundle'               => $bundleData,
-                            ];
-                            continue;
-                        }
-                    }
-                }
-            }
 
             // Strategy B: Build compliant FHIR Document Bundle from patient_master & OPD
             $bundle = $this->assembleFhirBundleForCareContext($ref);
