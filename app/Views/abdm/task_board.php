@@ -1081,9 +1081,13 @@
         var taskType = (row.getAttribute('data-task-type') || '').toLowerCase();
         var abhaInput = row.querySelector('.abha-input');
         var abhaId = (abhaInput ? abhaInput.value : (row.getAttribute('data-abha-id') || '')).trim();
+        var abhaClean = abhaId.replace(/\D/g, '');
+        if (abhaClean.length === 14) {
+            abhaId = abhaClean;
+        }
 
-        if (!/^\d{14}$/.test(abhaId)) {
-            setStatus('ABHA must be a 14-digit number before FHIR preview.', true);
+        if (abhaClean.length !== 14 && (!abhaId.includes('@') || !/^[a-zA-Z0-9.\-_]{3,}@[a-zA-Z]{3,}$/.test(abhaId))) {
+            setStatus('ABHA must be a 14-digit number or valid ABHA address before FHIR preview.', true);
             return true;
         }
 
@@ -1220,8 +1224,13 @@
             var recordId = row ? (parseInt(row.getAttribute('data-entity-id') || '0', 10) || 0) : 0;
             var taskId = row ? (parseInt(row.getAttribute('data-task-id') || '0', 10) || 0) : 0;
 
-            if (!/^\d{14}$/.test(abhaId) || patientId <= 0 || recordId <= 0) {
-                setStatus('A 14-digit ABHA and valid Immunization record are required.', true);
+            var abhaClean = abhaId.replace(/\D/g, '');
+            if (abhaClean.length === 14) {
+                abhaId = abhaClean;
+            }
+            var hasValidAbha = abhaClean.length === 14 || (abhaId.includes('@') && /^[a-zA-Z0-9.\-_]{3,}@[a-zA-Z]{3,}$/.test(abhaId));
+            if (!hasValidAbha || patientId <= 0 || recordId <= 0) {
+                setStatus('A 14-digit ABHA or valid ABHA address and valid Immunization record are required.', true);
                 return;
             }
 
@@ -1308,8 +1317,13 @@
             return;
         }
         var abha = modalAbhaInput.value.trim();
-        if (!/^\d{14}$/.test(abha)) {
-            setStatus('ABHA must be a 14-digit number.', true);
+        var abhaClean = abha.replace(/\D/g, '');
+        if (abhaClean.length === 14) {
+            abha = abhaClean;
+        }
+        var hasValidAbha = abhaClean.length === 14 || (abha.includes('@') && /^[a-zA-Z0-9.\-_]{3,}@[a-zA-Z]{3,}$/.test(abha));
+        if (!hasValidAbha) {
+            setStatus('ABHA must be a 14-digit number or valid ABHA address.', true);
             return;
         }
         var rowInput = selectedRow.querySelector('.abha-input');

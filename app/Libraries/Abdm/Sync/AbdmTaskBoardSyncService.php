@@ -1202,11 +1202,18 @@ class AbdmTaskBoardSyncService
             $dateFields = array_intersect(['reported_time', 'collected_time', 'Request_Date'], $labFields);
             $dateSelect = ! empty($dateFields) ? (', r.' . implode(', r.', $dateFields)) : '';
 
+            $abhaParts = [];
+            foreach (['abha_id', 'abha_no', 'abha_address', 'abha'] as $f) {
+                if (in_array($f, $patientFields, true)) {
+                    $abhaParts[] = 'p.' . $f;
+                }
+            }
+            $abhaSelect = ! empty($abhaParts) ? (', ' . implode(', ', $abhaParts)) : '';
+
             $labRows = $this->db->table('lab_request r')
-                ->select('r.id, r.patient_id, r.patient_name, r.lab_type, r.charge_id, r.status' . $dateSelect . ', p.' . $abhaCol . ' as abha_id', false)
+                ->select('r.id, r.patient_id, r.patient_name, r.lab_type, r.charge_id, r.status' . $dateSelect . $abhaSelect, false)
                 ->join('patient_master p', 'p.id = r.patient_id', 'inner')
                 ->where('r.status >=', 2)
-                ->where('p.' . $abhaCol . ' !=', '')
                 ->orderBy('r.id', 'DESC')
                 ->limit($limit)
                 ->get()
@@ -1215,8 +1222,29 @@ class AbdmTaskBoardSyncService
             foreach ($labRows as $lRow) {
                 $labReqId = (int) ($lRow['id'] ?? 0);
                 $patientId = (int) ($lRow['patient_id'] ?? 0);
-                $abhaId = trim((string) ($lRow['abha_id'] ?? ''));
-                if ($labReqId <= 0 || $patientId <= 0 || preg_match('/^\d{14}$/', $abhaId) !== 1) {
+                if ($labReqId <= 0 || $patientId <= 0) {
+                    continue;
+                }
+
+                $rawAbha = '';
+                $abhaAddress = '';
+                foreach (['abha_address', 'abha_id', 'abha_no', 'abha'] as $f) {
+                    $val = trim((string) ($lRow[$f] ?? ''));
+                    if ($val === '') {
+                        continue;
+                    }
+                    if ($abhaAddress === '' && str_contains($val, '@')) {
+                        $abhaAddress = $val;
+                        continue;
+                    }
+                    $digits = preg_replace('/\D/', '', $val);
+                    if ($rawAbha === '' && strlen($digits) === 14) {
+                        $rawAbha = $digits;
+                    }
+                }
+
+                $abhaId = $rawAbha !== '' ? $rawAbha : $abhaAddress;
+                if ($abhaId === '') {
                     continue;
                 }
 

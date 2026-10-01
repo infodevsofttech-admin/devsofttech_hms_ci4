@@ -4549,7 +4549,23 @@ class Diagnosis extends BaseController
                 }
 
                 if ($patient) {
-                    $abhaId = trim((string) ($patient->abha_id ?? $patient->abha_no ?? $patient->abha_address ?? $patient->abha ?? ''));
+                    $rawAbha = '';
+                    $abhaAddress = '';
+                    foreach (['abha_address', 'abha_id', 'abha_no', 'abha'] as $f) {
+                        $val = trim((string) ($patient->{$f} ?? ''));
+                        if ($val === '') {
+                            continue;
+                        }
+                        if ($abhaAddress === '' && str_contains($val, '@')) {
+                            $abhaAddress = $val;
+                            continue;
+                        }
+                        $digits = preg_replace('/\D/', '', $val);
+                        if ($rawAbha === '' && strlen($digits) === 14) {
+                            $rawAbha = $digits;
+                        }
+                    }
+                    $abhaId = $rawAbha !== '' ? $rawAbha : $abhaAddress;
                 }
             }
 
@@ -4568,8 +4584,15 @@ class Diagnosis extends BaseController
             $bridgeSync = new BridgeSyncService();
             $bridgeSync->enqueue($eventType, $payload, 'lab_request', (string) $labReqId);
 
+            $cleanDigits = preg_replace('/\D/', '', $abhaId);
+            $hasValidAbha = ($cleanDigits !== '' && strlen($cleanDigits) === 14)
+                || (str_contains($abhaId, '@') && preg_match('/^[a-zA-Z0-9.\-_]{3,}@[a-zA-Z]{3,}$/', $abhaId) === 1);
+
             // Create ABDM work tasks for verified/finalized reports so staff can submit them.
-            if ((int) ($labReq->status ?? 0) >= 2 && preg_match('/^\d{14}$/', $abhaId) === 1) {
+            if ((int) ($labReq->status ?? 0) >= 2 && $hasValidAbha) {
+                if (strlen($cleanDigits) === 14) {
+                    $abhaId = $cleanDigits;
+                }
                 $taskType = $this->isRadiologyType((int) ($labReq->lab_type ?? 0))
                     ? 'radiology_report_publish'
                     : 'lab_report_publish';

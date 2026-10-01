@@ -62,4 +62,42 @@ final class AbhaOtpErrorHandlingTest extends CIUnitTestCase
         $result = $this->extractMethod->invoke($this->controller, $payload, 'Please enter a valid OTP. Entered OTP is either expired or incorrect.');
         $this->assertSame('Incorrect OTP', $result);
     }
+
+    public function testExtractBridgeErrorTextSkipsGenericUpstreamErrorAndExtractsLoginHint(): void
+    {
+        $payload = [
+            'ok' => 0,
+            'error' => [
+                'source' => 'abdm_gateway',
+                'code' => 'ABDM_UPSTREAM_ERROR',
+                'message' => 'ABDM gateway returned an error.',
+                'http_status' => 400,
+            ],
+            'data' => [
+                'loginHint' => 'Invalid Login Hint',
+                'timestamp' => '2026-10-01 16:20:23',
+            ],
+        ];
+
+        $result = $this->extractMethod->invoke($this->controller, $payload, 'The ABDM Bridge could not send the OTP.');
+        $this->assertStringContainsString('ABDM gateway rejected login hint', $result);
+        $this->assertStringContainsString('14-digit ABHA Number', $result);
+        $this->assertStringNotContainsString('ABDM gateway returned an error.', $result);
+    }
+
+    public function testExtractBridgeErrorTextPreservesGenericWhenNoFieldErrors(): void
+    {
+        $payload = [
+            'ok' => 0,
+            'error' => [
+                'source' => 'abdm_gateway',
+                'code' => 'ABDM_UPSTREAM_ERROR',
+                'message' => 'ABDM gateway returned an error.',
+                'http_status' => 400,
+            ],
+        ];
+
+        $result = $this->extractMethod->invoke($this->controller, $payload, 'The ABDM Bridge could not send the OTP.');
+        $this->assertSame('ABDM gateway returned an error.', $result);
+    }
 }

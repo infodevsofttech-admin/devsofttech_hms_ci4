@@ -1698,9 +1698,22 @@ class Abha extends BaseController
             $result['data']['description'] ?? null,
         ];
 
+        $genericPhrases = [
+            'abdm gateway returned an error.',
+            'abdm_upstream_error',
+            'gateway error',
+            'upstream error',
+            'bad request',
+            'an error occurred.',
+        ];
+        $firstGeneric = null;
+
         foreach ($candidates as $candidate) {
             if (is_string($candidate) && trim($candidate) !== '') {
                 $trimmed = trim($candidate);
+                if (stripos($trimmed, 'loginHint') !== false && stripos($trimmed, 'invalid') !== false) {
+                    return 'ABDM gateway rejected login hint: OTP verification by ABHA Address is not supported directly by ABDM. Please verify using the 14-digit ABHA Number or Find ABHA via Mobile.';
+                }
                 if (stripos($trimmed, 'loginId') !== false && stripos($trimmed, 'invalid') !== false) {
                     return 'Aadhaar Number is not valid. Valid 12-digit Aadhaar number is required.';
                 }
@@ -1718,6 +1731,10 @@ class Abha extends BaseController
                         return 'Incorrect OTP. Maximum number of attempts exceeded. Please generate a fresh OTP and try again.';
                     }
                     return 'Incorrect OTP';
+                }
+                if (in_array(strtolower($cleaned), $genericPhrases, true)) {
+                    $firstGeneric ??= $cleaned;
+                    continue;
                 }
                 return $cleaned;
             }
@@ -1739,7 +1756,9 @@ class Abha extends BaseController
                     continue;
                 }
                 $fieldMsg = trim($message);
-                if (strcasecmp($field, 'loginId') === 0 && stripos($fieldMsg, 'invalid') !== false) {
+                if (strcasecmp($field, 'loginHint') === 0 && stripos($fieldMsg, 'invalid') !== false) {
+                    $fieldErrors[] = 'ABDM gateway rejected login hint: OTP verification by ABHA Address is not supported directly by ABDM. Please verify using the 14-digit ABHA Number or Find ABHA via Mobile.';
+                } elseif (strcasecmp($field, 'loginId') === 0 && stripos($fieldMsg, 'invalid') !== false) {
                     $fieldErrors[] = 'Aadhaar Number is not valid. Valid 12-digit Aadhaar number is required.';
                 } elseif (preg_match('/(?:attempts.*exceeded|403)/i', $fieldMsg)) {
                     $fieldErrors[] = 'Incorrect OTP. Maximum number of attempts exceeded. Please generate a fresh OTP and try again.';
@@ -1752,6 +1771,10 @@ class Abha extends BaseController
         }
         if ($fieldErrors !== []) {
             return implode('; ', $fieldErrors);
+        }
+
+        if ($firstGeneric !== null) {
+            return $firstGeneric;
         }
 
         if (preg_match('/(?:invalid.*otp|incorrect.*otp|otp.*expired)/i', $fallback)) {
@@ -2834,7 +2857,9 @@ class Abha extends BaseController
                 $errorText .= ' (Ref: ' . $requestId . ')';
             }
 
-            if (stripos($errorText, 'Please make a valid request.') !== false) {
+            if (stripos($errorText, 'Unknown column') !== false || stripos($errorText, 'preferredAbhaAddress') !== false || stripos($errorText, 'not found') !== false || stripos($errorText, 'does not exist') !== false) {
+                $errorText = 'ABHA Address does not exist or was not found in the ABDM registry.';
+            } elseif (stripos($errorText, 'Please make a valid request.') !== false) {
                 $errorText = 'Bridge validation rejected this request. Please contact bridge support with the reference shown. '
                     . $errorText;
             }
@@ -2915,13 +2940,81 @@ class Abha extends BaseController
             'blocked_auth_methods' => is_array($blockedMethods) ? array_values($blockedMethods) : [],
             'masked_mobile' => $maskedMobile,
             'aadhaar_masked_mobile' => $aadhaarMaskedMobile,
-            'account' => [
-                'name' => trim((string) ($account['name'] ?? $account['fullName'] ?? $account['full_name'] ?? $data['name'] ?? $data['fullName'] ?? $data['full_name'] ?? '')),
-                'abha_number' => trim((string) ($account['ABHANumber'] ?? $account['abhaNumber'] ?? $account['abha_id'] ?? $account['healthIdNumber'] ?? $data['ABHANumber'] ?? $data['healthIdNumber'] ?? $data['abha_id'] ?? '')),
-                'abha_address' => trim((string) ($account['abhaAddress'] ?? $account['preferredAddress'] ?? $account['preferredAbhaAddress'] ?? $account['abha_address'] ?? $data['abhaAddress'] ?? $data['preferredAddress'] ?? $data['preferredAbhaAddress'] ?? $data['abha_address'] ?? '')),
-                'masked_mobile' => $maskedMobile,
-                'aadhaar_masked_mobile' => $aadhaarMaskedMobile,
-            ],
+            'account' => (function () use ($account, $data, $result, $maskedMobile, $aadhaarMaskedMobile): array {
+                $resolvedAbhaNumber = '';
+                foreach ([
+                    $data['healthIdNumber'] ?? null,
+                    $data['ABHANumber'] ?? null,
+                    $data['abhaNumber'] ?? null,
+                    $data['abha_number'] ?? null,
+                    $data['abha_id'] ?? null,
+                    $account['healthIdNumber'] ?? null,
+                    $account['ABHANumber'] ?? null,
+                    $account['abhaNumber'] ?? null,
+                    $account['abha_number'] ?? null,
+                    $account['abha_id'] ?? null,
+                    $result['healthIdNumber'] ?? null,
+                    $result['ABHANumber'] ?? null,
+                    $result['abhaNumber'] ?? null,
+                    $result['abha_number'] ?? null,
+                    $result['abha_id'] ?? null,
+                ] as $candidateNum) {
+                    if (is_string($candidateNum) && trim($candidateNum) !== '') {
+                        $resolvedAbhaNumber = trim($candidateNum);
+                        break;
+                    }
+                }
+
+                $resolvedName = '';
+                foreach ([
+                    $data['fullName'] ?? null,
+                    $data['full_name'] ?? null,
+                    $data['name'] ?? null,
+                    $account['fullName'] ?? null,
+                    $account['full_name'] ?? null,
+                    $account['name'] ?? null,
+                    $result['fullName'] ?? null,
+                    $result['full_name'] ?? null,
+                    $result['name'] ?? null,
+                ] as $candidateName) {
+                    if (is_string($candidateName) && trim($candidateName) !== '' && strcasecmp(trim($candidateName), 'ABHA User') !== 0) {
+                        $resolvedName = trim($candidateName);
+                        break;
+                    }
+                }
+                if ($resolvedName === '') {
+                    $resolvedName = trim((string) ($account['name'] ?? $data['name'] ?? $result['name'] ?? 'ABHA User'));
+                }
+
+                $resolvedAddress = '';
+                foreach ([
+                    $data['abhaAddress'] ?? null,
+                    $data['preferredAddress'] ?? null,
+                    $data['preferredAbhaAddress'] ?? null,
+                    $data['abha_address'] ?? null,
+                    $account['abhaAddress'] ?? null,
+                    $account['preferredAddress'] ?? null,
+                    $account['preferredAbhaAddress'] ?? null,
+                    $account['abha_address'] ?? null,
+                    $result['abhaAddress'] ?? null,
+                    $result['preferredAddress'] ?? null,
+                    $result['preferredAbhaAddress'] ?? null,
+                    $result['abha_address'] ?? null,
+                ] as $candidateAddr) {
+                    if (is_string($candidateAddr) && trim($candidateAddr) !== '') {
+                        $resolvedAddress = trim($candidateAddr);
+                        break;
+                    }
+                }
+
+                return [
+                    'name' => $resolvedName,
+                    'abha_number' => $resolvedAbhaNumber,
+                    'abha_address' => $resolvedAddress,
+                    'masked_mobile' => $maskedMobile,
+                    'aadhaar_masked_mobile' => $aadhaarMaskedMobile,
+                ];
+            })(),
         ]);
     }
 

@@ -696,6 +696,36 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             $result['aadhaar_masked_mobile'] = $aadhaarMaskedMobile;
         }
 
+        $resolvedAbhaNumber = '';
+        foreach ([
+            $data['healthIdNumber'] ?? null,
+            $data['ABHANumber'] ?? null,
+            $data['abhaNumber'] ?? null,
+            $data['abha_number'] ?? null,
+            $firstAccount['healthIdNumber'] ?? null,
+            $firstAccount['ABHANumber'] ?? null,
+            $firstAccount['abhaNumber'] ?? null,
+            $firstAccount['abha_number'] ?? null,
+            $result['abha_number'] ?? null,
+            $result['healthIdNumber'] ?? null,
+        ] as $candidateNum) {
+            if (is_string($candidateNum) && trim($candidateNum) !== '') {
+                $resolvedAbhaNumber = trim($candidateNum);
+                break;
+            }
+        }
+        if ($resolvedAbhaNumber !== '') {
+            $result['abha_number'] = $resolvedAbhaNumber;
+            if (isset($result['account']) && is_array($result['account'])) {
+                $result['account']['abha_number'] = $resolvedAbhaNumber;
+                $result['account']['abhaNumber'] = $resolvedAbhaNumber;
+            }
+            if (isset($result['data']['account']) && is_array($result['data']['account'])) {
+                $result['data']['account']['abha_number'] = $resolvedAbhaNumber;
+                $result['data']['account']['abhaNumber'] = $resolvedAbhaNumber;
+            }
+        }
+
         // HMS callers expect a status-like field; treat successful search as VALID when absent.
         $result['status'] = $status !== '' ? $status : 'VALID';
         return $result;

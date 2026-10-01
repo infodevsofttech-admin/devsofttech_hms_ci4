@@ -204,7 +204,11 @@ class AbdmTaskBoard extends BaseController
 
         $abhaId = trim((string) $this->request->getPost('abha_id'));
         if (! $this->isValidAbhaNumber($abhaId)) {
-            return $this->response->setJSON(['ok' => 0, 'error_text' => 'ABHA ID must be a 14-digit number']);
+            return $this->response->setJSON(['ok' => 0, 'error_text' => 'ABHA ID must be a 14-digit number or valid ABHA address']);
+        }
+        $digits = preg_replace('/\D/', '', $abhaId);
+        if (strlen($digits) === 14) {
+            $abhaId = $digits;
         }
 
         $taskType = (string) ($task['task_type'] ?? '');
@@ -328,7 +332,12 @@ class AbdmTaskBoard extends BaseController
 
     private function isValidAbhaNumber(string $abhaId): bool
     {
-        return preg_match('/^\d{14}$/', $abhaId) === 1;
+        $clean = preg_replace('/\D/', '', $abhaId);
+        if (strlen($clean) === 14) {
+            return true;
+        }
+
+        return str_contains($abhaId, '@') && preg_match('/^[a-zA-Z0-9.\-_]{3,}@[a-zA-Z]{3,}$/', $abhaId) === 1;
     }
 
     private function backfillPatientAbhaTasks(): void
@@ -356,7 +365,7 @@ class AbdmTaskBoard extends BaseController
             }
 
             $abha = trim((string) ($row[$abhaField] ?? ''));
-            if (preg_match('/^\d{14}$/', $abha) === 1) {
+            if ($this->isValidAbhaNumber($abha)) {
                 continue;
             }
 
@@ -446,8 +455,25 @@ class AbdmTaskBoard extends BaseController
                 continue;
             }
 
-            $abha = trim((string) ($row['abha_id'] ?? $row['abha_no'] ?? $row['abha_address'] ?? $row['abha'] ?? ''));
-            if (preg_match('/^\d{14}$/', $abha) !== 1) {
+            $rawAbha = '';
+            $abhaAddress = '';
+            foreach (['abha_address', 'abha_id', 'abha_no', 'abha'] as $f) {
+                $val = trim((string) ($row[$f] ?? ''));
+                if ($val === '') {
+                    continue;
+                }
+                if ($abhaAddress === '' && str_contains($val, '@')) {
+                    $abhaAddress = $val;
+                    continue;
+                }
+                $digits = preg_replace('/\D/', '', $val);
+                if ($rawAbha === '' && strlen($digits) === 14) {
+                    $rawAbha = $digits;
+                }
+            }
+
+            $abha = $rawAbha !== '' ? $rawAbha : $abhaAddress;
+            if ($abha === '') {
                 continue;
             }
 
@@ -477,6 +503,7 @@ class AbdmTaskBoard extends BaseController
                 ->where('task_type', $taskType)
                 ->where('entity_type', 'lab_request')
                 ->where('entity_id', (string) $labReqId)
+                ->whereIn('status', ['pending', 'in_progress', 'completed'])
                 ->get(1)
                 ->getRowArray();
             if (! empty($exists)) {

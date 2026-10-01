@@ -120,7 +120,9 @@ window.AbhaVerifyModal = (function () {
         var raw = response && (response.error_text || response.message)
             ? String(response.error_text || response.message)
             : fallback;
-        if (/UIDAI Error code/i.test(raw) || /ABDM-1204/i.test(raw) || /attempts.*exceeded/i.test(raw) || /invalid.*otp/i.test(raw) || /incorrect.*otp/i.test(raw) || /otp.*match/i.test(raw) || /otp.*expired/i.test(raw)) {
+        if (/loginHint/i.test(raw) || /Invalid Login Hint/i.test(raw)) {
+            raw = 'ABDM gateway rejected login hint: OTP verification by ABHA Address is not supported directly by ABDM. Please verify using the 14-digit ABHA Number or Find ABHA via Mobile.';
+        } else if (/UIDAI Error code/i.test(raw) || /ABDM-1204/i.test(raw) || /attempts.*exceeded/i.test(raw) || /invalid.*otp/i.test(raw) || /incorrect.*otp/i.test(raw) || /otp.*match/i.test(raw) || /otp.*expired/i.test(raw)) {
             if (/attempts.*exceeded/i.test(raw) || /403/.test(raw)) {
                 raw = 'Incorrect OTP. Maximum number of attempts exceeded. Please generate a fresh OTP and try again.';
             } else {
@@ -205,10 +207,14 @@ window.AbhaVerifyModal = (function () {
             if (!response.txn_id) { alertBox('warning', 'The Bridge found this ABHA but did not return the login transaction ID. Update /v3/abha/login/search before OTP verification can continue.'); return; }
             lookupResponse = response;
             var account = response.account || {};
+            var hasAbhaNumber = !!(account.abha_number || account.ABHANumber || account.abhaNumber || response.abha_id || response.abha_number);
             $('#abhaVerifyFoundName').text(account.name || 'ABHA account found');
             $('#abhaVerifyFoundIdentity').text(account.abha_address || account.abha_number || identifier);
             renderAuthMethods(response);
             showStep(2);
+            if (lookupType === 'address' && !hasAbhaNumber) {
+                alertBox('info', '<i class="bi bi-info-circle me-1"></i>Found ABHA Address <strong>' + escapeHtml(account.abha_address || identifier) + '</strong>. If ABDM rejects profile OTP for this address, verify using the patient\'s 14-digit ABHA Number or "Find ABHA via Mobile".');
+            }
         }, 'json').fail(function (xhr) {
             button.prop('disabled', false).html('<i class="bi bi-search me-1"></i>Find Account');
             alertBox('danger', apiMessage(xhr.responseJSON, 'Unable to look up the ABHA account.'));
@@ -218,8 +224,10 @@ window.AbhaVerifyModal = (function () {
         var method = $('input[name="abhaVerifyAuth"]:checked').val();
         if (!method || !lookupResponse) return;
         var account = lookupResponse.account || {};
+        var abhaId = account.abha_number || account.ABHANumber || account.abhaNumber || lookupResponse.abha_id || lookupResponse.abha_number || '';
+        var abhaAddress = account.abha_address || account.abhaAddress || lookupResponse.abha_address || '';
         var button = $('#abhaVerifySendOtpBtn').prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span>Sending');
-        $.post('<?= base_url('abha/register/login/request-otp') ?>', { txn_id:lookupResponse.txn_id, auth_method:method, abha_id:account.abha_number || '', abha_address:account.abha_address || '', '<?= csrf_token() ?>':csrf() }, function (response) {
+        $.post('<?= base_url('abha/register/login/request-otp') ?>', { txn_id:lookupResponse.txn_id, auth_method:method, abha_id:abhaId, abha_address:abhaAddress, '<?= csrf_token() ?>':csrf() }, function (response) {
             button.prop('disabled', false).html('<i class="bi bi-send me-1"></i>Send OTP');
             if (!response || response.ok != 1) { alertBox('danger', apiMessage(response, 'Unable to send OTP.')); return; }
             lookupResponse.txn_id = response.txn_id || lookupResponse.txn_id;
