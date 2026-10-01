@@ -111,6 +111,20 @@ final class AbhaOtpErrorHandlingTest extends CIUnitTestCase
         $this->assertStringContainsString('ABHA Number does not exist or was not found in the ABDM registry', $result);
     }
 
+    public function testExtractBridgeErrorTextNormalizesPleaseMakeAValidRequestForAbhaNumber(): void
+    {
+        $payload = [
+            'ok' => 0,
+            'type' => 'abha-number',
+            'value' => '91256312547458',
+            'error' => 'Please make a valid request.',
+            'request_id' => 'REQ-20261001184121-434cb891',
+        ];
+
+        $result = $this->extractMethod->invoke($this->controller, $payload, 'ABHA validation failed');
+        $this->assertStringContainsString('ABHA Number does not exist or was not found in the ABDM registry', $result);
+    }
+
     public function testExtractBridgeErrorTextPreservesGenericWhenNoFieldErrors(): void
     {
         $payload = [

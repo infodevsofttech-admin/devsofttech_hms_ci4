@@ -1713,7 +1713,9 @@ class Abha extends BaseController
         foreach ($candidates as $candidate) {
             if (is_string($candidate) && trim($candidate) !== '') {
                 $trimmed = trim($candidate);
-                if (stripos($trimmed, 'preferredAbhaAddress') !== false || (stripos($trimmed, 'Unknown column') !== false && stripos($trimmed, 'where clause') !== false)) {
+                if (stripos($trimmed, 'preferredAbhaAddress') !== false ||
+                    (stripos($trimmed, 'Unknown column') !== false && stripos($trimmed, 'where clause') !== false) ||
+                    stripos($trimmed, 'Please make a valid request') !== false) {
                     $isNumberLookup = (($result['type'] ?? '') === 'abha-number')
                         || (isset($result['abha_id']) && !isset($result['abha_address']))
                         || (isset($result['value']) && !str_contains((string) $result['value'], '@') && ctype_digit(str_replace(['-', ' '], '', (string) $result['value'])));
@@ -2858,19 +2860,24 @@ class Abha extends BaseController
                 }
             }
 
-            if ($errorText === '') {
-                $errorText = 'ABHA validation failed';
-            }
-            if ($requestId !== '' && stripos($errorText, $requestId) === false) {
-                $errorText .= ' (Ref: ' . $requestId . ')';
-            }
-
             $entityName = $isAddress ? 'ABHA Address' : 'ABHA Number';
-            if (stripos($errorText, 'Unknown column') !== false || stripos($errorText, 'preferredAbhaAddress') !== false || stripos($errorText, 'not found') !== false || stripos($errorText, 'does not exist') !== false) {
+            if (stripos($errorText, 'Unknown column') !== false ||
+                stripos($errorText, 'preferredAbhaAddress') !== false ||
+                stripos($errorText, 'not found') !== false ||
+                stripos($errorText, 'does not exist') !== false ||
+                stripos($errorText, 'ABDM gateway returned an error') !== false ||
+                stripos($errorText, 'Please make a valid request') !== false ||
+                stripos($errorText, 'Invalid Login Hint') !== false ||
+                stripos($errorText, 'rejected login hint') !== false ||
+                stripos($errorText, 'abdm_upstream_error') !== false) {
                 $errorText = $entityName . ' does not exist or was not found in the ABDM registry.';
-            } elseif (stripos($errorText, 'Please make a valid request.') !== false) {
-                $errorText = 'Bridge validation rejected this request. Please contact bridge support with the reference shown. '
-                    . $errorText;
+            } else {
+                if ($errorText === '') {
+                    $errorText = 'ABHA validation failed';
+                }
+                if ($requestId !== '' && stripos($errorText, $requestId) === false) {
+                    $errorText .= ' (Ref: ' . $requestId . ')';
+                }
             }
 
             return $this->response->setJSON([

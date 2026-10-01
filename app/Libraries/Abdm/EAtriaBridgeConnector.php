@@ -505,13 +505,29 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
                 || (!str_contains($targetVal, '@') && $targetVal !== '' && ctype_digit(str_replace(['-', ' '], '', $targetVal)));
             $entityLabel = $isNumberLookup ? 'ABHA Number' : 'ABHA Address';
 
-            // Normalise technical MySQL database errors from the bridge when an ABHA is not found
-            if (stripos($extractedErr, 'preferredAbhaAddress') !== false ||
-                (stripos($extractedErr, 'Unknown column') !== false && stripos($extractedErr, 'where clause') !== false)) {
-                $decoded['raw_bridge_error'] = $extractedErr;
-                $extractedErr = $entityLabel . ' does not exist or was not found in ABDM registry' . ($targetVal !== '' ? ' (' . $targetVal . ')' : '');
-            } elseif (stripos($extractedErr, 'Invalid Login Hint') !== false || stripos($extractedErr, 'rejected login hint') !== false) {
-                $extractedErr = $entityLabel . ' does not exist or was not found in ABDM registry' . ($targetVal !== '' ? ' (' . $targetVal . ')' : '');
+            // Normalise technical errors when an ABHA search/validate is performed
+            $isSearchPath = str_contains($path, '/abha/login/search') || str_contains($path, '/abha/validate');
+            if ($isSearchPath) {
+                if (stripos($extractedErr, 'preferredAbhaAddress') !== false ||
+                    (stripos($extractedErr, 'Unknown column') !== false && stripos($extractedErr, 'where clause') !== false) ||
+                    stripos($extractedErr, 'Invalid Login Hint') !== false ||
+                    stripos($extractedErr, 'rejected login hint') !== false ||
+                    stripos($extractedErr, 'Please make a valid request') !== false ||
+                    stripos($extractedErr, 'ABDM gateway returned an error') !== false ||
+                    stripos($extractedErr, 'ABDM_UPSTREAM_ERROR') !== false ||
+                    stripos($extractedErr, 'not found') !== false ||
+                    stripos($extractedErr, 'does not exist') !== false) {
+                    $decoded['raw_bridge_error'] = $extractedErr;
+                    $extractedErr = $entityLabel . ' does not exist or was not found in ABDM registry' . ($targetVal !== '' ? ' (' . $targetVal . ')' : '');
+                }
+            } else {
+                if (stripos($extractedErr, 'preferredAbhaAddress') !== false ||
+                    (stripos($extractedErr, 'Unknown column') !== false && stripos($extractedErr, 'where clause') !== false)) {
+                    $decoded['raw_bridge_error'] = $extractedErr;
+                    $extractedErr = $entityLabel . ' does not exist or was not found in ABDM registry' . ($targetVal !== '' ? ' (' . $targetVal . ')' : '');
+                } elseif (stripos($extractedErr, 'Invalid Login Hint') !== false || stripos($extractedErr, 'rejected login hint') !== false) {
+                    $extractedErr = $entityLabel . ' does not exist or was not found in ABDM registry' . ($targetVal !== '' ? ' (' . $targetVal . ')' : '');
+                }
             }
 
             if ($extractedErr !== '') {

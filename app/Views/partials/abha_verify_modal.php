@@ -122,6 +122,8 @@ window.AbhaVerifyModal = (function () {
             : fallback;
         if (/loginHint/i.test(raw) || /Invalid Login Hint/i.test(raw)) {
             raw = 'ABDM gateway rejected login hint: OTP verification by ABHA Address is not supported directly by ABDM. Please verify using the 14-digit ABHA Number or Find ABHA via Mobile.';
+        } else if (/does not exist or was not found/i.test(raw) || /Please make a valid request/i.test(raw) || /ABDM gateway returned an error/i.test(raw) || /abdm_upstream_error/i.test(raw)) {
+            raw = (lookupType === 'address' ? 'ABHA Address' : 'ABHA Number') + ' does not exist or was not found in the ABDM registry.';
         } else if (/UIDAI Error code/i.test(raw) || /ABDM-1204/i.test(raw) || /attempts.*exceeded/i.test(raw) || /invalid.*otp/i.test(raw) || /incorrect.*otp/i.test(raw) || /otp.*match/i.test(raw) || /otp.*expired/i.test(raw)) {
             if (/attempts.*exceeded/i.test(raw) || /403/.test(raw)) {
                 raw = 'Incorrect OTP. Maximum number of attempts exceeded. Please generate a fresh OTP and try again.';
