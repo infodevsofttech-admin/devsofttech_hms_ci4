@@ -94,11 +94,17 @@ $templates = $radiology_ultrasound_template ?? [];
                         $tplTitle = trim((string) ($tpl->title ?? ''));
                         $tplKeywords = trim((string) ($tpl->keywords ?? ''));
                         $tplCategory = trim((string) ($tpl->impression_cat ?? ''));
-                        $searchBlob = strtolower(trim($tplName . ' ' . $tplTitle . ' ' . $tplKeywords . ' ' . $tplCategory));
+                        $isRelated = !empty($tpl->is_related);
+                        $searchBlob = strtolower(trim($tplName . ' ' . $tplTitle . ' ' . $tplKeywords . ' ' . $tplCategory . ($isRelated ? ' related' : '')));
                     ?>
                     <div class="template-item mb-2" data-search="<?= esc($searchBlob) ?>">
-                        <a href="javascript:set_template(<?= (int) ($tpl->id ?? 0) ?>)" class="d-block p-2 border rounded text-decoration-none">
-                            <div class="fw-semibold"><?= esc($tplName) ?></div>
+                        <a href="javascript:set_template(<?= (int) ($tpl->id ?? 0) ?>)" class="d-block p-2 border rounded text-decoration-none <?= $isRelated ? 'border-primary bg-primary-subtle bg-opacity-10' : '' ?>">
+                            <div class="d-flex justify-content-between align-items-start gap-1">
+                                <div class="fw-semibold <?= $isRelated ? 'text-primary' : '' ?>"><?= esc($tplName) ?></div>
+                                <?php if ($isRelated): ?>
+                                    <span class="badge bg-primary text-white" style="font-size:0.68rem;">Related</span>
+                                <?php endif; ?>
+                            </div>
                             <?php if ($tplTitle !== ''): ?>
                                 <div class="small text-muted"><?= esc($tplTitle) ?></div>
                             <?php endif; ?>

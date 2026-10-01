@@ -41,13 +41,21 @@ $studyName = trim((string) ($study_name ?? ''));
                             <a href="<?= esc((string) $row['url']) ?>" target="_blank" rel="noopener">
                                 <img src="<?= esc((string) $row['url']) ?>" alt="Uploaded image" class="img-fluid rounded border" style="width:100%; max-height:220px; object-fit:cover;">
                             </a>
-                        <?php elseif (!empty($row['is_dicom']) && !empty($row['dicom_preview_url'])): ?>
+                        <?php elseif (!empty($row['is_dicom'])): ?>
                             <div class="border rounded p-2 bg-light">
-                                <img src="<?= esc((string) $row['dicom_preview_url']) ?>" alt="DICOM preview" class="img-fluid rounded border" style="width:100%; max-height:220px; object-fit:cover;">
+                                <?php if (!empty($row['dicom_preview_url'])): ?>
+                                    <img src="<?= esc((string) $row['dicom_preview_url']) ?>" alt="DICOM preview" class="img-fluid rounded border mb-2" style="width:100%; max-height:220px; object-fit:cover;" onerror="this.style.display='none'; if(this.nextElementSibling) this.nextElementSibling.style.display='block';">
+                                <?php endif; ?>
+                                <div style="<?= !empty($row['dicom_preview_url']) ? 'display:none;' : '' ?>" class="text-center py-4 bg-white rounded border mb-2 text-muted">
+                                    <div class="display-6 text-primary"><i class="bi bi-file-earmark-medical"></i></div>
+                                    <div class="small fw-semibold mt-1">DICOM Imaging File</div>
+                                </div>
                                 <div class="d-flex justify-content-between align-items-center mt-2">
-                                    <span class="badge bg-primary-subtle text-primary-emphasis border">DICOM Preview</span>
+                                    <span class="badge bg-primary-subtle text-primary-emphasis border">DICOM</span>
                                     <?php if (!empty($row['url'])): ?>
-                                        <a href="<?= esc((string) $row['url']) ?>" target="_blank" rel="noopener">Open DICOM</a>
+                                        <a href="<?= esc((string) $row['url']) ?>" class="btn btn-sm btn-outline-primary" target="_blank" rel="noopener" download>
+                                            <i class="bi bi-download"></i> Download / View
+                                        </a>
                                     <?php endif; ?>
                                 </div>
                             </div>

@@ -1046,27 +1046,7 @@ class Diagnosis extends BaseController
             return '<div class="alert alert-danger">Report not found</div>';
         }
 
-        $invoiceItem = $this->db->table('invoice_item')
-            ->select('item_id')
-            ->where('id', (int) ($reportRow->charge_item_id ?? 0))
-            ->get()
-            ->getRow();
-
-        $templateBuilder = $this->db->table('radiology_ultrasound_template')
-            ->select('id, template_name, title, keywords, impression_cat')
-            ->where('Modality', (int) ($reportRow->lab_type ?? 0));
-
-        if (! empty($invoiceItem->item_id)) {
-            $templateBuilder->groupStart()
-                ->where('charge_id', (int) $invoiceItem->item_id)
-                ->orWhere('charge_id', 0)
-                ->groupEnd();
-        }
-
-        $templates = $templateBuilder
-            ->orderBy('template_name', 'ASC')
-            ->get()
-            ->getResult();
+        $templates = $this->getRadiologyTemplatesForReport($reportRow);
 
         return view('diagnosis/lab_final_report_show_xray', [
             'report_format' => [$reportRow],
@@ -1126,33 +1106,145 @@ class Diagnosis extends BaseController
             }
         }
 
-        $invoiceItem = $this->db->table('invoice_item')
-            ->select('item_id')
-            ->where('id', (int) ($reportRow->charge_item_id ?? 0))
-            ->get()
-            ->getRow();
-
-        $templateBuilder = $this->db->table('radiology_ultrasound_template')
-            ->select('id, template_name, title, keywords, impression_cat')
-            ->where('Modality', (int) ($reportRow->lab_type ?? 0));
-
-        if (! empty($invoiceItem->item_id)) {
-            $templateBuilder->groupStart()
-                ->where('charge_id', (int) $invoiceItem->item_id)
-                ->orWhere('charge_id', 0)
-                ->groupEnd();
-        }
-
-        $templates = $templateBuilder
-            ->orderBy('template_name', 'ASC')
-            ->get()
-            ->getResult();
+        $templates = $this->getRadiologyTemplatesForReport($reportRow);
 
         return view('diagnosis/lab_final_report_editor', [
             'report_format' => [$reportRow],
             'radiology_ultrasound_template' => $templates,
             'edit_reason' => $editReason,
         ]);
+    }
+
+    /**
+     * Fetch and rank radiology templates matching a given report.
+     *
+     * @param object|array<string, mixed> $reportRow
+     * @return array<int, object>
+     */
+    private function getRadiologyTemplatesForReport($reportRow): array
+    {
+        $reportObj = is_array($reportRow) ? (object) $reportRow : $reportRow;
+        $labType = (int) ($reportObj->lab_type ?? 0);
+        if ($labType <= 0 || ! $this->db->tableExists('radiology_ultrasound_template')) {
+            return [];
+        }
+
+        $builder = $this->db->table('radiology_ultrasound_template')
+            ->select('id, template_name, title, keywords, impression_cat, charge_id, Modality');
+
+        if ($labType === 2) {
+            $builder->groupStart()
+                ->where('Modality', 2)
+                ->orWhere('Modality IS NULL')
+                ->groupEnd();
+        } else {
+            $builder->where('Modality', $labType);
+        }
+
+        $allTemplates = $builder->orderBy('template_name', 'ASC')->get()->getResult();
+        if (empty($allTemplates)) {
+            return [];
+        }
+
+        $chargeItemId = (int) ($reportObj->charge_item_id ?? 0);
+        $reportName = trim((string) ($reportObj->report_name ?? ''));
+
+        $invoiceItem = null;
+        if ($chargeItemId > 0 && $this->db->tableExists('invoice_item')) {
+            $invoiceItem = $this->db->table('invoice_item')
+                ->select('item_id, item_name')
+                ->where('id', $chargeItemId)
+                ->get()
+                ->getRow();
+        }
+
+        $itemId = (int) ($invoiceItem->item_id ?? 0);
+        $itemName = trim((string) ($invoiceItem->item_name ?? ''));
+
+        // Normalizer helper for clinical test names
+        $normalizeTest = static function (string $text): string {
+            $s = strtolower(trim($text));
+            $s = preg_replace('/\b(x[- ]?ray|xray|mri|ct|scan|usg|ultrasound|view|views|plain|contrast)\b/i', ' ', $s);
+            $s = preg_replace('/[^a-z0-9]+/i', ' ', $s);
+            return trim((string) preg_replace('/\s+/', ' ', $s));
+        };
+
+        $normalizedReportName = $normalizeTest($reportName);
+        $normalizedItemName = $normalizeTest($itemName);
+        $primaryTarget = $normalizedReportName !== '' ? $normalizedReportName : $normalizedItemName;
+
+        // Collect related charge IDs from hc_items
+        $matchedChargeIds = [];
+        if ($itemId > 0) {
+            $matchedChargeIds[] = $itemId;
+        }
+
+        if ($primaryTarget !== '' && $this->db->tableExists('hc_items')) {
+            $hcRows = $this->db->table('hc_items')
+                ->select('id, idesc')
+                ->where('itype', $labType)
+                ->get()
+                ->getResult();
+
+            foreach ($hcRows as $hc) {
+                $hcClean = $normalizeTest((string) ($hc->idesc ?? ''));
+                if ($hcClean !== '' && ($hcClean === $primaryTarget || str_contains($hcClean, $primaryTarget) || str_contains($primaryTarget, $hcClean))) {
+                    $matchedChargeIds[] = (int) $hc->id;
+                }
+            }
+            $matchedChargeIds = array_values(array_unique($matchedChargeIds));
+        }
+
+        $targetTokens = array_values(array_filter(explode(' ', $primaryTarget), static fn($t) => strlen($t) >= 3));
+
+        foreach ($allTemplates as $tpl) {
+            $score = 0;
+            $tplChargeId = (int) ($tpl->charge_id ?? 0);
+            $tplCleanTitle = $normalizeTest((string) ($tpl->title ?? ''));
+            $tplCleanName = $normalizeTest((string) ($tpl->template_name ?? ''));
+            $tplKeywords = strtolower((string) ($tpl->keywords ?? ''));
+
+            if ($tplChargeId > 0 && in_array($tplChargeId, $matchedChargeIds, true)) {
+                $score = max($score, 100);
+            }
+
+            if ($primaryTarget !== '') {
+                if ($tplCleanTitle === $primaryTarget || $tplCleanName === $primaryTarget) {
+                    $score = max($score, 90);
+                } elseif (str_contains($tplCleanTitle, $primaryTarget) || str_contains($tplCleanName, $primaryTarget) || str_contains($primaryTarget, $tplCleanTitle)) {
+                    $score = max($score, 75);
+                }
+            }
+
+            if (! empty($targetTokens)) {
+                $tokenHits = 0;
+                $searchCorpus = $tplCleanName . ' ' . $tplCleanTitle . ' ' . $tplKeywords;
+                foreach ($targetTokens as $token) {
+                    if (str_contains($searchCorpus, $token)) {
+                        $tokenHits++;
+                    }
+                }
+                if ($tokenHits === count($targetTokens)) {
+                    $score = max($score, 60);
+                } elseif ($tokenHits > 0) {
+                    $score = max($score, 30 + ($tokenHits * 10));
+                }
+            }
+
+            $tpl->match_score = $score;
+            $tpl->is_related = $score >= 50;
+        }
+
+        usort($allTemplates, static function ($a, $b) {
+            $scoreA = (int) ($a->match_score ?? 0);
+            $scoreB = (int) ($b->match_score ?? 0);
+            if ($scoreA !== $scoreB) {
+                return $scoreB <=> $scoreA;
+            }
+            return strcasecmp((string) ($a->template_name ?? ''), (string) ($b->template_name ?? ''));
+        });
+
+        return $allTemplates;
     }
 
     public function getTemplateXray($templateId)
@@ -2994,31 +3086,52 @@ class Diagnosis extends BaseController
         $labType = (int) $labType;
         $labReqId = (int) $labReqId;
 
-        if ($invoiceId <= 0 || $labType <= 0 || ! $this->db->tableExists('file_upload_data')) {
+        $studyName = '';
+        if ($labReqId > 0 && $this->db->tableExists('lab_request')) {
+            $requestRow = $this->db->table('lab_request')
+                ->select('id, charge_id, lab_type, report_name')
+                ->where('id', $labReqId)
+                ->get(1)
+                ->getRowArray();
+            if ($requestRow) {
+                $studyName = trim((string) ($requestRow['report_name'] ?? ''));
+                if ($invoiceId <= 0 || $invoiceId === $labReqId) {
+                    $invoiceId = (int) ($requestRow['charge_id'] ?? $invoiceId);
+                }
+                if ($labType <= 0) {
+                    $labType = (int) ($requestRow['lab_type'] ?? $labType);
+                }
+            }
+        }
+
+        if (($invoiceId <= 0 && $labReqId <= 0) || ! $this->db->tableExists('file_upload_data')) {
             return view('diagnosis/imaging_upload_gallery', [
                 'files' => [],
                 'study_name' => '',
             ]);
         }
 
-        $studyName = '';
-        if ($labReqId > 0) {
-            $requestRow = $this->db->table('lab_request')
-                ->select('id, report_name')
-                ->where('id', $labReqId)
-                ->get(1)
-                ->getRowArray();
-            $studyName = trim((string) ($requestRow['report_name'] ?? ''));
-        }
+        $fields = $this->db->getFieldNames('file_upload_data');
+        $hasRepoId = in_array('repo_id', $fields, true);
 
         $builder = $this->db->table('file_upload_data')
-            ->where('isdelete', 0)
-            ->where('charge_id', $invoiceId)
-            ->where('charge_type', $labType);
+            ->where('isdelete', 0);
 
-        $fields = $this->db->getFieldNames('file_upload_data');
-        if ($labReqId > 0 && in_array('repo_id', $fields, true)) {
+        if ($labReqId > 0 && $hasRepoId && $invoiceId > 0) {
+            $builder->groupStart()
+                ->where('repo_id', $labReqId)
+                ->orGroupStart()
+                    ->where('charge_id', $invoiceId)
+                    ->where('charge_type', $labType)
+                ->groupEnd()
+            ->groupEnd();
+        } elseif ($labReqId > 0 && $hasRepoId) {
             $builder->where('repo_id', $labReqId);
+        } elseif ($invoiceId > 0) {
+            $builder->where('charge_id', $invoiceId);
+            if ($labType > 0) {
+                $builder->where('charge_type', $labType);
+            }
         }
 
         $rows = $builder->orderBy('id', 'DESC')->get()->getResultArray();
@@ -3677,18 +3790,31 @@ class Diagnosis extends BaseController
      */
     private function findImagingFilesForRequest(int $invoiceId, int $labType, int $labReqId): array
     {
-        if ($invoiceId <= 0 || $labType <= 0 || ! $this->db->tableExists('file_upload_data')) {
+        if (($invoiceId <= 0 && $labReqId <= 0) || ! $this->db->tableExists('file_upload_data')) {
             return [];
         }
 
-        $builder = $this->db->table('file_upload_data')
-            ->where('isdelete', 0)
-            ->where('charge_id', $invoiceId)
-            ->where('charge_type', $labType);
-
         $fields = $this->db->getFieldNames('file_upload_data');
-        if ($labReqId > 0 && in_array('repo_id', $fields, true)) {
+        $hasRepoId = in_array('repo_id', $fields, true);
+
+        $builder = $this->db->table('file_upload_data')
+            ->where('isdelete', 0);
+
+        if ($labReqId > 0 && $hasRepoId && $invoiceId > 0) {
+            $builder->groupStart()
+                ->where('repo_id', $labReqId)
+                ->orGroupStart()
+                    ->where('charge_id', $invoiceId)
+                    ->where('charge_type', $labType)
+                ->groupEnd()
+            ->groupEnd();
+        } elseif ($labReqId > 0 && $hasRepoId) {
             $builder->where('repo_id', $labReqId);
+        } elseif ($invoiceId > 0) {
+            $builder->where('charge_id', $invoiceId);
+            if ($labType > 0) {
+                $builder->where('charge_type', $labType);
+            }
         }
 
         return $builder->orderBy('id', 'DESC')->get()->getResultArray();
