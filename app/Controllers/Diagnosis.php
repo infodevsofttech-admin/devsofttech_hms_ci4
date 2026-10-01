@@ -1121,7 +1121,7 @@ class Diagnosis extends BaseController
      * @param object|array<string, mixed> $reportRow
      * @return array<int, object>
      */
-    private function getRadiologyTemplatesForReport($reportRow): array
+    protected function getRadiologyTemplatesForReport($reportRow): array
     {
         $reportObj = is_array($reportRow) ? (object) $reportRow : $reportRow;
         $labType = (int) ($reportObj->lab_type ?? 0);
@@ -3788,7 +3788,7 @@ class Diagnosis extends BaseController
     /**
      * @return array<int, array<string, mixed>>
      */
-    private function findImagingFilesForRequest(int $invoiceId, int $labType, int $labReqId): array
+    protected function findImagingFilesForRequest(int $invoiceId, int $labType, int $labReqId): array
     {
         if (($invoiceId <= 0 && $labReqId <= 0) || ! $this->db->tableExists('file_upload_data')) {
             return [];
