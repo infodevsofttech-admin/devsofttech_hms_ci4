@@ -499,15 +499,19 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
                 }
             }
 
+            $targetVal = (string) ($body['value'] ?? $body['abha_address'] ?? $body['abha_id'] ?? '');
+            $isNumberLookup = (($body['type'] ?? '') === 'abha-number')
+                || (isset($body['abha_id']) && !isset($body['abha_address']))
+                || (!str_contains($targetVal, '@') && $targetVal !== '' && ctype_digit(str_replace(['-', ' '], '', $targetVal)));
+            $entityLabel = $isNumberLookup ? 'ABHA Number' : 'ABHA Address';
+
             // Normalise technical MySQL database errors from the bridge when an ABHA is not found
             if (stripos($extractedErr, 'preferredAbhaAddress') !== false ||
                 (stripos($extractedErr, 'Unknown column') !== false && stripos($extractedErr, 'where clause') !== false)) {
-                $targetVal = (string) ($body['value'] ?? $body['abha_address'] ?? $body['abha_id'] ?? '');
                 $decoded['raw_bridge_error'] = $extractedErr;
-                $extractedErr = 'ABHA Address does not exist or was not found in ABDM registry' . ($targetVal !== '' ? ' (' . $targetVal . ')' : '');
-            } elseif (stripos($extractedErr, 'Invalid Login Hint') !== false && stripos($extractedErr, 'ABHA Address') === false) {
-                $targetVal = (string) ($body['value'] ?? $body['abha_address'] ?? $body['abha_id'] ?? '');
-                $extractedErr = 'ABHA Address does not exist or was not found in ABDM registry' . ($targetVal !== '' ? ' (' . $targetVal . ')' : '');
+                $extractedErr = $entityLabel . ' does not exist or was not found in ABDM registry' . ($targetVal !== '' ? ' (' . $targetVal . ')' : '');
+            } elseif (stripos($extractedErr, 'Invalid Login Hint') !== false || stripos($extractedErr, 'rejected login hint') !== false) {
+                $extractedErr = $entityLabel . ' does not exist or was not found in ABDM registry' . ($targetVal !== '' ? ' (' . $targetVal . ')' : '');
             }
 
             if ($extractedErr !== '') {

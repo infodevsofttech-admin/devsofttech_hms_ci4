@@ -97,6 +97,20 @@ final class AbhaOtpErrorHandlingTest extends CIUnitTestCase
         $this->assertStringContainsString('ABHA Address does not exist or was not found in the ABDM registry', $result);
     }
 
+    public function testExtractBridgeErrorTextNormalizesUnknownColumnForAbhaNumber(): void
+    {
+        $payload = [
+            'ok' => 0,
+            'type' => 'abha-number',
+            'value' => '91987654321032',
+            'error' => "Unknown column 'preferredAbhaAddress' in 'where clause'",
+            'request_id' => 'REQ-20261001181024-934fd7ae',
+        ];
+
+        $result = $this->extractMethod->invoke($this->controller, $payload, 'ABHA validation failed');
+        $this->assertStringContainsString('ABHA Number does not exist or was not found in the ABDM registry', $result);
+    }
+
     public function testExtractBridgeErrorTextPreservesGenericWhenNoFieldErrors(): void
     {
         $payload = [

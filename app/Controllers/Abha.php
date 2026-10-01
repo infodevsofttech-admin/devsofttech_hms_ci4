@@ -1714,7 +1714,10 @@ class Abha extends BaseController
             if (is_string($candidate) && trim($candidate) !== '') {
                 $trimmed = trim($candidate);
                 if (stripos($trimmed, 'preferredAbhaAddress') !== false || (stripos($trimmed, 'Unknown column') !== false && stripos($trimmed, 'where clause') !== false)) {
-                    return 'ABHA Address does not exist or was not found in the ABDM registry.';
+                    $isNumberLookup = (($result['type'] ?? '') === 'abha-number')
+                        || (isset($result['abha_id']) && !isset($result['abha_address']))
+                        || (isset($result['value']) && !str_contains((string) $result['value'], '@') && ctype_digit(str_replace(['-', ' '], '', (string) $result['value'])));
+                    return ($isNumberLookup ? 'ABHA Number' : 'ABHA Address') . ' does not exist or was not found in the ABDM registry.';
                 }
                 if (stripos($trimmed, 'loginHint') !== false && stripos($trimmed, 'invalid') !== false) {
                     return 'ABDM gateway rejected login hint: OTP verification by ABHA Address is not supported directly by ABDM. Please verify using the 14-digit ABHA Number or Find ABHA via Mobile.';
@@ -2862,8 +2865,9 @@ class Abha extends BaseController
                 $errorText .= ' (Ref: ' . $requestId . ')';
             }
 
+            $entityName = $isAddress ? 'ABHA Address' : 'ABHA Number';
             if (stripos($errorText, 'Unknown column') !== false || stripos($errorText, 'preferredAbhaAddress') !== false || stripos($errorText, 'not found') !== false || stripos($errorText, 'does not exist') !== false) {
-                $errorText = 'ABHA Address does not exist or was not found in the ABDM registry.';
+                $errorText = $entityName . ' does not exist or was not found in the ABDM registry.';
             } elseif (stripos($errorText, 'Please make a valid request.') !== false) {
                 $errorText = 'Bridge validation rejected this request. Please contact bridge support with the reference shown. '
                     . $errorText;
