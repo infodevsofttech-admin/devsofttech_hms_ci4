@@ -4969,11 +4969,19 @@ class AbdmGateway extends BaseController
             // Strategy A: Check if health_records already has stored FHIR record_data
             $hrRow = null;
             if ($db->tableExists('health_records')) {
-                $hrBuilder = $db->table('health_records')->where('care_context_reference', $ref);
+                $hrBuilder = $db->table('health_records')
+                    ->groupStart()
+                        ->where('care_context_reference', $ref);
                 if ($db->fieldExists('queue_id', 'health_records')) {
                     $hrBuilder->orWhere('queue_id', $ref);
                 }
-                $hrRow = $hrBuilder->get()->getRowArray();
+                $hrBuilder->groupEnd()
+                    ->groupStart()
+                        ->where('record_data IS NOT NULL AND record_data !=', '')
+                        ->orWhere('fhir_bundle_enc IS NOT NULL AND fhir_bundle_enc !=', '')
+                    ->groupEnd()
+                    ->orderBy('id', 'DESC');
+                $hrRow = $hrBuilder->get(1)->getRowArray();
             }
 
             if ($hrRow && !empty($hrRow['record_data'])) {
@@ -5015,23 +5023,25 @@ class AbdmGateway extends BaseController
                     $targetPatientId = (int) $m[1];
                     $targetSessionId = (int) ($m[2] ?? 0);
                 }
-                $docBuilder = $db->table('opd_fhir_documents');
-                if ($targetSessionId > 0) {
-                    $docBuilder->where('opd_session_id', $targetSessionId);
-                } elseif ($targetPatientId > 0) {
-                    $docBuilder->where('opd_id', $targetPatientId);
-                }
-                $docRow = $docBuilder->orderBy('id', 'DESC')->get(1)->getRowArray();
-                if (! empty($docRow['bundle_json'])) {
-                    $bundleData = json_decode((string) $docRow['bundle_json'], true);
-                    if (is_array($bundleData)) {
-                        $records[] = [
-                            'careContextReference' => $ref,
-                            'hiType'               => $docRow['bundle_type'] ?? 'OPConsultRecord',
-                            'display'              => 'Consultation Record - ' . date('d M Y', strtotime($docRow['generated_at'] ?? 'now')),
-                            'bundle'               => $bundleData,
-                        ];
-                        continue;
+                if ($targetSessionId > 0 || $targetPatientId > 0) {
+                    $docBuilder = $db->table('opd_fhir_documents');
+                    if ($targetSessionId > 0) {
+                        $docBuilder->where('opd_session_id', $targetSessionId);
+                    } else {
+                        $docBuilder->where('opd_id', $targetPatientId);
+                    }
+                    $docRow = $docBuilder->orderBy('id', 'DESC')->get(1)->getRowArray();
+                    if (! empty($docRow['bundle_json'])) {
+                        $bundleData = json_decode((string) $docRow['bundle_json'], true);
+                        if (is_array($bundleData)) {
+                            $records[] = [
+                                'careContextReference' => $ref,
+                                'hiType'               => $docRow['bundle_type'] ?? 'OPConsultRecord',
+                                'display'              => 'Consultation Record - ' . date('d M Y', strtotime($docRow['generated_at'] ?? 'now')),
+                                'bundle'               => $bundleData,
+                            ];
+                            continue;
+                        }
                     }
                 }
             }
