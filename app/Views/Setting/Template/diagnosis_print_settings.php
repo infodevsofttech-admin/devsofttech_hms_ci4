@@ -178,11 +178,74 @@ $compilePlainTemplateName = (string) ($templateNameById[$compilePlainTemplateId]
                     </div>
                 </div>
 
+                <div class="card border-info mb-3">
+                    <div class="card-header bg-info bg-opacity-10 py-1 d-flex justify-content-between align-items-center">
+                        <span class="fw-semibold small text-info">Available Placeholders — click any to insert into focused textarea</span>
+                        <span class="text-muted small" id="diag_tpl_focus_label">Focus a textarea below first</span>
+                    </div>
+                    <div class="card-body p-2">
+                        <div class="mb-1"><span class="badge bg-secondary me-1">Hospital</span>
+                            <?php foreach ([
+                                '{{H_Name}}'             => 'Hospital Name',
+                                '{{H_address_1}}'        => 'Address Line 1',
+                                '{{H_address_2}}'        => 'Address Line 2',
+                                '{{hospital_address}}'   => 'Combined Address',
+                                '{{H_phone_No}}'         => 'Phone Number',
+                                '{{H_Email}}'            => 'Email Address',
+                                '{{H_logo}}'             => 'Logo (image src or data URI)',
+                                '{{hospital_logo_html}}' => 'Logo <img> tag',
+                            ] as $ph => $desc): ?>
+                                <button type="button" class="btn btn-outline-info btn-sm py-0 px-1 me-1 mb-1 diag-ph-btn" data-ph="<?= esc($ph) ?>" title="<?= esc($desc) ?>"><code><?= esc($ph) ?></code></button>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="mb-1"><span class="badge bg-secondary me-1">Patient</span>
+                            <?php foreach ([
+                                '{{patient_name}}'       => 'Full Patient Name',
+                                '{{uhid}}'               => 'Patient UHID',
+                                '{{invoice_code}}'       => 'Invoice Code',
+                                '{{age}}'                => 'Patient Age',
+                                '{{gender}}'             => 'Gender',
+                                '{{age_sex}}'            => 'Age & Gender (e.g. 35 / Male)',
+                                '{{relative}}'           => 'Relative Name & Relation',
+                                '{{phoneno}}'            => 'Patient Mobile No.',
+                                '{{p_address}}'          => 'Patient Address',
+                                '{{collected_time}}'     => 'Sample/Study Collected Time',
+                                '{{reported_time}}'      => 'Reported Time',
+                                '{{report_title}}'       => 'Test / Report Title',
+                            ] as $ph => $desc): ?>
+                                <button type="button" class="btn btn-outline-success btn-sm py-0 px-1 me-1 mb-1 diag-ph-btn" data-ph="<?= esc($ph) ?>" title="<?= esc($desc) ?>"><code><?= esc($ph) ?></code></button>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="mb-1"><span class="badge bg-secondary me-1">Doctor & Sign</span>
+                            <?php foreach ([
+                                '{{doctor_name}}'        => 'Treating / Verifying Doctor Name',
+                                '{{doctor_education}}'   => 'Doctor Degree / Qualification',
+                                '{{technician_name}}'    => 'Technician Name',
+                                '{{doctor_sign_html}}'   => 'Doctor Signature <img> Tag',
+                                '{{signature_image_url}}'=> 'Signature Image URL / Data URI',
+                            ] as $ph => $desc): ?>
+                                <button type="button" class="btn btn-outline-primary btn-sm py-0 px-1 me-1 mb-1 diag-ph-btn" data-ph="<?= esc($ph) ?>" title="<?= esc($desc) ?>"><code><?= esc($ph) ?></code></button>
+                            <?php endforeach; ?>
+                        </div>
+                        <div class="mb-0"><span class="badge bg-secondary me-1">Date & Page</span>
+                            <?php foreach ([
+                                '{{printed_time}}'       => 'Print Date & Time (d-m-Y h:i A)',
+                                '{{print_time}}'         => 'Print Timestamp (d-m-Y h:i:s A)',
+                                '{{CURRENT_DATE}}'       => 'Today Date (d-m-Y)',
+                                '{PAGENO}'               => 'mPDF: Current Page Number',
+                                '{nbpg}'                 => 'mPDF: Total Pages Count',
+                            ] as $ph => $desc): ?>
+                                <button type="button" class="btn btn-outline-warning btn-sm py-0 px-1 me-1 mb-1 diag-ph-btn" data-ph="<?= esc($ph) ?>" title="<?= esc($desc) ?>"><code><?= esc($ph) ?></code></button>
+                            <?php endforeach; ?>
+                        </div>
+                    </div>
+                </div>
+
                 <h6 class="mb-2">2. Header</h6>
                 <div class="row g-2">
                     <div class="col-12">
                         <label class="form-label small">Header HTML / mPDF tags</label>
-                        <textarea class="form-control" name="header_html" rows="6" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['header_html'] ?? '')) ?></textarea>
+                        <textarea class="form-control diag-ph-target" data-label="Header" name="header_html" rows="6" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['header_html'] ?? '')) ?></textarea>
                     </div>
                 </div>
 
@@ -190,7 +253,7 @@ $compilePlainTemplateName = (string) ($templateNameById[$compilePlainTemplateId]
                 <div class="row g-2">
                     <div class="col-12">
                         <label class="form-label small">First Page Header HTML / mPDF tags</label>
-                        <textarea class="form-control" name="first_page_header_html" rows="5" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['first_page_header_html'] ?? '')) ?></textarea>
+                        <textarea class="form-control diag-ph-target" data-label="First Page Header" name="first_page_header_html" rows="5" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['first_page_header_html'] ?? '')) ?></textarea>
                     </div>
                 </div>
 
@@ -207,15 +270,15 @@ $compilePlainTemplateName = (string) ($templateNameById[$compilePlainTemplateId]
                 <div class="row g-2">
                     <div class="col-12">
                         <label class="form-label small">Patient Info HTML Template (tokens supported)</label>
-                        <textarea class="form-control" name="patient_info_html" rows="8" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['patient_info_html'] ?? '')) ?></textarea>
+                        <textarea class="form-control diag-ph-target" data-label="Patient Info" name="patient_info_html" rows="8" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['patient_info_html'] ?? '')) ?></textarea>
                     </div>
                     <div class="col-12">
                         <label class="form-label small">Content Prefix HTML (before report body)</label>
-                        <textarea class="form-control" name="content_prefix_html" rows="4" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['content_prefix_html'] ?? '')) ?></textarea>
+                        <textarea class="form-control diag-ph-target" data-label="Content Prefix" name="content_prefix_html" rows="4" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['content_prefix_html'] ?? '')) ?></textarea>
                     </div>
                     <div class="col-12">
                         <label class="form-label small">Content Suffix HTML (after report body)</label>
-                        <textarea class="form-control" name="content_suffix_html" rows="4" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['content_suffix_html'] ?? '')) ?></textarea>
+                        <textarea class="form-control diag-ph-target" data-label="Content Suffix" name="content_suffix_html" rows="4" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['content_suffix_html'] ?? '')) ?></textarea>
                     </div>
                 </div>
 
@@ -224,7 +287,7 @@ $compilePlainTemplateName = (string) ($templateNameById[$compilePlainTemplateId]
                 <div class="row g-2">
                     <div class="col-12">
                         <label class="form-label small">Footer HTML / mPDF tags</label>
-                        <textarea class="form-control" name="footer_html" rows="5" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['footer_html'] ?? '')) ?></textarea>
+                        <textarea class="form-control diag-ph-target" data-label="Footer" name="footer_html" rows="5" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['footer_html'] ?? '')) ?></textarea>
                     </div>
                 </div>
 
@@ -232,7 +295,7 @@ $compilePlainTemplateName = (string) ($templateNameById[$compilePlainTemplateId]
                 <div class="row g-2">
                     <div class="col-12">
                         <label class="form-label small">Last Page Footer HTML / mPDF tags</label>
-                        <textarea class="form-control" name="last_page_footer_html" rows="5" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['last_page_footer_html'] ?? '')) ?></textarea>
+                        <textarea class="form-control diag-ph-target" data-label="Last Page Footer" name="last_page_footer_html" rows="5" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['last_page_footer_html'] ?? '')) ?></textarea>
                     </div>
                 </div>
 
@@ -243,13 +306,52 @@ $compilePlainTemplateName = (string) ($templateNameById[$compilePlainTemplateId]
                 <div class="row g-2">
                     <div class="col-12">
                         <label class="form-label small">mPDF Prefix HTML (before content)</label>
-                        <textarea class="form-control" name="mpdf_prefix_html" rows="8" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['mpdf_prefix_html'] ?? '')) ?></textarea>
+                        <textarea class="form-control diag-ph-target" data-label="mPDF Prefix" name="mpdf_prefix_html" rows="8" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['mpdf_prefix_html'] ?? '')) ?></textarea>
                     </div>
                     <div class="col-12">
                         <label class="form-label small">mPDF Suffix HTML (after content)</label>
-                        <textarea class="form-control" name="mpdf_suffix_html" rows="5" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['mpdf_suffix_html'] ?? '')) ?></textarea>
+                        <textarea class="form-control diag-ph-target" data-label="mPDF Suffix" name="mpdf_suffix_html" rows="5" style="font-family:Consolas,Monaco,monospace;"><?= esc((string) ($row['mpdf_suffix_html'] ?? '')) ?></textarea>
                     </div>
                 </div>
+
+                <script>
+                (function () {
+                    var activeTarget = null;
+                    document.querySelectorAll('.diag-ph-target').forEach(function (ta) {
+                        ta.addEventListener('focus', function () {
+                            activeTarget = ta;
+                            var label = document.getElementById('diag_tpl_focus_label');
+                            if (label) {
+                                var fieldLabel = ta.getAttribute('data-label') || ta.name || 'textarea';
+                                label.textContent = 'Inserting into: ' + fieldLabel;
+                                label.className = 'small text-success fw-semibold';
+                            }
+                        });
+                    });
+
+                    document.querySelectorAll('.diag-ph-btn').forEach(function (btn) {
+                        btn.addEventListener('click', function () {
+                            var ph = btn.getAttribute('data-ph') || '';
+                            if (!ph) { return; }
+                            if (!activeTarget) {
+                                var headerTa = document.querySelector('textarea[name="header_html"]');
+                                if (headerTa) {
+                                    activeTarget = headerTa;
+                                } else {
+                                    alert('Click inside a Header, Content, or Footer textarea first, then click a placeholder.');
+                                    return;
+                                }
+                            }
+                            var start = activeTarget.selectionStart || 0;
+                            var end   = activeTarget.selectionEnd   || 0;
+                            var val   = activeTarget.value;
+                            activeTarget.value = val.substring(0, start) + ph + val.substring(end);
+                            activeTarget.selectionStart = activeTarget.selectionEnd = start + ph.length;
+                            activeTarget.focus();
+                        });
+                    });
+                })();
+                </script>
 
                 <div class="mt-3 d-flex gap-2">
                     <button type="submit" class="btn btn-primary btn-sm" <?= ! $columnsReady ? 'disabled' : '' ?>>Save Settings</button>
@@ -259,21 +361,41 @@ $compilePlainTemplateName = (string) ($templateNameById[$compilePlainTemplateId]
                     <div class="modal-dialog modal-lg modal-dialog-scrollable">
                         <div class="modal-content">
                             <div class="modal-header">
-                                <h6 class="modal-title" id="pdfTemplateTipsModalLabel">PDF Template Help Tips</h6>
+                                <h6 class="modal-title" id="pdfTemplateTipsModalLabel">PDF Template Help Tips & Placeholders</h6>
                                 <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
                             </div>
                             <div class="modal-body small">
-                                <p class="mb-2"><b>Patient Tokens</b></p>
+                                <p class="mb-1"><b>Hospital Placeholders</b></p>
                                 <p style="font-family:Consolas,Monaco,monospace; line-height:1.8;">
-                                    {{invoice_code}}, {{patient_name}}, {{relative_type}}, {{relative_name}}, {{relative}}, {{age}}, {{gender}}, {{age_sex}}, {{uhid}}, {{collected_time}}, {{reported_time}}, {{printed_time}}, {{report_title}}
-                                </p>
-                                <p style="font-family:Consolas,Monaco,monospace; line-height:1.8;">
-                                    {{hospital_logo_url}}, {{signature_image_url}}, {{doctor_name}}, {{doctor_education}}, {{technician_name}}
+                                    <code>{{H_Name}}</code> (Hospital name), <code>{{H_address_1}}</code>, <code>{{H_address_2}}</code>, <code>{{hospital_address}}</code>, <code>{{H_phone_No}}</code>, <code>{{H_Email}}</code>, <code>{{H_logo}}</code>, <code>{{hospital_logo_html}}</code>
                                 </p>
 
-                                <p class="mb-1" style="font-family:Consolas,Monaco,monospace;">Signature image usage: &lt;img src="{{signature_image_url}}" width="100px" /&gt;</p>
+                                <p class="mb-1 mt-3"><b>Patient Placeholders</b></p>
+                                <p style="font-family:Consolas,Monaco,monospace; line-height:1.8;">
+                                    <code>{{patient_name}}</code>, <code>{{pName}}</code>, <code>{{uhid}}</code>, <code>{{invoice_code}}</code>, <code>{{age}}</code>, <code>{{gender}}</code>, <code>{{age_sex}}</code>, <code>{{relative}}</code>, <code>{{phoneno}}</code>, <code>{{p_address}}</code>, <code>{{collected_time}}</code>, <code>{{reported_time}}</code>, <code>{{report_title}}</code>
+                                </p>
 
-                                <p class="mb-2 mt-3"><b>mPDF Constants / Tags (use in Prefix or Suffix)</b></p>
+                                <p class="mb-1 mt-3"><b>Doctor & Staff Placeholders</b></p>
+                                <p style="font-family:Consolas,Monaco,monospace; line-height:1.8;">
+                                    <code>{{doctor_name}}</code>, <code>{{doctor_education}}</code>, <code>{{technician_name}}</code>, <code>{{doctor_sign_html}}</code>, <code>{{signature_image_url}}</code>
+                                </p>
+
+                                <p class="mb-1 mt-3"><b>Date & Time Placeholders</b></p>
+                                <p style="font-family:Consolas,Monaco,monospace; line-height:1.8;">
+                                    <code>{{printed_time}}</code> (e.g. 03-10-2026 02:00 PM), <code>{{print_time}}</code>, <code>{{CURRENT_DATE}}</code>
+                                </p>
+
+                                <p class="mb-1 mt-3"><b>Logo and Signature Image Tag Usage</b></p>
+                                <pre class="bg-light border rounded p-2 mb-0" style="font-family:Consolas,Monaco,monospace; white-space:pre-wrap;">&lt;!-- Option 1: Direct img tag with placeholder src --&gt;
+&lt;img style="width:100px; vertical-align:top;" src="assets/images/{{H_logo}}" /&gt;
+
+&lt;!-- Option 2: Pre-formatted logo HTML tag --&gt;
+{{hospital_logo_html}}
+
+&lt;!-- Signature image --&gt;
+{{doctor_sign_html}} or &lt;img src="{{signature_image_url}}" style="height:40px;" /&gt;</pre>
+
+                                <p class="mb-2 mt-3"><b>mPDF Constants / Tags (use in Prefix, Header, or Suffix)</b></p>
                                 <p class="mb-1" style="font-family:Consolas,Monaco,monospace;">Page No: {PAGENO}</p>
                                 <p class="mb-1" style="font-family:Consolas,Monaco,monospace;">Total Pages: {nbpg}</p>
                                 <p class="mb-1" style="font-family:Consolas,Monaco,monospace;">Page Break: &lt;pagebreak /&gt;</p>

@@ -1459,6 +1459,7 @@ class Diagnosis extends BaseController
 
         $sql = "SELECT l.*, m.invoice_code, m.attach_id,
                     p.p_fname, p.p_rname, p.p_relative, p.p_code, p.gender, p.dob, p.age, p.age_in, p.age_in_month, p.estimate_dob,
+                    p.mphone1, p.mphone2, p.add1, p.add2, p.city, p.district, p.state,
                     r.Title as repo_title, g.RepoGrp
                 FROM lab_request l
                 LEFT JOIN invoice_master m ON m.id = l.charge_id
@@ -1523,6 +1524,13 @@ class Diagnosis extends BaseController
 
         $doctorTokenData = $this->resolveMappedReportDoctorTokenData((int) ($row->lab_type ?? 0), $headRow);
 
+        $patientAddress = trim(($row->add1 ?? '') . ' ' . ($row->add2 ?? '') . ' ' . ($row->city ?? ''));
+        $patientPhone   = trim((string) ($row->mphone1 ?? $row->mphone2 ?? ''));
+        $signatureUrl   = (string) ($printSetting['signature_image'] ?? '');
+        if ($signatureUrl === '') {
+            $signatureUrl = (string) ($doctorTokenData['signature_image'] ?? '');
+        }
+
         $tokens = $this->buildPdfTokens([
             'invoice_code'   => $row->invoice_code ?? '',
             'patient_name'   => $patientName,
@@ -1531,13 +1539,15 @@ class Diagnosis extends BaseController
             'age'            => $ageText,
             'gender'         => $genderText,
             'uhid'           => $row->p_code ?? '',
+            'phone_no'       => $patientPhone,
+            'patient_address'=> $patientAddress,
             'collected_time' => $row->collected_time ?? '',
             'reported_time'  => $row->reported_time ?? '',
             'report_title'   => $repoTitle,
             'doctor_name'    => $doctorTokenData['doctor_name'] ?? '',
             'doctor_education' => $doctorTokenData['doctor_education'] ?? '',
             'technician_name' => $doctorTokenData['technician_name'] ?? '',
-            'signature_image_url' => (string) ($printSetting['signature_image'] ?? ''),
+            'signature_image_url' => $signatureUrl,
         ]);
 
         // Render the optional patient info template (tokens resolved).
@@ -1596,6 +1606,7 @@ class Diagnosis extends BaseController
             . $autoHeaderHtml
             . $autoFooterHtml, $tokens);
         $suffixHtml = $this->applyPdfTokens(trim((string) ($printSetting['mpdf_suffix_html'] ?? '')), $tokens);
+        $pdfHtml = $this->applyPdfTokens($pdfHtml, $tokens);
         $pdfHtml = mpdf_normalize_font_weight_css($pdfHtml);
         $prefixHtml = mpdf_normalize_font_weight_css($prefixHtml);
         $suffixHtml = mpdf_normalize_font_weight_css($suffixHtml);
@@ -1877,6 +1888,7 @@ class Diagnosis extends BaseController
             'doctor_name' => $legacyDoctorName,
             'doctor_education' => $legacyDoctorEducation,
             'technician_name' => $legacyTechnicianName,
+            'signature_image' => '',
         ];
 
         $mappedDoctorId = $this->resolveMappedDoctorIdForLabType($labType);
@@ -1891,12 +1903,16 @@ class Diagnosis extends BaseController
 
         $mappedName = trim((string) ($mappedDoctor['name'] ?? ''));
         $mappedEducation = trim((string) ($mappedDoctor['education'] ?? ''));
+        $mappedSign = trim((string) ($mappedDoctor['signature_image'] ?? ''));
 
         if ($mappedName !== '') {
             $out['doctor_name'] = $mappedName;
         }
         if ($mappedEducation !== '') {
             $out['doctor_education'] = $mappedEducation;
+        }
+        if ($mappedSign !== '') {
+            $out['signature_image'] = $mappedSign;
         }
 
         return $out;
@@ -1951,7 +1967,7 @@ class Diagnosis extends BaseController
 
         $fields = $this->db->getFieldNames('doctor_master') ?? [];
         $select = ['id'];
-        foreach (['p_title', 'p_fname', 'p_lname', 'education', 'qualification', 'degree', 'speciality', 'specialty', 'designation'] as $field) {
+        foreach (['p_title', 'p_fname', 'p_lname', 'doc_sign', 'sign_image', 'signature', 'education', 'qualification', 'degree', 'speciality', 'specialty', 'designation'] as $field) {
             if (in_array($field, $fields, true)) {
                 $select[] = $field;
             }
@@ -1985,63 +2001,233 @@ class Diagnosis extends BaseController
             }
         }
 
+        $docSign = '';
+        foreach (['doc_sign', 'sign_image', 'signature'] as $signCol) {
+            $val = trim((string) ($row[$signCol] ?? ''));
+            if ($val !== '') {
+                $docSign = $val;
+                break;
+            }
+        }
+
         return [
             'name' => $name,
             'education' => $education,
+            'signature_image' => $docSign,
         ];
+    }
+
+    private function buildImageDataUriFromPath(string $absolutePath): string
+    {
+        $absolutePath = trim($absolutePath);
+        if ($absolutePath === '' || ! is_file($absolutePath) || ! is_readable($absolutePath)) {
+            return '';
+        }
+
+        $bytes = @file_get_contents($absolutePath);
+        if ($bytes === false || $bytes === '') {
+            return '';
+        }
+
+        $mime = 'image/png';
+        if (function_exists('mime_content_type')) {
+            $detected = @mime_content_type($absolutePath);
+            if (is_string($detected) && str_starts_with($detected, 'image/')) {
+                $mime = $detected;
+            }
+        }
+
+        return 'data:' . $mime . ';base64,' . base64_encode($bytes);
     }
 
     /**
      * Build an associative array of {{token}} => value pairs for PDF template substitution.
      * All string values are HTML-escaped so they are safe to embed inside HTML attributes and text.
      */
-    private function buildPdfTokens(array $data): array
+    protected function buildPdfTokens(array $data): array
     {
         $e = static function (string $v): string {
             return htmlspecialchars($v, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         };
 
-        $age    = (string) ($data['age'] ?? '-');
-        $gender = (string) ($data['gender'] ?? '-');
-        $hospitalName = defined('H_Name') ? (string) constant('H_Name') : 'Hospital';
-        $hospitalAddress1 = defined('H_address_1') ? (string) constant('H_address_1') : '';
-        $hospitalPhone = defined('H_phone_No') ? (string) constant('H_phone_No') : '';
-        $hospitalLogoName = defined('H_logo') ? trim((string) constant('H_logo')) : '';
-        $hospitalLogoUrl = $this->resolvePdfAssetPath([
+        $hospitalName     = (string) (defined('H_Name') ? constant('H_Name') : (function_exists('hospital_setting_value') ? hospital_setting_value('H_Name', 'Hospital') : 'Hospital'));
+        $hospitalAddress1 = (string) (defined('H_address_1') ? constant('H_address_1') : (function_exists('hospital_setting_value') ? hospital_setting_value('H_address_1', '') : ''));
+        $hospitalAddress2 = (string) (defined('H_address_2') ? constant('H_address_2') : (function_exists('hospital_setting_value') ? hospital_setting_value('H_address_2', '') : ''));
+        $hospitalPhone    = (string) (defined('H_phone_No') ? constant('H_phone_No') : (function_exists('hospital_setting_value') ? hospital_setting_value('H_phone_No', '') : ''));
+        $hospitalEmail    = (string) (defined('H_Email') ? constant('H_Email') : (function_exists('hospital_setting_value') ? hospital_setting_value('H_Email', '') : ''));
+        $hospitalLogoName = trim((string) (defined('H_logo') ? constant('H_logo') : (function_exists('hospital_setting_value') ? hospital_setting_value('H_logo', '') : '')));
+        $hospitalNabh     = trim((string) (defined('H_NABH') ? constant('H_NABH') : (function_exists('hospital_setting_value') ? hospital_setting_value('H_NABH', '') : '')));
+        $hospitalNameHindi= (string) (defined('H_Name_Hindi') ? constant('H_Name_Hindi') : (function_exists('hospital_setting_value') ? hospital_setting_value('H_Name_Hindi', '') : ''));
+        $hospitalGst      = (string) (defined('H_Med_GST') ? constant('H_Med_GST') : (function_exists('hospital_setting_value') ? hospital_setting_value('H_Med_GST', '') : ''));
+
+        $fullHospitalAddress = trim($hospitalAddress1 . ($hospitalAddress2 !== '' ? (', ' . $hospitalAddress2) : ''));
+
+        $hospitalLogoAbs = $this->resolvePdfAssetPath([
             $hospitalLogoName !== '' ? 'assets/images/' . ltrim($hospitalLogoName, '/\\') : '',
+            $hospitalLogoName !== '' ? $hospitalLogoName : '',
+            'assets/images/hospital_logo_20260723_161110_75d8b3e0.png',
             'assets/img/logo.png',
             'assets/images/no_image.svg',
         ]);
-        $signatureImageUrl = $this->resolvePdfAssetPath([
+        $logoDataUri = $this->buildImageDataUriFromPath($hospitalLogoAbs);
+        $logoSrc = $logoDataUri !== '' ? $logoDataUri : $hospitalLogoAbs;
+        $logoHtml = $logoSrc !== '' ? '<img style="width: 100px; vertical-align: top;" src="' . $logoSrc . '" />' : '';
+
+        $signatureImageAbs = $this->resolvePdfAssetPath([
             (string) ($data['signature_image_url'] ?? ''),
             'assets/images/drPreetiSingh.jpg',
         ]);
+        $signDataUri = $this->buildImageDataUriFromPath($signatureImageAbs);
+        $signSrc = $signDataUri !== '' ? $signDataUri : $signatureImageAbs;
+        $signHtml = $signSrc !== '' ? '<img style="height: 40px; vertical-align: middle;" src="' . $signSrc . '" />' : '';
+
+        $patientName  = (string) ($data['patient_name'] ?? '');
+        $relativeType = (string) ($data['relative_type'] ?? '');
+        $relativeName = (string) ($data['relative_name'] ?? '');
+        $relativeCombined = trim($relativeType . ' ' . $relativeName);
+        $age          = (string) ($data['age'] ?? '-');
+        $gender       = (string) ($data['gender'] ?? '-');
+        $ageSex       = (string) ($data['age_sex'] ?? ($age . ' / ' . $gender));
+        $uhid         = (string) ($data['uhid'] ?? '');
+        $invoiceCode  = (string) ($data['invoice_code'] ?? '');
+        $phoneNo      = (string) ($data['phone_no'] ?? '');
+        $patientAddr  = (string) ($data['patient_address'] ?? '');
+        $reportTitle  = (string) ($data['report_title'] ?? '');
+        $collectedTime= (string) ($data['collected_time'] ?? '');
+        $reportedTime = (string) ($data['reported_time'] ?? '');
+        $doctorName   = (string) ($data['doctor_name'] ?? '');
+        $doctorEducation = (string) ($data['doctor_education'] ?? '');
+        $technicianName  = (string) ($data['technician_name'] ?? '');
+
+        $nowDate        = date('d-m-Y');
+        $nowDateTime    = date('d-m-Y h:i A');
+        $nowDateTimeSec = date('d-m-Y h:i:s A');
 
         return [
-            '{{invoice_code}}'   => $e((string) ($data['invoice_code'] ?? '')),
-            '{{patient_name}}'   => $e((string) ($data['patient_name'] ?? '')),
-            '{{relative_type}}'  => $e((string) ($data['relative_type'] ?? '')),
-            '{{relative_name}}'  => $e((string) ($data['relative_name'] ?? '')),
-            '{{relative}}'       => $e(trim((string) ($data['relative_type'] ?? '') . ' ' . (string) ($data['relative_name'] ?? ''))),
-            '{{age}}'            => $e($age),
-            '{{gender}}'         => $e($gender),
-            '{{age_sex}}'        => $e($age . ' / ' . $gender),
-            '{{uhid}}'           => $e((string) ($data['uhid'] ?? '')),
-            '{{collected_time}}' => $e((string) ($data['collected_time'] ?? '')),
-            '{{reported_time}}'  => $e((string) ($data['reported_time'] ?? '')),
-            '{{printed_time}}'   => date('d-m-Y h:i A'),
-            '{{report_title}}'   => $e((string) ($data['report_title'] ?? '')),
-            '{{doctor_name}}'    => $e((string) ($data['doctor_name'] ?? '')),
-            '{{doctor_education}}' => $e((string) ($data['doctor_education'] ?? '')),
-            '{{technician_name}}' => $e((string) ($data['technician_name'] ?? '')),
-            '{{hospital_name}}'  => $e($hospitalName),
+            // Long prefixes first to avoid partial replacement of nested placeholders
+            'assets/images/{{H_logo}}' => $logoSrc,
+            'assets/images/{{h_logo}}' => $logoSrc,
+            'assets/images/{{H_LOGO}}' => $logoSrc,
+            'assets/images/{{hospital_logo_url}}' => $logoSrc,
+            'assets/images/{{hospital_logo_name}}' => $logoSrc,
+            'assets/images/{{signature_image_url}}' => $signSrc,
+
+            // Hospital Placeholders
+            '{{H_Name}}'             => $e($hospitalName),
+            '{{h_name}}'             => $e($hospitalName),
+            '{{H_NAME}}'             => $e($hospitalName),
+            '{{hospital_name}}'      => $e($hospitalName),
+            '{{HOSPITAL_NAME}}'      => $e($hospitalName),
+
+            '{{H_address_1}}'        => $e($hospitalAddress1),
+            '{{h_address_1}}'        => $e($hospitalAddress1),
+            '{{H_ADDRESS_1}}'        => $e($hospitalAddress1),
             '{{hospital_address_1}}' => $e($hospitalAddress1),
-            '{{hospital_phone}}' => $e($hospitalPhone),
+            '{{HOSPITAL_ADDRESS_1}}' => $e($hospitalAddress1),
+
+            '{{H_address_2}}'        => $e($hospitalAddress2),
+            '{{h_address_2}}'        => $e($hospitalAddress2),
+            '{{H_ADDRESS_2}}'        => $e($hospitalAddress2),
+            '{{hospital_address_2}}' => $e($hospitalAddress2),
+            '{{HOSPITAL_ADDRESS_2}}' => $e($hospitalAddress2),
+
+            '{{hospital_address}}'   => $e($fullHospitalAddress),
+            '{{HOSPITAL_ADDRESS}}'   => $e($fullHospitalAddress),
+
+            '{{H_phone_No}}'         => $e($hospitalPhone),
+            '{{H_phone_no}}'         => $e($hospitalPhone),
+            '{{h_phone_no}}'         => $e($hospitalPhone),
+            '{{H_PHONE_NO}}'         => $e($hospitalPhone),
+            '{{hospital_phone}}'     => $e($hospitalPhone),
+            '{{HOSPITAL_PHONE}}'     => $e($hospitalPhone),
+
+            '{{H_Email}}'            => $e($hospitalEmail),
+            '{{H_email}}'            => $e($hospitalEmail),
+            '{{h_email}}'            => $e($hospitalEmail),
+            '{{H_EMAIL}}'            => $e($hospitalEmail),
+            '{{hospital_email}}'     => $e($hospitalEmail),
+            '{{HOSPITAL_EMAIL}}'     => $e($hospitalEmail),
+
+            '{{H_logo}}'             => $logoSrc,
+            '{{h_logo}}'             => $logoSrc,
+            '{{H_LOGO}}'             => $logoSrc,
+            '{{H_logo_abs}}'         => $hospitalLogoAbs,
+            '{{hospital_logo_url}}'  => $logoSrc,
+            '{{hospital_logo_path}}' => $hospitalLogoAbs,
             '{{hospital_logo_name}}' => $e($hospitalLogoName),
-            '{{hospital_logo_url}}' => $e($hospitalLogoUrl),
-            '{{hospital_logo_path}}' => $e($hospitalLogoUrl),
-            '{{signature_image_url}}' => $e($signatureImageUrl),
-            '{{signature_image_path}}' => $e($signatureImageUrl),
+            '{{hospital_logo_html}}' => $logoHtml,
+            '{{HOSPITAL_LOGO_HTML}}' => $logoHtml,
+
+            '{{H_NABH}}'             => $e($hospitalNabh),
+            '{{H_Name_Hindi}}'       => $e($hospitalNameHindi),
+            '{{H_Med_GST}}'          => $e($hospitalGst),
+
+            // Patient Placeholders
+            '{{patient_name}}'       => $e($patientName),
+            '{{PATIENT_NAME}}'       => $e($patientName),
+            '{{pName}}'              => $e($patientName),
+            '{{p_fname}}'            => $e($patientName),
+
+            '{{uhid}}'               => $e($uhid),
+            '{{UHID}}'               => $e($uhid),
+            '{{uhid_no}}'            => $e($uhid),
+            '{{p_code}}'             => $e($uhid),
+
+            '{{invoice_code}}'       => $e($invoiceCode),
+            '{{INVOICE_CODE}}'       => $e($invoiceCode),
+            '{{invoice_no}}'         => $e($invoiceCode),
+
+            '{{age}}'                => $e($age),
+            '{{AGE}}'                => $e($age),
+            '{{gender}}'             => $e($gender),
+            '{{GENDER}}'             => $e($gender),
+            '{{age_sex}}'            => $e($ageSex),
+            '{{AGE_GENDER}}'         => $e($ageSex),
+            '{{age_gender}}'         => $e($ageSex),
+
+            '{{relative_type}}'      => $e($relativeType),
+            '{{relative_name}}'      => $e($relativeName),
+            '{{relative}}'           => $e($relativeCombined),
+            '{{pRelative}}'          => $e($relativeCombined),
+            '{{p_relative}}'         => $e($relativeType),
+            '{{p_rname}}'            => $e($relativeName),
+
+            '{{phoneno}}'            => $e($phoneNo),
+            '{{phone_no}}'           => $e($phoneNo),
+            '{{contact_no}}'         => $e($phoneNo),
+            '{{p_address}}'          => $e($patientAddr),
+            '{{patient_address}}'    => $e($patientAddr),
+
+            '{{collected_time}}'     => $e($collectedTime),
+            '{{COLLECTED_TIME}}'     => $e($collectedTime),
+            '{{reported_time}}'      => $e($reportedTime),
+            '{{REPORTED_TIME}}'      => $e($reportedTime),
+
+            '{{report_title}}'       => $e($reportTitle),
+            '{{REPORT_TITLE}}'       => $e($reportTitle),
+            '{{report_name}}'        => $e($reportTitle),
+
+            // Doctor & Sign Placeholders
+            '{{doctor_name}}'        => $e($doctorName),
+            '{{dr_name}}'            => $e($doctorName),
+            '{{DOCTORS}}'            => $e($doctorName),
+            '{{doctor_education}}'   => $e($doctorEducation),
+            '{{technician_name}}'    => $e($technicianName),
+
+            '{{signature_image_url}}' => $signSrc,
+            '{{signature_image_path}}' => $signatureImageAbs,
+            '{{doctor_sign_html}}'   => $signHtml,
+            '{{doctor_sign_img}}'    => $signHtml,
+            '{{signature_html}}'     => $signHtml,
+
+            // Date / Time Placeholders
+            '{{printed_time}}'       => $nowDateTime,
+            '{{print_time}}'         => $nowDateTimeSec,
+            '{{CURRENT_DATE}}'       => $nowDate,
+            '{{current_date}}'       => $nowDate,
+            '{{date}}'               => $nowDate,
+            '{{CURRENT_DATETIME}}'   => $nowDateTime,
+            '{{current_datetime}}'   => $nowDateTime,
         ];
     }
 
@@ -2055,7 +2241,7 @@ class Diagnosis extends BaseController
             }
 
             if (preg_match('/^https?:\/\//i', $candidate) === 1 || str_starts_with($candidate, 'data:')) {
-                continue;
+                return $candidate;
             }
 
             if (preg_match('/^[A-Za-z]:[\\\\\/]/', $candidate) === 1) {
@@ -2080,9 +2266,37 @@ class Diagnosis extends BaseController
     /**
      * Replace all {{token}} placeholders in $html using the token map returned by buildPdfTokens().
      */
-    private function applyPdfTokens(string $html, array $tokens): string
+    protected function applyPdfTokens(string $html, array $tokens): string
     {
-        return str_replace(array_keys($tokens), array_values($tokens), $html);
+        if ($html === '') {
+            return '';
+        }
+
+        // Case-insensitive token replacement
+        $html = str_ireplace(array_keys($tokens), array_values($tokens), $html);
+
+        // Backward compatibility with legacy PHP echo tags in templates (e.g. H_Name)
+        $html = preg_replace_callback('/<\?=(?:[^?]|\?(?!>))*\x3F\x3E/i', function ($m) use ($tokens) {
+            $tag = $m[0];
+            if (preg_match('/H_Name/i', $tag) && isset($tokens['{{H_Name}}'])) {
+                return $tokens['{{H_Name}}'];
+            }
+            if (preg_match('/H_address_1/i', $tag) && isset($tokens['{{H_address_1}}'])) {
+                return $tokens['{{H_address_1}}'];
+            }
+            if (preg_match('/H_address_2/i', $tag) && isset($tokens['{{H_address_2}}'])) {
+                return $tokens['{{H_address_2}}'];
+            }
+            if (preg_match('/H_phone_No/i', $tag) && isset($tokens['{{H_phone_No}}'])) {
+                return $tokens['{{H_phone_No}}'];
+            }
+            if (preg_match('/H_logo/i', $tag) && isset($tokens['{{H_logo}}'])) {
+                return $tokens['{{H_logo}}'];
+            }
+            return '';
+        }, $html);
+
+        return $html;
     }
 
     private function buildDefaultPatientInfoHtml(array $data): string
@@ -2714,6 +2928,13 @@ class Diagnosis extends BaseController
 
         $doctorTokenData = $this->resolveMappedReportDoctorTokenData($labType, $head);
 
+        $patientAddress = is_object($patient) ? trim(($patient->add1 ?? '') . ' ' . ($patient->add2 ?? '') . ' ' . ($patient->city ?? '')) : '';
+        $patientPhone   = is_object($patient) ? trim((string) ($patient->mphone1 ?? $patient->mphone2 ?? '')) : '';
+        $signatureUrl   = (string) ($printSetting['signature_image'] ?? '');
+        if ($signatureUrl === '') {
+            $signatureUrl = (string) ($doctorTokenData['signature_image'] ?? '');
+        }
+
         $tokens = $this->buildPdfTokens([
             'invoice_code'   => $invoice->invoice_code ?? '',
             'patient_name'   => $patientName,
@@ -2722,13 +2943,15 @@ class Diagnosis extends BaseController
             'age'            => $ageText,
             'gender'         => $genderText,
             'uhid'           => $patient->p_code ?? '',
+            'phone_no'       => $patientPhone,
+            'patient_address'=> $patientAddress,
             'collected_time' => $invoiceRequest->collected_time ?? '',
             'reported_time'  => $invoiceRequest->reported_time ?? '',
             'report_title'   => $repoTitle,
             'doctor_name'    => $doctorTokenData['doctor_name'] ?? '',
             'doctor_education' => $doctorTokenData['doctor_education'] ?? '',
             'technician_name' => $doctorTokenData['technician_name'] ?? '',
-            'signature_image_url' => (string) ($printSetting['signature_image'] ?? ''),
+            'signature_image_url' => $signatureUrl,
         ]);
 
         $rawPatientInfoHtml = trim((string) ($printSetting['patient_info_html'] ?? ''));
@@ -2799,6 +3022,7 @@ class Diagnosis extends BaseController
             . $autoHeaderHtml
             . $autoFooterHtml, $tokens);
         $suffixHtml = $this->applyPdfTokens(trim((string) ($printSetting['mpdf_suffix_html'] ?? '')), $tokens);
+        $pdfHtml = $this->applyPdfTokens($pdfHtml, $tokens);
         $pdfHtml = mpdf_normalize_font_weight_css($pdfHtml);
         $prefixHtml = mpdf_normalize_font_weight_css($prefixHtml);
         $suffixHtml = mpdf_normalize_font_weight_css($suffixHtml);
