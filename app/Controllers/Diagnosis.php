@@ -1451,11 +1451,44 @@ class Diagnosis extends BaseController
         $labReqId = (int) $labReqId;
         $templateId = (int) ($this->request->getGet('template_id') ?? 0);
 
-           set_time_limit(300);
+        set_time_limit(300);
 
         if ($labReqId <= 0) {
             return '<h3>Invalid request id</h3>';
         }
+
+        $pdfBytes = $this->generateSingleReportPdfBytes($labReqId, $templateId);
+        if ($pdfBytes === null) {
+            return '<h3>Report not found</h3>';
+        }
+
+        $fileName = 'Report_' . $labReqId . '.pdf';
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/pdf')
+            ->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+            ->setHeader('Pragma', 'no-cache')
+            ->setHeader('Expires', '0')
+            ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+            ->setBody($pdfBytes);
+    }
+
+    /**
+     * Generate single diagnosis/radiology report PDF binary bytes.
+     *
+     * @param int  $labReqId     lab_request ID
+     * @param int  $templateId   specific template ID (or 0 for automatic/default)
+     * @param bool $preferPlain  when true and templateId is 0, prefer Plain Paper template if available
+     * @return string|null       binary PDF data or null if not found/error
+     */
+    public function generateSingleReportPdfBytes(int $labReqId, int $templateId = 0, bool $preferPlain = false): ?string
+    {
+        $labReqId = (int) $labReqId;
+        if ($labReqId <= 0) {
+            return null;
+        }
+
+        set_time_limit(300);
 
         $sql = "SELECT l.*, m.invoice_code, m.attach_id,
                     p.p_fname, p.p_rname, p.p_relative, p.p_code, p.gender, p.dob, p.age, p.age_in, p.age_in_month, p.estimate_dob,
@@ -1471,7 +1504,7 @@ class Diagnosis extends BaseController
         $row = $this->db->query($sql, [$labReqId])->getRow();
 
         if (! $row) {
-            return '<h3>Report not found</h3>';
+            return null;
         }
 
         $reportData = trim((string) ($row->Report_Data ?? ''));
@@ -1509,8 +1542,24 @@ class Diagnosis extends BaseController
             $ageText = (string) $row->age;
         }
 
-        $printSetting = $this->getDiagnosisTemplateSetting((int) ($row->lab_type ?? 0), $templateId);
-        $isPlainPaper = false;
+        $labType = (int) ($row->lab_type ?? 0);
+        if ($templateId <= 0 && $preferPlain && $labType > 0 && $this->db->tableExists('diagnosis_print_templates')) {
+            $plainRow = $this->db->table('diagnosis_print_templates')
+                ->select('id')
+                ->where('modality', $labType)
+                ->where('status', 1)
+                ->like('template_name', 'plain')
+                ->orderBy('is_default', 'DESC')
+                ->orderBy('id', 'ASC')
+                ->get(1)
+                ->getRowArray();
+            if (! empty($plainRow['id'])) {
+                $templateId = (int) $plainRow['id'];
+            }
+        }
+
+        $printSetting = $this->getDiagnosisTemplateSetting($labType, $templateId);
+        $isPlainPaper = stripos((string) ($printSetting['template_name'] ?? ''), 'plain') !== false;
 
         // Compute display values here so they are available for token substitution.
         $patientName   = trim((string) ($row->p_fname ?? ''));
@@ -1518,11 +1567,11 @@ class Diagnosis extends BaseController
         $relativeText  = trim((string) ($row->p_rname ?? ''));
         $repoTitle     = trim((string) ($row->report_name ?? $row->repo_title ?? $row->RepoGrp ?? 'Report'));
         $headRow       = $this->db->table('diagnosis_head_name')
-            ->where('d_type', (int) ($row->lab_type ?? 0))
+            ->where('d_type', $labType)
             ->get(1)
             ->getRow();
 
-        $doctorTokenData = $this->resolveMappedReportDoctorTokenData((int) ($row->lab_type ?? 0), $headRow);
+        $doctorTokenData = $this->resolveMappedReportDoctorTokenData($labType, $headRow);
 
         $patientAddress = trim(($row->add1 ?? '') . ' ' . ($row->add2 ?? '') . ' ' . ($row->city ?? ''));
         $patientPhone   = trim((string) ($row->mphone1 ?? $row->mphone2 ?? ''));
@@ -1552,23 +1601,23 @@ class Diagnosis extends BaseController
 
         // Render the optional patient info template (tokens resolved).
         $rawPatientInfoHtml = trim((string) ($printSetting['patient_info_html'] ?? ''));
-           if ($rawPatientInfoHtml !== '') {
-               $patientInfoHtml = $this->applyPdfTokens($rawPatientInfoHtml, $tokens);
-           } elseif (($printSetting['id'] ?? 0) <= 0) {
-               $patientInfoHtml = $this->buildDefaultPatientInfoHtml([
-                   'invoice_code'   => $row->invoice_code ?? '',
-                   'patient_name'   => $patientName,
-                   'relative_name'  => $relativeName,
-                   'relative_text'  => $relativeText,
-                   'age_text'       => $ageText,
-                   'gender_text'    => $genderText,
-                   'uhid'           => $row->p_code ?? '',
-                   'collected_time' => $row->collected_time ?? '',
-                   'reported_time'  => $row->reported_time ?? '',
-               ]);
-           } else {
-               $patientInfoHtml = '';
-           }
+        if ($rawPatientInfoHtml !== '') {
+            $patientInfoHtml = $this->applyPdfTokens($rawPatientInfoHtml, $tokens);
+        } elseif (($printSetting['id'] ?? 0) <= 0) {
+            $patientInfoHtml = $this->buildDefaultPatientInfoHtml([
+                'invoice_code'   => $row->invoice_code ?? '',
+                'patient_name'   => $patientName,
+                'relative_name'  => $relativeName,
+                'relative_text'  => $relativeText,
+                'age_text'       => $ageText,
+                'gender_text'    => $genderText,
+                'uhid'           => $row->p_code ?? '',
+                'collected_time' => $row->collected_time ?? '',
+                'reported_time'  => $row->reported_time ?? '',
+            ]);
+        } else {
+            $patientInfoHtml = '';
+        }
 
         $reportHtml = trim((string) ($printSetting['content_prefix_html'] ?? '')) . $reportHtml . trim((string) ($printSetting['content_suffix_html'] ?? ''));
 
@@ -1607,9 +1656,11 @@ class Diagnosis extends BaseController
             . $autoFooterHtml, $tokens);
         $suffixHtml = $this->applyPdfTokens(trim((string) ($printSetting['mpdf_suffix_html'] ?? '')), $tokens);
         $pdfHtml = $this->applyPdfTokens($pdfHtml, $tokens);
-        $pdfHtml = mpdf_normalize_font_weight_css($pdfHtml);
-        $prefixHtml = mpdf_normalize_font_weight_css($prefixHtml);
-        $suffixHtml = mpdf_normalize_font_weight_css($suffixHtml);
+        if (function_exists('mpdf_normalize_font_weight_css')) {
+            $pdfHtml = mpdf_normalize_font_weight_css($pdfHtml);
+            $prefixHtml = mpdf_normalize_font_weight_css($prefixHtml);
+            $suffixHtml = mpdf_normalize_font_weight_css($suffixHtml);
+        }
 
         $marginTop = $this->cmToMm($printSetting['page_margin_top_cm'] ?? 1.2, 1.2);
         $marginBottom = $this->cmToMm($printSetting['page_margin_bottom_cm'] ?? 1.2, 1.2);
@@ -1620,7 +1671,7 @@ class Diagnosis extends BaseController
 
         $mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
         if (! is_dir($mpdfTempDir)) {
-            mkdir($mpdfTempDir, 0755, true);
+            @mkdir($mpdfTempDir, 0755, true);
         }
 
         $mpdf = new Mpdf([
@@ -1644,7 +1695,9 @@ class Diagnosis extends BaseController
 
         if (! $headerHasTags) {
             $plainHeader = $this->applyPdfTokens($rawHeaderHtml . $rawFirstPageHeaderHtml, $tokens);
-            $plainHeader = mpdf_normalize_font_weight_css($plainHeader);
+            if (function_exists('mpdf_normalize_font_weight_css')) {
+                $plainHeader = mpdf_normalize_font_weight_css($plainHeader);
+            }
             if ($plainHeader !== '') {
                 $mpdf->SetHTMLHeader($plainHeader, 'O');
                 $mpdf->SetHTMLHeader($plainHeader, 'E');
@@ -1656,7 +1709,9 @@ class Diagnosis extends BaseController
             if ($plainFooter === '') {
                 $plainFooter = $this->applyPdfTokens($rawLastPageFooterHtml, $tokens);
             }
-            $plainFooter = mpdf_normalize_font_weight_css($plainFooter);
+            if (function_exists('mpdf_normalize_font_weight_css')) {
+                $plainFooter = mpdf_normalize_font_weight_css($plainFooter);
+            }
 
             if ($plainFooter !== '') {
                 $mpdf->SetHTMLFooter($plainFooter, 'O');
@@ -1705,13 +1760,7 @@ class Diagnosis extends BaseController
         $invoiceCode = preg_replace('/[^A-Za-z0-9\-_]/', '_', (string) ($row->invoice_code ?? 'invoice'));
         $fileName = 'Report_' . $invoiceCode . '_' . $labReqId . '.pdf';
 
-        return $this->response
-            ->setHeader('Content-Type', 'application/pdf')
-            ->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
-            ->setHeader('Pragma', 'no-cache')
-            ->setHeader('Expires', '0')
-            ->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
-            ->setBody($mpdf->Output($fileName, 'S'));
+        return $mpdf->Output($fileName, 'S');
     }
 
     private function getDiagnosisPrintTemplates(int $labType): array
@@ -1737,7 +1786,8 @@ class Diagnosis extends BaseController
         $defaults = array_merge($legacy, [
             'page_size' => 'A4',
             'page_margin_top_cm' => 6.1,
-               'id' => 0,
+            'id' => 0,
+            'template_name' => '',
             'page_margin_bottom_cm' => 2.5,
             'page_margin_left_cm' => 0.7,
             'page_margin_right_cm' => 0.7,
@@ -1808,7 +1858,8 @@ class Diagnosis extends BaseController
 
         $pageSize = strtoupper(trim((string) ($defaults['page_size'] ?? 'A4')));
 
-           $defaults['id'] = (int) ($row['id'] ?? 0);
+        $defaults['id'] = (int) ($row['id'] ?? 0);
+        $defaults['template_name'] = (string) ($row['template_name'] ?? '');
         if (! in_array($pageSize, ['A4', 'A4-L', 'LETTER', 'LEGAL'], true)) {
             $pageSize = 'A4';
         }

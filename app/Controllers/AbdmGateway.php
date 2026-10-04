@@ -2017,9 +2017,15 @@ class AbdmGateway extends BaseController
             return $this->response->setJSON(['ok' => 0, 'error' => 'lab_req_id and patient_id are required']);
         }
 
-        // -- Load lab request --------------------------------------------------
+        $selectCols = ['id', 'patient_name', 'lab_type', 'charge_id', 'report_name', 'Report_Data', 'report_data_Impression', 'status', 'reported_time'];
+        if ($this->db->fieldExists('charge_item_id', 'lab_request')) {
+            $selectCols[] = 'charge_item_id';
+        }
+        if ($this->db->fieldExists('lab_repo_id', 'lab_request')) {
+            $selectCols[] = 'lab_repo_id';
+        }
         $labReq = $this->db->table('lab_request')
-            ->select('id, patient_name, lab_type, charge_id, Report_Data, report_data_Impression, status, reported_time')
+            ->select(implode(', ', $selectCols))
             ->where('id', $labReqId)
             ->get(1)
             ->getRow();
@@ -2056,18 +2062,25 @@ class AbdmGateway extends BaseController
         $patientBirthYear = $this->resolvePatientBirthYear($patientRow, str_contains($abhaId, '@') ? $abhaId : '', str_contains($abhaId, '@') ? '' : $abhaId);
 
         // -- Load test / charge name --------------------------------------------
-        $testTitle = '';
+        $testTitle = trim((string) ($labReq->report_name ?? ''));
         $labType   = (int) ($labReq->lab_type ?? 0);
         $isImaging = in_array($labType, [1, 2, 3, 4, 6], true);
 
-        // Check lab_repo first
+        // Check lab_repo if testTitle empty
         $labRepoId = (int) ($labReq->lab_repo_id ?? 0);
-        if ($labRepoId > 0 && $this->db->tableExists('lab_repo')) {
+        if ($testTitle === '' && $labRepoId > 0 && $this->db->tableExists('lab_repo')) {
             $repoRow = $this->db->table('lab_repo')->select('Repo, RepoName')->where('mstRepoKey', $labRepoId)->get(1)->getRowArray() ?? [];
             $testTitle = trim((string) ($repoRow['RepoName'] ?? $repoRow['Repo'] ?? ''));
         }
 
-        // Fallback: check charge_id in invoice_item or item_master
+        // Check charge_item_id in invoice_item
+        $chargeItemId = (int) ($labReq->charge_item_id ?? 0);
+        if ($testTitle === '' && $chargeItemId > 0 && $this->db->tableExists('invoice_item')) {
+            $invItem = $this->db->table('invoice_item')->select('item_name')->where('id', $chargeItemId)->get(1)->getRowArray() ?? [];
+            $testTitle = trim((string) ($invItem['item_name'] ?? ''));
+        }
+
+        // Fallback: check charge_id in invoice_item, item_master or charge_master
         $chargeId = (int) ($labReq->charge_id ?? 0);
         if ($testTitle === '' && $chargeId > 0) {
             if ($this->db->tableExists('invoice_item')) {
@@ -2078,10 +2091,14 @@ class AbdmGateway extends BaseController
                 $itRow = $this->db->table('item_master')->select('item_name')->where('id', $chargeId)->get(1)->getRowArray() ?? [];
                 $testTitle = trim((string) ($itRow['item_name'] ?? ''));
             }
+            if ($testTitle === '' && $this->db->tableExists('charge_master')) {
+                $cmRow = $this->db->table('charge_master')->select('charge_name')->where('id', $chargeId)->get(1)->getRowArray() ?? [];
+                $testTitle = trim((string) ($cmRow['charge_name'] ?? ''));
+            }
         }
 
         if ($testTitle === '') {
-            $testTitle = $isImaging ? 'Radiology Report' : $this->mapLabTypeToTitle($labType);
+            $testTitle = $this->mapLabTypeToTitle($labType) ?: ($isImaging ? 'Radiology Report' : 'Laboratory Report');
         }
 
         // -- Load hospital profile ---------------------------------------------
@@ -2103,18 +2120,23 @@ class AbdmGateway extends BaseController
             'abhaAddress' => $abhaId,
         ];
 
+        $rawImpression = trim((string) ($labReq->report_data_Impression ?? ''));
+        $cleanImpression = trim(html_entity_decode(strip_tags($rawImpression), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+
         $diagnosticReport = [
             'id'           => (string) $labReqId,
             'title'        => $testTitle ?: ($isImaging ? 'Radiology Report' : 'Laboratory Report'),
             'status'       => $labReq->status == 1 ? 'final' : 'preliminary',
-            'conclusion'   => trim((string) ($labReq->report_data_Impression ?? '')),
+            'conclusion'   => $cleanImpression,
             'reported_at'  => $reportedAt,
             'report_html'  => trim((string) ($labReq->Report_Data ?? '')),
+            'lab_type'     => $labType,
         ];
         if ($isImaging) {
             $diagnosticReport['is_imaging'] = true;
             $diagnosticReport['report_domain'] = 'imaging';
-            $diagnosticReport['section_title'] = 'Diagnostic imaging report';
+            $modalityName = $this->mapLabTypeToTitle($labType) ?: 'Diagnostic imaging';
+            $diagnosticReport['section_title'] = $modalityName . ' report';
             $diagnosticReport['section_snomed_code'] = '371531008';
             $diagnosticReport['section_snomed_display'] = 'Diagnostic imaging report';
         }
@@ -2292,8 +2314,15 @@ class AbdmGateway extends BaseController
             ]);
         }
 
+        $selectCols = ['id', 'patient_name', 'lab_type', 'charge_id', 'report_name', 'Report_Data', 'report_data_Impression', 'status', 'reported_time'];
+        if ($this->db->fieldExists('charge_item_id', 'lab_request')) {
+            $selectCols[] = 'charge_item_id';
+        }
+        if ($this->db->fieldExists('lab_repo_id', 'lab_request')) {
+            $selectCols[] = 'lab_repo_id';
+        }
         $labReq = $this->db->table('lab_request')
-            ->select('id, patient_name, lab_type, charge_id, Report_Data, report_data_Impression, status, reported_time')
+            ->select(implode(', ', $selectCols))
             ->where('id', $labReqId)
             ->get(1)
             ->getRow();
@@ -2314,14 +2343,33 @@ class AbdmGateway extends BaseController
             $patName = trim((string) ($labReq->patient_name ?? ''));
         }
 
-        $testTitle = '';
-        $chargeId  = (int) ($labReq->charge_id ?? 0);
-        if ($chargeId > 0 && $this->db->tableExists('charge_master')) {
-            $chargeRow = $this->db->table('charge_master')->select('charge_name')->where('id', $chargeId)->get(1)->getRowArray() ?? [];
-            $testTitle = trim((string) ($chargeRow['charge_name'] ?? ''));
+        $testTitle = trim((string) ($labReq->report_name ?? ''));
+        $labType   = (int) ($labReq->lab_type ?? 0);
+        $isImaging = in_array($labType, [1, 2, 3, 4, 6], true);
+
+        if ($testTitle === '') {
+            $labRepoId = (int) ($labReq->lab_repo_id ?? 0);
+            if ($labRepoId > 0 && $this->db->tableExists('lab_repo')) {
+                $repoRow = $this->db->table('lab_repo')->select('Repo, RepoName')->where('mstRepoKey', $labRepoId)->get(1)->getRowArray() ?? [];
+                $testTitle = trim((string) ($repoRow['RepoName'] ?? $repoRow['Repo'] ?? ''));
+            }
         }
         if ($testTitle === '') {
-            $testTitle = $this->mapLabTypeToTitle((int) ($labReq->lab_type ?? 0));
+            $chargeItemId = (int) ($labReq->charge_item_id ?? 0);
+            if ($chargeItemId > 0 && $this->db->tableExists('invoice_item')) {
+                $invItem = $this->db->table('invoice_item')->select('item_name')->where('id', $chargeItemId)->get(1)->getRowArray() ?? [];
+                $testTitle = trim((string) ($invItem['item_name'] ?? ''));
+            }
+        }
+        if ($testTitle === '') {
+            $chargeId  = (int) ($labReq->charge_id ?? 0);
+            if ($chargeId > 0 && $this->db->tableExists('charge_master')) {
+                $chargeRow = $this->db->table('charge_master')->select('charge_name')->where('id', $chargeId)->get(1)->getRowArray() ?? [];
+                $testTitle = trim((string) ($chargeRow['charge_name'] ?? ''));
+            }
+        }
+        if ($testTitle === '') {
+            $testTitle = $this->mapLabTypeToTitle($labType) ?: ($isImaging ? 'Radiology Report' : 'Laboratory Report');
         }
 
         $hospitalProfile = $this->getHospitalProfileForFhir();
@@ -2329,21 +2377,25 @@ class AbdmGateway extends BaseController
         $reportedRaw = trim((string) ($labReq->reported_time ?? ''));
         $reportedAt = $reportedRaw !== '' ? (new \DateTime($reportedRaw, new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP') : '';
 
+        $rawImpression = trim((string) ($labReq->report_data_Impression ?? ''));
+        $cleanImpression = trim(html_entity_decode(strip_tags($rawImpression), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+
         $diagnosticReport = [
             'id'           => (string) $labReqId,
-            'title'        => $testTitle ?: 'Laboratory Report',
+            'title'        => $testTitle ?: ($isImaging ? 'Radiology Report' : 'Laboratory Report'),
             'status'       => ((string) ($labReq->status ?? '0')) === '1' ? 'final' : 'preliminary',
-            'conclusion'   => trim((string) ($labReq->report_data_Impression ?? '')),
+            'conclusion'   => $cleanImpression,
             'reported_at'  => $reportedAt,
             'report_html'  => trim((string) ($labReq->Report_Data ?? '')),
+            'lab_type'     => $labType,
         ];
-        $isImaging = (int) ($labReq->lab_type ?? 0) === 6;
         if ($isImaging) {
             $diagnosticReport['is_imaging'] = true;
             $diagnosticReport['report_domain'] = 'imaging';
-            $diagnosticReport['section_title'] = 'Computed tomography imaging report';
+            $modalityName = $this->mapLabTypeToTitle($labType) ?: 'Diagnostic imaging';
+            $diagnosticReport['section_title'] = $modalityName . ' report';
             $diagnosticReport['section_snomed_code'] = '371531008';
-            $diagnosticReport['section_snomed_display'] = 'Computed tomography imaging report';
+            $diagnosticReport['section_snomed_display'] = 'Diagnostic imaging report';
         }
 
         $labRepoRow = $this->db->table('lab_request lr')
@@ -6757,6 +6809,20 @@ class AbdmGateway extends BaseController
         array $hospitalProfile,
         int $labReqId
     ): ?array {
+        // Option 1: If Plain Paper template is available in diagnosis_print_templates, prefer it
+        $labType = (int) ($diagnosticReport['lab_type'] ?? 0);
+        $plainPdf = $this->resolvePlainTemplatePdfBytes($labReqId, $labType);
+        if ($plainPdf !== null) {
+            return [
+                'content_type' => 'application/pdf',
+                'data_base64'  => base64_encode($plainPdf),
+                'title'        => 'Digital-Share-LAB-' . $labReqId . '.pdf',
+                'size'         => strlen($plainPdf),
+                'hash'         => base64_encode(sha1($plainPdf, true)),
+            ];
+        }
+
+        // Option 2: Fallback to digital share template with cleaned text and proper title
         $escape = static fn (string $value): string => htmlspecialchars($value, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
         $contentHtml = trim((string) ($diagnosticReport['report_html'] ?? ''));
         if ($contentHtml === '' && $observations !== []) {
@@ -6780,7 +6846,8 @@ class AbdmGateway extends BaseController
             return null;
         }
 
-        $conclusion = trim((string) ($diagnosticReport['conclusion'] ?? ''));
+        $rawConclusion = trim((string) ($diagnosticReport['conclusion'] ?? ''));
+        $conclusion = trim(html_entity_decode(strip_tags($rawConclusion), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
         if ($conclusion !== '') {
             $contentHtml .= '<div class="share-conclusion"><strong>Conclusion:</strong> ' . $escape($conclusion) . '</div>';
         }
@@ -6801,6 +6868,60 @@ class AbdmGateway extends BaseController
             'practitioner' => trim((string) ($practitioner['name'] ?? '')),
             'facility_name' => trim((string) ($hospitalProfile['name'] ?? '')),
         ]);
+    }
+
+    /**
+     * Attempt to render PDF using Plain Paper template from diagnosis_print_templates if available.
+     */
+    private function resolvePlainTemplatePdfBytes(int $labReqId, int $labType = 0): ?string
+    {
+        if ($labReqId <= 0) {
+            return null;
+        }
+
+        try {
+            if ($labType <= 0 && $this->db->tableExists('lab_request')) {
+                $lr = $this->db->table('lab_request')->select('lab_type')->where('id', $labReqId)->get(1)->getRowArray();
+                $labType = (int) ($lr['lab_type'] ?? 0);
+            }
+
+            $plainTemplateId = 0;
+            if ($labType > 0 && $this->db->tableExists('diagnosis_print_templates')) {
+                $plainRow = $this->db->table('diagnosis_print_templates')
+                    ->select('id')
+                    ->where('modality', $labType)
+                    ->where('status', 1)
+                    ->like('template_name', 'plain')
+                    ->orderBy('is_default', 'DESC')
+                    ->orderBy('id', 'ASC')
+                    ->get(1)
+                    ->getRowArray();
+
+                if (! empty($plainRow['id'])) {
+                    $plainTemplateId = (int) $plainRow['id'];
+                }
+            }
+
+            if ($plainTemplateId <= 0) {
+                return null;
+            }
+
+            $diag = new \App\Controllers\Diagnosis();
+            $request = \Config\Services::request();
+            $response = \Config\Services::response();
+            $logger = \Config\Services::logger();
+            $diag->initController($request, $response, $logger);
+
+            $pdfBytes = $diag->generateSingleReportPdfBytes($labReqId, $plainTemplateId);
+            if (is_string($pdfBytes) && str_starts_with($pdfBytes, '%PDF-')) {
+                return $pdfBytes;
+            }
+
+            return null;
+        } catch (\Throwable $e) {
+            log_message('error', 'resolvePlainTemplatePdfBytes error: ' . $e->getMessage());
+            return null;
+        }
     }
 
     /**
@@ -8482,19 +8603,17 @@ class AbdmGateway extends BaseController
     }
 
     /**
-     * Map numeric lab_type code to a human-readable title.
+     * Map numeric lab_type / modality code to a human-readable title.
      */
     private function mapLabTypeToTitle(int $labType): string
     {
         return match ($labType) {
-            1 => 'Haematology',
-            2 => 'Biochemistry',
-            3 => 'Serology',
-            4 => 'Microbiology',
-            5 => 'Pathology / Cytology',
-            6 => 'Radiology',
-            7 => 'Urology',
-            8 => 'Molecular Diagnostics',
+            1 => 'Ultrasound',
+            2 => 'MRI',
+            3 => 'X-Ray',
+            4 => 'CT-Scan',
+            5 => 'Pathology',
+            6 => 'ECHO',
             default => '',
         };
     }
