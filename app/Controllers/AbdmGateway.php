@@ -6463,12 +6463,11 @@ class AbdmGateway extends BaseController
                 if (str_starts_with($ccRef, 'PRESC-') || str_starts_with($ccRef, 'WELLNESS-')) {
                     continue;
                 }
-                $hiType = trim((string) ($row['hi_type'] ?? 'HealthDocumentRecord'));
-                if (str_starts_with($ccRef, 'INVOICE-') || stripos($hiType, 'invoice') !== false) {
-                    $hiType = 'InvoiceRecord';
-                } elseif (str_starts_with($ccRef, 'OPD-')) {
-                    $hiType = 'OPConsultRecord';
+                // OPD- and INVOICE- contexts are enriched with doctor/session/bill details in steps 4 & 6
+                if (str_starts_with($ccRef, 'OPD-') || str_starts_with($ccRef, 'INVOICE-')) {
+                    continue;
                 }
+                $hiType = trim((string) ($row['hi_type'] ?? 'HealthDocumentRecord'));
                 $dateStr = date('d M Y', strtotime((string) ($row['created_at'] ?? $row['updated_at'] ?? 'now')));
                 $display = $hiType . ' - ' . $dateStr;
 
@@ -6918,6 +6917,36 @@ class AbdmGateway extends BaseController
                         'is_primary'      => false,
                     ]);
                 }
+            }
+        }
+
+        // 6c. Fallback for any OPD- or INVOICE- health_records not matched in steps 4 or 6
+        if (! empty($rows)) {
+            foreach ($rows as $row) {
+                $ccRef = trim((string) ($row['care_context_reference'] ?? ''));
+                if ($ccRef === '' || isset($seenRefs[$ccRef])) {
+                    continue;
+                }
+                if (str_starts_with($ccRef, 'PRESC-') || str_starts_with($ccRef, 'WELLNESS-')) {
+                    continue;
+                }
+                $hiType = trim((string) ($row['hi_type'] ?? 'HealthDocumentRecord'));
+                if (str_starts_with($ccRef, 'INVOICE-')) {
+                    $hiType = 'InvoiceRecord';
+                } elseif (str_starts_with($ccRef, 'OPD-')) {
+                    $hiType = 'OPConsultRecord';
+                }
+                $dateStr = date('d M Y', strtotime((string) ($row['created_at'] ?? $row['updated_at'] ?? 'now')));
+                $display = $hiType . ' - ' . $dateStr;
+                $addContext([
+                    'careContextId'   => $ccRef,
+                    'referenceNumber' => $ccRef,
+                    'display'         => $display,
+                    'record_type'     => $hiType,
+                    'patient_id'      => $patientId,
+                    'is_fhir_ready'   => true,
+                    'is_primary'      => false,
+                ]);
             }
         }
 
