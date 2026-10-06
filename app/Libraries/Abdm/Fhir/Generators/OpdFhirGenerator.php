@@ -22,39 +22,69 @@ class OpdFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\AbstractModul
         $builder = new \App\Libraries\Abdm\Fhir\FhirDocumentBuilder();
         $builder
             ->buildBundleMeta('opd-' . $recordId . '-' . strtotime($timestamp), $timestamp)
-            ->buildComposition($this->buildBaseComposition($source, 'OPD Consultation Summary', '11506-3', 'Progress note'))
             ->addPatient($this->buildBasePatient($source));
 
+        $patientRef = 'urn:uuid:patient-' . $patientId;
+
         $encounter = $this->buildEncounter($source);
-        if (is_array($encounter)) {
-            $builder->addEncounter($encounter);
+        if (! is_array($encounter)) {
+            $encounter = [
+                'resourceType' => 'Encounter',
+                'id' => 'encounter-' . $recordId,
+                'status' => 'finished',
+                'class' => [
+                    'system' => 'http://terminology.hl7.org/CodeSystem/v3-ActCode',
+                    'code' => 'AMB',
+                    'display' => 'ambulatory',
+                ],
+                'subject' => ['reference' => $patientRef],
+            ];
         }
+        $builder->addEncounter($encounter);
+        $encounterRef = 'urn:uuid:' . (string) $encounter['id'];
 
         $practitioner = $this->buildPractitioner($source);
-        if (is_array($practitioner)) {
-            $builder->addPractitioner($practitioner);
+        if (! is_array($practitioner)) {
+            $fallbackDoctorName = trim((string) ($source['doctor_name'] ?? 'Dr. Attending Medical Officer'));
+            $docId = (string) ($source['practitioner']['id'] ?? $source['doctor']['id'] ?? '1');
+            $practitioner = [
+                'resourceType' => 'Practitioner',
+                'id' => 'practitioner-' . ($docId !== '' && $docId !== '0' ? $docId : '1'),
+                'name' => [[
+                    'text' => $fallbackDoctorName !== '' ? $fallbackDoctorName : 'Dr. Attending Medical Officer',
+                ]],
+            ];
         }
+        $builder->addPractitioner($practitioner);
 
         $organization = $this->buildOrganization($source);
-        if (is_array($organization)) {
-            $builder->addOrganization($organization);
+        if (! is_array($organization)) {
+            $orgId = (string) ($source['organization']['id'] ?? $source['hfr_id'] ?? 'IN0510000871');
+            $orgName = (string) ($source['organization']['name'] ?? 'Hospital');
+            $organization = [
+                'resourceType' => 'Organization',
+                'id' => 'organization-' . ($orgId !== '' ? $orgId : 'IN0510000871'),
+                'name' => $orgName,
+            ];
         }
+        $builder->addOrganization($organization);
 
-        $patientRef = 'urn:uuid:patient-' . $patientId;
-        $encounterRef = is_array($encounter) ? 'urn:uuid:' . (string) ($encounter['id'] ?? '') : null;
-
+        $conditionRefs = [];
         foreach ((array) ($source['diagnoses'] ?? []) as $idx => $diag) {
             $text = trim((string) ($diag['text'] ?? ''));
             if ($text === '') {
                 continue;
             }
 
+            $condId = 'condition-' . $recordId . '-' . $idx;
+            $conditionRefs[] = ['reference' => 'urn:uuid:' . $condId];
+
             $resolution = $this->codingResolver->resolveSnomedForDiagnosisOrFinding((string) ($diag['code'] ?? ''), $text);
             $condition = [
                 'resourceType' => 'Condition',
-                'id' => 'condition-' . $recordId . '-' . $idx,
+                'id' => $condId,
                 'subject' => ['reference' => $patientRef],
-                'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
+                'encounter' => ['reference' => $encounterRef],
                 'code' => [
                     'coding' => $resolution['coding'] ?? [],
                     'text' => $text,
@@ -68,6 +98,7 @@ class OpdFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\AbstractModul
             $builder->addCondition($condition);
         }
 
+        $medicationRefs = [];
         foreach ((array) ($source['medications'] ?? []) as $idx => $med) {
             $drugName = trim((string) ($med['name'] ?? ''));
             if (! $this->isMeaningfulValue($drugName)) {
@@ -121,14 +152,17 @@ class OpdFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\AbstractModul
                 ];
             }
 
+            $medId = 'medication-' . $recordId . '-' . $idx;
+            $medicationRefs[] = ['reference' => 'urn:uuid:' . $medId];
+
             $medResource = [
                 'resourceType' => 'MedicationRequest',
-                'id' => 'medication-' . $recordId . '-' . $idx,
+                'id' => $medId,
                 'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationRequest']],
                 'status' => 'active',
                 'intent' => 'order',
                 'subject' => ['reference' => $patientRef],
-                'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
+                'encounter' => ['reference' => $encounterRef],
                 'medicationCodeableConcept' => [
                     'coding' => $coding,
                     'text' => $drugName,
@@ -139,17 +173,21 @@ class OpdFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\AbstractModul
             $builder->addMedicationRequest($medResource);
         }
 
+        $observationRefs = [];
         foreach ((array) ($source['vitals'] ?? []) as $idx => $vital) {
             $display = trim((string) ($vital['display'] ?? ''));
             if ($display === '') {
                 continue;
             }
 
+            $obsId = 'observation-' . $recordId . '-' . $idx;
+            $observationRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+
             $loinc = $this->codingResolver->resolveLoincForLabTest((string) ($vital['code'] ?? ''), $display);
             $ucum = $this->codingResolver->resolveUnitUcUM((string) ($vital['unit'] ?? ''));
             $builder->addObservation([
                 'resourceType' => 'Observation',
-                'id' => 'observation-' . $recordId . '-' . $idx,
+                'id' => $obsId,
                 'status' => 'final',
                 'category' => [[
                     'coding' => [[
@@ -162,7 +200,7 @@ class OpdFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\AbstractModul
                     'text' => $display,
                 ],
                 'subject' => ['reference' => $patientRef],
-                'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
+                'encounter' => ['reference' => $encounterRef],
                 'effectiveDateTime' => $timestamp,
                 'valueQuantity' => [
                     'value' => (float) ($vital['value'] ?? 0),
@@ -172,6 +210,110 @@ class OpdFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\AbstractModul
                 ],
             ]);
         }
+
+        $sections = [];
+        if (! empty($conditionRefs)) {
+            $sections[] = [
+                'title' => 'Chief complaints',
+                'code' => [
+                    'coding' => [[
+                        'system' => 'http://snomed.info/sct',
+                        'code' => '422843007',
+                        'display' => 'Chief complaint section',
+                    ]],
+                ],
+                'entry' => $conditionRefs,
+            ];
+        }
+
+        if (! empty($medicationRefs)) {
+            $sections[] = [
+                'title' => 'Medications',
+                'code' => [
+                    'coding' => [[
+                        'system' => 'http://snomed.info/sct',
+                        'code' => '721912009',
+                        'display' => 'Medication summary document',
+                    ]],
+                ],
+                'entry' => $medicationRefs,
+            ];
+        }
+
+        if (! empty($observationRefs)) {
+            $sections[] = [
+                'title' => 'Physical Examination',
+                'code' => [
+                    'coding' => [[
+                        'system' => 'http://snomed.info/sct',
+                        'code' => '425044008',
+                        'display' => 'Physical examination section',
+                    ]],
+                ],
+                'entry' => $observationRefs,
+            ];
+        }
+
+        if (empty($sections)) {
+            $sections[] = [
+                'title' => 'Clinical Consultation',
+                'code' => [
+                    'coding' => [[
+                        'system' => 'http://snomed.info/sct',
+                        'code' => '371530004',
+                        'display' => 'Clinical consultation report',
+                    ]],
+                ],
+                'entry' => [
+                    ['reference' => $encounterRef],
+                ],
+            ];
+        }
+
+        $authorRef = 'urn:uuid:' . (string) $practitioner['id'];
+        $authorDisplay = (string) ($practitioner['name'][0]['text'] ?? 'Dr. Attending Medical Officer');
+        $custodianRef = 'urn:uuid:' . (string) $organization['id'];
+
+        $composition = [
+            'resourceType' => 'Composition',
+            'id' => 'composition-' . $recordId,
+            'meta' => [
+                'versionId' => '1',
+                'lastUpdated' => $timestamp,
+                'profile' => [
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/OPConsultRecord',
+                ],
+            ],
+            'status' => 'final',
+            'type' => [
+                'coding' => [[
+                    'system' => 'http://snomed.info/sct',
+                    'code' => '371530004',
+                    'display' => 'Clinical consultation report',
+                ]],
+                'text' => 'Clinical Consultation Record',
+            ],
+            'title' => 'OP Consultation Report',
+            'date' => $timestamp,
+            'subject' => [
+                'reference' => $patientRef,
+                'display' => (string) ($source['patient']['name'] ?? 'Patient'),
+            ],
+            'encounter' => [
+                'reference' => $encounterRef,
+            ],
+            'author' => [[
+                'reference' => $authorRef,
+                'display' => $authorDisplay,
+            ]],
+            'custodian' => [
+                'reference' => $custodianRef,
+                'display' => (string) ($organization['name'] ?? 'Hospital'),
+            ],
+            'section' => $sections,
+        ];
+
+        $builder->buildComposition($composition);
 
         $bundle = $builder->toBundle();
         $validation = $this->validator->validate($bundle, 'opd', ['resolved' => 1, 'unresolved' => 0, 'fallback_used' => 0]);

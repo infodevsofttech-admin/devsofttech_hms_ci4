@@ -1,0 +1,13 @@
+{
+  "mcpServers": {
+    "abdm-docs": {
+      "command": "npx",
+      "args": [
+        "-y",
+        "mcp-remote",
+        "https://docs.abdm.gov.in/mcp"
+      ],
+      "url": "https://docs.abdm.gov.in/mcp"
+    }
+  }
+}

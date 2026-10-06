@@ -41,7 +41,6 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
 
         $builder
             ->buildBundleMeta('wellness-' . $recordId . '-' . strtotime($timestamp), $timestamp)
-            ->updateBundleMeta(['meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/WellnessBundle']]])
             ->addPatient($this->buildBasePatient($source));
 
         $encounter = $this->buildEncounter($source);
@@ -53,16 +52,31 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
             ];
         }
 
-
         $practitioner = $this->buildPractitioner($source);
-        if (is_array($practitioner)) {
-            $builder->addPractitioner($practitioner);
+        if (! is_array($practitioner)) {
+            $fallbackDoctorName = trim((string) ($source['doctor_name'] ?? 'Dr. Attending Medical Officer'));
+            $docId = (string) ($source['practitioner']['id'] ?? $source['doctor']['id'] ?? '1');
+            $practitioner = [
+                'resourceType' => 'Practitioner',
+                'id' => 'practitioner-' . ($docId !== '' && $docId !== '0' ? $docId : '1'),
+                'name' => [[
+                    'text' => $fallbackDoctorName !== '' ? $fallbackDoctorName : 'Dr. Attending Medical Officer',
+                ]],
+            ];
         }
+        $builder->addPractitioner($practitioner);
 
         $organization = $this->buildOrganization($source);
-        if (is_array($organization)) {
-            $builder->addOrganization($organization);
+        if (! is_array($organization)) {
+            $orgId = (string) ($source['organization']['id'] ?? $source['hfr_id'] ?? 'IN0510000871');
+            $orgName = (string) ($source['organization']['name'] ?? 'Hospital');
+            $organization = [
+                'resourceType' => 'Organization',
+                'id' => 'organization-' . ($orgId !== '' ? $orgId : 'IN0510000871'),
+                'name' => $orgName,
+            ];
         }
+        $builder->addOrganization($organization);
 
         $encounterRef = is_array($encounter) ? 'urn:uuid:' . (string) ($encounter['id'] ?? '') : null;
 

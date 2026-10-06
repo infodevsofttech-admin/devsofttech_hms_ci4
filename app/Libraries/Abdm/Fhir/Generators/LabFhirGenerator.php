@@ -30,6 +30,32 @@ class LabFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\AbstractModul
             $builder->addEncounter($encounter);
         }
 
+        $practitioner = $this->buildPractitioner($source);
+        if (! is_array($practitioner)) {
+            $fallbackDoctorName = trim((string) ($source['doctor_name'] ?? 'Dr. Attending Medical Officer'));
+            $docId = (string) ($source['practitioner']['id'] ?? $source['doctor']['id'] ?? '1');
+            $practitioner = [
+                'resourceType' => 'Practitioner',
+                'id' => 'practitioner-' . ($docId !== '' && $docId !== '0' ? $docId : '1'),
+                'name' => [[
+                    'text' => $fallbackDoctorName !== '' ? $fallbackDoctorName : 'Dr. Attending Medical Officer',
+                ]],
+            ];
+        }
+        $builder->addPractitioner($practitioner);
+
+        $organization = $this->buildOrganization($source);
+        if (! is_array($organization)) {
+            $orgId = (string) ($source['organization']['id'] ?? $source['hfr_id'] ?? 'IN0510000871');
+            $orgName = (string) ($source['organization']['name'] ?? 'Hospital');
+            $organization = [
+                'resourceType' => 'Organization',
+                'id' => 'organization-' . ($orgId !== '' ? $orgId : 'IN0510000871'),
+                'name' => $orgName,
+            ];
+        }
+        $builder->addOrganization($organization);
+
         $patientRef = 'urn:uuid:patient-' . $patientId;
         $encounterRef = is_array($encounter) ? 'urn:uuid:' . (string) ($encounter['id'] ?? '') : null;
 
@@ -131,6 +157,87 @@ class LabFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\AbstractModul
                     'display' => 'Laboratory',
                 ]],
             ]],
+        ]);
+
+        $sectionEntries = [
+            ['reference' => 'urn:uuid:' . $diagReportId],
+        ];
+
+        // Add DocumentReference if report PDF/scanned data is provided
+        $docData = (string) ($source['report_pdf_base64'] ?? $source['document_data_base64'] ?? $source['pdf_base64'] ?? '');
+        if ($docData !== '') {
+            $docRefId = 'lab-doc-' . $recordId;
+            $builder->addDocumentReference([
+                'resourceType' => 'DocumentReference',
+                'id' => $docRefId,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference']],
+                'status' => 'current',
+                'docStatus' => 'final',
+                'type' => [
+                    'coding' => [[
+                        'system' => 'http://loinc.org',
+                        'code' => '11502-2',
+                        'display' => 'Laboratory report',
+                    ]],
+                    'text' => 'Laboratory Report PDF',
+                ],
+                'subject' => ['reference' => $patientRef],
+                'date' => $timestamp,
+                'description' => 'Laboratory Report PDF',
+                'content' => [[
+                    'attachment' => [
+                        'contentType' => 'application/pdf',
+                        'language' => 'en-IN',
+                        'data' => $docData,
+                        'title' => 'Lab Report.pdf',
+                        'creation' => $timestamp,
+                    ],
+                ]],
+            ]);
+            $sectionEntries[] = ['reference' => 'urn:uuid:' . $docRefId];
+        }
+
+        $authorRef = 'urn:uuid:' . (string) $practitioner['id'];
+        $authorDisplay = (string) ($practitioner['name'][0]['text'] ?? 'Dr. Attending Medical Officer');
+        $custodianRef = 'urn:uuid:' . (string) $organization['id'];
+
+        $builder->updateComposition([
+            'meta' => [
+                'versionId' => '1',
+                'lastUpdated' => $timestamp,
+                'profile' => [
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/DiagnosticReportRecord',
+                ],
+            ],
+            'type' => [
+                'coding' => [[
+                    'system' => 'http://snomed.info/sct',
+                    'code' => '721981007',
+                    'display' => 'Diagnostic studies report',
+                ]],
+                'text' => 'Diagnostic Report Summary',
+            ],
+            'author' => [[
+                'reference' => $authorRef,
+                'display' => $authorDisplay,
+            ]],
+            'custodian' => [
+                'reference' => $custodianRef,
+                'display' => (string) ($organization['name'] ?? 'Hospital'),
+            ],
+            'section' => [
+                [
+                    'title' => 'Diagnostic Report',
+                    'code' => [
+                        'coding' => [[
+                            'system' => 'http://snomed.info/sct',
+                            'code' => '721981007',
+                            'display' => 'Diagnostic studies report',
+                        ]],
+                    ],
+                    'entry' => $sectionEntries,
+                ],
+            ],
         ]);
 
         $bundle = $builder->toBundle();

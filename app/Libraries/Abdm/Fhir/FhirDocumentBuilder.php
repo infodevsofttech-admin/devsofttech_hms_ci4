@@ -45,6 +45,9 @@ class FhirDocumentBuilder
     /** @param array<string,mixed> $values */
     public function updateBundleMeta(array $values): self
     {
+        if (isset($values['meta']) && is_array($values['meta']) && isset($this->bundleMeta['meta']) && is_array($this->bundleMeta['meta'])) {
+            $values['meta'] = array_replace($this->bundleMeta['meta'], $values['meta']);
+        }
         $this->bundleMeta = array_replace($this->bundleMeta, $values);
 
         return $this;
@@ -63,6 +66,9 @@ class FhirDocumentBuilder
     public function updateComposition(array $values): self
     {
         if (is_array($this->composition)) {
+            if (isset($values['meta']) && is_array($values['meta']) && isset($this->composition['meta']) && is_array($this->composition['meta'])) {
+                $values['meta'] = array_replace($this->composition['meta'], $values['meta']);
+            }
             $this->composition = array_replace($this->composition, $values);
         }
 
