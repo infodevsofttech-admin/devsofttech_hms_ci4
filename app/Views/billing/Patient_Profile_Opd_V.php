@@ -73,8 +73,16 @@ if ($patientPhotoPath === '') {
                 <?php
                     $rawAbhaId = trim((string)($patient->abha_id ?? ''));
                     $validModalAbhaNum = (strpos($rawAbhaId, '@') === false && strlen(preg_replace('/\D/', '', $rawAbhaId)) === 14) ? preg_replace('/\D/', '', $rawAbhaId) : '';
+                    $patientDob = (string)($patient->dob ?? '');
+                    $patientAgeVal = (int)($patient->age ?? 0);
+                    $patientYob = '';
+                    if (!empty($patientDob) && strpos($patientDob, '0000') !== 0 && strtotime($patientDob) !== false) {
+                        $patientYob = date('Y', strtotime($patientDob));
+                    } elseif ($patientAgeVal > 0) {
+                        $patientYob = (string)((int)date('Y') - $patientAgeVal);
+                    }
                 ?>
-                <button type="button" class="btn btn-outline-primary btn-sm fw-semibold" onclick="openAbdmHipLinkModal(<?= (int)$patient->id ?>, '<?= esc($patientAbhaAddress ?? '') ?>', { name: '<?= esc($patient->p_fname ?? '') ?>', gender: '<?= $patient->gender == 1 ? 'M' : ($patient->gender == 2 ? 'F' : 'O') ?>', yob: '<?= !empty($patient->dob) ? date('Y', strtotime($patient->dob)) : '' ?>', phone: '<?= esc($patient->mphone1 ?? '') ?>', abha_number: '<?= esc($validModalAbhaNum) ?>' })">
+                <button type="button" class="btn btn-outline-primary btn-sm fw-semibold" onclick="openAbdmHipLinkModal(<?= (int)$patient->id ?>, '<?= esc($patientAbhaAddress ?? '') ?>', { name: '<?= esc($patient->p_fname ?? '') ?>', gender: '<?= $patient->gender == 1 ? 'M' : ($patient->gender == 2 ? 'F' : 'O') ?>', yob: '<?= esc($patientYob) ?>', phone: '<?= esc($patient->mphone1 ?? '') ?>', abha_number: '<?= esc($validModalAbhaNum) ?>' })">
                     <i class="bi bi-link-45deg me-1"></i>Link to ABHA (HIP)
                 </button>
                 <button type="button" class="btn btn-outline-secondary btn-sm"

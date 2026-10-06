@@ -6505,11 +6505,14 @@ class AbdmGateway extends BaseController
 
                 // 4b. Prescription Record (if prescribed medicines exist)
                 $hasMeds = false;
-                if ($this->db->tableExists('opd_prescrption_prescribed')) {
-                    $hasMeds = ($this->db->table('opd_prescrption_prescribed')->where('prescription_id', (int) $pr['id'])->countAllResults() > 0);
-                }
-                if (! $hasMeds && $this->db->tableExists('opd_prescription_prescribed')) {
-                    $hasMeds = ($this->db->table('opd_prescription_prescribed')->where('opd_pre_id', (int) $pr['id'])->countAllResults() > 0);
+                $tblPresc = $this->db->tableExists('opd_prescrption_prescribed') ? 'opd_prescrption_prescribed' : ($this->db->tableExists('opd_prescription_prescribed') ? 'opd_prescription_prescribed' : null);
+                if ($tblPresc !== null) {
+                    $hasPreIdCol = $this->db->fieldExists('opd_pre_id', $tblPresc);
+                    $hasPrescIdCol = $this->db->fieldExists('prescription_id', $tblPresc);
+                    $col = $hasPreIdCol ? 'opd_pre_id' : ($hasPrescIdCol ? 'prescription_id' : null);
+                    if ($col !== null) {
+                        $hasMeds = ($this->db->table($tblPresc)->where($col, (int) $pr['id'])->countAllResults() > 0);
+                    }
                 }
                 if ($hasMeds) {
                     $prescCcRef = 'PRESC-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
@@ -9531,6 +9534,76 @@ class AbdmGateway extends BaseController
         return ['abha_id' => $number, 'abha_address' => $address];
     }
 
+    private function findPatientMasterRow(int $patientId = 0, string $abhaAddress = '', string $abhaNumber = '', string $pCode = ''): array
+    {
+        if (! $this->db->tableExists('patient_master')) {
+            return [];
+        }
+
+        if ($patientId > 0) {
+            $row = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray();
+            if (! empty($row)) {
+                return $row;
+            }
+        }
+
+        if ($pCode !== '') {
+            $row = $this->db->table('patient_master')->where('p_code', $pCode)->get(1)->getRowArray();
+            if (! empty($row)) {
+                return $row;
+            }
+        }
+
+        $cleanAbhaNumber = preg_replace('/\D/', '', $abhaNumber !== '' ? $abhaNumber : $abhaAddress);
+        $cleanAbhaNumber = strlen($cleanAbhaNumber) === 14 ? $cleanAbhaNumber : '';
+
+        $cleanAbhaAddress = '';
+        if (str_contains($abhaAddress, '@')) {
+            $cleanAbhaAddress = trim($abhaAddress);
+        } elseif (str_contains($abhaNumber, '@')) {
+            $cleanAbhaAddress = trim($abhaNumber);
+        }
+
+        $hasAddressCol = $this->db->fieldExists('abha_address', 'patient_master');
+        $hasIdCol = $this->db->fieldExists('abha_id', 'patient_master');
+
+        if ($cleanAbhaAddress !== '') {
+            $builder = $this->db->table('patient_master');
+            if ($hasAddressCol && $hasIdCol) {
+                $builder->groupStart()
+                    ->where('abha_address', $cleanAbhaAddress)
+                    ->orWhere('abha_id', $cleanAbhaAddress)
+                    ->groupEnd();
+            } elseif ($hasAddressCol) {
+                $builder->where('abha_address', $cleanAbhaAddress);
+            } elseif ($hasIdCol) {
+                $builder->where('abha_id', $cleanAbhaAddress);
+            }
+            $row = $builder->get(1)->getRowArray();
+            if (! empty($row)) {
+                return $row;
+            }
+        }
+
+        if ($cleanAbhaNumber !== '') {
+            $builder = $this->db->table('patient_master');
+            if ($hasIdCol && $hasAddressCol) {
+                $builder->groupStart()
+                    ->where('abha_id', $cleanAbhaNumber)
+                    ->orWhere('abha_address', $cleanAbhaNumber)
+                    ->groupEnd();
+            } elseif ($hasIdCol) {
+                $builder->where('abha_id', $cleanAbhaNumber);
+            }
+            $row = $builder->get(1)->getRowArray();
+            if (! empty($row)) {
+                return $row;
+            }
+        }
+
+        return [];
+    }
+
     private function loadPatientRow(int $patientId): array
     {
         if ($patientId <= 0 || ! $this->db->tableExists('patient_master')) {
@@ -9562,7 +9635,7 @@ class AbdmGateway extends BaseController
 
         foreach (['dob', 'p_dob', 'birth_date', 'date_of_birth'] as $field) {
             $raw = trim((string) ($patientRow[$field] ?? ''));
-            if ($raw === '') {
+            if ($raw === '' || $raw === '0000-00-00' || str_starts_with($raw, '0000')) {
                 continue;
             }
             $ts = strtotime($raw);
@@ -11197,37 +11270,86 @@ class AbdmGateway extends BaseController
 
     public function hipLinkToken()
     {
-        if (! $this->request->isAJAX()) {
+        if (ENVIRONMENT !== 'testing' && ! $this->request->isAJAX()) {
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
         }
 
         $body = $this->request->getJSON(true) ?? $this->request->getPost() ?? [];
+        if (empty($body) && ! empty($_POST)) {
+            $body = $_POST;
+        }
+
+        $patientId      = (int) ($body['patient_id'] ?? $body['patientId'] ?? 0);
+        $reqAbhaAddress = trim((string) ($body['abha_address'] ?? ''));
+        $reqAbhaNumber  = trim((string) ($body['abha_number'] ?? ''));
+        $patientRef     = trim((string) ($body['patient_ref'] ?? $body['p_code'] ?? ''));
+
+        // Look up patient_master row before validation
+        $patientRow = $this->findPatientMasterRow($patientId, $reqAbhaAddress, $reqAbhaNumber, $patientRef);
+        if (! empty($patientRow) && $patientId <= 0) {
+            $patientId = (int) ($patientRow['id'] ?? 0);
+        }
+
+        // Auto-resolve ABHA identity from patient_master
+        if ($patientId > 0 || ! empty($patientRow)) {
+            $identity = $this->resolvePatientAbhaIdentity($patientId > 0 ? $patientId : (int) ($patientRow['id'] ?? 0), $reqAbhaNumber, $reqAbhaAddress);
+            if (empty($body['abha_address']) && ! empty($identity['abha_address'])) {
+                $body['abha_address'] = $identity['abha_address'];
+            }
+            if (empty($body['abha_number']) && ! empty($identity['abha_id'])) {
+                $body['abha_number'] = $identity['abha_id'];
+            }
+        }
+
+        // Auto-resolve Name from patient_master
+        if (empty($body['name']) && ! empty($patientRow)) {
+            $pName = $this->patientDisplayName($patientRow);
+            if ($pName !== '' && $pName !== 'Patient') {
+                $body['name'] = $pName;
+            }
+        }
+
+        // Auto-resolve Gender from patient_master
+        if (empty($body['gender']) && ! empty($patientRow)) {
+            $genderCode = (int) ($patientRow['gender'] ?? 0);
+            $rawGender  = strtoupper(trim((string) ($patientRow['gender'] ?? '')));
+            if ($genderCode === 1 || $rawGender === 'M' || $rawGender === 'MALE') {
+                $body['gender'] = 'M';
+            } elseif ($genderCode === 2 || $rawGender === 'F' || $rawGender === 'FEMALE') {
+                $body['gender'] = 'F';
+            } else {
+                $body['gender'] = 'O';
+            }
+        }
+
+        // Auto-resolve Year of Birth from patient_master (dob, age, estimate_dob)
+        $currentYob = (int) ($body['year_of_birth'] ?? 0);
+        if ($currentYob <= 1900 || $currentYob > (int) date('Y')) {
+            $resolvedYob = $this->resolvePatientBirthYear($patientRow, $body['abha_address'] ?? $reqAbhaAddress, $body['abha_number'] ?? $reqAbhaNumber);
+            if ($resolvedYob >= 1900 && $resolvedYob <= (int) date('Y')) {
+                $body['year_of_birth'] = $resolvedYob;
+            }
+        }
+
+        // If patient_master has no abha_address saved, but a valid ABHA address was passed, save it to patient_master
+        if ($patientId > 0 && ! empty($body['abha_address']) && str_contains($body['abha_address'], '@') && $this->db->tableExists('patient_master')) {
+            if ($this->db->fieldExists('abha_address', 'patient_master') && empty($patientRow['abha_address'])) {
+                $upPm = ['abha_address' => $body['abha_address']];
+                if ($this->db->fieldExists('last_update', 'patient_master')) {
+                    $upPm['last_update'] = date('Y-m-d H:i:s');
+                }
+                $this->db->table('patient_master')->where('id', $patientId)->update($upPm);
+            }
+        }
 
         $required = ['abha_address', 'name', 'gender', 'year_of_birth'];
         foreach ($required as $key) {
             if (empty($body[$key])) {
-                return $this->response->setJSON(['ok' => 0, 'error_text' => $key . ' is required']);
+                return $this->response->setJSON(['ok' => 0, 'error_text' => $key . ' is required. Please check patient master records.']);
             }
         }
 
         $body['year_of_birth'] = (int) $body['year_of_birth'];
-
-        // Auto-lookup abha_number from patient_master if missing
-        if (empty($body['abha_number']) && ! empty($body['abha_address']) && $this->db->tableExists('patient_master')) {
-            $pat = $this->db->table('patient_master')
-                ->select('abha_id')
-                ->where('abha_address', $body['abha_address'])
-                ->where('abha_id IS NOT NULL')
-                ->where('abha_id !=', '')
-                ->get(1)
-                ->getRowArray();
-            if (! empty($pat['abha_id'])) {
-                $candidateNum = trim((string) $pat['abha_id']);
-                if (strpos($candidateNum, '@') === false && strlen(preg_replace('/\D/', '', $candidateNum)) === 14) {
-                    $body['abha_number'] = preg_replace('/\D/', '', $candidateNum);
-                }
-            }
-        }
 
         // Sanitize abha_number: only keep if valid 14-digit numeric ABHA number. Never pass email/abha_address!
         if (! empty($body['abha_number'])) {
@@ -11251,11 +11373,33 @@ class AbdmGateway extends BaseController
 
     public function hipLinkCareContext()
     {
-        if (! $this->request->isAJAX()) {
+        if (ENVIRONMENT !== 'testing' && ! $this->request->isAJAX()) {
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
         }
 
         $body = $this->request->getJSON(true) ?? $this->request->getPost() ?? [];
+        if (empty($body) && ! empty($_POST)) {
+            $body = $_POST;
+        }
+
+        $patientId      = (int) ($body['patient_id'] ?? $body['patientId'] ?? 0);
+        $reqAbhaAddress = trim((string) ($body['abha_address'] ?? ''));
+        $reqAbhaNumber  = trim((string) ($body['abha_number'] ?? ''));
+        $patientRef     = trim((string) ($body['patient_ref'] ?? $body['p_code'] ?? ''));
+
+        // Look up patient_master row
+        $patientRow = $this->findPatientMasterRow($patientId, $reqAbhaAddress, $reqAbhaNumber, $patientRef);
+        if (! empty($patientRow) && $patientId <= 0) {
+            $patientId = (int) ($patientRow['id'] ?? 0);
+        }
+
+        // Auto-resolve abha_address from patient_master if missing
+        if (empty($body['abha_address']) && ($patientId > 0 || ! empty($patientRow))) {
+            $identity = $this->resolvePatientAbhaIdentity($patientId > 0 ? $patientId : (int) ($patientRow['id'] ?? 0), $reqAbhaNumber, $reqAbhaAddress);
+            if (! empty($identity['abha_address'])) {
+                $body['abha_address'] = $identity['abha_address'];
+            }
+        }
 
         $required = ['abha_address', 'link_token_id', 'care_contexts'];
         foreach ($required as $key) {
@@ -11264,30 +11408,32 @@ class AbdmGateway extends BaseController
             }
         }
 
-        if (empty($body['patient_ref'])) {
-            $body['patient_ref'] = $body['abha_address'];
+        if (empty($body['patient_ref']) || $body['patient_ref'] === $body['abha_address']) {
+            if (! empty($patientRow['p_code'])) {
+                $body['patient_ref'] = (string) $patientRow['p_code'];
+            } elseif ($patientId > 0) {
+                $body['patient_ref'] = 'P-' . $patientId;
+            } else {
+                $body['patient_ref'] = $body['abha_address'];
+            }
         }
-        if (empty($body['display'])) {
-            $body['display'] = $body['patient_ref'];
+        if (empty($body['display']) || $body['display'] === $body['patient_ref']) {
+            $pName = $this->patientDisplayName($patientRow);
+            if ($pName !== '' && $pName !== 'Patient') {
+                $body['display'] = $pName;
+            } else {
+                $body['display'] = $body['patient_ref'];
+            }
         }
         if (empty($body['hi_type'])) {
-            $body['hi_type'] = 'OPConsultation';
+            $body['hi_type'] = 'OPConsultRecord';
         }
 
         // Auto-resolve abha_number from patient_master if missing so ABDM doesn't reject with ABDM-9999
-        if (empty($body['abha_number']) && ! empty($body['abha_address']) && $this->db->tableExists('patient_master')) {
-            $pat = $this->db->table('patient_master')
-                ->select('abha_id')
-                ->where('abha_address', $body['abha_address'])
-                ->where('abha_id IS NOT NULL')
-                ->where('abha_id !=', '')
-                ->get(1)
-                ->getRowArray();
-            if (! empty($pat['abha_id'])) {
-                $candidateNum = trim((string) $pat['abha_id']);
-                if (strpos($candidateNum, '@') === false && strlen(preg_replace('/\D/', '', $candidateNum)) === 14) {
-                    $body['abha_number'] = preg_replace('/\D/', '', $candidateNum);
-                }
+        if (empty($body['abha_number']) && ($patientId > 0 || ! empty($patientRow))) {
+            $identity = $this->resolvePatientAbhaIdentity($patientId > 0 ? $patientId : (int) ($patientRow['id'] ?? 0), $reqAbhaNumber, $body['abha_address']);
+            if (! empty($identity['abha_id'])) {
+                $body['abha_number'] = $identity['abha_id'];
             }
         }
 
@@ -11393,7 +11539,7 @@ class AbdmGateway extends BaseController
 
     public function hipPatientCareContexts()
     {
-        if (method_exists($this->request, 'isAJAX') && ! $this->request->isAJAX()) {
+        if (ENVIRONMENT !== 'testing' && method_exists($this->request, 'isAJAX') && ! $this->request->isAJAX()) {
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
         }
 
@@ -11415,12 +11561,18 @@ class AbdmGateway extends BaseController
         }
         if ($patientId <= 0 && ! empty($_REQUEST['patient_id'])) {
             $patientId = (int) $_REQUEST['patient_id'];
+        } elseif ($patientId <= 0 && ! empty($_GET['patient_id'])) {
+            $patientId = (int) $_GET['patient_id'];
         }
         if ($abhaAddress === '' && ! empty($_REQUEST['abha_address'])) {
             $abhaAddress = trim((string) $_REQUEST['abha_address']);
+        } elseif ($abhaAddress === '' && ! empty($_GET['abha_address'])) {
+            $abhaAddress = trim((string) $_GET['abha_address']);
         }
         if ($pCode === '' && ! empty($_REQUEST['p_code'])) {
             $pCode = trim((string) $_REQUEST['p_code']);
+        } elseif ($pCode === '' && ! empty($_GET['p_code'])) {
+            $pCode = trim((string) $_GET['p_code']);
         }
         if ($taskType === '' && ! empty($_REQUEST['task_type'])) {
             $taskType = trim((string) $_REQUEST['task_type']);
@@ -11439,27 +11591,7 @@ class AbdmGateway extends BaseController
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'patient_id, abha_address, or p_code is required']);
         }
 
-        $patient = null;
-        if ($this->db->tableExists('patient_master')) {
-            $builder = $this->db->table('patient_master');
-            if ($patientId > 0) {
-                $builder->where('id', $patientId);
-            } elseif ($abhaAddress !== '') {
-                $cleanAbha = preg_replace('/\D/', '', $abhaAddress);
-                if (strlen($cleanAbha) === 14) {
-                    $builder->groupStart()
-                        ->where('abha_address', $abhaAddress)
-                        ->orWhere('abha_id', $cleanAbha)
-                        ->orWhere('abha_id', $abhaAddress)
-                        ->groupEnd();
-                } else {
-                    $builder->where('abha_address', $abhaAddress);
-                }
-            } elseif ($pCode !== '') {
-                $builder->where('p_code', $pCode);
-            }
-            $patient = $builder->get(1)->getRowArray();
-        }
+        $patient = $this->findPatientMasterRow($patientId, $abhaAddress, '', $pCode);
 
         if (empty($patient)) {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'Patient not found in records']);
@@ -11467,9 +11599,12 @@ class AbdmGateway extends BaseController
 
         $patientId   = (int) $patient['id'];
         $patientRef  = (string) ($patient['p_code'] ?: ('P-' . $patientId));
-        $patientName = trim((string) ($patient['p_fname'] ?? ''));
-        if ($patientName === '') {
-            $patientName = 'Patient ' . $patientRef;
+        $patientName = $this->patientDisplayName($patient);
+        if ($patientName === '' || $patientName === 'Patient') {
+            $patientName = trim((string) ($patient['p_fname'] ?? ''));
+            if ($patientName === '') {
+                $patientName = 'Patient ' . $patientRef;
+            }
         }
 
         $genderCode = (int) ($patient['gender'] ?? 0);
@@ -11481,15 +11616,29 @@ class AbdmGateway extends BaseController
             $gender = 'F';
         }
 
-        $yob = 0;
-        $dob = trim((string) ($patient['dob'] ?? ''));
-        if ($dob !== '' && $dob !== '0000-00-00') {
-            $yob = (int) date('Y', strtotime($dob));
-        } elseif (! empty($patient['age'])) {
-            $yob = (int) date('Y') - (int) $patient['age'];
-        }
-        if ($yob <= 1900) {
+        $yob = $this->resolvePatientBirthYear($patient, $abhaAddress);
+        if ($yob <= 1900 || $yob > (int) date('Y')) {
             $yob = 1990;
+        }
+
+        $dob = trim((string) ($patient['dob'] ?? ''));
+        if ($dob === '0000-00-00' || str_starts_with($dob, '0000')) {
+            $dob = $yob > 0 ? ($yob . '-01-01') : '';
+        }
+
+        $identity = $this->resolvePatientAbhaIdentity($patientId, '', $abhaAddress);
+        $effAbhaAddress = $identity['abha_address'] !== '' ? $identity['abha_address'] : $abhaAddress;
+        $effAbhaNumber = $identity['abha_id'];
+
+        // If patient_master had no abha_address saved, but a valid ABHA address was passed, update master
+        if ($patientId > 0 && ! empty($effAbhaAddress) && str_contains($effAbhaAddress, '@') && $this->db->tableExists('patient_master')) {
+            if ($this->db->fieldExists('abha_address', 'patient_master') && empty($patient['abha_address'])) {
+                $upPm = ['abha_address' => $effAbhaAddress];
+                if ($this->db->fieldExists('last_update', 'patient_master')) {
+                    $upPm['last_update'] = date('Y-m-d H:i:s');
+                }
+                $this->db->table('patient_master')->where('id', $patientId)->update($upPm);
+            }
         }
 
         $rawPhone   = trim((string) ($patient['mphone1'] ?? $patient['mphone2'] ?? ''));
@@ -11499,7 +11648,6 @@ class AbdmGateway extends BaseController
 
         // Fetch already-linked care contexts from Bridge if ABHA address is present
         $linkedRefs = [];
-        $effAbhaAddress = trim((string) ($patient['abha_address'] ?? $abhaAddress));
         if ($effAbhaAddress !== '') {
             try {
                 $bridgeLinks = $this->connector->hipGetPatientLinks(['abha_address' => $effAbhaAddress]);
@@ -11544,13 +11692,14 @@ class AbdmGateway extends BaseController
             'ok'      => 1,
             'patient' => [
                 'id'            => $patientId,
+                'patient_id'    => $patientId,
                 'patient_ref'   => $patientRef,
                 'name'          => $patientName,
                 'gender'        => $gender,
                 'year_of_birth' => $yob,
                 'dob'           => $dob,
                 'abha_address'  => $effAbhaAddress,
-                'abha_number'   => (strpos((string) ($patient['abha_id'] ?? ''), '@') === false && strlen(preg_replace('/\D/', '', (string) ($patient['abha_id'] ?? ''))) === 14) ? preg_replace('/\D/', '', (string) $patient['abha_id']) : '',
+                'abha_number'   => $effAbhaNumber,
                 'phone'         => $cleanPhone,
             ],
             'care_contexts' => $contextsList,

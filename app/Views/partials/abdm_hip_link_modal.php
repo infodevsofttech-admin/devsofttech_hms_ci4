@@ -788,15 +788,17 @@
             });
         });
 
-        if (!abhaAddress) {
+        var hasPatientContext = !!(window.currentHipTaskContext && window.currentHipTaskContext.patientId);
+
+        if (!abhaAddress && !hasPatientContext) {
             alert('Please provide patient ABHA address (e.g. user@sbx).');
             return;
         }
-        if (!name) {
+        if (!name && !hasPatientContext) {
             alert('Please provide patient name.');
             return;
         }
-        if (isNaN(yearOfBirth) || yearOfBirth < 1900) {
+        if ((isNaN(yearOfBirth) || yearOfBirth < 1900) && !hasPatientContext) {
             alert('Please provide a valid 4-digit birth year.');
             return;
         }
@@ -868,6 +870,8 @@
         alertBox.innerHTML = '<strong>Step 1/2:</strong> Requesting Link Token from ABDM Gateway via Demographic Auth...';
         alertBox.classList.remove('d-none');
 
+        var currentPatientId = (window.currentHipTaskContext && window.currentHipTaskContext.patientId) ? window.currentHipTaskContext.patientId : 0;
+
         try {
             var csrf = getCsrfData();
 
@@ -880,11 +884,12 @@
                     'Accept': 'application/json'
                 },
                 body: JSON.stringify({
+                    patient_id: currentPatientId,
                     abha_address: abhaAddress,
                     abha_number: abhaNumber,
                     name: name,
                     gender: gender,
-                    year_of_birth: yearOfBirth,
+                    year_of_birth: (!isNaN(yearOfBirth) && yearOfBirth >= 1900) ? yearOfBirth : 0,
                     csrf_hms: csrf.hash
                 })
             });
@@ -920,6 +925,7 @@
                     'Accept': 'application/json'
                 },
                 body: JSON.stringify({
+                    patient_id: currentPatientId,
                     abha_address: abhaAddress,
                     abha_number: abhaNumber,
                     link_token_id: linkTokenId,

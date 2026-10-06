@@ -282,6 +282,87 @@ class AbdmTaskBoardSyncService
      * Link and push a single OPD record to ABDM gateway/bridge.
      *
      * @param array<string, mixed> $opdRow
+    /**
+     * Resolve comprehensive demographics (name, gender, year_of_birth, abha_address, abha_number)
+     * strictly and reliably from patient_master.
+     *
+     * @return array{patient_name: string, gender: string, year_of_birth: string, abha_address: string, abha_number: string, effective_abha: string}
+     */
+    private function resolvePatientMasterDemographics(int $patientId, string $fallbackName = '', string $fallbackAbha = ''): array
+    {
+        $patientRow = [];
+        if ($patientId > 0 && $this->db->tableExists('patient_master')) {
+            $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
+        }
+
+        $patientName = trim((string) ($patientRow['p_fname'] ?? $fallbackName));
+        if ($patientName === '') {
+            $patientName = 'PATIENT-' . $patientId;
+        }
+
+        $genderRaw = (string) ($patientRow['gender'] ?? '');
+        $gender = match ((string) $genderRaw) {
+            '1', 'M', 'm', 'Male' => 'M',
+            '2', 'F', 'f', 'Female' => 'F',
+            default => 'O',
+        };
+
+        // Resolve Year of Birth (from DOB, Age, or ABHA regex)
+        $yearOfBirth = '';
+        $dob = trim((string) ($patientRow['dob'] ?? ''));
+        if ($dob !== '' && $dob !== '0000-00-00' && ! str_starts_with($dob, '0000')) {
+            $yearOfBirth = substr($dob, 0, 4);
+        } elseif (! empty($patientRow['age']) && (int) $patientRow['age'] > 0) {
+            $yearOfBirth = (string) ((int) date('Y') - (int) $patientRow['age']);
+        }
+
+        // Resolve ABHA Address and Number
+        $abhaAddress = '';
+        $abhaNumber = '';
+        $candidates = [
+            trim((string) ($patientRow['abha_address'] ?? '')),
+            trim($fallbackAbha),
+            trim((string) ($patientRow['abha_id'] ?? '')),
+            trim((string) ($patientRow['abha_no'] ?? '')),
+            trim((string) ($patientRow['abha'] ?? '')),
+        ];
+
+        foreach ($candidates as $cand) {
+            if ($cand === '') {
+                continue;
+            }
+            if ($abhaAddress === '' && str_contains($cand, '@')) {
+                $abhaAddress = $cand;
+            }
+            $clean14 = preg_replace('/\D/', '', $cand);
+            if ($abhaNumber === '' && strlen($clean14) === 14) {
+                $abhaNumber = $clean14;
+            }
+        }
+
+        // If YOB is still empty, try extracting 4-digit year from ABHA address or number
+        if ($yearOfBirth === '' && ($abhaAddress !== '' || $abhaNumber !== '')) {
+            $src = $abhaAddress !== '' ? $abhaAddress : $abhaNumber;
+            if (preg_match('/(19\d{2}|20\d{2})/', $src, $m) === 1) {
+                $yearOfBirth = $m[1];
+            }
+        }
+
+        $effectiveAbha = $abhaAddress !== '' ? $abhaAddress : $abhaNumber;
+
+        return [
+            'name'           => $patientName,
+            'patient_name'   => $patientName,
+            'gender'         => $gender,
+            'year_of_birth'  => $yearOfBirth,
+            'abha_address'   => $abhaAddress,
+            'abha_number'    => $abhaNumber,
+            'effective_abha' => $effectiveAbha,
+        ];
+    }
+
+    /**
+     * @param array<string, mixed> $opdRow
      * @param array<string, mixed> $docRow
      * @param array<string, mixed>|null $existingHr
      * @return array{ok: int, queue_id?: string|null, bridge_record_id?: int|null, error?: string}
@@ -295,48 +376,18 @@ class AbdmTaskBoardSyncService
     ): array {
         $opdId = (int) ($opdRow['opd_id'] ?? 0);
         $patientId = (int) ($opdRow['p_id'] ?? 0);
-        $patientName = trim((string) ($opdRow['p_fname'] ?? $opdRow['P_name'] ?? ''));
         $rawAbha = trim((string) ($opdRow['abha_id'] ?? ''));
-        $genderRaw = (string) ($opdRow['gender'] ?? '');
-        $gender = match ((string) $genderRaw) {
-            '1', 'M', 'm', 'Male' => 'M',
-            '2', 'F', 'f', 'Female' => 'F',
-            default => 'O',
-        };
+        $rawName = trim((string) ($opdRow['p_fname'] ?? $opdRow['P_name'] ?? ''));
 
-        $yearOfBirth = '';
-        $dob = trim((string) ($opdRow['dob'] ?? ''));
-        if ($dob !== '' && $dob !== '0000-00-00') {
-            $yearOfBirth = substr($dob, 0, 4);
-        }
+        // Always resolve full patient demographics from patient_master
+        $demo = $this->resolvePatientMasterDemographics($patientId, $rawName, $rawAbha);
+        $patientName = $demo['patient_name'];
+        $gender = $demo['gender'];
+        $yearOfBirth = $demo['year_of_birth'];
+        $abhaAddress = $demo['abha_address'];
+        $abhaNumber = $demo['abha_number'];
+        $effectiveAbha = $demo['effective_abha'];
 
-        $abhaNumber = preg_match('/^\d{14}$/', $rawAbha) === 1 ? $rawAbha : '';
-        $abhaAddress = str_contains($rawAbha, '@') ? $rawAbha : '';
-
-        // If patient_master has abha_address separately, resolve it
-        if ($abhaAddress === '' && $this->db->tableExists('patient_master')) {
-            $pFields = $this->db->getFieldNames('patient_master') ?? [];
-            $selectCols = array_values(array_intersect(['abha_address', 'abha_id', 'abha_number', 'abha_no', 'abha'], $pFields));
-            if (! empty($selectCols)) {
-                $pm = $this->db->table('patient_master')
-                    ->select(implode(', ', $selectCols))
-                    ->where('id', $patientId)
-                    ->get(1)
-                    ->getRowArray();
-                if (! empty($pm)) {
-                    if (! empty($pm['abha_address'])) {
-                        $abhaAddress = trim((string) $pm['abha_address']);
-                    }
-                    foreach (['abha_number', 'abha_id', 'abha_no', 'abha'] as $c) {
-                        if ($abhaNumber === '' && ! empty($pm[$c]) && preg_match('/^\d{14}$/', trim((string) $pm[$c]))) {
-                            $abhaNumber = trim((string) $pm[$c]);
-                        }
-                    }
-                }
-            }
-        }
-
-        $effectiveAbha = $abhaAddress !== '' ? $abhaAddress : $abhaNumber;
         if ($effectiveAbha === '') {
             return ['ok' => 0, 'error' => 'No valid ABHA found for patient #' . $patientId];
         }
@@ -521,11 +572,12 @@ class AbdmTaskBoardSyncService
         $sessionId = (int) ($docRow['opd_session_id'] ?? 0);
         if ($isSuccess && $sessionId > 0) {
             $hasMeds = false;
-            if ($this->db->tableExists('opd_prescrption_prescribed')) {
-                $hasMeds = ($this->db->table('opd_prescrption_prescribed')->where('prescription_id', $sessionId)->countAllResults() > 0);
-            }
-            if (! $hasMeds && $this->db->tableExists('opd_prescription_prescribed')) {
-                $hasMeds = ($this->db->table('opd_prescription_prescribed')->where('opd_pre_id', $sessionId)->countAllResults() > 0);
+            $tblPresc = $this->db->tableExists('opd_prescrption_prescribed') ? 'opd_prescrption_prescribed' : ($this->db->tableExists('opd_prescription_prescribed') ? 'opd_prescription_prescribed' : null);
+            if ($tblPresc !== null) {
+                $col = $this->db->fieldExists('opd_pre_id', $tblPresc) ? 'opd_pre_id' : ($this->db->fieldExists('prescription_id', $tblPresc) ? 'prescription_id' : null);
+                if ($col !== null) {
+                    $hasMeds = ($this->db->table($tblPresc)->where($col, $sessionId)->countAllResults() > 0);
+                }
             }
             if ($hasMeds) {
                 $cleanDate = str_replace('-', '', $visitDate);
@@ -847,24 +899,12 @@ class AbdmTaskBoardSyncService
             default => 'HealthDocumentRecord',
         };
 
-        $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray();
-        $patientName = trim((string) ($patientRow['p_fname'] ?? $task['patient_name'] ?? ''));
-        $gender = match ((string) ($patientRow['gender'] ?? '')) {
-            '1', 'M', 'm', 'Male' => 'M',
-            '2', 'F', 'f', 'Female' => 'F',
-            default => 'O',
-        };
-        $dob = trim((string) ($patientRow['dob'] ?? ''));
-        $yearOfBirth = ($dob !== '' && $dob !== '0000-00-00') ? substr($dob, 0, 4) : '';
-
-        $abhaNumber = preg_match('/^\d{14}$/', $abhaId) === 1 ? $abhaId : '';
-        $abhaAddress = str_contains($abhaId, '@') ? $abhaId : '';
-        if ($abhaAddress === '' && ! empty($patientRow['abha_address'])) {
-            $abhaAddress = trim((string) $patientRow['abha_address']);
-        }
-        if ($abhaNumber === '' && ! empty($patientRow['abha_id']) && preg_match('/^\d{14}$/', trim((string) $patientRow['abha_id']))) {
-            $abhaNumber = trim((string) $patientRow['abha_id']);
-        }
+        $demo = $this->resolvePatientMasterDemographics($patientId, (string) ($task['patient_name'] ?? ''), $abhaId);
+        $patientName = $demo['patient_name'];
+        $gender = $demo['gender'];
+        $yearOfBirth = $demo['year_of_birth'];
+        $abhaAddress = $demo['abha_address'];
+        $abhaNumber = $demo['abha_number'];
 
         $clinTs = self::resolveTaskClinicalTimestamp($task, $this->db);
         $visitDate = ! empty($clinTs) && strtotime($clinTs) > 0 ? date('Y-m-d', strtotime($clinTs)) : date('Y-m-d');

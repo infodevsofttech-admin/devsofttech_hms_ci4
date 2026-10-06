@@ -108,8 +108,18 @@
                                         <i class="bi bi-upload me-1"></i>Upload
                                     </button>
                                 </div>
-                                <?php $validAbhaNumForModal = (strpos($patientAbhaId, '@') === false && strlen(preg_replace('/\D/', '', $patientAbhaId)) === 14) ? preg_replace('/\D/', '', $patientAbhaId) : ''; ?>
-                                <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2 fw-semibold" onclick="openAbdmHipLinkModal(<?= (int)$data[0]->id ?>, '<?= esc($abhaAddress) ?>', { name: '<?= esc($data[0]->p_fname ?? '') ?>', gender: '<?= $data[0]->gender == 1 ? 'M' : ($data[0]->gender == 2 ? 'F' : 'O') ?>', yob: '<?= !empty($data[0]->dob) ? date('Y', strtotime($data[0]->dob)) : '' ?>', phone: '<?= esc($data[0]->mphone1 ?? '') ?>', abha_number: '<?= esc($validAbhaNumForModal) ?>' })">
+                                <?php
+                                    $validAbhaNumForModal = (strpos($patientAbhaId, '@') === false && strlen(preg_replace('/\D/', '', $patientAbhaId)) === 14) ? preg_replace('/\D/', '', $patientAbhaId) : '';
+                                    $personDob = (string)($data[0]->dob ?? '');
+                                    $personAge = (int)($data[0]->age ?? 0);
+                                    $personYob = '';
+                                    if (!empty($personDob) && strpos($personDob, '0000') !== 0 && strtotime($personDob) !== false) {
+                                        $personYob = date('Y', strtotime($personDob));
+                                    } elseif ($personAge > 0) {
+                                        $personYob = (string)((int)date('Y') - $personAge);
+                                    }
+                                ?>
+                                <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2 fw-semibold" onclick="openAbdmHipLinkModal(<?= (int)$data[0]->id ?>, '<?= esc($abhaAddress) ?>', { name: '<?= esc($data[0]->p_fname ?? '') ?>', gender: '<?= $data[0]->gender == 1 ? 'M' : ($data[0]->gender == 2 ? 'F' : 'O') ?>', yob: '<?= esc($personYob) ?>', phone: '<?= esc($data[0]->mphone1 ?? '') ?>', abha_number: '<?= esc($validAbhaNumForModal) ?>' })">
                                     <i class="bi bi-link-45deg me-1"></i>Link Records to ABHA (HIP)
                                 </button>
                                 <?php if (empty($abhaAddress) && !empty($data[0]->mphone1)) : ?>
