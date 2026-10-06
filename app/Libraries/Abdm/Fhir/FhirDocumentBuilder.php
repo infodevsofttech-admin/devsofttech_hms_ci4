@@ -161,6 +161,12 @@ class FhirDocumentBuilder
         return $this->addResource($resource);
     }
 
+    /** @param array<string,mixed> $resource */
+    public function addImmunization(array $resource): self
+    {
+        return $this->addResource($resource);
+    }
+
     /**
      * @return array<string,mixed>
      */
@@ -252,7 +258,7 @@ class FhirDocumentBuilder
     /**
      * @param array<string,mixed> $resource
      */
-    private function addResource(array $resource): self
+    public function addResource(array $resource): self
     {
         $id = (string) ($resource['id'] ?? '');
         if ($id === '') {

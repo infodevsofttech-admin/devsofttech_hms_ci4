@@ -1122,6 +1122,140 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $encExp = array_values(array_filter($outExp['fhir_bundle']['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'Encounter'))[0]['resource'];
         $this->assertSame('exp', $encExp['hospitalization']['dischargeDisposition']['coding'][0]['code']);
     }
+
+    public function testPrescriptionGeneratorHappyPath(): void
+    {
+        $src = [
+            'record_id' => 9001,
+            'session_id' => 1,
+            'visit_date' => '2026-06-27',
+            'completed_at' => '2026-06-27T10:00:00+05:30',
+            'patient' => [
+                'id' => 12,
+                'name' => 'Devender Singh',
+                'gender' => 'male',
+                'dob' => '1979-03-28',
+                'abha_id' => '1234-5678-9012',
+            ],
+            'encounter' => [
+                'id' => 'E101',
+                'start' => '2026-06-27T09:30:00+05:30',
+                'end' => '2026-06-27T10:00:00+05:30',
+            ],
+            'doctor' => [
+                'id' => 'D9',
+                'name' => 'Dr. R K Sundriyal',
+            ],
+            'organization' => [
+                'id' => 'H1',
+                'name' => 'Chamunda Hospital',
+            ],
+            'medications' => [
+                [
+                    'name' => 'Paracetamol 500mg',
+                    'code' => '387593006',
+                    'dosage' => '1 tablet twice daily for 3 days',
+                    'formulation' => 'TAB',
+                ],
+                [
+                    'name' => 'Amoxicillin 500mg',
+                    'code' => '372687004',
+                    'dosage' => '1 capsule thrice daily after meals',
+                    'formulation' => 'CAP',
+                ],
+            ],
+            'prescription_pdf_base64' => base64_encode('%PDF-1.4 test prescription'),
+        ];
+
+        $out = $this->factory->prescription()->generate($src);
+        $this->assertSame('PrescriptionRecord', $out['hi_type']);
+        $this->assertSame('PRESCRIPTION-9001-S1-2026-06-27', $out['care_context_reference']);
+        $this->assertTrue((bool) ($out['validation']['valid'] ?? false));
+
+        $bundle = $out['fhir_bundle'];
+        $this->assertSame('Bundle', $bundle['resourceType']);
+        $this->assertSame('document', $bundle['type']);
+
+        $composition = $bundle['entry'][0]['resource'];
+        $this->assertSame('Composition', $composition['resourceType']);
+        $this->assertContains('https://nrces.in/ndhm/fhir/r4/StructureDefinition/PrescriptionRecord', $composition['meta']['profile']);
+        $this->assertSame('440545006', $composition['type']['coding'][0]['code']);
+        $this->assertCount(1, $composition['section']);
+        $this->assertSame('440545006', $composition['section'][0]['code']['coding'][0]['code']);
+
+        // Check medication requests and document reference
+        $medRequests = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'MedicationRequest'));
+        $this->assertCount(2, $medRequests);
+        $this->assertSame('active', $medRequests[0]['resource']['status']);
+        $this->assertSame('order', $medRequests[0]['resource']['intent']);
+
+        $docRefs = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'DocumentReference'));
+        $this->assertCount(1, $docRefs);
+        $this->assertSame('application/pdf', $docRefs[0]['resource']['content'][0]['attachment']['contentType']);
+    }
+
+    public function testImmunizationGeneratorHappyPath(): void
+    {
+        $src = [
+            'record_id' => 9002,
+            'visit_date' => '2026-06-27',
+            'completed_at' => '2026-06-27T10:30:00+05:30',
+            'patient' => [
+                'id' => 12,
+                'name' => 'Devender Singh',
+                'gender' => 'male',
+                'dob' => '1979-03-28',
+                'abha_id' => '1234-5678-9012',
+            ],
+            'doctor' => [
+                'id' => 'D9',
+                'name' => 'Dr. R K Sundriyal',
+            ],
+            'organization' => [
+                'id' => 'H1',
+                'name' => 'Chamunda Hospital',
+            ],
+            'immunizations' => [
+                [
+                    'vaccine_name' => 'COVID-19 vaccine',
+                    'code' => '840534001',
+                    'given_date' => '2026-06-27T10:15:00+05:30',
+                ],
+                [
+                    'vaccine_name' => 'Hepatitis B vaccine',
+                    'code' => '836377005',
+                    'given_date' => '2026-06-27T10:20:00+05:30',
+                ],
+            ],
+            'certificate_pdf_base64' => base64_encode('%PDF-1.4 vaccine certificate'),
+        ];
+
+        $out = $this->factory->immunization()->generate($src);
+        $this->assertSame('ImmunizationRecord', $out['hi_type']);
+        $this->assertSame('IMMUNIZATION-9002-2026-06-27', $out['care_context_reference']);
+        $this->assertTrue((bool) ($out['validation']['valid'] ?? false));
+
+        $bundle = $out['fhir_bundle'];
+        $this->assertSame('Bundle', $bundle['resourceType']);
+        $this->assertSame('document', $bundle['type']);
+
+        $composition = $bundle['entry'][0]['resource'];
+        $this->assertSame('Composition', $composition['resourceType']);
+        $this->assertContains('https://nrces.in/ndhm/fhir/r4/StructureDefinition/ImmunizationRecord', $composition['meta']['profile']);
+        $this->assertSame('41000179103', $composition['type']['coding'][0]['code']);
+        $this->assertCount(1, $composition['section']);
+        $this->assertSame('41000179103', $composition['section'][0]['code']['coding'][0]['code']);
+
+        // Check immunization resources and certificate attachment
+        $immResources = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'Immunization'));
+        $this->assertCount(2, $immResources);
+        $this->assertSame('completed', $immResources[0]['resource']['status']);
+        $this->assertTrue($immResources[0]['resource']['primarySource']);
+
+        $docRefs = array_values(array_filter($bundle['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'DocumentReference'));
+        $this->assertCount(1, $docRefs);
+        $this->assertSame('application/pdf', $docRefs[0]['resource']['content'][0]['attachment']['contentType']);
+    }
 }
 
 

@@ -4,9 +4,11 @@ namespace App\Libraries\Abdm\Fhir;
 
 use App\Libraries\Abdm\Fhir\Generators\DischargeFhirGenerator;
 use App\Libraries\Abdm\Fhir\Generators\HealthDocumentFhirGenerator;
+use App\Libraries\Abdm\Fhir\Generators\ImmunizationFhirGenerator;
 use App\Libraries\Abdm\Fhir\Generators\InvoiceFhirGenerator;
 use App\Libraries\Abdm\Fhir\Generators\LabFhirGenerator;
 use App\Libraries\Abdm\Fhir\Generators\OpdFhirGenerator;
+use App\Libraries\Abdm\Fhir\Generators\PrescriptionFhirGenerator;
 use App\Libraries\Abdm\Fhir\Generators\RadiologyFhirGenerator;
 use App\Libraries\Abdm\Fhir\Generators\WellnessFhirGenerator;
 
@@ -40,6 +42,16 @@ class FhirGeneratorFactory
     public function healthDocument(): HealthDocumentFhirGenerator
     {
         return new HealthDocumentFhirGenerator();
+    }
+
+    public function prescription(): PrescriptionFhirGenerator
+    {
+        return new PrescriptionFhirGenerator();
+    }
+
+    public function immunization(): ImmunizationFhirGenerator
+    {
+        return new ImmunizationFhirGenerator();
     }
 
     public function wellness(): WellnessFhirGenerator
