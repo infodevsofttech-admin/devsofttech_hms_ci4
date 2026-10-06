@@ -177,7 +177,7 @@ class AbdmGateway extends BaseController
                 }
             }
 
-            [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientDisplay);
+            [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientDisplay, '', '', 0, '', true);
 
             $this->getAuditService()->log([
                 'action' => 'discovery_records',
@@ -4844,7 +4844,7 @@ class AbdmGateway extends BaseController
                 }
             }
 
-            [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientDisplay);
+            [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientDisplay, '', '', 0, '', true);
 
             $this->getAuditService()->log([
                 'action' => 'discovery_records',
@@ -6185,6 +6185,21 @@ class AbdmGateway extends BaseController
         return count($common) / max(1, count($union));
     }
 
+    public function mapRecordTypeToAbdmHiType(string $recordType): string
+    {
+        $normalized = strtolower(trim($recordType));
+        return match ($normalized) {
+            'invoice', 'invoicerecord' => 'Invoice',
+            'immunization', 'immunizationrecord' => 'ImmunizationRecord',
+            'wellness', 'wellnessrecord' => 'WellnessRecord',
+            'dischargesummary', 'dischargesummaryrecord', 'ipd', 'ipd_discharge' => 'DischargeSummary',
+            'diagnosticreport', 'diagnosticreportrecord', 'lab', 'radiology' => 'DiagnosticReport',
+            'prescription', 'prescriptionrecord', 'medicationrequest', 'medicationrequestbundle' => 'Prescription',
+            'healthdocument', 'healthdocumentrecord', 'document', 'patient_doc' => 'HealthDocumentRecord',
+            default => 'OPConsultation',
+        };
+    }
+
     private function findCareContextsForPatient(
         int $patientId,
         string $patientRef,
@@ -6192,23 +6207,34 @@ class AbdmGateway extends BaseController
         string $taskType = '',
         string $entityId = '',
         int $taskId = 0,
-        string $source = ''
+        string $source = '',
+        bool $readyOnly = false
     ): array {
         $this->db = $this->db ?? \Config\Database::connect();
         $careContextsV3 = [];
         $careContextsFull = [];
         $seenRefs = [];
 
-        $addContext = function (array $item) use (&$careContextsV3, &$careContextsFull, &$seenRefs) {
+        $addContext = function (array $item) use (&$careContextsV3, &$careContextsFull, &$seenRefs, $readyOnly) {
             $ref = trim((string) ($item['referenceNumber'] ?? $item['careContextId'] ?? ''));
             if ($ref === '' || isset($seenRefs[$ref])) {
                 return;
             }
+            if ($readyOnly && empty($item['is_fhir_ready'])) {
+                return;
+            }
             $seenRefs[$ref] = true;
+            $recType = trim((string) ($item['record_type'] ?? ''));
+            $hiType = $this->mapRecordTypeToAbdmHiType($recType);
+
             $careContextsV3[] = [
                 'referenceNumber' => $ref,
                 'display'         => $item['display'] ?? $ref,
+                'hiType'          => $hiType,
+                'record_type'     => $recType,
+                'is_fhir_ready'   => ! empty($item['is_fhir_ready']),
             ];
+            $item['hiType'] = $hiType;
             $careContextsFull[] = $item;
         };
 
