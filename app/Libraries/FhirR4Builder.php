@@ -755,8 +755,10 @@ class FhirR4Builder
             'resourceType' => 'Bundle',
             'id'           => $bundleUuid,
             'meta'         => [
-                'profile'  => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle'],
-                'security' => [[
+                'versionId'   => '1',
+                'lastUpdated' => $issuedAt,
+                'profile'     => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle'],
+                'security'    => [[
                     'system'  => 'http://terminology.hl7.org/CodeSystem/v3-Confidentiality',
                     'code'    => 'V',
                     'display' => 'very restricted',
@@ -1186,8 +1188,10 @@ class FhirR4Builder
             'resourceType' => 'Bundle',
             'id'           => $bundleUuid,
             'meta'         => [
-                'profile'  => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle'],
-                'security' => [['system' => 'http://terminology.hl7.org/CodeSystem/v3-Confidentiality', 'code' => 'V', 'display' => 'very restricted']],
+                'versionId'   => '1',
+                'lastUpdated' => $issuedAt,
+                'profile'     => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle'],
+                'security'    => [['system' => 'http://terminology.hl7.org/CodeSystem/v3-Confidentiality', 'code' => 'V', 'display' => 'very restricted']],
             ],
             'identifier' => ['system' => $bundleIdSystem, 'value' => $bundleIdValue],
             'type'       => 'document',
@@ -1454,8 +1458,10 @@ class FhirR4Builder
             'resourceType' => 'Bundle',
             'id'           => $bundleUuid,
             'meta'         => [
-                'profile'  => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle'],
-                'security' => [['system' => 'http://terminology.hl7.org/CodeSystem/v3-Confidentiality', 'code' => 'V', 'display' => 'very restricted']],
+                'versionId'   => '1',
+                'lastUpdated' => $issuedAt,
+                'profile'     => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle'],
+                'security'    => [['system' => 'http://terminology.hl7.org/CodeSystem/v3-Confidentiality', 'code' => 'V', 'display' => 'very restricted']],
             ],
             'identifier' => ['system' => $bundleIdSystem, 'value' => $bundleIdValue],
             'type'       => 'document',
@@ -2117,10 +2123,12 @@ class FhirR4Builder
             'resourceType' => 'Bundle',
             'id' => $bundleUuid,
             'meta' => [
-                'profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle'],
-                'security' => [[
-                    'system' => 'http://terminology.hl7.org/CodeSystem/v3-Confidentiality',
-                    'code' => 'V',
+                'versionId'   => '1',
+                'lastUpdated' => $issuedAt,
+                'profile'     => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentBundle'],
+                'security'    => [[
+                    'system'  => 'http://terminology.hl7.org/CodeSystem/v3-Confidentiality',
+                    'code'    => 'V',
                     'display' => 'very restricted',
                 ]],
             ],
