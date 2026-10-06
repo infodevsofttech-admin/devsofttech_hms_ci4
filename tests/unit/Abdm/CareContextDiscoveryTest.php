@@ -50,7 +50,15 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
             temp TEXT,
             spo2 TEXT,
             weight TEXT,
-            height TEXT
+            height TEXT,
+            complaints TEXT,
+            diagnosis TEXT,
+            Provisional_diagnosis TEXT,
+            advice TEXT,
+            investigation TEXT,
+            Finding_Examinations TEXT,
+            diagnosis_json TEXT,
+            complaint_snomed_json TEXT
         )");
 
         $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('opd_prescrption_prescribed') . " (
@@ -65,7 +73,8 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
             p_id INTEGER,
             apointment_date TEXT,
             opd_book_date TEXT,
-            doc_name TEXT
+            doc_name TEXT,
+            opd_status INTEGER
         )");
 
         $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('health_records') . " (
@@ -531,6 +540,76 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
         $this->assertSame('WELLNESS-33723-20261006', $primary['careContextId']);
         $this->assertSame('WellnessRecord', $primary['record_type']);
         $this->assertTrue($primary['is_primary']);
+    }
+
+    public function testUnfilledOpdConsultShowsSingleDraftRecordWithDoctorName(): void
+    {
+        $db = \Config\Database::connect();
+        $db->table('opd_master')->insert([
+            'opd_id'          => 33793,
+            'p_id'            => 15353,
+            'apointment_date' => '2026-10-06 14:00:00',
+            'opd_book_date'   => '2026-10-06 14:00:00',
+            'doc_name'        => 'Jayashri Joshi',
+            'opd_status'      => 1, // Booked / waiting (not done)
+        ]);
+
+        $db->table('opd_prescription')->insert([
+            'id'             => 33727,
+            'opd_id'         => 33793,
+            'p_id'           => 15353,
+            'session_id'     => 0,
+            'date_opd_visit' => '2026-10-06',
+            'complaints'     => '',
+            'diagnosis'      => '',
+        ]);
+
+        $refGateway = new ReflectionClass($this->gateway);
+        $method = $refGateway->getMethod('findCareContextsForPatient');
+        $method->setAccessible(true);
+
+        [$v3, $full] = $method->invoke($this->gateway, 15353, 'P26081015353', 'DHAIRYA SINGH BISHT');
+
+        // Verify only ONE OPD consult record is returned (no duplicate!)
+        $opdConsults = array_values(array_filter($full, fn ($c) => ($c['record_type'] ?? '') === 'OPConsultRecord'));
+        $this->assertCount(1, $opdConsults, 'Should return exactly 1 consolidated OPD consultation record, not duplicates');
+
+        $consult = $opdConsults[0];
+        $this->assertStringContainsString('Dr. Jayashri Joshi', $consult['display'], 'Should include the doctor name');
+        $this->assertFalse($consult['is_fhir_ready'], 'Unfilled booking should NOT be marked FHIR ready');
+    }
+
+    public function testCompletedOpdConsultShowsFhirReady(): void
+    {
+        $db = \Config\Database::connect();
+        $db->table('opd_master')->insert([
+            'opd_id'          => 33794,
+            'p_id'            => 15353,
+            'apointment_date' => '2026-10-06 15:00:00',
+            'opd_book_date'   => '2026-10-06 15:00:00',
+            'doc_name'        => 'Jayashri Joshi',
+            'opd_status'      => 2, // Visit Done
+        ]);
+
+        $db->table('opd_prescription')->insert([
+            'id'             => 33728,
+            'opd_id'         => 33794,
+            'p_id'           => 15353,
+            'session_id'     => 0,
+            'date_opd_visit' => '2026-10-06',
+            'complaints'     => 'Fever and Cough',
+            'diagnosis'      => 'Viral Pharyngitis',
+        ]);
+
+        $refGateway = new ReflectionClass($this->gateway);
+        $method = $refGateway->getMethod('findCareContextsForPatient');
+        $method->setAccessible(true);
+
+        [$v3, $full] = $method->invoke($this->gateway, 15353, 'P26081015353', 'DHAIRYA SINGH BISHT');
+
+        $opdConsults = array_values(array_filter($full, fn ($c) => ($c['record_type'] ?? '') === 'OPConsultRecord' && str_contains($c['careContextId'], '33728')));
+        $this->assertCount(1, $opdConsults);
+        $this->assertTrue($opdConsults[0]['is_fhir_ready'], 'Completed consultation with findings must be marked FHIR ready');
     }
 }
 

@@ -5013,13 +5013,93 @@ class Opd_prescription extends BaseController
         }
 
         $row = $builder->orderBy('id', 'DESC')->get(1)->getRowArray();
+
+        if (empty($row) && $sessionId > 0) {
+            $row = $this->db->table('opd_fhir_documents')
+                ->where('opd_id', (int) $sessionId)
+                ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle', 'PrescriptionRecord'])
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+        }
+        if (empty($row) && $sessionId > 0) {
+            $row = $this->db->table('opd_fhir_documents')
+                ->where('opd_session_id', (int) $sessionId)
+                ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle', 'PrescriptionRecord'])
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+        }
+        if (empty($row) && $this->db->tableExists('health_records')) {
+            $hr = $this->db->table('health_records')
+                ->groupStart()
+                    ->where('entity_id', (string) $opdId)
+                    ->orWhere('entity_id', (string) $sessionId)
+                    ->orLike('care_context_reference', 'S' . $sessionId . '-')
+                    ->orLike('care_context_reference', 'S' . $opdId . '-')
+                ->groupEnd()
+                ->whereIn('hi_type', ['OPConsultRecord', 'PrescriptionRecord'])
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+            if (! empty($hr['record_data'])) {
+                $dec = json_decode((string) $hr['record_data'], true);
+                if (is_array($dec)) {
+                    $row = [
+                        'bundle_json'    => $hr['record_data'],
+                        'bundle_type'    => $hr['hi_type'] ?? 'OPConsultRecord',
+                        'opd_id'         => (int) ($hr['entity_id'] ?? $opdId),
+                        'opd_session_id' => $sessionId,
+                    ];
+                }
+            }
+        }
+
         if (empty($row)) {
-            return $this->response->setStatusCode(404)->setJSON([
-                'status' => 'error',
-                'message' => 'FHIR bundle not found.',
-                'opd_id' => (int) $opdId,
-                'opd_session_id' => (int) $sessionId,
-            ]);
+            $candidateOpdId = ($opdId > 0 && $this->db->tableExists('opd_master') && $this->db->table('opd_master')->where('opd_id', $opdId)->countAllResults() > 0)
+                ? $opdId
+                : ($sessionId > 0 && $this->db->tableExists('opd_master') && $this->db->table('opd_master')->where('opd_id', $sessionId)->countAllResults() > 0 ? $sessionId : 0);
+
+            if ($candidateOpdId > 0) {
+                $hasFindings = false;
+                $pRow = $this->db->table('opd_prescription')->where('opd_id', $candidateOpdId)->orderBy('id', 'DESC')->get(1)->getRowArray();
+                if (! empty($pRow)) {
+                    $hasFindings = trim((string) ($pRow['complaints'] ?? '')) !== ''
+                        || trim((string) ($pRow['diagnosis'] ?? '')) !== ''
+                        || trim((string) ($pRow['Provisional_diagnosis'] ?? '')) !== ''
+                        || trim((string) ($pRow['advice'] ?? '')) !== '';
+                }
+                $omRow = $this->db->table('opd_master')->where('opd_id', $candidateOpdId)->get(1)->getRowArray();
+                $isDone = ((int) ($omRow['opd_status'] ?? 0) === 2);
+
+                if ($hasFindings || $isDone) {
+                    $regen = $this->regenerateFhirBundleInternal($candidateOpdId, $sessionId > 0 ? $sessionId : (int) ($pRow['id'] ?? 0));
+                    if (! empty($regen['ok']) && ! empty($regen['bundle'])) {
+                        $row = [
+                            'bundle_json'    => json_encode($regen['bundle']),
+                            'bundle_type'    => $regen['bundle_type'] ?? 'OPConsultRecord',
+                            'opd_id'         => $candidateOpdId,
+                            'opd_session_id' => $sessionId,
+                        ];
+                    }
+                } else {
+                    return $this->response->setStatusCode(404)->setJSON([
+                        'status'         => 'draft',
+                        'message'        => 'OPD Consultation is pending. Clinical findings have not been documented by the doctor yet.',
+                        'opd_id'         => (int) $opdId,
+                        'opd_session_id' => (int) $sessionId,
+                    ]);
+                }
+            }
+
+            if (empty($row)) {
+                return $this->response->setStatusCode(404)->setJSON([
+                    'status'         => 'error',
+                    'message'        => 'FHIR bundle not found.',
+                    'opd_id'         => (int) $opdId,
+                    'opd_session_id' => (int) $sessionId,
+                ]);
+            }
         }
 
         $bundleJson = (string) ($row['bundle_json'] ?? '{}');

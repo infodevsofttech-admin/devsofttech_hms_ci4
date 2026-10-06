@@ -1317,24 +1317,28 @@
 
                 var fhirBadge = isFhir
                     ? '<span class="badge bg-info"><i class="bi bi-file-earmark-code me-1"></i>Ready</span>'
-                    : '<span class="badge bg-light text-muted border">Pending</span>';
+                    : '<span class="badge bg-warning-subtle text-dark border border-warning small"><i class="bi bi-clock me-1"></i>Pending Consult</span>';
 
-                // Resolve preview button
+                // Resolve preview button (only when FHIR bundle is ready)
                 var fhirPreviewBtn = '';
-                var opdMatch = ref.match(/^OPD-(\d+)/i);
-                if (opdMatch) {
-                    var opdId = opdMatch[1];
-                    var sMatch = ref.match(/-S(\d+)-/i);
-                    var sId = sMatch ? sMatch[1] : 0;
-                    var previewUrl = sId > 0
-                        ? '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId + '/' + sId
-                        : '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId;
-                    fhirPreviewBtn = '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 ms-1 insp-preview-fhir" data-url="' + previewUrl + '" data-title="Care Context ' + ref + ' FHIR"><i class="bi bi-eye me-1"></i>Preview FHIR</button>';
+                if (isFhir) {
+                    var opdMatch = ref.match(/^OPD-(\d+)/i);
+                    if (opdMatch) {
+                        var opdId = opdMatch[1];
+                        var sMatch = ref.match(/-S(\d+)-/i);
+                        var sId = sMatch ? sMatch[1] : 0;
+                        var previewUrl = sId > 0
+                            ? '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId + '/' + sId
+                            : '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId;
+                        fhirPreviewBtn = '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 ms-1 insp-preview-fhir" data-url="' + previewUrl + '" data-title="Care Context ' + ref + ' FHIR"><i class="bi bi-eye me-1"></i>Preview FHIR</button>';
+                    }
                 }
 
                 var actionBtn = '';
                 if (isLinked) {
                     actionBtn = '<span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2"><i class="bi bi-check-all me-1"></i>Active</span>';
+                } else if (!isFhir) {
+                    actionBtn = '<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" disabled title="Clinical findings must be documented before linking to ABDM"><i class="bi bi-clock me-1"></i>Draft / Incomplete</button>';
                 } else {
                     actionBtn = '<button type="button" class="btn btn-sm btn-outline-success py-0 px-2 btn-insp-link" data-ref="' + hesc(ref) + '" data-type="' + hesc(hiType) + '" data-patient-id="' + pat.id + '" data-patient-name="' + hesc(pat.name) + '" data-abha="' + hesc(pat.abha_address || abhaAddress) + '"><i class="bi bi-link-45deg me-1"></i>Link Context</button>';
                 }

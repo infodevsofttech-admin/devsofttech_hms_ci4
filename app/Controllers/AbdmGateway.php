@@ -6266,16 +6266,38 @@ class AbdmGateway extends BaseController
                 if (! empty($pr)) {
                     $visitDate = ! empty($pr['date_opd_visit']) ? $pr['date_opd_visit'] : date('Y-m-d', strtotime((string) ($pr['p_datetime'] ?? 'now')));
                     $dateStr = date('d M Y', strtotime((string) $visitDate));
+                    $cleanDate = str_replace('-', '', (string) $visitDate);
                     $sessionId = ! empty($pr['session_id']) ? $pr['session_id'] : $pr['id'];
-                    $ccRef = 'OPD-' . $patientId . '-S' . $sessionId . '-' . str_replace('-', '', (string) $visitDate);
-                    $display = 'OPConsultRecord - ' . $dateStr;
+                    $ccRef = 'OPD-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
+
+                    $docName = '';
+                    $opdStatus = 0;
+                    $opdId = ! empty($pr['opd_id']) ? (int) $pr['opd_id'] : 0;
+                    if ($opdId > 0 && $this->db->tableExists('opd_master')) {
+                        $om = $this->db->table('opd_master')->select('doc_name, opd_status')->where('opd_id', $opdId)->get(1)->getRowArray();
+                        if (! empty($om)) {
+                            $docName = trim((string) ($om['doc_name'] ?? ''));
+                            $opdStatus = (int) ($om['opd_status'] ?? 0);
+                        }
+                    }
+                    $display = 'OPConsultRecord - ' . ($docName !== '' ? 'Dr. ' . $docName . ' - ' : '') . $dateStr;
+
+                    $hasFindings = trim((string) ($pr['complaints'] ?? '')) !== ''
+                        || trim((string) ($pr['diagnosis'] ?? '')) !== ''
+                        || trim((string) ($pr['Provisional_diagnosis'] ?? '')) !== ''
+                        || trim((string) ($pr['Finding_Examinations'] ?? '')) !== ''
+                        || trim((string) ($pr['advice'] ?? '')) !== ''
+                        || (! empty($pr['diagnosis_json']) && trim((string) $pr['diagnosis_json']) !== '[]');
+
+                    $isReady = ($opdStatus === 2) || $hasFindings;
+
                     $addContext([
                         'careContextId'   => $ccRef,
                         'referenceNumber' => $ccRef,
                         'display'         => $display,
                         'record_type'     => 'OPConsultRecord',
                         'patient_id'      => $patientId,
-                        'is_fhir_ready'   => true,
+                        'is_fhir_ready'   => $isReady,
                         'is_primary'      => true,
                     ]);
                 }
@@ -6473,16 +6495,161 @@ class AbdmGateway extends BaseController
             }
         }
 
-        // 4. Query opd_prescription (OPD consultations, prescriptions & wellness records)
-        if ($this->db->tableExists('opd_prescription')) {
-            $prescRows = $this->db->table('opd_prescription')
+        // 4. Query OPD Consultations (unified from opd_master & opd_prescription)
+        $processedOpdIds = [];
+        if ($this->db->tableExists('opd_master')) {
+            $omFields = $this->db->getFieldNames('opd_master') ?? [];
+            $selectCols = ['opd_id', 'p_id'];
+            if (in_array('apointment_date', $omFields, true)) $selectCols[] = 'apointment_date';
+            if (in_array('opd_book_date', $omFields, true)) $selectCols[] = 'opd_book_date';
+            if (in_array('doc_name', $omFields, true)) $selectCols[] = 'doc_name';
+            if (in_array('doc_id', $omFields, true)) $selectCols[] = 'doc_id';
+            if (in_array('opd_status', $omFields, true)) $selectCols[] = 'opd_status';
+
+            $opdMasterRows = $this->db->table('opd_master')
+                ->select(implode(', ', $selectCols))
                 ->where('p_id', $patientId)
-                ->orderBy('id', 'DESC')
+                ->orderBy('opd_id', 'DESC')
                 ->limit(30)
                 ->get()
                 ->getResultArray();
 
-            foreach ($prescRows as $pr) {
+            foreach ($opdMasterRows as $om) {
+                $opdId = (int) $om['opd_id'];
+                $processedOpdIds[$opdId] = true;
+
+                $visitRaw = ! empty($om['apointment_date']) && $om['apointment_date'] !== '0000-00-00 00:00:00'
+                    ? $om['apointment_date']
+                    : (! empty($om['opd_book_date']) ? $om['opd_book_date'] : date('Y-m-d'));
+                $visitDate = date('Y-m-d', strtotime((string) $visitRaw));
+                $dateStr = date('d M Y', strtotime($visitDate));
+                $cleanDate = str_replace('-', '', $visitDate);
+
+                // Find associated prescription row if exists
+                $pr = null;
+                if ($this->db->tableExists('opd_prescription')) {
+                    $pr = $this->db->table('opd_prescription')
+                        ->where('opd_id', $opdId)
+                        ->orderBy('id', 'DESC')
+                        ->get(1)
+                        ->getRowArray();
+                }
+
+                $sessionId = ! empty($pr['session_id']) ? (int) $pr['session_id'] : (! empty($pr['id']) ? (int) $pr['id'] : $opdId);
+
+                // Primary care context reference matches storePrescriptionFhirBundle
+                $ccRef = 'OPD-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
+                // Alias reference prevents duplicate if opd_id differs from session_id
+                $aliasRef = 'OPD-' . $patientId . '-S' . $opdId . '-' . $cleanDate;
+
+                $docName = trim((string) ($om['doc_name'] ?? ''));
+                $display = 'OPConsultRecord - ' . ($docName !== '' ? 'Dr. ' . $docName . ' - ' : '') . $dateStr;
+
+                // Determine FHIR readiness: check stored doc, health_records, status, or clinical findings
+                $hasStoredDoc = false;
+                if ($this->db->tableExists('opd_fhir_documents')) {
+                    $hasStoredDoc = $this->db->table('opd_fhir_documents')
+                        ->groupStart()
+                            ->where('opd_id', $opdId)
+                            ->orWhere('opd_session_id', $sessionId)
+                            ->orWhere('opd_session_id', $opdId)
+                        ->groupEnd()
+                        ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle', 'PrescriptionRecord'])
+                        ->countAllResults() > 0;
+                }
+
+                $hasHr = false;
+                if ($this->db->tableExists('health_records')) {
+                    $hasHr = $this->db->table('health_records')
+                        ->groupStart()
+                            ->where('care_context_reference', $ccRef)
+                            ->orWhere('care_context_reference', $aliasRef)
+                        ->groupEnd()
+                        ->countAllResults() > 0;
+                }
+
+                $statusVal = (int) ($om['opd_status'] ?? 0);
+                $isVisitDone = ($statusVal === 2);
+
+                $hasFindings = false;
+                if (! empty($pr)) {
+                    $hasFindings = trim((string) ($pr['complaints'] ?? '')) !== ''
+                        || trim((string) ($pr['diagnosis'] ?? '')) !== ''
+                        || trim((string) ($pr['Provisional_diagnosis'] ?? '')) !== ''
+                        || trim((string) ($pr['Finding_Examinations'] ?? '')) !== ''
+                        || trim((string) ($pr['advice'] ?? '')) !== ''
+                        || trim((string) ($pr['investigation'] ?? '')) !== ''
+                        || (! empty($pr['diagnosis_json']) && trim((string) $pr['diagnosis_json']) !== '[]')
+                        || (! empty($pr['complaint_snomed_json']) && trim((string) $pr['complaint_snomed_json']) !== '[]');
+                }
+
+                // Check prescribed medications
+                $hasMeds = false;
+                $tblPresc = $this->db->tableExists('opd_prescrption_prescribed') ? 'opd_prescrption_prescribed' : ($this->db->tableExists('opd_prescription_prescribed') ? 'opd_prescription_prescribed' : null);
+                if ($tblPresc !== null && ! empty($pr['id'])) {
+                    $hasPreIdCol = $this->db->fieldExists('opd_pre_id', $tblPresc);
+                    $hasPrescIdCol = $this->db->fieldExists('prescription_id', $tblPresc);
+                    $col = $hasPreIdCol ? 'opd_pre_id' : ($hasPrescIdCol ? 'prescription_id' : null);
+                    if ($col !== null) {
+                        $hasMeds = ($this->db->table($tblPresc)->where($col, (int) $pr['id'])->countAllResults() > 0);
+                    }
+                }
+
+                $isReady = $hasStoredDoc || $hasHr || $isVisitDone || $hasFindings || $hasMeds;
+
+                $addContext([
+                    'careContextId'   => $ccRef,
+                    'referenceNumber' => $ccRef,
+                    'alias_reference' => $aliasRef,
+                    'display'         => $display,
+                    'record_type'     => 'OPConsultRecord',
+                    'patient_id'      => $patientId,
+                    'is_fhir_ready'   => $isReady,
+                    'is_primary'      => false,
+                ]);
+                $seenRefs[$aliasRef] = true;
+
+                // 4b. Prescription Record (if prescribed medicines exist)
+                if ($hasMeds) {
+                    $prescCcRef = 'PRESC-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
+                    $prescDisplay = 'Prescription - ' . ($docName !== '' ? 'Dr. ' . $docName . ' - ' : '') . $dateStr;
+                    $addContext([
+                        'careContextId'   => $prescCcRef,
+                        'referenceNumber' => $prescCcRef,
+                        'display'         => $prescDisplay,
+                        'record_type'     => 'PrescriptionRecord',
+                        'patient_id'      => $patientId,
+                        'is_fhir_ready'   => true,
+                        'is_primary'      => false,
+                    ]);
+                }
+
+                // 4c. Wellness Record (if vitals exist)
+                $hasVitals = ! empty($pr) && (! empty($pr['bp']) || ! empty($pr['pulse']) || ! empty($pr['temp']) || ! empty($pr['spo2']) || ! empty($pr['weight']) || ! empty($pr['height']));
+                if ($hasVitals) {
+                    $wellCcRef = 'WELLNESS-' . $sessionId . '-' . $cleanDate;
+                    $wellDisplay = 'Wellness Record - ' . $dateStr;
+                    $addContext([
+                        'careContextId'   => $wellCcRef,
+                        'referenceNumber' => $wellCcRef,
+                        'display'         => $wellDisplay,
+                        'record_type'     => 'WellnessRecord',
+                        'patient_id'      => $patientId,
+                        'is_fhir_ready'   => true,
+                        'is_primary'      => false,
+                    ]);
+                }
+            }
+        }
+
+        // 4d. Fallback: Any standalone opd_prescription not already covered by opd_master
+        if ($this->db->tableExists('opd_prescription')) {
+            $builder = $this->db->table('opd_prescription')->where('p_id', $patientId);
+            if (! empty($processedOpdIds)) {
+                $builder->whereNotIn('opd_id', array_keys($processedOpdIds));
+            }
+            $orphanPrescs = $builder->orderBy('id', 'DESC')->limit(10)->get()->getResultArray();
+            foreach ($orphanPrescs as $pr) {
                 $visitDate = ! empty($pr['date_opd_visit'])
                     ? $pr['date_opd_visit']
                     : date('Y-m-d', strtotime((string) ($pr['p_datetime'] ?? 'now')));
@@ -6490,7 +6657,9 @@ class AbdmGateway extends BaseController
                 $cleanDate = str_replace('-', '', $visitDate);
                 $sessionId = ! empty($pr['session_id']) ? $pr['session_id'] : $pr['id'];
 
-                // 4a. Consultation Record
+                $hasFindings = trim((string) ($pr['complaints'] ?? '')) !== ''
+                    || trim((string) ($pr['diagnosis'] ?? '')) !== ''
+                    || trim((string) ($pr['Provisional_diagnosis'] ?? '')) !== '';
                 $ccRef = 'OPD-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
                 $display = 'OPConsultRecord - ' . $dateStr;
                 $addContext([
@@ -6499,14 +6668,14 @@ class AbdmGateway extends BaseController
                     'display'         => $display,
                     'record_type'     => 'OPConsultRecord',
                     'patient_id'      => $patientId,
-                    'is_fhir_ready'   => true,
+                    'is_fhir_ready'   => $hasFindings,
                     'is_primary'      => false,
                 ]);
 
-                // 4b. Prescription Record (if prescribed medicines exist)
+                // Also check if prescribed medicines exist for orphan
                 $hasMeds = false;
                 $tblPresc = $this->db->tableExists('opd_prescrption_prescribed') ? 'opd_prescrption_prescribed' : ($this->db->tableExists('opd_prescription_prescribed') ? 'opd_prescription_prescribed' : null);
-                if ($tblPresc !== null) {
+                if ($tblPresc !== null && ! empty($pr['id'])) {
                     $hasPreIdCol = $this->db->fieldExists('opd_pre_id', $tblPresc);
                     $hasPrescIdCol = $this->db->fieldExists('prescription_id', $tblPresc);
                     $col = $hasPreIdCol ? 'opd_pre_id' : ($hasPrescIdCol ? 'prescription_id' : null);
@@ -6528,7 +6697,7 @@ class AbdmGateway extends BaseController
                     ]);
                 }
 
-                // 4c. Wellness Record (if vitals exist)
+                // Also check if vitals exist for orphan
                 $hasVitals = ! empty($pr['bp']) || ! empty($pr['pulse']) || ! empty($pr['temp']) || ! empty($pr['spo2']) || ! empty($pr['weight']) || ! empty($pr['height']);
                 if ($hasVitals) {
                     $wellCcRef = 'WELLNESS-' . $sessionId . '-' . $cleanDate;
@@ -6543,39 +6712,6 @@ class AbdmGateway extends BaseController
                         'is_primary'      => false,
                     ]);
                 }
-            }
-        }
-
-        // 4b. Query opd_master (OPD consultation appointments/visits not already in prescriptions)
-        if ($this->db->tableExists('opd_master')) {
-            $opdMasterRows = $this->db->table('opd_master')
-                ->select('opd_id, p_id, apointment_date, opd_book_date, doc_name')
-                ->where('p_id', $patientId)
-                ->orderBy('opd_id', 'DESC')
-                ->limit(30)
-                ->get()
-                ->getResultArray();
-
-            foreach ($opdMasterRows as $om) {
-                $visitRaw = ! empty($om['apointment_date']) && $om['apointment_date'] !== '0000-00-00 00:00:00'
-                    ? $om['apointment_date']
-                    : (! empty($om['opd_book_date']) ? $om['opd_book_date'] : date('Y-m-d'));
-                $visitDate = date('Y-m-d', strtotime((string) $visitRaw));
-                $dateStr = date('d M Y', strtotime($visitDate));
-                $opdId = (int) $om['opd_id'];
-                $ccRef = 'OPD-' . $patientId . '-S' . $opdId . '-' . str_replace('-', '', $visitDate);
-                $docName = trim((string) ($om['doc_name'] ?? ''));
-                $display = 'OPConsultRecord - ' . ($docName !== '' ? 'Dr. ' . $docName . ' - ' : '') . $dateStr;
-
-                $addContext([
-                    'careContextId'   => $ccRef,
-                    'referenceNumber' => $ccRef,
-                    'display'         => $display,
-                    'record_type'     => 'OPConsultRecord',
-                    'patient_id'      => $patientId,
-                    'is_fhir_ready'   => true,
-                    'is_primary'      => false,
-                ]);
             }
         }
 
@@ -11670,12 +11806,15 @@ class AbdmGateway extends BaseController
         foreach ($careContextsFull as $cc) {
             $ref = $cc['referenceNumber'] ?? $cc['careContextId'] ?? '';
             $isLinked = in_array($ref, $linkedRefs, true);
+            if (! $isLinked && ! empty($cc['alias_reference'])) {
+                $isLinked = in_array($cc['alias_reference'], $linkedRefs, true);
+            }
             $contextsList[] = [
                 'ref'           => $ref,
                 'display'       => $cc['display'] ?? $ref,
                 'hi_type'       => $cc['record_type'] ?? 'OPConsultRecord',
                 'is_linked'     => $isLinked,
-                'is_fhir_ready' => (bool) ($cc['is_fhir_ready'] ?? true),
+                'is_fhir_ready' => (bool) ($cc['is_fhir_ready'] ?? false),
                 'is_primary'    => (bool) ($cc['is_primary'] ?? false),
             ];
         }
