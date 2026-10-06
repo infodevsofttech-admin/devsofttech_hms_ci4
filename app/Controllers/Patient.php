@@ -1113,6 +1113,7 @@ class Patient extends BaseController
         }
 
 		$data['profile_file_path'] = $profile_file_path;
+		$data['abhaPhotoAvailable'] = $abha_profile_photo_base64 !== '';
 
 		if ($edit == 0) {
 			return view('billing/Person_profile_V', $data);

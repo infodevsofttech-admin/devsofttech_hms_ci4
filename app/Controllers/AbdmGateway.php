@@ -6241,6 +6241,70 @@ class AbdmGateway extends BaseController
                         'is_primary'      => true,
                     ]);
                 }
+            } elseif ($taskType === 'immunization_record_publish' && $this->db->tableExists('immunization_records')) {
+                $imm = $this->db->table('immunization_records')
+                    ->select('id, patient_id, vaccine_name, given_date, abdm_care_context_reference')
+                    ->where('id', $taskEntityId)
+                    ->get(1)
+                    ->getRowArray();
+                if (! empty($imm)) {
+                    $admDate = ! empty($imm['given_date']) && strtotime((string) $imm['given_date']) > 0
+                        ? date('Y-m-d', strtotime((string) $imm['given_date']))
+                        : date('Y-m-d');
+                    $dateStr = date('d M Y', strtotime($admDate));
+                    $ccRef = ! empty($imm['abdm_care_context_reference'])
+                        ? trim((string) $imm['abdm_care_context_reference'])
+                        : ('IMM-' . $taskEntityId);
+                    $display = 'ImmunizationRecord - ' . ($imm['vaccine_name'] ?? 'Vaccine') . ' (' . $dateStr . ')';
+
+                    $addContext([
+                        'careContextId'   => $ccRef,
+                        'referenceNumber' => $ccRef,
+                        'display'         => $display,
+                        'record_type'     => 'ImmunizationRecord',
+                        'patient_id'      => $patientId,
+                        'is_fhir_ready'   => true,
+                        'is_primary'      => true,
+                    ]);
+                }
+            } elseif ($taskType === 'health_document_publish') {
+                if ($this->db->tableExists('patient_doc')) {
+                    $pdoc = $this->db->table('patient_doc')->where('id', $taskEntityId)->get(1)->getRowArray();
+                    if (! empty($pdoc)) {
+                        $docDate = ! empty($pdoc['date_issue']) ? $pdoc['date_issue'] : (! empty($pdoc['created_at']) ? $pdoc['created_at'] : date('Y-m-d'));
+                        $dateStr = date('d M Y', strtotime((string) $docDate));
+                        $ccRef = 'DOC-' . $taskEntityId . '-' . date('Ymd', strtotime((string) $docDate));
+                        $display = 'HealthDocumentRecord - ' . (! empty($pdoc['doc_name']) ? $pdoc['doc_name'] : 'Medical Document') . ' (' . $dateStr . ')';
+                        $addContext([
+                            'careContextId'   => $ccRef,
+                            'referenceNumber' => $ccRef,
+                            'display'         => $display,
+                            'record_type'     => 'HealthDocumentRecord',
+                            'patient_id'      => $patientId,
+                            'is_fhir_ready'   => true,
+                            'is_primary'      => true,
+                        ]);
+                    }
+                }
+            } elseif ($taskType === 'wellness_record_publish') {
+                if ($this->db->tableExists('opd_prescription')) {
+                    $wopd = $this->db->table('opd_prescription')->where('id', $taskEntityId)->get(1)->getRowArray();
+                    if (! empty($wopd)) {
+                        $vDate = ! empty($wopd['date_opd_visit']) ? $wopd['date_opd_visit'] : date('Y-m-d');
+                        $dateStr = date('d M Y', strtotime((string) $vDate));
+                        $ccRef = 'WELLNESS-' . $patientId . '-S' . $taskEntityId . '-' . date('Ymd', strtotime((string) $vDate));
+                        $display = 'WellnessRecord - ' . $dateStr;
+                        $addContext([
+                            'careContextId'   => $ccRef,
+                            'referenceNumber' => $ccRef,
+                            'display'         => $display,
+                            'record_type'     => 'WellnessRecord',
+                            'patient_id'      => $patientId,
+                            'is_fhir_ready'   => true,
+                            'is_primary'      => true,
+                        ]);
+                    }
+                }
             }
         }
 
@@ -6419,20 +6483,33 @@ class AbdmGateway extends BaseController
 
         // 6. Query immunization_records / patient_immunization if exists
         if ($this->db->tableExists('immunization_records')) {
-            $immRows = $this->db->table('immunization_records')
-                ->select('id, patient_id, vaccine_name, given_date, abdm_care_context_reference')
-                ->where('patient_id', $patientId)
-                ->orderBy('id', 'DESC')
-                ->limit(10)
+            $immFields = $this->db->getFieldNames('immunization_records') ?? [];
+            $hasStatus = in_array('status', $immFields, true);
+            $builder = $this->db->table('immunization_records')
+                ->select('id, patient_id, vaccine_name, given_date, abdm_care_context_reference' . ($hasStatus ? ', status' : ''))
+                ->where('patient_id', $patientId);
+
+            if ($hasStatus) {
+                // Prioritize completed records, and don't omit administered ones
+                $builder->orderBy("CASE WHEN status = 'completed' THEN 1 WHEN given_date IS NOT NULL AND given_date > '1970-01-01' THEN 2 ELSE 3 END", 'ASC', false);
+            }
+            $immRows = $builder->orderBy('id', 'DESC')
+                ->limit(30)
                 ->get()
                 ->getResultArray();
 
             foreach ($immRows as $imm) {
-                $admDate = ! empty($imm['given_date']) ? date('Y-m-d', strtotime((string) $imm['given_date'])) : date('Y-m-d');
+                // If status is present and 'due' (and not given), skip unadministered vaccines
+                if ($hasStatus && strtolower((string) ($imm['status'] ?? '')) === 'due' && (empty($imm['given_date']) || $imm['given_date'] === '0000-00-00 00:00:00')) {
+                    continue;
+                }
+                $admDate = ! empty($imm['given_date']) && strtotime((string) $imm['given_date']) > 0
+                    ? date('Y-m-d', strtotime((string) $imm['given_date']))
+                    : date('Y-m-d');
                 $dateStr = date('d M Y', strtotime($admDate));
                 $ccRef = ! empty($imm['abdm_care_context_reference'])
                     ? trim((string) $imm['abdm_care_context_reference'])
-                    : ('IMM-' . $imm['id'] . '-' . str_replace('-', '', $admDate));
+                    : ('IMM-' . $imm['id']);
                 $display = 'ImmunizationRecord - ' . ($imm['vaccine_name'] ?? 'Vaccine') . ' (' . $dateStr . ')';
 
                 $addContext([

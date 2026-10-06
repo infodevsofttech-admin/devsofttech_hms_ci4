@@ -11887,6 +11887,7 @@ class Opd_prescription extends BaseController
         $masterTable = $this->findExistingTable(['opd_med_master']);
 
         $masterById = [];
+        $masterByName = [];
         if ($masterTable !== null) {
             $masterFields = $this->db->getFieldNames($masterTable) ?? [];
             $masterNameField = $this->resolveFirstField($masterFields, ['item_name', 'med_name']);
@@ -11896,14 +11897,19 @@ class Opd_prescription extends BaseController
             $masterAtcField = $this->resolveFirstField($masterFields, ['atc_code', 'who_atc_code']);
 
             $medIds = [];
+            $medNames = [];
             foreach ($rows as $row) {
                 $mid = (int) ($row['med_id'] ?? 0);
                 if ($mid > 0) {
                     $medIds[$mid] = $mid;
                 }
+                $rawName = strtoupper(trim((string) ($row['med_name'] ?? '')));
+                if ($rawName !== '') {
+                    $medNames[$rawName] = $rawName;
+                }
             }
 
-            if (! empty($medIds)) {
+            if (! empty($medIds) || ! empty($medNames)) {
                 $select = ['id'];
                 if ($masterNameField !== null) {
                     $select[] = $masterNameField . ' as item_name';
@@ -11921,16 +11927,53 @@ class Opd_prescription extends BaseController
                     $select[] = $masterAtcField . ' as atc_code';
                 }
 
-                $masterRows = $this->db->table($masterTable)
-                    ->select(implode(',', $select))
-                    ->whereIn('id', array_values($medIds))
-                    ->get()
-                    ->getResultArray();
+                $query = $this->db->table($masterTable)->select(implode(',', $select));
+                if (! empty($medIds) && ! empty($medNames) && $masterNameField !== null) {
+                    $query->groupStart()
+                        ->whereIn('id', array_values($medIds))
+                        ->orWhereIn($masterNameField, array_values($medNames))
+                        ->groupEnd();
+                } elseif (! empty($medIds)) {
+                    $query->whereIn('id', array_values($medIds));
+                } elseif (! empty($medNames) && $masterNameField !== null) {
+                    $query->whereIn($masterNameField, array_values($medNames));
+                }
+
+                $masterRows = $query->get()->getResultArray();
 
                 foreach ($masterRows as $mrow) {
                     $mid = (int) ($mrow['id'] ?? 0);
                     if ($mid > 0) {
                         $masterById[$mid] = $mrow;
+                    }
+                    $iname = strtoupper(trim((string) ($mrow['item_name'] ?? '')));
+                    if ($iname !== '') {
+                        $masterByName[$iname] = $mrow;
+                    }
+                }
+            }
+        }
+
+        // Secondary lookup in mst_items for SNOMED CT and generic name
+        $mstItemsByName = [];
+        if ($this->db->tableExists('mst_items')) {
+            $mstNames = [];
+            foreach ($rows as $row) {
+                $rawName = strtoupper(trim((string) ($row['med_name'] ?? '')));
+                if ($rawName !== '') {
+                    $mstNames[$rawName] = $rawName;
+                }
+            }
+            if (! empty($mstNames)) {
+                $mstRows = $this->db->table('mst_items')
+                    ->select('item_name, generic_name, snomed_ct_code, snomed_display')
+                    ->whereIn('item_name', array_values($mstNames))
+                    ->get()
+                    ->getResultArray();
+                foreach ($mstRows as $item) {
+                    $k = strtoupper(trim((string) ($item['item_name'] ?? '')));
+                    if ($k !== '') {
+                        $mstItemsByName[$k] = $item;
                     }
                 }
             }
@@ -11944,11 +11987,29 @@ class Opd_prescription extends BaseController
         $medications = [];
         foreach ($rows as $row) {
             $dose = $this->resolveDoseMasterLabel($row['dosage'] ?? '', $doseMap);
+            if ($dose === '' && ! empty($row['dosage_str'])) {
+                $dose = trim((string) $row['dosage_str']);
+            }
+
             $when = $this->resolveDoseMasterLabel($row['dosage_when'] ?? '', $whenMap);
+            if ($when === '' && ! empty($row['dosage_when_str'])) {
+                $when = trim((string) $row['dosage_when_str']);
+            }
+
             $frequency = $this->resolveDoseMasterLabel($row['dosage_freq'] ?? '', $frequencyMap);
+            if ($frequency === '' && ! empty($row['dosage_freq_str'])) {
+                $frequency = trim((string) $row['dosage_freq_str']);
+            }
+
             $route = $this->resolveDoseMasterLabel($row['dosage_where'] ?? '', $routeMap);
+            if ($route === '' && ! empty($row['dosage_where_str'])) {
+                $route = trim((string) $row['dosage_where_str']);
+            }
+
             $quantity = trim((string) ($row['qty'] ?? ''));
             $duration = trim((string) ($row['no_of_days'] ?? ''));
+            $remark   = trim((string) ($row['remark'] ?? ''));
+
             if (stripos($when, 'week') !== false && stripos($frequency, 'week') !== false) {
                 $frequency = '';
             }
@@ -11967,19 +12028,33 @@ class Opd_prescription extends BaseController
                 $frequency,
                 $duration,
                 $quantity !== '' && $quantity !== '0' ? ('Qty: ' . $quantity) : '',
+                $remark !== '' ? ('Instructions: ' . $remark) : '',
             ]);
 
             $mid = (int) ($row['med_id'] ?? 0);
+            $rawDrugName = trim((string) ($row['med_name'] ?? ''));
             $master = $mid > 0 ? ($masterById[$mid] ?? []) : [];
-            $drugName = trim((string) ($row['med_name'] ?? ''));
-            if ($drugName === '') {
-                $drugName = trim((string) ($master['item_name'] ?? ''));
+            if (empty($master) && $rawDrugName !== '') {
+                $master = $masterByName[strtoupper($rawDrugName)] ?? [];
             }
 
+            $drugName = $rawDrugName !== '' ? $rawDrugName : trim((string) ($master['item_name'] ?? ''));
             $genericName = trim((string) ($master['genericname'] ?? ''));
             $medType = trim((string) ($row['med_type'] ?? ''));
             if ($medType === '') {
                 $medType = trim((string) ($master['formulation'] ?? ''));
+            }
+
+            $snomedCode = trim((string) ($master['snomed_code'] ?? ''));
+            $atcCode = strtoupper(trim((string) ($master['atc_code'] ?? '')));
+
+            // Fallback from mst_items if snomed_code is not in opd_med_master
+            if ($snomedCode === '' && ! empty($mstItemsByName[strtoupper($drugName)])) {
+                $mst = $mstItemsByName[strtoupper($drugName)];
+                $snomedCode = trim((string) ($mst['snomed_ct_code'] ?? ''));
+                if ($genericName === '' && ! empty($mst['generic_name'])) {
+                    $genericName = trim((string) $mst['generic_name']);
+                }
             }
 
             $medications[] = [
@@ -11991,8 +12066,8 @@ class Opd_prescription extends BaseController
                 'med_id' => $mid,
                 'generic_name' => $genericName,
                 'med_type' => $medType,
-                'snomed_code' => trim((string) ($master['snomed_code'] ?? '')),
-                'atc_code' => strtoupper(trim((string) ($master['atc_code'] ?? ''))),
+                'snomed_code' => $snomedCode,
+                'atc_code' => $atcCode,
             ];
         }
 

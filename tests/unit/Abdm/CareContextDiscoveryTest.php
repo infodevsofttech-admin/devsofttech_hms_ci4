@@ -309,6 +309,39 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
         $this->assertTrue($foundImm, 'ImmunizationRecord should be discovered');
     }
 
+    public function testImmunizationTaskReturnsPrimaryCareContextInDiscovery(): void
+    {
+        $db = \Config\Database::connect();
+        $db->table('immunization_records')->insert([
+            'id' => 11,
+            'patient_id' => 11,
+            'vaccine_name' => 'PCV',
+            'given_date' => '2026-10-06 01:54:00',
+            'abdm_care_context_reference' => 'IMM-11',
+        ]);
+
+        $reflector = new ReflectionClass($this->gateway);
+        $method = $reflector->getMethod('findCareContextsForPatient');
+        $method->setAccessible(true);
+
+        [$v3List, $fullList] = $method->invoke(
+            $this->gateway,
+            11,
+            'P-11',
+            'DEVENDER SINGH',
+            'immunization_record_publish',
+            '11'
+        );
+
+        $this->assertNotEmpty($fullList);
+        $primary = $fullList[0];
+        $this->assertSame('IMM-11', $primary['careContextId']);
+        $this->assertSame('ImmunizationRecord', $primary['record_type']);
+        $this->assertTrue($primary['is_primary']);
+        $this->assertTrue($primary['is_fhir_ready']);
+        $this->assertStringContainsString('PCV', $primary['display']);
+    }
+
     public function testShareDiagnosisReportBundleFormatsRadiologyCareContext(): void
     {
         $_SERVER['HTTP_X_REQUESTED_WITH'] = 'xmlhttprequest';

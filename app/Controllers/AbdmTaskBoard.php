@@ -147,7 +147,7 @@ class AbdmTaskBoard extends BaseController
             unset($task);
         }
 
-        // 2. Lookup health_records by entity_id
+        // 2. Lookup health_records by entity_id with strict entity_type / patient_id scoping
         $latestHr = [];
         if ($db->tableExists('health_records')) {
             $entityIds = [];
@@ -161,23 +161,93 @@ class AbdmTaskBoard extends BaseController
 
             if ($entityIds !== []) {
                 $rows = $db->table('health_records')
-                    ->select('id, entity_type, entity_id, push_status, care_context_reference, linked_at, abdm_txn_id')
+                    ->select('id, patient_id, entity_type, hi_type, entity_id, push_status, care_context_reference, linked_at, abdm_txn_id')
                     ->whereIn('entity_id', $entityIds)
                     ->orderBy('id', 'DESC')
                     ->get()
                     ->getResultArray();
                 foreach ($rows as $row) {
+                    $pId = (int) ($row['patient_id'] ?? 0);
+                    $eType = strtolower(trim((string) ($row['entity_type'] ?? '')));
+                    $hiType = strtolower(trim((string) ($row['hi_type'] ?? '')));
                     $eid = (string) ($row['entity_id'] ?? '');
-                    if ($eid !== '' && ! isset($latestHr[$eid])) {
-                        $latestHr[$eid] = $row;
+                    if ($eid !== '') {
+                        if ($pId > 0 && $eType !== '') {
+                            $k1 = $pId . '_' . $eType . '_' . $eid;
+                            if (! isset($latestHr[$k1])) {
+                                $latestHr[$k1] = $row;
+                            }
+                        }
+                        if ($pId > 0 && $hiType !== '') {
+                            $k2 = $pId . '_' . $hiType . '_' . $eid;
+                            if (! isset($latestHr[$k2])) {
+                                $latestHr[$k2] = $row;
+                            }
+                        }
+                        if ($eType !== '') {
+                            $k3 = $eType . '_' . $eid;
+                            if (! isset($latestHr[$k3])) {
+                                $latestHr[$k3] = $row;
+                            }
+                        }
+                        if (! isset($latestHr[$eid])) {
+                            $latestHr[$eid] = $row;
+                        }
                     }
                 }
             }
         }
 
         foreach ($tasks as &$task) {
+            $pId = (int) ($task['patient_id'] ?? 0);
+            $taskType = strtolower(trim((string) ($task['task_type'] ?? '')));
+            $taskEntityType = strtolower(trim((string) ($task['entity_type'] ?? '')));
             $eid = (string) ($task['entity_id'] ?? '');
-            $hr = $latestHr[$eid] ?? null;
+
+            // Map task type or entity type to standard health_record entity types / hi_types
+            $candidateTypes = array_values(array_filter([$taskEntityType]));
+            if ($taskType === 'immunization_record_publish') {
+                $candidateTypes = array_values(array_unique(array_merge($candidateTypes, ['immunization', 'immunizationrecord'])));
+            } elseif ($taskType === 'opd_prescription_publish') {
+                $candidateTypes = array_values(array_unique(array_merge($candidateTypes, ['opd', 'opd_prescription', 'opconsultrecord'])));
+            } elseif ($taskType === 'ipd_discharge_publish') {
+                $candidateTypes = array_values(array_unique(array_merge($candidateTypes, ['ipd', 'ipd_discharge', 'dischargesummaryrecord'])));
+            } elseif ($taskType === 'lab_report_publish' || $taskType === 'radiology_report_publish') {
+                $candidateTypes = array_values(array_unique(array_merge($candidateTypes, ['lab', 'radiology', 'diagnosticreportrecord'])));
+            } elseif ($taskType === 'wellness_record_publish') {
+                $candidateTypes = array_values(array_unique(array_merge($candidateTypes, ['opd_vitals', 'opd', 'wellness', 'wellnessrecord'])));
+            } elseif ($taskType === 'health_document_publish') {
+                $candidateTypes = array_values(array_unique(array_merge($candidateTypes, ['patient_document', 'doctor_document', 'file_upload_data', 'patient_doc', 'healthdocumentrecord'])));
+            } elseif (in_array($taskType, ['invoice_publish', 'invoice_record_publish'], true)) {
+                $candidateTypes = array_values(array_unique(array_merge($candidateTypes, ['invoice', 'opd_invoice', 'charges_invoice', 'ipd_invoice', 'invoicerecord'])));
+            }
+
+            $hr = null;
+            // 1) Match with patient_id and entity/hi type
+            if ($pId > 0) {
+                foreach ($candidateTypes as $cType) {
+                    $key = $pId . '_' . strtolower($cType) . '_' . $eid;
+                    if (isset($latestHr[$key])) {
+                        $hr = $latestHr[$key];
+                        break;
+                    }
+                }
+            }
+            // 2) Match with entity/hi type without patient_id
+            if ($hr === null) {
+                foreach ($candidateTypes as $cType) {
+                    $key = strtolower($cType) . '_' . $eid;
+                    if (isset($latestHr[$key])) {
+                        $hr = $latestHr[$key];
+                        break;
+                    }
+                }
+            }
+            // 3) Only fallback to raw $eid if task has no specific taskType or candidateTypes
+            if ($hr === null && empty($candidateTypes) && isset($latestHr[$eid])) {
+                $hr = $latestHr[$eid];
+            }
+
             $pushStatus = strtolower(trim((string) ($hr['push_status'] ?? '')));
             $task['bridge_health_record_id'] = (int) ($hr['id'] ?? 0);
             $task['bridge_push_status'] = $pushStatus;
@@ -185,7 +255,7 @@ class AbdmTaskBoard extends BaseController
             $careContext = trim((string) ($hr['care_context_reference'] ?? ''));
             if ($careContext === '') {
                 $resultText = (string) ($task['last_action_result'] ?? '');
-                if (preg_match('/(RAD-\d+-\d+|LAB-\d+-\d+|OPD-\d+-\d+|INVOICE-\w+-\d+-\d+|IMM-\d+-\d+|DIS-\d+-\d+)/i', $resultText, $ccm)) {
+                if (preg_match('/((?:RAD|LAB|OPD|INVOICE|IMM|DISCHARGE|DIS|WELLNESS|DOC)-[A-Za-z0-9_-]+)/i', $resultText, $ccm)) {
                     $careContext = $ccm[1];
                 }
             }

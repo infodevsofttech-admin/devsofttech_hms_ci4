@@ -770,6 +770,12 @@ class AbdmTaskBoardSyncService
         };
         $cleanVisitDate = str_replace('-', '', $visitDate);
         $careContextRef = $prefix . $entityId . '-' . $cleanVisitDate;
+        if ($taskType === 'immunization_record_publish' && $this->db->tableExists('immunization_records')) {
+            $immRec = $this->db->table('immunization_records')->select('abdm_care_context_reference')->where('id', (int) $entityId)->get(1)->getRowArray();
+            if (! empty($immRec['abdm_care_context_reference'])) {
+                $careContextRef = trim((string) $immRec['abdm_care_context_reference']);
+            }
+        }
         $careContextDisplay = $hiType . ' ' . $visitDate;
 
         $pushData = [

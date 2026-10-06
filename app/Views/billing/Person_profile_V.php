@@ -56,7 +56,7 @@
             $abhaKycVerified = (int) ($data[0]->abha_kyc_verified ?? 0) === 1;
             $abhaMobileVerified = (int) ($data[0]->abha_mobile_verified ?? 0) === 1;
             $abhaLinkedAt = trim((string) ($data[0]->abdm_linked_at ?? ''));
-            $abhaPhotoAvailable = trim((string) ($data[0]->abha_profile_photo_base64 ?? '')) !== '';
+            $abhaPhotoAvailable = isset($abhaPhotoAvailable) ? (bool) $abhaPhotoAvailable : (trim((string) ($data[0]->abha_profile_photo_base64 ?? '')) !== '');
             $hasExistingAbha = ($patientAbhaId !== '' || $abhaAddress !== '' || $abhaLinkedAt !== '');
             $isAbhaStatusVerified = in_array(strtoupper($abhaVerifiedStatus), ['VERIFIED', 'LINKED', 'ACTIVE', '1', 'YES', 'Y', 'TRUE'], true)
                 || strtoupper($abhaVerificationType) === 'VERIFIED'
@@ -64,7 +64,11 @@
             $isAbhaLinkedAndVerified = $hasExistingAbha && ($isAbhaStatusVerified || $abhaLinkedAt !== '');
         ?>
         <?php
-            $user = auth()->user();
+            try {
+                $user = function_exists('auth') ? auth()->user() : null;
+            } catch (\Throwable $e) {
+                $user = null;
+            }
             $canEditOpd = is_object($user) && method_exists($user, 'can') ? $user->can('billing.opd.edit') : false;
             $canChargeEdit = is_object($user) && method_exists($user, 'can') ? $user->can('billing.charges.edit') : false;
         ?>
@@ -119,11 +123,11 @@
                             <div class="d-flex justify-content-between align-items-center border rounded px-3 py-2">
                                 <div>
                                     <div class="small text-muted">OPD Visits</div>
-                                    <div class="fw-bold"><?= count($opd_List) ?></div>
+                                    <div class="fw-bold"><?= count($opd_List ?? []) ?></div>
                                 </div>
                                 <div>
                                     <div class="small text-muted">Invoices</div>
-                                    <div class="fw-bold"><?= count($invoice_list) ?></div>
+                                    <div class="fw-bold"><?= count($invoice_list ?? []) ?></div>
                                 </div>
                                 <div>
                                     <div class="small text-muted">Insurance</div>
@@ -178,7 +182,7 @@
                                 </div>
                                 <div class="row">
                                     <div class="col-lg-3 col-md-4 label">Gender / Age</div>
-                                    <div class="col-lg-9 col-md-8"><?=$data[0]->xgender?> / <?= esc(get_age_1($data[0]->dob ?? null, $data[0]->age ?? '', $data[0]->age_in_month ?? '', $data[0]->estimate_dob ?? '')) ?></div>
+                                    <div class="col-lg-9 col-md-8"><?= esc($data[0]->xgender ?? ((int) ($data[0]->gender ?? 0) === 1 ? 'Male' : 'Female')) ?> / <?= esc(get_age_1($data[0]->dob ?? null, $data[0]->age ?? '', $data[0]->age_in_month ?? '', $data[0]->estimate_dob ?? '')) ?></div>
                                 </div>
                                 <div class="row">
                                     <div class="col-lg-3 col-md-4 label">Relation</div>

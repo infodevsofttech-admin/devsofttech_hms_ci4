@@ -9,7 +9,11 @@
     </nav>
 </div>
 <?php
-    $user = auth()->user();
+    try {
+        $user = function_exists('auth') ? auth()->user() : null;
+    } catch (\Throwable $e) {
+        $user = null;
+    }
     $patientAbhaId = (string) ($data[0]->abha_id ?? $data[0]->abha_no ?? $data[0]->abha ?? $data[0]->abha_address ?? '');
     $abhaAddress = trim((string) ($data[0]->abha_address ?? ''));
     $abhaVerifiedStatus = trim((string) ($data[0]->abha_verified_status ?? ''));
@@ -17,6 +21,7 @@
     $abhaKycVerified = (int) ($data[0]->abha_kyc_verified ?? 0) === 1;
     $abhaMobileVerified = (int) ($data[0]->abha_mobile_verified ?? 0) === 1;
     $abhaLinkedAt = trim((string) ($data[0]->abdm_linked_at ?? ''));
+    $abhaPhotoAvailable = isset($abhaPhotoAvailable) ? (bool) $abhaPhotoAvailable : (trim((string) ($data[0]->abha_profile_photo_base64 ?? '')) !== '');
     $isAbhaVerified = in_array(strtoupper($abhaVerifiedStatus), ['VERIFIED', 'ACTIVE', 'LINKED', '1', 'YES', 'Y', 'TRUE'], true)
         || strtoupper($abhaVerificationType) === 'VERIFIED'
         || ($abhaKycVerified && $abhaMobileVerified);
@@ -131,7 +136,7 @@
                                 <div class="row" style="margin-top: 6px;">
                                     <div class="col-md-3"><strong>KYC Verified:</strong> <?= $abhaKycVerified ? 'YES' : 'NO' ?></div>
                                     <div class="col-md-3"><strong>Mobile Verified:</strong> <?= $abhaMobileVerified ? 'YES' : 'NO' ?></div>
-                                    <div class="col-md-6"><strong>ABHA Photo:</strong> <?= $abhaPhotoAvailable ? 'AVAILABLE (BASE64 STORED)' : 'NOT AVAILABLE' ?></div>
+                                    <div class="col-md-6"><strong>ABHA Photo:</strong> <?= !empty($abhaPhotoAvailable) ? 'AVAILABLE (BASE64 STORED)' : 'NOT AVAILABLE' ?></div>
                                 </div>
                                 <?php if ($abhaLockNotice !== '') : ?>
                                 <div class="row" style="margin-top: 6px;">

@@ -3685,6 +3685,8 @@
                     task_type: taskType,
                     entity_id: entityId,
                     onLinked: function (res) {
+                        row.setAttribute('data-task-status', 'completed');
+                        row.setAttribute('data-is-linked', '1');
                         var statusCell = row.children[5];
                         if (statusCell) {
                             var refHtml = '';
@@ -3692,6 +3694,10 @@
                                 refHtml = '<div class="small"><code>' + (res.care_contexts[0].ref || '') + '</code></div>';
                             }
                             statusCell.innerHTML = '<span class="badge bg-success status-pill">LINKED</span>' + refHtml;
+                        }
+                        var actionCell = row.children[6];
+                        if (actionCell) {
+                            actionCell.innerHTML = '<span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2"><i class="bi bi-check2-all me-1"></i>Done</span>';
                         }
                     }
                 });

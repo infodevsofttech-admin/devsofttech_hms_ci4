@@ -73,6 +73,52 @@ final class AbdmTaskBoardBackfillTest extends CIUnitTestCase
         $this->assertSame('RAD-51450-20261001', $enriched[1]['bridge_care_context_reference']);
     }
 
+    public function testEnrichTasksWithHealthRecordStatePreventsCrossModuleCollision(): void
+    {
+        $db = \Config\Database::connect();
+        if ($db->tableExists('health_records')) {
+            // Insert an IPD discharge health record with entity_id = 999 for patient 18
+            $db->table('health_records')->insert([
+                'id' => 9999,
+                'patient_id' => 18,
+                'entity_type' => 'ipd',
+                'hi_type' => 'DischargeSummaryRecord',
+                'entity_id' => '999',
+                'push_status' => 'queued',
+                'care_context_reference' => 'DISCHARGE-999-S999-2026',
+            ]);
+
+            $controller = (new ReflectionClass(AbdmTaskBoard::class))->newInstanceWithoutConstructor();
+            $method = new ReflectionMethod(AbdmTaskBoard::class, 'enrichTasksWithHealthRecordState');
+            $method->setAccessible(true);
+
+            // Task is for patient 11 with entity_type = immunization and entity_id = 999
+            $mockTasks = [
+                [
+                    'id' => 101,
+                    'task_code' => 'ABDM-TEST-001',
+                    'task_type' => 'immunization_record_publish',
+                    'patient_id' => 11,
+                    'entity_type' => 'immunization',
+                    'entity_id' => '999',
+                    'status' => 'pending',
+                    'last_action_result' => '',
+                ],
+            ];
+
+            $enriched = $method->invoke($controller, $mockTasks);
+
+            // Should NOT match the IPD record for patient 18
+            $this->assertSame(0, $enriched[0]['bridge_submitted']);
+            $this->assertSame('', $enriched[0]['bridge_care_context_reference']);
+
+            // Clean up
+            $db->table('health_records')->where('id', 9999)->delete();
+        } else {
+            $this->assertTrue(true);
+        }
+    }
+
     public function testWorkTaskServiceHasGetTasksMethod(): void
     {
         $serviceClass = new ReflectionClass(\App\Libraries\AbdmWorkTaskService::class);

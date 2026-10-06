@@ -678,6 +678,75 @@
                     alertBox.innerHTML += '<div class="mt-2 pt-2 border-top border-success-subtle text-dark small"><i class="bi bi-file-earmark-medical text-success me-1"></i><strong>FHIR Document Stored on Bridge:</strong> Invoice bundle is active on Bridge for Care Context <code>' + (pRes.care_context_reference || firstRef) + '</code>.<br><i class="bi bi-info-circle text-primary me-1"></i><strong>To view in PHR App:</strong> Open your PHR app (e.g. ABHA App) &rarr; tap <em>Linked Facilities</em> &rarr; tap <em>"Fetch Records" / "Pull Records"</em>.</div>';
                 }
             }).catch(function() {});
+        } else if (ctxTaskType === 'immunization_record_publish') {
+            var pushData = new URLSearchParams();
+            pushData.append('record_id', ctxEntityId);
+            pushData.append('patient_id', ctxPatientId);
+            pushData.append('abha_id', abhaAddress);
+            pushData.append('push_to_gateway', '1');
+            if (firstRef) pushData.append('care_context_reference', firstRef);
+            pushData.append(csrf.name || 'csrf_hms', csrf.hash);
+
+            fetch('<?= base_url('AbdmGateway/share_immunization_bundle') ?>', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                body: pushData.toString()
+            }).then(function(r) { return r.json(); }).then(function(pRes) {
+                updateCsrf(pRes);
+                if (pRes && pRes.ok === 1 && alertBox) {
+                    alertBox.innerHTML += '<div class="mt-2 pt-2 border-top border-success-subtle text-dark small"><i class="bi bi-file-earmark-medical text-success me-1"></i><strong>FHIR Document Stored on Bridge:</strong> Immunization bundle is active on Bridge for Care Context <code>' + (pRes.care_context_reference || firstRef) + '</code>.<br><i class="bi bi-info-circle text-primary me-1"></i><strong>To view in PHR App:</strong> Open your PHR app (e.g. ABHA App) &rarr; tap <em>Linked Facilities</em> &rarr; tap <em>"Fetch Records" / "Pull Records"</em>.</div>';
+                }
+            }).catch(function() {});
+        } else if (ctxTaskType === 'ipd_discharge_publish') {
+            var pushData = new URLSearchParams();
+            pushData.append('ipd_id', ctxEntityId);
+            pushData.append('patient_id', ctxPatientId);
+            pushData.append('abha_id', abhaAddress);
+            pushData.append('push_to_gateway', '1');
+            if (firstRef) pushData.append('care_context_reference', firstRef);
+            pushData.append(csrf.name || 'csrf_hms', csrf.hash);
+
+            fetch('<?= base_url('AbdmGateway/share_ipd_discharge_bundle') ?>', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                body: pushData.toString()
+            }).then(function(r) { return r.json(); }).then(function(pRes) {
+                updateCsrf(pRes);
+                if (pRes && pRes.ok === 1 && alertBox) {
+                    alertBox.innerHTML += '<div class="mt-2 pt-2 border-top border-success-subtle text-dark small"><i class="bi bi-file-earmark-medical text-success me-1"></i><strong>FHIR Document Stored on Bridge:</strong> Discharge summary bundle is active on Bridge for Care Context <code>' + (pRes.care_context_reference || firstRef) + '</code>.<br><i class="bi bi-info-circle text-primary me-1"></i><strong>To view in PHR App:</strong> Open your PHR app (e.g. ABHA App) &rarr; tap <em>Linked Facilities</em> &rarr; tap <em>"Fetch Records" / "Pull Records"</em>.</div>';
+                }
+            }).catch(function() {});
+        } else if (ctxTaskType === 'wellness_record_publish') {
+            var pushData = new URLSearchParams();
+            pushData.append('opd_id', ctxEntityId);
+            pushData.append('patient_id', ctxPatientId);
+            pushData.append('abha_id', abhaAddress);
+            pushData.append('push_to_gateway', '1');
+            if (firstRef) pushData.append('care_context_reference', firstRef);
+            pushData.append(csrf.name || 'csrf_hms', csrf.hash);
+
+            fetch('<?= base_url('AbdmGateway/share_wellness_bundle') ?>', {
+                method: 'POST',
+                headers: {
+                    'Content-Type': 'application/x-www-form-urlencoded; charset=UTF-8',
+                    'X-Requested-With': 'XMLHttpRequest',
+                    'Accept': 'application/json'
+                },
+                body: pushData.toString()
+            }).then(function(r) { return r.json(); }).then(function(pRes) {
+                updateCsrf(pRes);
+                if (pRes && pRes.ok === 1 && alertBox) {
+                    alertBox.innerHTML += '<div class="mt-2 pt-2 border-top border-success-subtle text-dark small"><i class="bi bi-file-earmark-medical text-success me-1"></i><strong>FHIR Document Stored on Bridge:</strong> Wellness bundle is active on Bridge for Care Context <code>' + (pRes.care_context_reference || firstRef) + '</code>.<br><i class="bi bi-info-circle text-primary me-1"></i><strong>To view in PHR App:</strong> Open your PHR app (e.g. ABHA App) &rarr; tap <em>Linked Facilities</em> &rarr; tap <em>"Fetch Records" / "Pull Records"</em>.</div>';
+                }
+            }).catch(function() {});
         }
     }
 
