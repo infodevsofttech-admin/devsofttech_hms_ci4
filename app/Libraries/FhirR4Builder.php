@@ -718,10 +718,10 @@ class FhirR4Builder
             'type'         => [
                 'coding' => [[
                     'system'  => 'http://snomed.info/sct',
-                    'code'    => '371530004',
-                    'display' => 'Clinical consultation report',
+                    'code'    => $isOpConsult ? '371530004' : '440545006',
+                    'display' => $isOpConsult ? 'Clinical consultation report' : 'Prescription record',
                 ]],
-                'text' => 'Clinical Consultation report',
+                'text' => $isOpConsult ? 'Clinical Consultation report' : 'Prescription record',
             ],
             'subject'   => ['reference' => $patientRef, 'display' => 'Patient'],
             'encounter' => ['reference' => $encounterRef, 'display' => 'Encounter'],

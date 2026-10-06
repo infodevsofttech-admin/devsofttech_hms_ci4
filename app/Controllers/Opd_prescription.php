@@ -4844,7 +4844,7 @@ class Opd_prescription extends BaseController
      *
      * @return array<string, mixed>
      */
-    public function regenerateFhirBundleInternal(int $opdId, int $sessionId): array
+    public function regenerateFhirBundleInternal(int $opdId, int $sessionId, string $bundleType = 'OPConsultRecord'): array
     {
 
         if ($opdId <= 0) {
@@ -4932,7 +4932,8 @@ class Opd_prescription extends BaseController
             if ($prescriptionPdf !== null) {
                 $clinicalContext['attachments'][] = $prescriptionPdf;
             }
-            $clinicalContext['bundle_type'] = 'OPConsultRecord';
+            $normalizedBundleType = in_array($bundleType, ['Prescription', 'PrescriptionRecord'], true) ? 'PrescriptionRecord' : 'OPConsultRecord';
+            $clinicalContext['bundle_type'] = $normalizedBundleType;
             $bundle          = $this->fhirR4Builder->buildOpConsultBundle($patient, $encounter, $medications, $conditions, $clinicalContext);
             $bundleJson      = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
@@ -4947,10 +4948,10 @@ class Opd_prescription extends BaseController
             }
             $generatedAt = Time::now('Asia/Kolkata')->toDateTimeString();
 
-            // Overwrite the latest stored bundle for this opd_id / session
+            // Overwrite the latest stored bundle for this opd_id / session and bundle_type
             $existingBuilder = $this->db->table('opd_fhir_documents')
                 ->where('opd_id', $opdId)
-                ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle', 'PrescriptionRecord']);
+                ->where('bundle_type', $normalizedBundleType);
             if ($sessionId > 0) {
                 $existingBuilder->where('opd_session_id', $sessionId);
             }
@@ -4960,7 +4961,7 @@ class Opd_prescription extends BaseController
                 $this->db->table('opd_fhir_documents')
                     ->where('id', (int) $existing['id'])
                     ->update([
-                        'bundle_type' => 'OPConsultRecord',
+                        'bundle_type' => $normalizedBundleType,
                         'bundle_json'  => $bundleJson,
                         'generated_by' => $generatedBy,
                         'generated_at' => $generatedAt,
@@ -4970,7 +4971,7 @@ class Opd_prescription extends BaseController
                 $this->db->table('opd_fhir_documents')->insert([
                     'opd_id'         => $opdId,
                     'opd_session_id' => $sessionId,
-                    'bundle_type'    => 'OPConsultRecord',
+                    'bundle_type'    => $normalizedBundleType,
                     'bundle_json'    => $bundleJson,
                     'generated_by'   => $generatedBy,
                     'generated_at'   => $generatedAt,
@@ -4982,7 +4983,9 @@ class Opd_prescription extends BaseController
                 'ok'           => 1,
                 'message'      => 'FHIR bundle regenerated successfully',
                 'document_id'  => $documentId,
+                'bundle_type'  => $normalizedBundleType,
                 'bundle'       => $bundle,
+                'medications'  => $medications,
                 'generated_at' => $generatedAt,
                 'entry_count'  => isset($bundle['entry']) ? count($bundle['entry']) : 0,
             ];
@@ -11830,6 +11833,45 @@ class Opd_prescription extends BaseController
             ]);
         }
 
+        // Also generate and store PrescriptionRecord FHIR bundle if medicines were prescribed
+        $prescBundleJson = null;
+        if (! empty($medications)) {
+            $prescContext = $clinicalContext;
+            $prescContext['bundle_type'] = 'PrescriptionRecord';
+            $prescBundle = $this->fhirR4Builder->buildOpConsultBundle($patient, $encounter, $medications, $conditions, $prescContext);
+            $prescBundleJson = (string) json_encode($prescBundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+            $existingPrescDoc = $this->db->table('opd_fhir_documents')
+                ->where('opd_id', $opdId)
+                ->where('opd_session_id', $sessionId)
+                ->where('bundle_type', 'PrescriptionRecord')
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+
+            if (! empty($existingPrescDoc['id'])) {
+                $this->db->table('opd_fhir_documents')
+                    ->where('id', (int) $existingPrescDoc['id'])
+                    ->update([
+                        'bundle_json'  => $prescBundleJson,
+                        'generated_by' => $generatedBy,
+                        'generated_at' => $now,
+                        'updated_at'   => $now,
+                    ]);
+            } else {
+                $this->db->table('opd_fhir_documents')->insert([
+                    'opd_id'         => $opdId,
+                    'opd_session_id' => $sessionId,
+                    'bundle_type'    => 'PrescriptionRecord',
+                    'bundle_json'    => $prescBundleJson,
+                    'generated_by'   => $generatedBy,
+                    'generated_at'   => $now,
+                    'created_at'     => $now,
+                    'updated_at'     => $now,
+                ]);
+            }
+        }
+
         if (! $inserted) {
             return false;
         }
@@ -11839,8 +11881,10 @@ class Opd_prescription extends BaseController
                 $patientId = (int) ($patientRow['id'] ?? ($opdRow['p_id'] ?? 0));
                 $visitDateRaw = trim((string) ($opdRow['date_opd_visit'] ?? $opdRow['apointment_date'] ?? ''));
                 $visitDate = $visitDateRaw !== '' ? date('Y-m-d', strtotime($visitDateRaw)) : date('Y-m-d');
-                $careContextRef = 'OPD-' . $patientId . '-S' . $sessionId . '-' . str_replace('-', '', $visitDate);
+                $cleanDate = str_replace('-', '', $visitDate);
+                $careContextRef = 'OPD-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
 
+                // 1. Upsert OPConsultRecord
                 $existingHr = $this->db->table('health_records')
                     ->select('id')
                     ->where('care_context_reference', $careContextRef)
@@ -11864,6 +11908,74 @@ class Opd_prescription extends BaseController
                 } else {
                     $hrPayload['created_at'] = Time::now('Asia/Kolkata')->toDateTimeString();
                     $this->db->table('health_records')->insert($hrPayload);
+                }
+
+                // 2. Upsert PrescriptionRecord (if medications exist)
+                if (! empty($medications) && ! empty($prescBundleJson)) {
+                    $prescCcRef = 'PRESC-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
+                    $existingPrescHr = $this->db->table('health_records')
+                        ->select('id')
+                        ->where('care_context_reference', $prescCcRef)
+                        ->get(1)
+                        ->getRowArray();
+                    $prescHrPayload = [
+                        'patient_id' => $patientId > 0 ? $patientId : null,
+                        'abha_id' => $abhaAddress !== '' ? $abhaAddress : null,
+                        'hi_type' => 'PrescriptionRecord',
+                        'entity_type' => 'opd_prescription',
+                        'entity_id' => (string) $sessionId,
+                        'record_data' => $prescBundleJson,
+                        'care_context_reference' => $prescCcRef,
+                        'push_status' => 'local_discovery_ready',
+                        'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                    ];
+                    if (! empty($existingPrescHr)) {
+                        $this->db->table('health_records')->where('id', (int) $existingPrescHr['id'])->update($prescHrPayload);
+                    } else {
+                        $prescHrPayload['created_at'] = Time::now('Asia/Kolkata')->toDateTimeString();
+                        $this->db->table('health_records')->insert($prescHrPayload);
+                    }
+                }
+
+                // 3. Upsert WellnessRecord (if vitals exist)
+                $hasVitals = ! empty($clinicalContext['observations']);
+                if ($hasVitals && class_exists('\App\Controllers\DoctorDocument')) {
+                    try {
+                        $docCtrl = new \App\Controllers\DoctorDocument();
+                        $wSource = $docCtrl->buildWellnessRecordSource($patientId, $sessionId);
+                        if (! empty($wSource) && ! empty($wSource['vitals'])) {
+                            $wFactory = new \App\Libraries\Abdm\Fhir\FhirGeneratorFactory();
+                            $wGen = $wFactory->wellness()->generate($wSource);
+                            if (! empty($wGen['bundle'])) {
+                                $wellBundleJson = json_encode($wGen['bundle'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                                $wellCcRef = 'WELLNESS-' . $sessionId . '-' . $cleanDate;
+                                $existingWellHr = $this->db->table('health_records')
+                                    ->select('id')
+                                    ->where('care_context_reference', $wellCcRef)
+                                    ->get(1)
+                                    ->getRowArray();
+                                $wellHrPayload = [
+                                    'patient_id' => $patientId > 0 ? $patientId : null,
+                                    'abha_id' => $abhaAddress !== '' ? $abhaAddress : null,
+                                    'hi_type' => 'WellnessRecord',
+                                    'entity_type' => 'opd_vitals',
+                                    'entity_id' => (string) $sessionId,
+                                    'record_data' => $wellBundleJson,
+                                    'care_context_reference' => $wellCcRef,
+                                    'push_status' => 'local_discovery_ready',
+                                    'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                                ];
+                                if (! empty($existingWellHr)) {
+                                    $this->db->table('health_records')->where('id', (int) $existingWellHr['id'])->update($wellHrPayload);
+                                } else {
+                                    $wellHrPayload['created_at'] = Time::now('Asia/Kolkata')->toDateTimeString();
+                                    $this->db->table('health_records')->insert($wellHrPayload);
+                                }
+                            }
+                        }
+                    } catch (\Throwable $we) {
+                        log_message('warning', '[storePrescriptionFhirBundle] auto wellness error: ' . $we->getMessage());
+                    }
                 }
             } catch (\Throwable $e) {
                 log_message('warning', '[storePrescriptionFhirBundle] auto health_records insert error: ' . $e->getMessage());

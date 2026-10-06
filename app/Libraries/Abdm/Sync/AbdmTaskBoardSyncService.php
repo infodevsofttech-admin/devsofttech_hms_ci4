@@ -517,6 +517,115 @@ class AbdmTaskBoardSyncService
             }
         }
 
+        // 5b. If medications exist and we linked OPConsultRecord, also link PrescriptionRecord care context to bridge
+        $sessionId = (int) ($docRow['opd_session_id'] ?? 0);
+        if ($isSuccess && $sessionId > 0) {
+            $hasMeds = false;
+            if ($this->db->tableExists('opd_prescrption_prescribed')) {
+                $hasMeds = ($this->db->table('opd_prescrption_prescribed')->where('prescription_id', $sessionId)->countAllResults() > 0);
+            }
+            if (! $hasMeds && $this->db->tableExists('opd_prescription_prescribed')) {
+                $hasMeds = ($this->db->table('opd_prescription_prescribed')->where('opd_pre_id', $sessionId)->countAllResults() > 0);
+            }
+            if ($hasMeds) {
+                $cleanDate = str_replace('-', '', $visitDate);
+                $prescCcRef = 'PRESC-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
+                $prescDisplay = 'Prescription - ' . $visitDate;
+                try {
+                    $opdCtrl = new \App\Controllers\Opd_prescription();
+                    $opdCtrl->initController(\Config\Services::request(), \Config\Services::response(), service('logger'));
+                    $prescRegen = $opdCtrl->regenerateFhirBundleInternal($opdId, $sessionId, 'PrescriptionRecord');
+                    $prescBundleJson = ! empty($prescRegen['bundle']) ? json_encode($prescRegen['bundle'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+
+                    $prescPushData = [
+                        'patient_id'             => (string) $patientId,
+                        'patient_name'           => $patientName !== '' ? $patientName : ('PATIENT-' . $patientId),
+                        'abha_id'                => $abhaNumber,
+                        'abha_address'           => $abhaAddress,
+                        'year_of_birth'          => $yearOfBirth,
+                        'gender'                 => $gender,
+                        'hi_type'                => 'PrescriptionRecord',
+                        'record_type'            => 'PrescriptionRecord',
+                        'visit_date'             => $visitDate,
+                        'care_context_reference' => $prescCcRef,
+                        'care_context_display'   => $prescDisplay,
+                        'notes'                  => $prescDisplay,
+                        'queue_id'               => $prescCcRef,
+                    ];
+                    if (! empty($prescRegen['bundle'])) {
+                        $prescPushData['bundle'] = $prescRegen['bundle'];
+                        $prescPushData['fhir_bundle'] = $prescRegen['bundle'];
+                    }
+                    $prescRes = $this->connector->pushRecord($prescPushData);
+                    $this->recordLinkedState(
+                        $patientId,
+                        $effectiveAbha,
+                        'PrescriptionRecord',
+                        'opd_prescription',
+                        (string) $sessionId,
+                        $prescCcRef,
+                        (string) ($prescRes['queue_id'] ?? $prescCcRef),
+                        (int) ($prescRes['record_id'] ?? 0),
+                        $prescBundleJson
+                    );
+                } catch (\Throwable $pe) {
+                    log_message('warning', '[linkAndPushOpdRecord] Prescription care context push error: ' . $pe->getMessage());
+                }
+            }
+
+            // 5c. If vitals exist, also link WellnessRecord care context to bridge
+            try {
+                $pRow = $this->db->table('opd_prescription')->where('id', $sessionId)->get(1)->getRowArray();
+                $hasVitals = ! empty($pRow['bp']) || ! empty($pRow['pulse']) || ! empty($pRow['temp']) || ! empty($pRow['spo2']) || ! empty($pRow['weight']);
+                if ($hasVitals && class_exists('\App\Controllers\DoctorDocument')) {
+                    $cleanDate = str_replace('-', '', $visitDate);
+                    $wellCcRef = 'WELLNESS-' . $sessionId . '-' . $cleanDate;
+                    $docCtrl = new \App\Controllers\DoctorDocument();
+                    $wSource = $docCtrl->buildWellnessRecordSource($patientId, $sessionId);
+                    if (! empty($wSource) && ! empty($wSource['vitals'])) {
+                        $wFactory = new \App\Libraries\Abdm\Fhir\FhirGeneratorFactory();
+                        $wGen = $wFactory->wellness()->generate($wSource);
+                        $wellBundleJson = ! empty($wGen['bundle']) ? json_encode($wGen['bundle'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES) : null;
+                        $wellDisplay = 'Wellness Record - ' . $visitDate;
+
+                        $wellPushData = [
+                            'patient_id'             => (string) $patientId,
+                            'patient_name'           => $patientName !== '' ? $patientName : ('PATIENT-' . $patientId),
+                            'abha_id'                => $abhaNumber,
+                            'abha_address'           => $abhaAddress,
+                            'year_of_birth'          => $yearOfBirth,
+                            'gender'                 => $gender,
+                            'hi_type'                => 'WellnessRecord',
+                            'record_type'            => 'WellnessRecord',
+                            'visit_date'             => $visitDate,
+                            'care_context_reference' => $wellCcRef,
+                            'care_context_display'   => $wellDisplay,
+                            'notes'                  => $wellDisplay,
+                            'queue_id'               => $wellCcRef,
+                        ];
+                        if (! empty($wGen['bundle'])) {
+                            $wellPushData['bundle'] = $wGen['bundle'];
+                            $wellPushData['fhir_bundle'] = $wGen['bundle'];
+                        }
+                        $wellRes = $this->connector->pushRecord($wellPushData);
+                        $this->recordLinkedState(
+                            $patientId,
+                            $effectiveAbha,
+                            'WellnessRecord',
+                            'opd_vitals',
+                            (string) $sessionId,
+                            $wellCcRef,
+                            (string) ($wellRes['queue_id'] ?? $wellCcRef),
+                            (int) ($wellRes['record_id'] ?? 0),
+                            $wellBundleJson
+                        );
+                    }
+                }
+            } catch (\Throwable $we) {
+                log_message('warning', '[linkAndPushOpdRecord] Wellness care context push error: ' . $we->getMessage());
+            }
+        }
+
         if ($isSuccess) {
             return [
                 'ok'               => 1,
@@ -794,6 +903,25 @@ class AbdmTaskBoardSyncService
             'queue_id'               => $careContextRef,
         ];
 
+        $bundleJson = null;
+        if ($taskType === 'wellness_record_publish' && class_exists('\App\Controllers\DoctorDocument')) {
+            try {
+                $docCtrl = new \App\Controllers\DoctorDocument();
+                $wSource = $docCtrl->buildWellnessRecordSource($patientId, $entityId);
+                if (! empty($wSource)) {
+                    $wFactory = new \App\Libraries\Abdm\Fhir\FhirGeneratorFactory();
+                    $wGen = $wFactory->wellness()->generate($wSource);
+                    if (! empty($wGen['bundle'])) {
+                        $pushData['bundle'] = $wGen['bundle'];
+                        $pushData['fhir_bundle'] = $wGen['bundle'];
+                        $bundleJson = (string) json_encode($wGen['bundle'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    }
+                }
+            } catch (\Throwable $we) {
+                log_message('warning', '[processIndividualWorkTask] Wellness bundle generation error: ' . $we->getMessage());
+            }
+        }
+
         try {
             $result = $this->connector->pushRecord($pushData);
             $ok = (int) ($result['ok'] ?? 0);
@@ -812,7 +940,8 @@ class AbdmTaskBoardSyncService
                     (string) $entityId,
                     $careContextRef,
                     $queueId,
-                    (int) ($result['record_id'] ?? 0)
+                    (int) ($result['record_id'] ?? 0),
+                    $bundleJson
                 );
 
                 return ['ok' => 1, 'queue_id' => $queueId];
@@ -832,7 +961,8 @@ class AbdmTaskBoardSyncService
         string $entityId,
         string $careContextRef,
         string $queueId,
-        int $bridgeRecordId
+        int $bridgeRecordId,
+        ?string $recordData = null
     ): void {
         $now = Time::now('Asia/Kolkata')->toDateTimeString();
 
@@ -854,6 +984,9 @@ class AbdmTaskBoardSyncService
                     'abdm_txn_id'            => $queueId,
                     'updated_at'             => $now,
                 ];
+                if ($recordData !== null && $recordData !== '') {
+                    $hrData['record_data'] = $recordData;
+                }
                 if ($bridgeRecordId > 0 && in_array('bridge_record_id', $this->db->getFieldNames('health_records') ?? [], true)) {
                     $hrData['bridge_record_id'] = $bridgeRecordId;
                 }

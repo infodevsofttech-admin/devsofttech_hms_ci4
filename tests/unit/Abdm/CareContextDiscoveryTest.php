@@ -41,9 +41,23 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
         $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('opd_prescription') . " (
             id INTEGER PRIMARY KEY,
             p_id INTEGER,
+            opd_id INTEGER,
             date_opd_visit TEXT,
             session_id INTEGER,
-            p_datetime TEXT
+            p_datetime TEXT,
+            bp TEXT,
+            pulse TEXT,
+            temp TEXT,
+            spo2 TEXT,
+            weight TEXT,
+            height TEXT
+        )");
+
+        $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('opd_prescrption_prescribed') . " (
+            id INTEGER PRIMARY KEY,
+            prescription_id INTEGER,
+            medicine_name TEXT,
+            dosage_summary TEXT
         )");
 
         $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('opd_master') . " (
@@ -442,5 +456,82 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
         $this->assertTrue($invoiceCtx['is_primary']);
         $this->assertTrue($invoiceCtx['is_fhir_ready']);
     }
+
+    public function testDiscoversPrescriptionAndWellnessCareContextsWhenPresent(): void
+    {
+        $db = \Config\Database::connect();
+        $db->table('opd_prescription')->insert([
+            'id' => 901,
+            'p_id' => 15350,
+            'opd_id' => 15350,
+            'session_id' => 901,
+            'date_opd_visit' => '2026-10-06',
+            'bp' => '120/80',
+            'pulse' => '72',
+            'temp' => '98.4',
+            'spo2' => '98',
+            'weight' => '70',
+            'height' => '175',
+        ]);
+
+        $db->table('opd_prescrption_prescribed')->insert([
+            'id' => 101,
+            'prescription_id' => 901,
+            'medicine_name' => 'CAP PANTOP DSR',
+            'dosage_summary' => '1 Tab | OD | 5 days',
+        ]);
+
+        $refGateway = new ReflectionClass($this->gateway);
+        $method = $refGateway->getMethod('findCareContextsForPatient');
+        $method->setAccessible(true);
+
+        [$v3, $full] = $method->invoke($this->gateway, 15350, 'P-15350', 'DEVENDER SINGH');
+
+        $refs = array_column($v3, 'referenceNumber');
+        $this->assertContains('OPD-15350-S901-20261006', $refs);
+        $this->assertContains('PRESC-15350-S901-20261006', $refs);
+        $this->assertContains('WELLNESS-901-20261006', $refs);
+
+        $types = array_column($full, 'record_type');
+        $this->assertContains('OPConsultRecord', $types);
+        $this->assertContains('PrescriptionRecord', $types);
+        $this->assertContains('WellnessRecord', $types);
+    }
+
+    public function testDiscoversWellnessTaskBoardCareContext(): void
+    {
+        $db = \Config\Database::connect();
+        $db->table('opd_prescription')->insert([
+            'id' => 33723,
+            'p_id' => 15350,
+            'opd_id' => 15350,
+            'session_id' => 33723,
+            'date_opd_visit' => '2026-10-06',
+            'bp' => '130/85',
+            'pulse' => '75',
+        ]);
+
+        $refGateway = new ReflectionClass($this->gateway);
+        $method = $refGateway->getMethod('findCareContextsForPatient');
+        $method->setAccessible(true);
+
+        [$v3, $full] = $method->invoke(
+            $this->gateway,
+            15350,
+            'P-15350',
+            'DEVENDER SINGH',
+            'wellness_record_publish',
+            '33723'
+        );
+
+        $refs = array_column($v3, 'referenceNumber');
+        $this->assertContains('WELLNESS-33723-20261006', $refs);
+
+        $primary = $full[0];
+        $this->assertSame('WELLNESS-33723-20261006', $primary['careContextId']);
+        $this->assertSame('WellnessRecord', $primary['record_type']);
+        $this->assertTrue($primary['is_primary']);
+    }
 }
+
 

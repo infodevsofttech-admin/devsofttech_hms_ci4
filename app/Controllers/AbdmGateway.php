@@ -4983,10 +4983,11 @@ class AbdmGateway extends BaseController
                 continue;
             }
 
-            // Strategy 0: Live On-Demand Fresh Generation for OPD Consult Record
-            if (preg_match('/(?:OPD|PRESCRIPTION)-(\d+)(?:-S(\d+))?/i', $ref, $m)) {
-                $targetPatientId = (int) $m[1];
-                $targetSessionId = (int) ($m[2] ?? 0);
+            // Strategy 0: Live On-Demand Fresh Generation for OPD Consult & Prescription Records
+            if (preg_match('/^(OPD|PRESCRIPTION|PRESC)-(\d+)(?:-S(\d+))?/i', $ref, $m)) {
+                $refPrefix = strtoupper($m[1]);
+                $targetPatientId = (int) $m[2];
+                $targetSessionId = (int) ($m[3] ?? 0);
                 $targetOpdId = 0;
 
                 if ($targetSessionId > 0 && $db->tableExists('opd_prescription')) {
@@ -5005,14 +5006,21 @@ class AbdmGateway extends BaseController
 
                 if ($targetOpdId > 0) {
                     try {
+                        $isPrescriptionReq = in_array($refPrefix, ['PRESC', 'PRESCRIPTION'], true);
+                        $targetBundleType = $isPrescriptionReq ? 'PrescriptionRecord' : 'OPConsultRecord';
+                        $targetHiType = $isPrescriptionReq ? 'PrescriptionRecord' : 'OPConsultRecord';
+                        $targetDisplay = $isPrescriptionReq
+                            ? ('Prescription - ' . date('d M Y'))
+                            : ('Consultation Record - ' . date('d M Y'));
+
                         $opdCtrl = new \App\Controllers\Opd_prescription();
                         $opdCtrl->initController($this->request, $this->response, service('logger'));
-                        $regen = $opdCtrl->regenerateFhirBundleInternal($targetOpdId, $targetSessionId);
+                        $regen = $opdCtrl->regenerateFhirBundleInternal($targetOpdId, $targetSessionId, $targetBundleType);
                         if (!empty($regen['ok']) && !empty($regen['bundle'])) {
                             $records[] = [
                                 'careContextReference' => $ref,
-                                'hiType'               => 'OPConsultRecord',
-                                'display'              => 'Consultation Record - ' . date('d M Y'),
+                                'hiType'               => $targetHiType,
+                                'display'              => $targetDisplay,
                                 'bundle'               => $regen['bundle'],
                             ];
                             continue;
@@ -5044,6 +5052,82 @@ class AbdmGateway extends BaseController
                     }
                 } catch (\Throwable $ex) {
                     log_message('warning', 'Live Invoice FHIR generation in recordsFetch failed: ' . $ex->getMessage());
+                }
+            }
+
+            // Strategy 0c: Live On-Demand Fresh Generation for Wellness Record
+            if (preg_match('/^WELLNESS-(?:(\d+)-)?(?:S)?(\d+)/i', $ref, $wMatch)) {
+                $wPart1 = (int) ($wMatch[1] ?? 0);
+                $wPart2 = (int) ($wMatch[2] ?? 0);
+
+                $targetPatientId = 0;
+                $targetSessionId = 0;
+
+                // Check if part2 is a date (e.g. 20261006)
+                $isDatePart2 = ($wPart2 >= 19700101 && $wPart2 <= 21001231);
+                $candidateEntityId = $isDatePart2 ? $wPart1 : $wPart2;
+                $candidatePatientId = $isDatePart2 ? 0 : $wPart1;
+
+                if ($db->tableExists('opd_prescription')) {
+                    // Try finding by prescription id
+                    if ($candidateEntityId > 0) {
+                        $pRow = $db->table('opd_prescription')
+                            ->select('id, p_id, opd_id')
+                            ->where('id', $candidateEntityId)
+                            ->get(1)
+                            ->getRowArray();
+                        if ($pRow) {
+                            $targetSessionId = (int) $pRow['id'];
+                            $targetPatientId = (int) $pRow['p_id'];
+                        }
+                    }
+                    // If not found, check by session_id or opd_id
+                    if ($targetPatientId <= 0 && $candidateEntityId > 0) {
+                        $pRow = $db->table('opd_prescription')
+                            ->select('id, p_id, opd_id')
+                            ->where('session_id', $candidateEntityId)
+                            ->orWhere('opd_id', $candidateEntityId)
+                            ->orderBy('id', 'DESC')
+                            ->get(1)
+                            ->getRowArray();
+                        if ($pRow) {
+                            $targetSessionId = (int) $pRow['id'];
+                            $targetPatientId = (int) $pRow['p_id'];
+                        }
+                    }
+                    // If candidatePatientId is set, or if candidateEntityId was patient_id
+                    if ($targetPatientId <= 0) {
+                        $testPid = $candidatePatientId > 0 ? $candidatePatientId : $candidateEntityId;
+                        if ($testPid > 0) {
+                            $pRow = $db->table('opd_prescription')
+                                ->select('id, p_id, opd_id')
+                                ->where('p_id', $testPid)
+                                ->orderBy('id', 'DESC')
+                                ->get(1)
+                                ->getRowArray();
+                            if ($pRow) {
+                                $targetPatientId = (int) $pRow['p_id'];
+                                $targetSessionId = (int) $pRow['id'];
+                            }
+                        }
+                    }
+                }
+
+                if ($targetPatientId > 0) {
+                    try {
+                        $wellnessPayload = $this->buildWellnessRecordPayload($targetPatientId, $targetSessionId, '');
+                        if ($wellnessPayload !== null && !empty($wellnessPayload['bundle'])) {
+                            $records[] = [
+                                'careContextReference' => $ref,
+                                'hiType'               => 'WellnessRecord',
+                                'display'              => $wellnessPayload['care_context_display'] ?? ('Wellness Record - ' . date('d M Y')),
+                                'bundle'               => $wellnessPayload['bundle'],
+                            ];
+                            continue;
+                        }
+                    } catch (\Throwable $ex) {
+                        log_message('warning', 'Live Wellness FHIR generation in recordsFetch failed: ' . $ex->getMessage());
+                    }
                 }
             }
 
@@ -5100,13 +5184,14 @@ class AbdmGateway extends BaseController
             // Strategy B: Build compliant FHIR Document Bundle from patient_master & OPD
             // STRICTLY restricted to OPD/consultation care contexts.
             // NEVER synthesize dummy consultation records for invoices, discharge, labs, radiology, etc.
-            if (preg_match('/^(?:OPD|PRESCRIPTION|CONSULT)/i', $ref)) {
+            if (preg_match('/^(?:OPD|PRESCRIPTION|PRESC|CONSULT)/i', $ref)) {
                 $bundle = $this->assembleFhirBundleForCareContext($ref);
                 if ($bundle !== null) {
+                    $isPresc = (bool) preg_match('/^(?:PRESC|PRESCRIPTION)/i', $ref);
                     $records[] = [
                         'careContextReference' => $ref,
-                        'hiType'               => 'OPConsultRecord',
-                        'display'              => 'OPConsultRecord - ' . date('d M Y'),
+                        'hiType'               => $isPresc ? 'PrescriptionRecord' : 'OPConsultRecord',
+                        'display'              => ($isPresc ? 'PrescriptionRecord - ' : 'OPConsultRecord - ') . date('d M Y'),
                         'bundle'               => $bundle,
                     ];
                 }
@@ -6292,7 +6377,9 @@ class AbdmGateway extends BaseController
                     if (! empty($wopd)) {
                         $vDate = ! empty($wopd['date_opd_visit']) ? $wopd['date_opd_visit'] : date('Y-m-d');
                         $dateStr = date('d M Y', strtotime((string) $vDate));
-                        $ccRef = 'WELLNESS-' . $patientId . '-S' . $taskEntityId . '-' . date('Ymd', strtotime((string) $vDate));
+                        $cleanDate = date('Ymd', strtotime((string) $vDate));
+                        // Reference format matching task board (e.g. WELLNESS-33723-20261006)
+                        $ccRef = 'WELLNESS-' . $taskEntityId . '-' . $cleanDate;
                         $display = 'WellnessRecord - ' . $dateStr;
                         $addContext([
                             'careContextId'   => $ccRef,
@@ -6386,10 +6473,9 @@ class AbdmGateway extends BaseController
             }
         }
 
-        // 4. Query opd_prescription (OPD consultations & prescriptions)
+        // 4. Query opd_prescription (OPD consultations, prescriptions & wellness records)
         if ($this->db->tableExists('opd_prescription')) {
             $prescRows = $this->db->table('opd_prescription')
-                ->select('id, p_id, date_opd_visit, session_id, p_datetime')
                 ->where('p_id', $patientId)
                 ->orderBy('id', 'DESC')
                 ->limit(30)
@@ -6401,10 +6487,12 @@ class AbdmGateway extends BaseController
                     ? $pr['date_opd_visit']
                     : date('Y-m-d', strtotime((string) ($pr['p_datetime'] ?? 'now')));
                 $dateStr = date('d M Y', strtotime($visitDate));
+                $cleanDate = str_replace('-', '', $visitDate);
                 $sessionId = ! empty($pr['session_id']) ? $pr['session_id'] : $pr['id'];
-                $ccRef = 'OPD-' . $patientId . '-S' . $sessionId . '-' . str_replace('-', '', $visitDate);
-                $display = 'OPConsultRecord - ' . $dateStr;
 
+                // 4a. Consultation Record
+                $ccRef = 'OPD-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
+                $display = 'OPConsultRecord - ' . $dateStr;
                 $addContext([
                     'careContextId'   => $ccRef,
                     'referenceNumber' => $ccRef,
@@ -6414,6 +6502,44 @@ class AbdmGateway extends BaseController
                     'is_fhir_ready'   => true,
                     'is_primary'      => false,
                 ]);
+
+                // 4b. Prescription Record (if prescribed medicines exist)
+                $hasMeds = false;
+                if ($this->db->tableExists('opd_prescrption_prescribed')) {
+                    $hasMeds = ($this->db->table('opd_prescrption_prescribed')->where('prescription_id', (int) $pr['id'])->countAllResults() > 0);
+                }
+                if (! $hasMeds && $this->db->tableExists('opd_prescription_prescribed')) {
+                    $hasMeds = ($this->db->table('opd_prescription_prescribed')->where('opd_pre_id', (int) $pr['id'])->countAllResults() > 0);
+                }
+                if ($hasMeds) {
+                    $prescCcRef = 'PRESC-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
+                    $prescDisplay = 'Prescription - ' . $dateStr;
+                    $addContext([
+                        'careContextId'   => $prescCcRef,
+                        'referenceNumber' => $prescCcRef,
+                        'display'         => $prescDisplay,
+                        'record_type'     => 'PrescriptionRecord',
+                        'patient_id'      => $patientId,
+                        'is_fhir_ready'   => true,
+                        'is_primary'      => false,
+                    ]);
+                }
+
+                // 4c. Wellness Record (if vitals exist)
+                $hasVitals = ! empty($pr['bp']) || ! empty($pr['pulse']) || ! empty($pr['temp']) || ! empty($pr['spo2']) || ! empty($pr['weight']) || ! empty($pr['height']);
+                if ($hasVitals) {
+                    $wellCcRef = 'WELLNESS-' . $sessionId . '-' . $cleanDate;
+                    $wellDisplay = 'Wellness Record - ' . $dateStr;
+                    $addContext([
+                        'careContextId'   => $wellCcRef,
+                        'referenceNumber' => $wellCcRef,
+                        'display'         => $wellDisplay,
+                        'record_type'     => 'WellnessRecord',
+                        'patient_id'      => $patientId,
+                        'is_fhir_ready'   => true,
+                        'is_primary'      => false,
+                    ]);
+                }
             }
         }
 
