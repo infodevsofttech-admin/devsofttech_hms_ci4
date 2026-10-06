@@ -6195,7 +6195,7 @@ class AbdmGateway extends BaseController
             'dischargesummary', 'dischargesummaryrecord', 'ipd', 'ipd_discharge' => 'DischargeSummary',
             'diagnosticreport', 'diagnosticreportrecord', 'lab', 'radiology' => 'DiagnosticReport',
             'prescription', 'prescriptionrecord', 'medicationrequest', 'medicationrequestbundle' => 'Prescription',
-            'healthdocument', 'healthdocumentrecord', 'document', 'patient_doc' => 'HealthDocumentRecord',
+            'healthdocument', 'healthdocumentrecord', 'document', 'patient_doc', 'patientfile', 'patient_file', 'registration' => 'HealthDocumentRecord',
             default => 'OPConsultation',
         };
     }
