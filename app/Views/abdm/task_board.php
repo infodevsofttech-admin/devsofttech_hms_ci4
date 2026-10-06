@@ -11,6 +11,10 @@
         .container-wrap { width: 100%; margin: 0; padding: 20px 24px; box-sizing: border-box; }
         .table td, .table th { vertical-align: middle; }
         .status-pill { text-transform: uppercase; font-size: 11px; letter-spacing: .4px; }
+        .clickable-abha-filter { cursor: pointer; transition: all 0.15s ease-in-out; }
+        .clickable-abha-filter:hover { opacity: 0.85; transform: scale(1.02); filter: drop-shadow(0 1px 2px rgba(0,0,0,0.15)); }
+        .quick-abha-pill { transition: all 0.15s ease-in-out; }
+        .quick-abha-pill:hover { background-color: #0d6efd !important; color: #fff !important; }
     </style>
 </head>
 <body>
@@ -42,6 +46,176 @@
         <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="health_document_publish">Health Document</button>
         <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="wellness_record_publish">Wellness Record</button>
         <button type="button" class="btn btn-sm btn-outline-primary filter-btn" data-filter="ipd_discharge_publish">IPD Discharge</button>
+    </div>
+
+    <!-- ABHA Address & Patient Global Filter Bar -->
+    <div class="card shadow-sm mb-3 border-0 bg-white" id="globalAbhaFilterCard" style="border-radius: 8px;">
+        <div class="card-body py-2 px-3">
+            <div class="row g-2 align-items-center">
+                <div class="col-12 col-md-auto d-flex align-items-center gap-2">
+                    <span class="badge bg-primary-subtle text-primary border border-primary-subtle p-2">
+                        <i class="bi bi-person-badge fs-6"></i>
+                    </span>
+                    <div>
+                        <strong class="small d-block text-dark">ABHA Filter & FHIR Inspector</strong>
+                        <span class="text-muted" style="font-size: 11px;">Filter board & inspect patient care contexts</span>
+                    </div>
+                </div>
+                <div class="col-12 col-md">
+                    <div class="input-group input-group-sm">
+                        <span class="input-group-text bg-light"><i class="bi bi-search text-muted"></i></span>
+                        <input
+                            type="text"
+                            class="form-control"
+                            id="globalAbhaFilterInput"
+                            list="abhaPatientDataList"
+                            placeholder="Enter or select ABHA Address (e.g. user@sbx), 14-digit ABHA Number, or Patient Name..."
+                            value="<?= esc((string) ($filter_abha_address ?? '')) ?>"
+                            autocomplete="off"
+                        >
+                        <button type="button" class="btn btn-primary" id="btnApplyAbhaFilter">
+                            <i class="bi bi-funnel me-1"></i>Filter Records
+                        </button>
+                        <button type="button" class="btn btn-outline-secondary" id="btnClearAbhaFilter" title="Clear ABHA filter">
+                            <i class="bi bi-x-lg"></i>
+                        </button>
+                    </div>
+                    <datalist id="abhaPatientDataList">
+                        <?php foreach (($abha_patients ?? []) as $ap): ?>
+                            <?php
+                                $val = ! empty($ap['abha_address']) ? $ap['abha_address'] : $ap['abha_number'];
+                                $displayLabel = ($ap['name'] ?? '') . ' (' . ($ap['p_code'] ?? '') . ') - ' . (! empty($ap['abha_address']) ? $ap['abha_address'] : $ap['abha_number']);
+                            ?>
+                            <option value="<?= esc($val) ?>"><?= esc($displayLabel) ?></option>
+                        <?php endforeach; ?>
+                    </datalist>
+                </div>
+                <?php if (! empty($abha_patients ?? [])): ?>
+                <div class="col-12 col-lg-auto d-flex align-items-center gap-1 flex-wrap">
+                    <span class="text-muted small me-1" style="font-size:11px;">Quick:</span>
+                    <?php
+                        $quickPills = array_slice($abha_patients ?? [], 0, 4);
+                        foreach ($quickPills as $qp):
+                            $qpVal = ! empty($qp['abha_address']) ? $qp['abha_address'] : $qp['abha_number'];
+                            if (empty($qpVal)) continue;
+                    ?>
+                        <button
+                            type="button"
+                            class="btn btn-sm btn-light border py-0 px-2 text-primary quick-abha-pill"
+                            data-abha="<?= esc($qpVal) ?>"
+                            style="font-size: 11px;"
+                        >
+                            <i class="bi bi-person me-1"></i><?= esc($qp['name'] ?? $qpVal) ?>
+                        </button>
+                    <?php endforeach; ?>
+                </div>
+                <?php endif; ?>
+            </div>
+            <div id="activeAbhaFilterNotice" class="d-none mt-2 pt-2 border-top d-flex align-items-center justify-content-between flex-wrap gap-2">
+                <div class="d-flex align-items-center gap-2 small">
+                    <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-funnel-fill me-1"></i>Active ABHA Filter</span>
+                    <span>Filtering all queues for: <strong class="text-primary font-monospace" id="activeAbhaFilterText">-</strong></span>
+                    <span class="badge bg-light text-dark border" id="activeAbhaMatchStats">Scanning records...</span>
+                </div>
+                <div>
+                    <button type="button" class="btn btn-sm btn-link text-decoration-none py-0 px-1 text-danger" id="btnNoticeClearFilter">
+                        <i class="bi bi-x-circle me-1"></i>Reset Filter
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <!-- Patient ABHA Context & FHIR Status Inspector Card -->
+    <div class="card shadow-sm mb-3 border-primary d-none" id="patientAbhaInspectorCard">
+        <div class="card-header bg-primary text-white py-2 d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div class="d-flex align-items-center gap-2 flex-wrap">
+                <i class="bi bi-shield-check fs-5"></i>
+                <strong class="fs-6" id="inspPatientName">Patient Demographics & Context Status</strong>
+                <span class="badge bg-light text-dark" id="inspPatientGender">M</span>
+                <span class="badge bg-light text-dark" id="inspPatientYob">YOB: -</span>
+                <span class="badge bg-white text-primary fw-semibold" id="inspPatientUhid">UHID: -</span>
+            </div>
+            <div class="d-flex align-items-center gap-2">
+                <button type="button" class="btn btn-sm btn-light py-1 px-2" id="btnVerifyAbhaGateway" title="Query confirmed patient care context links on ABDM National Gateway">
+                    <i class="bi bi-cloud-check text-primary me-1"></i>Live Gateway Check
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-light py-1 px-2" id="btnRefreshInspector" title="Refresh local contexts">
+                    <i class="bi bi-arrow-clockwise"></i>
+                </button>
+                <button type="button" class="btn btn-sm btn-outline-light py-1 px-2" id="btnCloseInspector">
+                    <i class="bi bi-x-lg"></i>
+                </button>
+            </div>
+        </div>
+        <div class="card-body p-3">
+            <!-- Patient Profile & Status Bar -->
+            <div class="row g-2 mb-3 align-items-center pb-2 border-bottom">
+                <div class="col-md-3">
+                    <div class="text-muted small">ABHA Address</div>
+                    <div class="fw-semibold text-primary font-monospace" id="inspAbhaAddress" style="word-break: break-all;">-</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">ABHA Number</div>
+                    <div class="fw-semibold font-monospace" id="inspAbhaNumber">-</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Phone Number</div>
+                    <div class="fw-semibold" id="inspPhone">-</div>
+                </div>
+                <div class="col-md-3">
+                    <div class="text-muted small">Gateway Link Verification</div>
+                    <div id="inspGatewayStatus"><span class="badge bg-secondary">Unchecked</span></div>
+                </div>
+            </div>
+
+            <!-- Summary KPI Pill Tiles -->
+            <div class="row g-2 mb-3">
+                <div class="col-6 col-md-3">
+                    <div class="border rounded p-2 bg-light text-center">
+                        <div class="small text-muted">Total Care Contexts</div>
+                        <div class="fs-5 fw-bold text-dark" id="inspTotalContexts">0</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="border rounded p-2 bg-light text-center">
+                        <div class="small text-muted">Linked Contexts</div>
+                        <div class="fs-5 fw-bold text-success" id="inspLinkedContexts">0</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="border rounded p-2 bg-light text-center">
+                        <div class="small text-muted">Unlinked Contexts</div>
+                        <div class="fs-5 fw-bold text-warning" id="inspUnlinkedContexts">0</div>
+                    </div>
+                </div>
+                <div class="col-6 col-md-3">
+                    <div class="border rounded p-2 bg-light text-center">
+                        <div class="small text-muted">FHIR Ready Bundles</div>
+                        <div class="fs-5 fw-bold text-info" id="inspFhirCount">0</div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Care Contexts & FHIR Bundles Details Table -->
+            <div class="table-responsive border rounded">
+                <table class="table table-sm table-hover mb-0" id="inspCareContextTable">
+                    <thead class="table-light">
+                        <tr>
+                            <th>Care Context Ref</th>
+                            <th>Visit / Record Description</th>
+                            <th>HI Type</th>
+                            <th>FHIR Bundle Status</th>
+                            <th>Context Link Status</th>
+                            <th class="text-end">Actions</th>
+                        </tr>
+                    </thead>
+                    <tbody id="inspCareContextTbody">
+                        <tr><td colspan="6" class="text-center text-muted py-3">Loading care contexts and FHIR status...</td></tr>
+                    </tbody>
+                </table>
+            </div>
+        </div>
     </div>
 
     <?php $dashboard = $dashboard_metrics ?? []; ?>
@@ -171,6 +345,11 @@
                                 $bridgeCareContext,
                                 (string) ($t['last_action_result'] ?? ''),
                             ])));
+                            $taskAbhaAddr = trim((string) ($t['patient_abha_address'] ?? ''));
+                            $taskAbhaNum  = trim((string) ($t['patient_abha_number'] ?? ''));
+                            $taskPCode    = trim((string) ($t['patient_p_code'] ?? ''));
+                            $taskPhone    = trim((string) ($t['patient_phone'] ?? ''));
+                            $effectiveAbha = $taskAbhaAddr !== '' ? $taskAbhaAddr : ($taskAbhaNum !== '' ? $taskAbhaNum : $abhaId);
                         ?>
                         <tr
                             data-task-id="<?= (int) ($t['id'] ?? 0) ?>"
@@ -179,12 +358,16 @@
                             data-is-linked="<?= $isTaskLinked ? '1' : '0' ?>"
                             data-entity-id="<?= esc((string) ($t['entity_id'] ?? '')) ?>"
                             data-patient-id="<?= (int) ($t['patient_id'] ?? 0) ?>"
-                            data-abha-id="<?= esc($abhaId) ?>"
+                            data-patient-name="<?= esc(strtolower((string) ($t['patient_name'] ?? ''))) ?>"
+                            data-patient-p-code="<?= esc(strtolower($taskPCode)) ?>"
+                            data-patient-abha-address="<?= esc($taskAbhaAddr) ?>"
+                            data-patient-abha-number="<?= esc($taskAbhaNum) ?>"
+                            data-abha-id="<?= esc($effectiveAbha) ?>"
                             data-opd-id="<?= $opdId ?>"
                             data-opd-session-id="<?= $opdSessionId ?>"
                             data-sandbox-eligible="<?= $showSandbox ? '1' : '0' ?>"
                             data-bridge-submitted="<?= $bridgeSubmitted ? '1' : '0' ?>"
-                            data-search="<?= esc($searchText) ?>"
+                            data-search="<?= esc($searchText . ' ' . $taskAbhaAddr . ' ' . $taskAbhaNum . ' ' . $taskPCode . ' ' . $taskPhone) ?>"
                         >
                             <td><?= (int) ($t['id'] ?? 0) ?></td>
                             <td>
@@ -196,13 +379,27 @@
                             </td>
                             <td>
                                 <div><?= esc((string) ($t['patient_name'] ?? '')) ?></div>
-                                <div class="text-muted small">#<?= (int) ($t['patient_id'] ?? 0) ?></div>
+                                <div class="text-muted small">
+                                    #<?= (int) ($t['patient_id'] ?? 0) ?>
+                                    <?php if ($taskPCode !== ''): ?>
+                                        <span class="ms-1 fw-semibold text-secondary">(<?= esc($taskPCode) ?>)</span>
+                                    <?php endif; ?>
+                                </div>
                             </td>
                             <td>
                                 <?php if ($isTaskLinked): ?>
-                                    <div class="small"><span class="badge bg-light text-dark border"><i class="bi bi-person-check text-success me-1"></i><?= esc((string) ($t['abha_id'] ?? '')) ?></span></div>
+                                    <div class="small">
+                                        <span class="badge bg-light text-dark border clickable-abha-filter" data-filter-abha="<?= esc($effectiveAbha) ?>" title="Click to filter board by this ABHA">
+                                            <i class="bi bi-person-check text-success me-1"></i><?= esc($effectiveAbha) ?>
+                                        </span>
+                                    </div>
                                 <?php else: ?>
-                                    <input type="text" class="form-control form-control-sm abha-input" value="<?= esc((string) ($t['abha_id'] ?? '')) ?>" placeholder="14-digit ABHA">
+                                    <div class="input-group input-group-sm">
+                                        <input type="text" class="form-control form-control-sm abha-input" value="<?= esc($effectiveAbha) ?>" placeholder="14-digit ABHA / address">
+                                        <?php if ($effectiveAbha !== ''): ?>
+                                            <button type="button" class="btn btn-outline-secondary btn-sm clickable-abha-filter" data-filter-abha="<?= esc($effectiveAbha) ?>" title="Filter board by this ABHA"><i class="bi bi-funnel"></i></button>
+                                        <?php endif; ?>
+                                    </div>
                                 <?php endif; ?>
                             </td>
                             <td>
@@ -393,10 +590,23 @@
                     <tbody>
                     <?php if (! empty($opd_book_rows ?? [])): ?>
                         <?php foreach (($opd_book_rows ?? []) as $r): ?>
-                        <tr>
+                        <?php
+                            $rowAbha = (string) (($r['abha_address'] ?? '') ?: ($r['abha_number'] ?? ''));
+                        ?>
+                        <tr
+                            data-patient-id="<?= (int) ($r['patient_id'] ?? 0) ?>"
+                            data-abha-address="<?= esc((string) ($r['abha_address'] ?? '')) ?>"
+                            data-abha-number="<?= esc((string) ($r['abha_number'] ?? '')) ?>"
+                            data-patient-name="<?= esc(strtolower((string) ($r['patient_name'] ?? ''))) ?>"
+                            data-patient-p-code="<?= esc(strtolower((string) ($r['p_code'] ?? ''))) ?>"
+                        >
                             <td><?= esc((string) (($r['token_number'] ?? '') ?: ('#' . ($r['gateway_token_id'] ?? '')))) ?></td>
                             <td><?= esc((string) ($r['patient_name'] ?? '')) ?></td>
-                            <td><span class="text-primary small"><?= esc((string) (($r['abha_number'] ?? '') ?: ($r['abha_address'] ?? ''))) ?></span></td>
+                            <td>
+                                <span class="text-primary small clickable-abha-filter" data-filter-abha="<?= esc($rowAbha) ?>" title="Click to filter board by this ABHA">
+                                    <i class="bi bi-person-check me-1"></i><?= esc($rowAbha) ?>
+                                </span>
+                            </td>
                             <td><?= esc((string) ($r['queue_date'] ?? '')) ?></td>
                             <td><?= esc(ucwords(str_replace('_', ' ', (string) ($r['source'] ?? '')))) ?></td>
                             <?php $tokenStatus = strtoupper((string) ($r['status'] ?? 'PENDING')); ?>
@@ -447,11 +657,31 @@
                             if ($statusTone === 'warning') {
                                 $statusBadgeClass .= ' text-dark';
                             }
+                            $consultAbha = trim((string) (($r['abha_address'] ?? '') ?: ($r['abha_number'] ?? '') ?: ($r['abha_id'] ?? '')));
                         ?>
-                        <tr data-push-status="<?= esc($pushStatusRaw) ?>">
+                        <tr
+                            data-push-status="<?= esc($pushStatusRaw) ?>"
+                            data-opd-id="<?= (int) ($r['opd_id'] ?? 0) ?>"
+                            data-patient-id="<?= (int) ($r['p_id'] ?? 0) ?>"
+                            data-patient-name="<?= esc(strtolower((string) ($r['P_name'] ?? ''))) ?>"
+                            data-patient-p-code="<?= esc(strtolower((string) ($r['p_code'] ?? ''))) ?>"
+                            data-abha-address="<?= esc((string) ($r['abha_address'] ?? '')) ?>"
+                            data-abha-number="<?= esc((string) ($r['abha_number'] ?? '')) ?>"
+                            data-abha-id="<?= esc($consultAbha) ?>"
+                            data-care-context="<?= esc(strtolower((string) ($careContext ?? ''))) ?>"
+                        >
                             <td>#<?= (int) ($r['opd_id'] ?? 0) ?></td>
-                            <td><?= esc((string) ($r['P_name'] ?? '')) ?></td>
-                            <td><span class="text-primary small"><?= esc((string) ($r['abha_id'] ?? '')) ?></span></td>
+                            <td>
+                                <div><?= esc((string) ($r['P_name'] ?? '')) ?></div>
+                                <?php if (! empty($r['p_code'])): ?>
+                                    <div class="text-muted small"><?= esc((string) $r['p_code']) ?></div>
+                                <?php endif; ?>
+                            </td>
+                            <td>
+                                <span class="text-primary small clickable-abha-filter" data-filter-abha="<?= esc($consultAbha) ?>" title="Click to filter board by this ABHA">
+                                    <i class="bi bi-person-check me-1"></i><?= esc($consultAbha) ?>
+                                </span>
+                            </td>
                             <td><?= esc(substr((string) ($r['apointment_date'] ?? ''), 0, 16)) ?></td>
                             <td><?= esc((string) ($r['doc_name'] ?? '')) ?></td>
                             <td><span class="<?= esc($statusBadgeClass) ?> opd-consult-status-badge"><?= esc($statusLabel) ?></span></td>
@@ -530,22 +760,37 @@
                                 $pushStatus = strtolower(trim((string) ($invoice['push_status'] ?? '')));
                                 $linkStatus = strtolower(trim((string) ($invoice['link_status'] ?? '')));
                                 $alreadySubmitted = in_array($pushStatus, ['queued', 'pushed', 'linked'], true) || $linkStatus === 'linked';
+                                $invAbha = trim((string) (($invoice['abha_address'] ?? '') ?: ($invoice['abha_number'] ?? '') ?: ($invoice['abha_id'] ?? '')));
+                                $invPCode = trim((string) ($invoice['p_code'] ?? ''));
                             ?>
                             <tr
                                 data-invoice-source="<?= esc((string) ($invoice['source_key'] ?? '')) ?>"
                                 data-bill-id="<?= (int) ($invoice['bill_id'] ?? 0) ?>"
                                 data-patient-id="<?= (int) ($invoice['patient_id'] ?? 0) ?>"
-                                data-abha-id="<?= esc((string) ($invoice['abha_id'] ?? '')) ?>"
-                                data-care-context="<?= esc((string) ($invoice['care_context_reference'] ?? '')) ?>"
+                                data-patient-name="<?= esc(strtolower((string) ($invoice['patient_name'] ?? ''))) ?>"
+                                data-patient-p-code="<?= esc(strtolower($invPCode)) ?>"
+                                data-abha-address="<?= esc((string) ($invoice['abha_address'] ?? '')) ?>"
+                                data-abha-number="<?= esc((string) ($invoice['abha_number'] ?? '')) ?>"
+                                data-abha-id="<?= esc($invAbha) ?>"
+                                data-care-context="<?= esc(strtolower((string) ($invoice['care_context_reference'] ?? ''))) ?>"
                                 data-push-status="<?= esc($pushStatus) ?>"
                             >
                                 <td><?= esc((string) ($invoice['source'] ?? '')) ?></td>
                                 <td><strong><?= esc((string) (($invoice['bill_code'] ?? '') ?: ('#' . ($invoice['bill_id'] ?? '')))) ?></strong></td>
                                 <td>
                                     <div><?= esc((string) ($invoice['patient_name'] ?? '')) ?></div>
-                                    <small class="text-muted">#<?= (int) ($invoice['patient_id'] ?? 0) ?></small>
-                                    <?php if (! empty($invoice['abha_id'])): ?>
-                                        <div><span class="text-primary small" title="ABHA"><i class="bi bi-person-check me-1"></i><?= esc((string) $invoice['abha_id']) ?></span></div>
+                                    <small class="text-muted">
+                                        #<?= (int) ($invoice['patient_id'] ?? 0) ?>
+                                        <?php if ($invPCode !== ''): ?>
+                                            <span class="ms-1 fw-semibold text-secondary">(<?= esc($invPCode) ?>)</span>
+                                        <?php endif; ?>
+                                    </small>
+                                    <?php if ($invAbha !== ''): ?>
+                                        <div>
+                                            <span class="text-primary small clickable-abha-filter" data-filter-abha="<?= esc($invAbha) ?>" title="Click to filter board by this ABHA">
+                                                <i class="bi bi-person-check me-1"></i><?= esc($invAbha) ?>
+                                            </span>
+                                        </div>
                                     <?php endif; ?>
                                 </td>
                                 <td><?= esc(substr((string) ($invoice['bill_date'] ?? ''), 0, 16)) ?></td>
@@ -729,6 +974,7 @@
     var currentCategoryFilter = 'dashboard';
     var currentStatusFilter   = 'all';
     var currentSearchQuery    = '';
+    var currentAbhaFilter     = '<?= esc((string) ($filter_abha_address ?? '')) ?>'.trim();
 
     function updateTaskTableDisplay() {
         var rows = document.querySelectorAll('#taskTable tbody tr:not(#taskTableEmptyRow)');
@@ -776,7 +1022,29 @@
             // Check search match
             var searchMatch = !q || searchData.indexOf(q) !== -1;
 
-            if (statusMatch && searchMatch) {
+            // Check ABHA filter match
+            var abhaMatch = true;
+            if (currentAbhaFilter !== '') {
+                var patAbhaAddr = (row.getAttribute('data-patient-abha-address') || '').toLowerCase();
+                var patAbhaNum  = (row.getAttribute('data-patient-abha-number') || '').toLowerCase();
+                var rowAbhaId   = (row.getAttribute('data-abha-id') || '').toLowerCase();
+                var patPCode    = (row.getAttribute('data-patient-p-code') || '').toLowerCase();
+                var patId       = (row.getAttribute('data-patient-id') || '').toLowerCase();
+                var patName     = (row.getAttribute('data-patient-name') || '').toLowerCase();
+                var sTerm       = currentAbhaFilter.toLowerCase();
+                var sDigits     = sTerm.replace(/\D/g, '');
+
+                abhaMatch = (patAbhaAddr !== '' && patAbhaAddr.indexOf(sTerm) !== -1)
+                    || (rowAbhaId !== '' && rowAbhaId.indexOf(sTerm) !== -1)
+                    || (sDigits.length >= 6 && patAbhaNum !== '' && patAbhaNum.indexOf(sDigits) !== -1)
+                    || (sDigits.length >= 6 && rowAbhaId.replace(/\D/g, '').indexOf(sDigits) !== -1)
+                    || (patPCode !== '' && patPCode.indexOf(sTerm) !== -1)
+                    || (patId !== '' && patId === sTerm)
+                    || (patName !== '' && patName.indexOf(sTerm) !== -1)
+                    || (searchData.indexOf(sTerm) !== -1);
+            }
+
+            if (statusMatch && searchMatch && abhaMatch) {
                 row.style.display = '';
                 visibleCount++;
             } else {
@@ -799,6 +1067,294 @@
         }
     }
 
+    function filterOpdConsultTable() {
+        var rows = document.querySelectorAll('#opdConsultCard tbody tr');
+        var sTerm = currentAbhaFilter.toLowerCase();
+        var sDigits = sTerm.replace(/\D/g, '');
+        var matchCount = 0;
+
+        rows.forEach(function (row) {
+            if (sTerm === '') {
+                row.style.display = '';
+                matchCount++;
+                return;
+            }
+            var abhaAddr = (row.getAttribute('data-abha-address') || '').toLowerCase();
+            var abhaNum  = (row.getAttribute('data-abha-number') || '').toLowerCase();
+            var abhaId   = (row.getAttribute('data-abha-id') || '').toLowerCase();
+            var pCode    = (row.getAttribute('data-patient-p-code') || '').toLowerCase();
+            var pName    = (row.getAttribute('data-patient-name') || '').toLowerCase();
+            var pId      = (row.getAttribute('data-patient-id') || '').toLowerCase();
+            var cContext = (row.getAttribute('data-care-context') || '').toLowerCase();
+
+            var matches = (abhaAddr !== '' && abhaAddr.indexOf(sTerm) !== -1)
+                || (abhaId !== '' && abhaId.indexOf(sTerm) !== -1)
+                || (sDigits.length >= 6 && abhaNum !== '' && abhaNum.indexOf(sDigits) !== -1)
+                || (sDigits.length >= 6 && abhaId.replace(/\D/g, '').indexOf(sDigits) !== -1)
+                || (pCode !== '' && pCode.indexOf(sTerm) !== -1)
+                || (pName !== '' && pName.indexOf(sTerm) !== -1)
+                || (pId !== '' && pId === sTerm)
+                || (cContext !== '' && cContext.indexOf(sTerm) !== -1)
+                || (row.textContent || '').toLowerCase().indexOf(sTerm) !== -1;
+
+            if (matches) {
+                row.style.display = '';
+                matchCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        return matchCount;
+    }
+
+    function filterInvoiceTable() {
+        var rows = document.querySelectorAll('#invoiceCard tbody tr');
+        var sTerm = currentAbhaFilter.toLowerCase();
+        var sDigits = sTerm.replace(/\D/g, '');
+        var matchCount = 0;
+
+        rows.forEach(function (row) {
+            if (sTerm === '') {
+                row.style.display = '';
+                matchCount++;
+                return;
+            }
+            var abhaAddr = (row.getAttribute('data-abha-address') || '').toLowerCase();
+            var abhaNum  = (row.getAttribute('data-abha-number') || '').toLowerCase();
+            var abhaId   = (row.getAttribute('data-abha-id') || '').toLowerCase();
+            var pCode    = (row.getAttribute('data-patient-p-code') || '').toLowerCase();
+            var pName    = (row.getAttribute('data-patient-name') || '').toLowerCase();
+            var pId      = (row.getAttribute('data-patient-id') || '').toLowerCase();
+            var cContext = (row.getAttribute('data-care-context') || '').toLowerCase();
+
+            var matches = (abhaAddr !== '' && abhaAddr.indexOf(sTerm) !== -1)
+                || (abhaId !== '' && abhaId.indexOf(sTerm) !== -1)
+                || (sDigits.length >= 6 && abhaNum !== '' && abhaNum.indexOf(sDigits) !== -1)
+                || (sDigits.length >= 6 && abhaId.replace(/\D/g, '').indexOf(sDigits) !== -1)
+                || (pCode !== '' && pCode.indexOf(sTerm) !== -1)
+                || (pName !== '' && pName.indexOf(sTerm) !== -1)
+                || (pId !== '' && pId === sTerm)
+                || (cContext !== '' && cContext.indexOf(sTerm) !== -1)
+                || (row.textContent || '').toLowerCase().indexOf(sTerm) !== -1;
+
+            if (matches) {
+                row.style.display = '';
+                matchCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        return matchCount;
+    }
+
+    function filterOpdBookTable() {
+        var rows = document.querySelectorAll('#opdBookCard tbody tr');
+        var sTerm = currentAbhaFilter.toLowerCase();
+        var sDigits = sTerm.replace(/\D/g, '');
+        var matchCount = 0;
+
+        rows.forEach(function (row) {
+            if (sTerm === '') {
+                row.style.display = '';
+                matchCount++;
+                return;
+            }
+            var abhaAddr = (row.getAttribute('data-abha-address') || '').toLowerCase();
+            var abhaNum  = (row.getAttribute('data-abha-number') || '').toLowerCase();
+            var pCode    = (row.getAttribute('data-patient-p-code') || '').toLowerCase();
+            var pName    = (row.getAttribute('data-patient-name') || '').toLowerCase();
+            var pId      = (row.getAttribute('data-patient-id') || '').toLowerCase();
+
+            var matches = (abhaAddr !== '' && abhaAddr.indexOf(sTerm) !== -1)
+                || (sDigits.length >= 6 && abhaNum !== '' && abhaNum.indexOf(sDigits) !== -1)
+                || (pCode !== '' && pCode.indexOf(sTerm) !== -1)
+                || (pName !== '' && pName.indexOf(sTerm) !== -1)
+                || (pId !== '' && pId === sTerm)
+                || (row.textContent || '').toLowerCase().indexOf(sTerm) !== -1;
+
+            if (matches) {
+                row.style.display = '';
+                matchCount++;
+            } else {
+                row.style.display = 'none';
+            }
+        });
+
+        return matchCount;
+    }
+
+    function updateAllTablesForAbhaFilter() {
+        updateTaskTableDisplay();
+        var consultMatches = filterOpdConsultTable();
+        var invoiceMatches = filterInvoiceTable();
+        var opdBookMatches = filterOpdBookTable();
+
+        var qRows = document.querySelectorAll('#taskTable tbody tr:not(#taskTableEmptyRow)');
+        var qVisible = 0;
+        qRows.forEach(function (r) { if (r.style.display !== 'none') qVisible++; });
+
+        var total = qVisible + consultMatches + invoiceMatches + opdBookMatches;
+        var statsEl = document.getElementById('activeAbhaMatchStats');
+        if (statsEl) {
+            statsEl.textContent = total + ' matches found (' + qVisible + ' queue, ' + consultMatches + ' consult, ' + invoiceMatches + ' invoice, ' + opdBookMatches + ' tokens)';
+        }
+    }
+
+    function applyGlobalAbhaFilter(val) {
+        val = (val || '').trim();
+        currentAbhaFilter = val;
+        var inputEl = document.getElementById('globalAbhaFilterInput');
+        if (inputEl) {
+            inputEl.value = val;
+        }
+
+        var noticeEl = document.getElementById('activeAbhaFilterNotice');
+        var textEl = document.getElementById('activeAbhaFilterText');
+        var inspectorCard = document.getElementById('patientAbhaInspectorCard');
+
+        if (val !== '') {
+            if (noticeEl) noticeEl.classList.remove('d-none');
+            if (textEl) textEl.textContent = val;
+            if (currentCategoryFilter === 'dashboard') {
+                applyFilter('all');
+            }
+            loadPatientAbhaInspector(val);
+        } else {
+            if (noticeEl) noticeEl.classList.add('d-none');
+            if (inspectorCard) inspectorCard.classList.add('d-none');
+        }
+
+        updateAllTablesForAbhaFilter();
+    }
+
+    function clearGlobalAbhaFilter() {
+        applyGlobalAbhaFilter('');
+    }
+
+    function loadPatientAbhaInspector(abhaAddress) {
+        var card = document.getElementById('patientAbhaInspectorCard');
+        var tbody = document.getElementById('inspCareContextTbody');
+        if (!card || !tbody) {
+            return;
+        }
+
+        card.classList.remove('d-none');
+        tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3"><div class="spinner-border spinner-border-sm text-primary me-2"></div>Loading patient care contexts & FHIR readiness...</td></tr>';
+
+        var url = '<?= base_url('AbdmGateway/hip_patient_care_contexts') ?>?abha_address=' + encodeURIComponent(abhaAddress);
+
+        fetch(url, {
+            headers: {
+                'X-Requested-With': 'XMLHttpRequest',
+                'Accept': 'application/json'
+            }
+        }).then(function (r) {
+            return r.json();
+        }).then(function (res) {
+            if (!res || res.ok !== 1 || !res.patient) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-warning py-3"><i class="bi bi-info-circle me-1"></i>No patient demographics or active care contexts found for <strong>' + hesc(abhaAddress) + '</strong>. You can initiate linking via the HIP Link button.</td></tr>';
+                document.getElementById('inspPatientName').textContent = 'Patient Not Linked Yet';
+                document.getElementById('inspAbhaAddress').textContent = abhaAddress;
+                document.getElementById('inspAbhaNumber').textContent = '-';
+                document.getElementById('inspPhone').textContent = '-';
+                document.getElementById('inspGatewayStatus').innerHTML = '<span class="badge bg-secondary">Unregistered</span>';
+                document.getElementById('inspTotalContexts').textContent = '0';
+                document.getElementById('inspLinkedContexts').textContent = '0';
+                document.getElementById('inspUnlinkedContexts').textContent = '0';
+                document.getElementById('inspFhirCount').textContent = '0';
+                return;
+            }
+
+            var pat = res.patient;
+            var contexts = res.care_contexts || [];
+            var linkedRefs = res.linked_refs || [];
+
+            document.getElementById('inspPatientName').textContent = pat.name || 'Patient';
+            document.getElementById('inspPatientGender').textContent = pat.gender || 'O';
+            document.getElementById('inspPatientYob').textContent = 'YOB: ' + (pat.year_of_birth || '-');
+            document.getElementById('inspPatientUhid').textContent = 'UHID: ' + (pat.patient_ref || ('P-' + pat.id));
+            document.getElementById('inspAbhaAddress').textContent = pat.abha_address || abhaAddress;
+            document.getElementById('inspAbhaNumber').textContent = pat.abha_number || '-';
+            document.getElementById('inspPhone').textContent = pat.phone || '-';
+
+            var linkedCount = 0;
+            var fhirCount = 0;
+            contexts.forEach(function (c) {
+                if (c.is_linked) linkedCount++;
+                if (c.is_fhir_ready) fhirCount++;
+            });
+
+            document.getElementById('inspTotalContexts').textContent = contexts.length;
+            document.getElementById('inspLinkedContexts').textContent = linkedCount;
+            document.getElementById('inspUnlinkedContexts').textContent = contexts.length - linkedCount;
+            document.getElementById('inspFhirCount').textContent = fhirCount;
+
+            if (linkedRefs.length > 0) {
+                document.getElementById('inspGatewayStatus').innerHTML = '<span class="badge bg-success"><i class="bi bi-shield-check me-1"></i>Gateway Verified (' + linkedRefs.length + ' links)</span>';
+            } else if (linkedCount > 0) {
+                document.getElementById('inspGatewayStatus').innerHTML = '<span class="badge bg-primary"><i class="bi bi-check2-circle me-1"></i>Local Linked</span>';
+            } else {
+                document.getElementById('inspGatewayStatus').innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>Unlinked</span>';
+            }
+
+            if (contexts.length === 0) {
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-3">No care contexts registered for this patient yet.</td></tr>';
+                return;
+            }
+
+            var html = '';
+            contexts.forEach(function (c) {
+                var ref = c.ref || '';
+                var isLinked = !!c.is_linked;
+                var isFhir = !!c.is_fhir_ready;
+                var hiType = c.hi_type || 'OPConsultRecord';
+
+                var linkBadge = isLinked
+                    ? '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>LINKED</span>'
+                    : '<span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>UNLINKED</span>';
+
+                var fhirBadge = isFhir
+                    ? '<span class="badge bg-info"><i class="bi bi-file-earmark-code me-1"></i>Ready</span>'
+                    : '<span class="badge bg-light text-muted border">Pending</span>';
+
+                // Resolve preview button
+                var fhirPreviewBtn = '';
+                var opdMatch = ref.match(/^OPD-(\d+)/i);
+                if (opdMatch) {
+                    var opdId = opdMatch[1];
+                    var sMatch = ref.match(/-S(\d+)-/i);
+                    var sId = sMatch ? sMatch[1] : 0;
+                    var previewUrl = sId > 0
+                        ? '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId + '/' + sId
+                        : '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId;
+                    fhirPreviewBtn = '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 ms-1 insp-preview-fhir" data-url="' + previewUrl + '" data-title="Care Context ' + ref + ' FHIR"><i class="bi bi-eye me-1"></i>Preview FHIR</button>';
+                }
+
+                var actionBtn = '';
+                if (isLinked) {
+                    actionBtn = '<span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2"><i class="bi bi-check-all me-1"></i>Active</span>';
+                } else {
+                    actionBtn = '<button type="button" class="btn btn-sm btn-outline-success py-0 px-2 btn-insp-link" data-ref="' + hesc(ref) + '" data-type="' + hesc(hiType) + '" data-patient-id="' + pat.id + '" data-patient-name="' + hesc(pat.name) + '" data-abha="' + hesc(pat.abha_address || abhaAddress) + '"><i class="bi bi-link-45deg me-1"></i>Link Context</button>';
+                }
+
+                html += '<tr>';
+                html += '<td><code class="fw-semibold text-primary">' + hesc(ref) + '</code></td>';
+                html += '<td>' + hesc(c.display || ref) + '</td>';
+                html += '<td><span class="badge bg-secondary-subtle text-secondary border">' + hesc(hiType) + '</span></td>';
+                html += '<td>' + fhirBadge + ' ' + fhirPreviewBtn + '</td>';
+                html += '<td>' + linkBadge + '</td>';
+                html += '<td class="text-end">' + actionBtn + '</td>';
+                html += '</tr>';
+            });
+
+            tbody.innerHTML = html;
+        }).catch(function (err) {
+            tbody.innerHTML = '<tr><td colspan="6" class="text-center text-danger py-3"><i class="bi bi-exclamation-octagon me-1"></i>Failed to load contexts: ' + hesc(err.message || 'Network error') + '</td></tr>';
+        });
+    }
+
     function applyFilter(filter) {
         currentCategoryFilter = filter;
 
@@ -814,12 +1370,15 @@
         } else if (filter === 'opd_book') {
             if (taskTableCard) taskTableCard.classList.add('d-none');
             if (opdBookCard)   opdBookCard.classList.remove('d-none');
+            filterOpdBookTable();
         } else if (filter === 'opd_consult_publish') {
             if (taskTableCard)  taskTableCard.classList.add('d-none');
             if (opdConsultCard) opdConsultCard.classList.remove('d-none');
+            filterOpdConsultTable();
         } else if (filter === 'invoice') {
             if (taskTableCard) taskTableCard.classList.add('d-none');
             if (invoiceCard)   invoiceCard.classList.remove('d-none');
+            filterInvoiceTable();
         } else {
             if (taskTableCard) taskTableCard.classList.remove('d-none');
             var titleEl = document.getElementById('taskTableTitle');
@@ -1468,7 +2027,165 @@
         });
     });
 
-    applyFilter('dashboard');
+    // Wire ABHA Filter Bar Buttons
+    var btnApplyAbha = document.getElementById('btnApplyAbhaFilter');
+    if (btnApplyAbha) {
+        btnApplyAbha.addEventListener('click', function () {
+            var input = document.getElementById('globalAbhaFilterInput');
+            applyGlobalAbhaFilter(input ? input.value : '');
+        });
+    }
+
+    var inputAbhaFilter = document.getElementById('globalAbhaFilterInput');
+    if (inputAbhaFilter) {
+        inputAbhaFilter.addEventListener('keydown', function (e) {
+            if (e.key === 'Enter') {
+                e.preventDefault();
+                applyGlobalAbhaFilter(inputAbhaFilter.value);
+            }
+        });
+    }
+
+    var btnClearAbha = document.getElementById('btnClearAbhaFilter');
+    if (btnClearAbha) {
+        btnClearAbha.addEventListener('click', function () {
+            clearGlobalAbhaFilter();
+        });
+    }
+
+    var btnNoticeClear = document.getElementById('btnNoticeClearFilter');
+    if (btnNoticeClear) {
+        btnNoticeClear.addEventListener('click', function () {
+            clearGlobalAbhaFilter();
+        });
+    }
+
+    document.querySelectorAll('.quick-abha-pill').forEach(function (pill) {
+        pill.addEventListener('click', function () {
+            var abhaVal = pill.getAttribute('data-abha') || '';
+            applyGlobalAbhaFilter(abhaVal);
+        });
+    });
+
+    // Wire Inspector Actions
+    var btnCloseInsp = document.getElementById('btnCloseInspector');
+    if (btnCloseInsp) {
+        btnCloseInsp.addEventListener('click', function () {
+            var card = document.getElementById('patientAbhaInspectorCard');
+            if (card) card.classList.add('d-none');
+        });
+    }
+
+    var btnRefreshInsp = document.getElementById('btnRefreshInspector');
+    if (btnRefreshInsp) {
+        btnRefreshInsp.addEventListener('click', function () {
+            if (currentAbhaFilter !== '') {
+                loadPatientAbhaInspector(currentAbhaFilter);
+            }
+        });
+    }
+
+    var btnVerifyGateway = document.getElementById('btnVerifyAbhaGateway');
+    if (btnVerifyGateway) {
+        btnVerifyGateway.addEventListener('click', function () {
+            if (!currentAbhaFilter) {
+                setStatus('Please specify an ABHA address to query the ABDM Gateway.', true);
+                return;
+            }
+            var statusEl = document.getElementById('inspGatewayStatus');
+            if (statusEl) {
+                statusEl.innerHTML = '<span class="badge bg-info"><span class="spinner-border spinner-border-sm me-1"></span>Verifying on Gateway...</span>';
+            }
+            var gwUrl = '<?= base_url('AbdmGateway/hip_patient_links') ?>?abha_address=' + encodeURIComponent(currentAbhaFilter);
+            fetch(gwUrl, {
+                headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
+            }).then(function (r) { return r.json(); })
+            .then(function (res) {
+                if (res && res.ok === 1 && res.links && res.links.length > 0) {
+                    if (statusEl) {
+                        statusEl.innerHTML = '<span class="badge bg-success"><i class="bi bi-shield-check me-1"></i>Gateway Verified (' + res.links.length + ' links)</span>';
+                    }
+                    setStatus('ABDM Gateway verified ' + res.links.length + ' linked care context(s) for patient.');
+                } else if (res && res.ok === 1) {
+                    if (statusEl) {
+                        statusEl.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-info-circle me-1"></i>No Gateway Links Found</span>';
+                    }
+                    setStatus('No active links recorded on Gateway for this ABHA address yet.');
+                } else {
+                    if (statusEl) {
+                        statusEl.innerHTML = '<span class="badge bg-danger"><i class="bi bi-exclamation-octagon me-1"></i>Check Failed</span>';
+                    }
+                    setStatus('Gateway check returned error: ' + (res ? (res.error_text || res.message || 'Unknown') : 'Network error'), true);
+                }
+            }).catch(function (err) {
+                if (statusEl) {
+                    statusEl.innerHTML = '<span class="badge bg-danger"><i class="bi bi-exclamation-octagon me-1"></i>Error</span>';
+                }
+                setStatus('Gateway verification failed: ' + err.message, true);
+            });
+        });
+    }
+
+    // Delegated click handler for inspector actions and table filter triggers
+    document.addEventListener('click', function (e) {
+        // Clickable ABHA badge on any table
+        var abhaFilterTarget = e.target.closest('.clickable-abha-filter');
+        if (abhaFilterTarget) {
+            e.preventDefault();
+            var abhaVal = (abhaFilterTarget.getAttribute('data-patient-abha-address')
+                || abhaFilterTarget.getAttribute('data-patient-abha-number')
+                || abhaFilterTarget.getAttribute('data-abha-id')
+                || abhaFilterTarget.textContent || '').trim();
+            if (abhaVal) {
+                applyGlobalAbhaFilter(abhaVal);
+            }
+            return;
+        }
+
+        // Preview FHIR from within inspector table
+        var previewFhirTarget = e.target.closest('.insp-preview-fhir');
+        if (previewFhirTarget) {
+            e.preventDefault();
+            var previewUrl = previewFhirTarget.getAttribute('data-url') || '';
+            var previewTitle = previewFhirTarget.getAttribute('data-title') || 'FHIR Preview';
+            if (previewUrl) {
+                showInlineFhirPreview(previewUrl, previewTitle);
+            }
+            return;
+        }
+
+        // Link context from within inspector table
+        var linkTarget = e.target.closest('.btn-insp-link');
+        if (linkTarget) {
+            e.preventDefault();
+            var patId = parseInt(linkTarget.getAttribute('data-patient-id') || '0', 10);
+            var patName = linkTarget.getAttribute('data-patient-name') || '';
+            var abhaAddr = linkTarget.getAttribute('data-abha') || currentAbhaFilter;
+            var cRef = linkTarget.getAttribute('data-ref') || '';
+            var cType = linkTarget.getAttribute('data-type') || 'OPConsultRecord';
+
+            if (typeof window.openAbdmHipLinkModal === 'function') {
+                window.openAbdmHipLinkModal(patId, abhaAddr, {
+                    patient_name: patName,
+                    care_context_reference: cRef,
+                    hi_type: cType,
+                    onLinked: function () {
+                        if (currentAbhaFilter !== '') {
+                            loadPatientAbhaInspector(currentAbhaFilter);
+                        }
+                        updateAllTablesForAbhaFilter();
+                    }
+                });
+            }
+            return;
+        }
+    });
+
+    if (currentAbhaFilter !== '') {
+        applyGlobalAbhaFilter(currentAbhaFilter);
+    } else {
+        applyFilter('dashboard');
+    }
 
     modalConfirmBtn.addEventListener('click', function () {
         if (!selectedRow || !selectedAction) {

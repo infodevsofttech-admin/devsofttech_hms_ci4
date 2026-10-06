@@ -130,4 +130,128 @@ final class AbdmTaskBoardBackfillTest extends CIUnitTestCase
         $this->assertSame('status', $params[0]->getName());
         $this->assertSame('all', $params[0]->getDefaultValue());
     }
+
+    public function testGetAbhaPatientsListReturnsNormalizedArray(): void
+    {
+        $db = \Config\Database::connect();
+        $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('patient_master') . " (
+            id INTEGER PRIMARY KEY,
+            p_code TEXT,
+            p_fname TEXT,
+            p_lname TEXT,
+            dob TEXT,
+            age TEXT,
+            gender INTEGER,
+            abha_id TEXT,
+            abha_address TEXT,
+            abha_no TEXT,
+            mphone1 TEXT
+        )");
+
+        $testPatientId = 998876;
+        $db->table('patient_master')->where('id', $testPatientId)->delete();
+        $db->table('patient_master')->insert([
+            'id'           => $testPatientId,
+            'p_code'       => 'P-TEST-998876',
+            'p_fname'      => 'Janvi',
+            'p_lname'      => 'Bisht',
+            'mphone1'      => '9876543212',
+            'gender'       => 2,
+            'abha_address' => 'janvibisht2506@sbx',
+            'abha_id'      => '91747451787144',
+        ]);
+
+        try {
+            $controller = (new ReflectionClass(AbdmTaskBoard::class))->newInstanceWithoutConstructor();
+            $dbProp = new ReflectionProperty(AbdmTaskBoard::class, 'db');
+            $dbProp->setAccessible(true);
+            $dbProp->setValue($controller, $db);
+
+            $method = new ReflectionMethod(AbdmTaskBoard::class, 'getAbhaPatientsList');
+            $method->setAccessible(true);
+
+            $patients = $method->invoke($controller);
+            $this->assertIsArray($patients);
+            $this->assertNotEmpty($patients);
+
+            $found = false;
+            foreach ($patients as $p) {
+                if ($p['id'] === $testPatientId) {
+                    $this->assertSame('janvibisht2506@sbx', $p['abha_address']);
+                    $this->assertSame('91747451787144', $p['abha_number']);
+                    $this->assertSame('P-TEST-998876', $p['p_code']);
+                    $this->assertSame('Janvi Bisht', $p['name']);
+                    $this->assertSame('F', $p['gender']);
+                    $found = true;
+                    break;
+                }
+            }
+            $this->assertTrue($found, 'Inserted test patient was not found in getAbhaPatientsList');
+        } finally {
+            $db->table('patient_master')->where('id', $testPatientId)->delete();
+        }
+    }
+
+    public function testEnrichTasksWithHealthRecordStateAttachesPatientAbha(): void
+    {
+        $db = \Config\Database::connect();
+        $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('patient_master') . " (
+            id INTEGER PRIMARY KEY,
+            p_code TEXT,
+            p_fname TEXT,
+            p_lname TEXT,
+            dob TEXT,
+            age TEXT,
+            gender INTEGER,
+            abha_id TEXT,
+            abha_address TEXT,
+            abha_no TEXT,
+            mphone1 TEXT
+        )");
+
+        $testPatientId = 998877;
+        $db->table('patient_master')->where('id', $testPatientId)->delete();
+        $db->table('patient_master')->insert([
+            'id' => $testPatientId,
+            'p_code' => 'P-TEST-998877',
+            'p_fname' => 'Test',
+            'p_lname' => 'AbhaPatient',
+            'mphone1' => '9876543210',
+            'gender' => 1,
+            'abha_address' => 'testpatient998877@sbx',
+            'abha_id' => '91747451787143',
+        ]);
+
+        try {
+            $controller = (new ReflectionClass(AbdmTaskBoard::class))->newInstanceWithoutConstructor();
+            $dbProp = new ReflectionProperty(AbdmTaskBoard::class, 'db');
+            $dbProp->setAccessible(true);
+            $dbProp->setValue($controller, $db);
+
+            $method = new ReflectionMethod(AbdmTaskBoard::class, 'enrichTasksWithHealthRecordState');
+            $method->setAccessible(true);
+
+            $mockTasks = [
+                [
+                    'id' => 1,
+                    'task_code' => 'ABDM-TEST-ENRICH-1',
+                    'task_type' => 'opd_prescription_publish',
+                    'patient_id' => $testPatientId,
+                    'entity_id' => '100',
+                    'status' => 'pending',
+                    'abha_id' => '',
+                ]
+            ];
+
+            $enriched = $method->invoke($controller, $mockTasks);
+            $this->assertCount(1, $enriched);
+            $this->assertSame('testpatient998877@sbx', $enriched[0]['patient_abha_address']);
+            $this->assertSame('91747451787143', $enriched[0]['patient_abha_number']);
+            $this->assertSame('P-TEST-998877', $enriched[0]['patient_p_code']);
+            $this->assertSame('9876543210', $enriched[0]['patient_phone']);
+        } finally {
+            $db->table('patient_master')->where('id', $testPatientId)->delete();
+        }
+    }
 }
+

@@ -44,6 +44,8 @@ class AbdmTaskBoard extends BaseController
             [$dateFrom, $dateTo] = [$dateTo, $dateFrom];
         }
 
+        $filterAbha = trim((string) ($this->request->getGet('abha_address') ?? $this->request->getGet('abha') ?? ''));
+
         return view('abdm/task_board', [
             'tasks'                  => $tasks,
             'task_status'            => $taskStatus,
@@ -54,6 +56,8 @@ class AbdmTaskBoard extends BaseController
             'opd_book_rows'          => $this->getOpdBookRows(),
             'opd_consult_rows'       => $this->getOpdConsultPublishRows(),
             'invoice_rows'           => $this->getInvoiceRows(),
+            'abha_patients'          => $this->getAbhaPatientsList(),
+            'filter_abha_address'    => $filterAbha,
         ]);
     }
 
@@ -112,6 +116,64 @@ class AbdmTaskBoard extends BaseController
             return [];
         }
 
+        $db = $this->db ?? db_connect();
+
+        // 0. Batch-resolve patient_master for ABHA addresses, ABHA numbers, p_code, and phone
+        $patientIds = [];
+        foreach ($tasks as $task) {
+            $pId = (int) ($task['patient_id'] ?? 0);
+            if ($pId > 0) {
+                $patientIds[] = $pId;
+            }
+        }
+        $patientIds = array_values(array_filter(array_unique($patientIds)));
+        $patientMap = [];
+        if (! empty($patientIds) && $db->tableExists('patient_master')) {
+            $pFields = $db->getFieldNames('patient_master') ?? [];
+            $pSel = ['id', 'p_code', 'p_fname', 'gender', 'dob'];
+            if (in_array('p_lname', $pFields, true)) {
+                $pSel[] = 'p_lname';
+            }
+            if (in_array('mphone1', $pFields, true)) {
+                $pSel[] = 'mphone1';
+            }
+            if (in_array('abha_address', $pFields, true)) {
+                $pSel[] = 'abha_address';
+            }
+            if (in_array('abha_id', $pFields, true)) {
+                $pSel[] = 'abha_id';
+            }
+            if (in_array('abha_no', $pFields, true)) {
+                $pSel[] = 'abha_no';
+            }
+
+            $pRows = $db->table('patient_master')->select(implode(', ', $pSel))->whereIn('id', $patientIds)->get()->getResultArray();
+            foreach ($pRows as $pr) {
+                $rawAddr = trim((string) ($pr['abha_address'] ?? ''));
+                $rawId   = trim((string) ($pr['abha_id'] ?? $pr['abha_no'] ?? ''));
+                $addr = '';
+                $num = '';
+                if (str_contains($rawAddr, '@')) {
+                    $addr = $rawAddr;
+                } elseif (str_contains($rawId, '@')) {
+                    $addr = $rawId;
+                }
+                $d1 = preg_replace('/\D/', '', $rawId);
+                $d2 = preg_replace('/\D/', '', $rawAddr);
+                if (is_string($d1) && strlen($d1) === 14) {
+                    $num = $d1;
+                } elseif (is_string($d2) && strlen($d2) === 14) {
+                    $num = $d2;
+                }
+                $patientMap[(int) $pr['id']] = [
+                    'p_code'       => (string) ($pr['p_code'] ?? ''),
+                    'abha_address' => $addr,
+                    'abha_number'  => $num,
+                    'phone'        => (string) ($pr['mphone1'] ?? ''),
+                ];
+            }
+        }
+
         // 1. Extract invoice metadata and resolve invoice_code
         $invoiceIds = [];
         foreach ($tasks as &$task) {
@@ -126,8 +188,6 @@ class AbdmTaskBoard extends BaseController
             }
         }
         unset($task);
-
-        $db = $this->db ?? db_connect();
 
         if (! empty($invoiceIds) && $db->tableExists('invoice_master')) {
             $invRows = $db->table('invoice_master')
@@ -259,6 +319,24 @@ class AbdmTaskBoard extends BaseController
                     $careContext = $ccm[1];
                 }
             }
+
+            $pData = $patientMap[$pId] ?? null;
+            $taskAbha = trim((string) ($task['abha_id'] ?? ''));
+            $taskAbhaAddr = (string) ($pData['abha_address'] ?? '');
+            $taskAbhaNum  = (string) ($pData['abha_number'] ?? '');
+
+            if (str_contains($taskAbha, '@') && $taskAbhaAddr === '') {
+                $taskAbhaAddr = $taskAbha;
+            }
+            $cleanAbha = preg_replace('/\D/', '', $taskAbha);
+            if (strlen($cleanAbha) === 14 && $taskAbhaNum === '') {
+                $taskAbhaNum = $cleanAbha;
+            }
+
+            $task['patient_p_code']       = (string) ($pData['p_code'] ?? '');
+            $task['patient_abha_address'] = $taskAbhaAddr;
+            $task['patient_abha_number']  = $taskAbhaNum;
+            $task['patient_phone']        = (string) ($pData['phone'] ?? '');
 
             $task['bridge_care_context_reference'] = $careContext;
             $task['bridge_submitted'] = in_array($pushStatus, ['queued', 'pushed', 'linked'], true) ? 1 : 0;
@@ -881,7 +959,7 @@ class AbdmTaskBoard extends BaseController
 
         if ($this->db->tableExists('opd_master')) {
             $builder = $this->db->table('opd_master o')
-                ->select("o.opd_id AS bill_id, o.opd_code AS bill_code, o.p_id AS patient_id, COALESCE(NULLIF(o.P_name, ''), p.p_fname, '') AS patient_name, o.apointment_date AS bill_date, o.opd_fee_amount AS amount, COALESCE(NULLIF(p.abha_address, ''), NULLIF(p.abha_id, ''), '') AS abha_id", false);
+                ->select("o.opd_id AS bill_id, o.opd_code AS bill_code, o.p_id AS patient_id, COALESCE(NULLIF(o.P_name, ''), p.p_fname, '') AS patient_name, o.apointment_date AS bill_date, o.opd_fee_amount AS amount, COALESCE(p.p_code, '') AS p_code, COALESCE(p.abha_address, '') AS patient_abha_address, COALESCE(p.abha_id, '') AS patient_abha_number, COALESCE(NULLIF(p.abha_address, ''), NULLIF(p.abha_id, ''), '') AS abha_id", false);
             if ($this->db->tableExists('patient_master')) {
                 $builder->join('patient_master p', 'p.id = o.p_id', 'left');
             }
@@ -896,7 +974,7 @@ class AbdmTaskBoard extends BaseController
 
         if ($this->db->tableExists('invoice_master')) {
             $builder = $this->db->table('invoice_master i')
-                ->select("i.id AS bill_id, i.invoice_code AS bill_code, i.attach_id AS patient_id, COALESCE(NULLIF(i.inv_name, ''), p.p_fname, '') AS patient_name, i.inv_date AS bill_date, i.net_amount AS amount, COALESCE(NULLIF(p.abha_address, ''), NULLIF(p.abha_id, ''), '') AS abha_id", false);
+                ->select("i.id AS bill_id, i.invoice_code AS bill_code, i.attach_id AS patient_id, COALESCE(NULLIF(i.inv_name, ''), p.p_fname, '') AS patient_name, i.inv_date AS bill_date, i.net_amount AS amount, COALESCE(p.p_code, '') AS p_code, COALESCE(p.abha_address, '') AS patient_abha_address, COALESCE(p.abha_id, '') AS patient_abha_number, COALESCE(NULLIF(p.abha_address, ''), NULLIF(p.abha_id, ''), '') AS abha_id", false);
             if ($this->db->tableExists('patient_master')) {
                 $builder->join('patient_master p', 'p.id = i.attach_id AND i.attach_type = 0', 'left');
             }
@@ -911,7 +989,7 @@ class AbdmTaskBoard extends BaseController
 
         if ($this->db->tableExists('ipd_master')) {
             $builder = $this->db->table('ipd_master i')
-                ->select("i.id AS bill_id, i.ipd_code AS bill_code, i.p_id AS patient_id, COALESCE(NULLIF(NULLIF(TRIM(i.P_name), ''), '0'), NULLIF(TRIM(p.p_fname), ''), '') AS patient_name, COALESCE(i.discharge_date, i.register_date) AS bill_date, i.net_amount AS amount, COALESCE(NULLIF(p.abha_address, ''), NULLIF(p.abha_id, ''), '') AS abha_id", false);
+                ->select("i.id AS bill_id, i.ipd_code AS bill_code, i.p_id AS patient_id, COALESCE(NULLIF(NULLIF(TRIM(i.P_name), ''), '0'), NULLIF(TRIM(p.p_fname), ''), '') AS patient_name, COALESCE(i.discharge_date, i.register_date) AS bill_date, i.net_amount AS amount, COALESCE(p.p_code, '') AS p_code, COALESCE(p.abha_address, '') AS patient_abha_address, COALESCE(p.abha_id, '') AS patient_abha_number, COALESCE(NULLIF(p.abha_address, ''), NULLIF(p.abha_id, ''), '') AS abha_id", false);
             if ($this->db->tableExists('patient_master')) {
                 $builder->join('patient_master p', 'p.id = i.p_id', 'left');
             }
@@ -969,6 +1047,27 @@ class AbdmTaskBoard extends BaseController
         }
 
         foreach ($rows as &$row) {
+            $rawAddress = trim((string) ($row['patient_abha_address'] ?? ''));
+            $rawNumber = trim((string) ($row['patient_abha_number'] ?? ''));
+            $addr = '';
+            $num = '';
+            if (str_contains($rawAddress, '@')) {
+                $addr = $rawAddress;
+            } elseif (str_contains($rawNumber, '@')) {
+                $addr = $rawNumber;
+            }
+            $d1 = preg_replace('/\D/', '', $rawNumber);
+            $d2 = preg_replace('/\D/', '', $rawAddress);
+            if (is_string($d1) && strlen($d1) === 14) {
+                $num = $d1;
+            } elseif (is_string($d2) && strlen($d2) === 14) {
+                $num = $d2;
+            }
+            $row['abha_address'] = $addr;
+            $row['abha_number']  = $num;
+            $row['abha_id']      = $addr !== '' ? $addr : $num;
+            $row['p_code']       = (string) ($row['p_code'] ?? '');
+
             $billId = (string) ($row['bill_id'] ?? '');
             $keys = [(string) $row['source_key'] . ':' . $billId];
             if ($row['source_key'] === 'charges_invoice') {
@@ -1120,19 +1219,157 @@ class AbdmTaskBoard extends BaseController
      *
      * @return array<int, array<string, mixed>>
      */
+    /**
+     * Distinct patients with an ABHA address or ABHA number for the board selector & datalist.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function getAbhaPatientsList(): array
+    {
+        if (! $this->db->tableExists('patient_master')) {
+            return [];
+        }
+
+        $fields = $this->db->getFieldNames('patient_master') ?? [];
+        $hasAbhaAddress = in_array('abha_address', $fields, true);
+        $hasAbhaId = in_array('abha_id', $fields, true);
+        $hasAbhaNo = in_array('abha_no', $fields, true);
+
+        if (! $hasAbhaAddress && ! $hasAbhaId && ! $hasAbhaNo) {
+            return [];
+        }
+
+        $select = ['id', 'p_code', 'p_fname', 'gender', 'dob'];
+        if (in_array('p_lname', $fields, true)) {
+            $select[] = 'p_lname';
+        }
+        if (in_array('mphone1', $fields, true)) {
+            $select[] = 'mphone1';
+        }
+        if ($hasAbhaAddress) {
+            $select[] = 'abha_address';
+        }
+        if ($hasAbhaId) {
+            $select[] = 'abha_id';
+        }
+        if ($hasAbhaNo) {
+            $select[] = 'abha_no';
+        }
+
+        $builder = $this->db->table('patient_master')->select(implode(', ', $select));
+
+        $whereOr = [];
+        if ($hasAbhaAddress) {
+            $whereOr[] = "NULLIF(TRIM(abha_address), '') IS NOT NULL";
+        }
+        if ($hasAbhaId) {
+            $whereOr[] = "NULLIF(TRIM(abha_id), '') IS NOT NULL";
+        }
+        if ($hasAbhaNo) {
+            $whereOr[] = "NULLIF(TRIM(abha_no), '') IS NOT NULL";
+        }
+
+        if ($whereOr !== []) {
+            $builder->where('(' . implode(' OR ', $whereOr) . ')', null, false);
+        }
+
+        $rows = $builder->orderBy('id', 'DESC')->limit(500)->get()->getResultArray();
+        $patients = [];
+
+        foreach ($rows as $row) {
+            $rawAddress = trim((string) ($row['abha_address'] ?? ''));
+            $rawId = trim((string) ($row['abha_id'] ?? $row['abha_no'] ?? ''));
+
+            $addr = '';
+            $num = '';
+
+            if (str_contains($rawAddress, '@')) {
+                $addr = $rawAddress;
+            } elseif (str_contains($rawId, '@')) {
+                $addr = $rawId;
+            }
+
+            $d1 = preg_replace('/\D/', '', $rawId);
+            $d2 = preg_replace('/\D/', '', $rawAddress);
+            if (is_string($d1) && strlen($d1) === 14) {
+                $num = $d1;
+            } elseif (is_string($d2) && strlen($d2) === 14) {
+                $num = $d2;
+            }
+
+            if ($addr === '' && $num === '') {
+                continue;
+            }
+
+            $fname = trim((string) ($row['p_fname'] ?? ''));
+            $lname = trim((string) ($row['p_lname'] ?? ''));
+            $fullName = trim($fname . ' ' . $lname);
+            if ($fullName === '') {
+                $fullName = 'Patient #' . ($row['id'] ?? '');
+            }
+
+            $genderInt = (int) ($row['gender'] ?? 0);
+            $genderStr = ($genderInt === 1 ? 'M' : ($genderInt === 2 ? 'F' : 'O'));
+
+            $dob = trim((string) ($row['dob'] ?? ''));
+            $yob = 0;
+            if ($dob !== '' && ! str_starts_with($dob, '0000')) {
+                $ts = strtotime($dob);
+                if ($ts !== false) {
+                    $yob = (int) date('Y', $ts);
+                }
+            }
+
+            $patients[] = [
+                'id'           => (int) ($row['id'] ?? 0),
+                'p_code'       => (string) ($row['p_code'] ?? ''),
+                'name'         => $fullName,
+                'abha_address' => $addr,
+                'abha_number'  => $num,
+                'phone'        => (string) ($row['mphone1'] ?? ''),
+                'gender'       => $genderStr,
+                'dob'          => $dob,
+                'yob'          => $yob,
+            ];
+        }
+
+        return $patients;
+    }
+
     private function getOpdBookRows(): array
     {
         if (! $this->db->tableExists('abdm_opd_tokens')) {
             return [];
         }
 
-        return $this->db->table('abdm_opd_tokens')
-            ->where('queue_date >=', date('Y-m-d', strtotime('-7 days')))
-            ->orderBy('queue_date', 'DESC')
-            ->orderBy('gateway_token_id', 'DESC')
+        $builder = $this->db->table('abdm_opd_tokens t');
+        if ($this->db->tableExists('patient_master')) {
+            $builder->select('t.*, p.p_code, p.mphone1 as patient_phone')
+                ->join('patient_master p', 'p.id = t.patient_id', 'left');
+        } else {
+            $builder->select('t.*');
+        }
+
+        $rows = $builder->where('t.queue_date >=', date('Y-m-d', strtotime('-7 days')))
+            ->orderBy('t.queue_date', 'DESC')
+            ->orderBy('t.gateway_token_id', 'DESC')
             ->limit(200)
             ->get()
             ->getResultArray();
+
+        foreach ($rows as &$r) {
+            $rawAddress = trim((string) ($r['abha_address'] ?? ''));
+            $rawNumber  = trim((string) ($r['abha_number'] ?? ''));
+            if (str_contains($rawNumber, '@') && $rawAddress === '') {
+                $rawAddress = $rawNumber;
+            }
+            $r['abha_address'] = $rawAddress;
+            $r['abha_number']  = preg_replace('/\D/', '', $rawNumber);
+            $r['p_code']       = (string) ($r['p_code'] ?? '');
+        }
+        unset($r);
+
+        return $rows;
     }
 
     /**
@@ -1147,23 +1384,77 @@ class AbdmTaskBoard extends BaseController
         }
 
         $patientFields = $this->db->getFieldNames('patient_master') ?? [];
-        $abhaCol = $this->resolveExistingColumn($patientFields, ['abha_id', 'abha_no', 'abha_address', 'abha']);
-        if ($abhaCol === null) {
-            return [];
+        $selectCols = [
+            'o.opd_id', 'o.p_id', 'o.P_name', 'o.apointment_date', 'o.opd_status', 'o.doc_name',
+        ];
+        if (in_array('p_code', $patientFields, true)) {
+            $selectCols[] = 'p.p_code';
+        }
+        if (in_array('abha_address', $patientFields, true)) {
+            $selectCols[] = 'p.abha_address';
+        }
+        if (in_array('abha_id', $patientFields, true)) {
+            $selectCols[] = 'p.abha_id';
+        }
+        if (in_array('abha_no', $patientFields, true)) {
+            $selectCols[] = 'p.abha_no';
+        }
+        if (in_array('mphone1', $patientFields, true)) {
+            $selectCols[] = 'p.mphone1 as patient_phone';
         }
 
-        $rows = $this->db->table('opd_master o')
-            ->select('o.opd_id, o.p_id, o.P_name, o.apointment_date, o.opd_status, o.doc_name, p.' . $abhaCol . ' as abha_id', false)
+        $builder = $this->db->table('opd_master o')
+            ->select(implode(', ', $selectCols), false)
             ->join('patient_master p', 'p.id = o.p_id', 'left')
             ->where('o.opd_status', 2)
-            ->where('DATE(o.apointment_date) >=', date('Y-m-d', strtotime('-30 days')), false)
-            ->where('p.' . $abhaCol . ' !=', '')
-            ->orderBy('o.opd_id', 'DESC')
-            ->limit(300)
-            ->get()
-            ->getResultArray();
+            ->where('DATE(o.apointment_date) >=', date('Y-m-d', strtotime('-30 days')), false);
 
-        $rows = array_values(array_filter($rows, static fn ($r) => preg_match('/^\d{14}$/', trim((string) ($r['abha_id'] ?? ''))) === 1));
+        $whereAbhaOr = [];
+        if (in_array('abha_address', $patientFields, true)) {
+            $whereAbhaOr[] = "NULLIF(TRIM(p.abha_address), '') IS NOT NULL";
+        }
+        if (in_array('abha_id', $patientFields, true)) {
+            $whereAbhaOr[] = "NULLIF(TRIM(p.abha_id), '') IS NOT NULL";
+        }
+        if (in_array('abha_no', $patientFields, true)) {
+            $whereAbhaOr[] = "NULLIF(TRIM(p.abha_no), '') IS NOT NULL";
+        }
+        if ($whereAbhaOr !== []) {
+            $builder->where('(' . implode(' OR ', $whereAbhaOr) . ')', null, false);
+        }
+
+        $rawRows = $builder->orderBy('o.opd_id', 'DESC')->limit(300)->get()->getResultArray();
+
+        $rows = [];
+        foreach ($rawRows as $r) {
+            $rawAddress = trim((string) ($r['abha_address'] ?? ''));
+            $rawId = trim((string) ($r['abha_id'] ?? $r['abha_no'] ?? ''));
+            $addr = '';
+            $num = '';
+            if (str_contains($rawAddress, '@')) {
+                $addr = $rawAddress;
+            } elseif (str_contains($rawId, '@')) {
+                $addr = $rawId;
+            }
+            $d1 = preg_replace('/\D/', '', $rawId);
+            $d2 = preg_replace('/\D/', '', $rawAddress);
+            if (is_string($d1) && strlen($d1) === 14) {
+                $num = $d1;
+            } elseif (is_string($d2) && strlen($d2) === 14) {
+                $num = $d2;
+            }
+
+            if ($addr === '' && $num === '') {
+                continue;
+            }
+
+            $r['abha_address'] = $addr;
+            $r['abha_number']  = $num;
+            $r['abha_id']      = $addr !== '' ? $addr : $num;
+            $r['p_code']       = (string) ($r['p_code'] ?? '');
+            $rows[] = $r;
+        }
+
         if (empty($rows)) {
             return [];
         }
@@ -1398,7 +1689,7 @@ class AbdmTaskBoard extends BaseController
             $patientId = (int) ($row['p_id'] ?? 0);
             $docId = (int) ($row['id'] ?? 0);
             $abhaId = trim((string) ($row['abha_id'] ?? ''));
-            if ($patientId <= 0 || $docId <= 0 || preg_match('/^\d{14}$/', $abhaId) !== 1) {
+            if ($patientId <= 0 || $docId <= 0 || ! $this->isValidAbhaNumber($abhaId)) {
                 continue;
             }
 
@@ -1447,7 +1738,7 @@ class AbdmTaskBoard extends BaseController
                 $patientId = (int) ($fRow['pid'] ?? 0);
                 $fileId = (int) ($fRow['id'] ?? 0);
                 $abhaId = trim((string) ($fRow['abha_id'] ?? ''));
-                if ($patientId <= 0 || $fileId <= 0 || preg_match('/^\d{14}$/', $abhaId) !== 1) {
+                if ($patientId <= 0 || $fileId <= 0 || ! $this->isValidAbhaNumber($abhaId)) {
                     continue;
                 }
 
@@ -1524,7 +1815,7 @@ class AbdmTaskBoard extends BaseController
             $rxId = (int) ($row['id'] ?? 0);
             $opdId = (int) ($row['opd_id'] ?? 0);
             $abhaId = trim((string) ($row['abha_id'] ?? ''));
-            if ($patientId <= 0 || $rxId <= 0 || preg_match('/^\d{14}$/', $abhaId) !== 1) {
+            if ($patientId <= 0 || $rxId <= 0 || ! $this->isValidAbhaNumber($abhaId)) {
                 continue;
             }
 

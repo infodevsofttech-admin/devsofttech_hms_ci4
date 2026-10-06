@@ -73,7 +73,9 @@ final class TestHipDemographicsCareContext extends CIUnitTestCase
         ]);
 
         $this->gateway = new AbdmGateway();
-        $req = \Config\Services::request();
+        \Config\Services::resetSingle('request');
+        \Config\Services::resetSingle('response');
+        $req = \Config\Services::request(null, false);
         $resp = \Config\Services::response();
         $logger = \Config\Services::logger();
         $this->gateway->initController($req, $resp, $logger);
