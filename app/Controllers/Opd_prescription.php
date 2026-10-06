@@ -5892,8 +5892,7 @@ class Opd_prescription extends BaseController
         };
 
         if ($sessionId > 0 && in_array('care_context_reference', $fields, true)) {
-            $careContextPrefix = 'OPD-' . $opdId . '-S' . $sessionId . '-';
-            $candidate = $findCandidate($careContextPrefix);
+            $candidate = $findCandidate('-S' . $sessionId . '-');
             if ($candidate !== null) {
                 return $candidate;
             }
@@ -11923,6 +11922,16 @@ class Opd_prescription extends BaseController
             ]);
         }
 
+        // Clean up redundant standalone bundles in opd_fhir_documents so only unified OPConsultRecord is kept
+        try {
+            $this->db->table('opd_fhir_documents')
+                ->where('opd_id', $opdId)
+                ->where('opd_session_id', $sessionId)
+                ->whereIn('bundle_type', ['PrescriptionRecord', 'MedicationRequestBundle', 'WellnessRecord'])
+                ->delete();
+        } catch (\Throwable) {
+        }
+
         if (! $inserted) {
             return false;
         }
@@ -11961,10 +11970,15 @@ class Opd_prescription extends BaseController
                     $this->db->table('health_records')->insert($hrPayload);
                 }
 
-                // Delete redundant standalone PRESC / WELLNESS records so only the single unified bundle is kept
+                // Delete redundant standalone PRESC / WELLNESS / alias OPD records so only the single unified bundle is kept
                 $redundantRefs = [
                     'PRESC-' . $patientId . '-S' . $sessionId . '-' . $cleanDate,
                     'WELLNESS-' . $sessionId . '-' . $cleanDate,
+                    'OPD-' . $opdId . '-S' . $sessionId . '-' . $visitDate,
+                    'OPD-' . $opdId . '-S' . $sessionId . '-' . $cleanDate,
+                    'OPD-' . $patientId . '-S' . $sessionId . '-' . $visitDate,
+                    'PRESC-' . $opdId . '-S' . $sessionId . '-' . $visitDate,
+                    'WELLNESS-' . $opdId . '-S' . $sessionId . '-' . $visitDate,
                 ];
                 $this->db->table('health_records')
                     ->whereIn('care_context_reference', $redundantRefs)

@@ -112,6 +112,7 @@ class AbdmTaskBoardSyncService
                 ->select('id, opd_id, opd_session_id, bundle_type, bundle_json, generated_at')
                 ->whereIn('opd_id', $opdIds)
                 ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle', 'PrescriptionRecord'])
+                ->orderBy("CASE WHEN bundle_type = 'OPConsultRecord' THEN 1 ELSE 2 END", 'ASC', false)
                 ->orderBy('id', 'DESC')
                 ->get()
                 ->getResultArray();
@@ -203,7 +204,8 @@ class AbdmTaskBoardSyncService
 
             $consultDate = (string) ($row['apointment_date'] ?? '');
             $visitDate = $consultDate !== '' ? date('Y-m-d', strtotime($consultDate)) : date('Y-m-d');
-            $derivedCcRef = 'OPD-' . $opdId . '-S' . ($sessionId > 0 ? $sessionId : 0) . '-' . $visitDate;
+            $cleanDate = str_replace('-', '', $visitDate);
+            $derivedCcRef = 'OPD-' . $patientId . '-S' . ($sessionId > 0 ? $sessionId : 0) . '-' . $cleanDate;
 
             $careContextRef = trim((string) ($hr['care_context_reference'] ?? ''));
             if ($careContextRef === '') {
@@ -411,6 +413,16 @@ class AbdmTaskBoardSyncService
 
         // 1. Upsert into health_records
         $healthRecordId = (int) ($existingHr['id'] ?? 0);
+        if ($healthRecordId <= 0) {
+            $foundHr = $this->db->table('health_records')
+                ->select('id')
+                ->where('care_context_reference', $careContextRef)
+                ->get(1)
+                ->getRowArray();
+            if (! empty($foundHr['id'])) {
+                $healthRecordId = (int) $foundHr['id'];
+            }
+        }
         $hrData = [
             'patient_id'             => $patientId,
             'abha_id'                => $effectiveAbha,
@@ -763,6 +775,7 @@ class AbdmTaskBoardSyncService
             if ($this->db->tableExists('opd_fhir_documents')) {
                 $docRow = $this->db->table('opd_fhir_documents')
                     ->where('opd_id', $entityId)
+                    ->orderBy("CASE WHEN bundle_type = 'OPConsultRecord' THEN 1 ELSE 2 END", 'ASC', false)
                     ->orderBy('id', 'DESC')
                     ->get(1)
                     ->getRowArray();
@@ -778,7 +791,10 @@ class AbdmTaskBoardSyncService
 
             $opdRow['abha_id'] = $abhaId;
             $visitDate = ! empty($opdRow['apointment_date']) ? date('Y-m-d', strtotime((string) $opdRow['apointment_date'])) : date('Y-m-d');
-            $ccRef = 'OPD-' . $entityId . '-S' . ($docRow['opd_session_id'] ?? 0) . '-' . $visitDate;
+            $cleanDate = str_replace('-', '', $visitDate);
+            $targetPatientId = (int) ($opdRow['p_id'] ?? $patientId);
+            $targetSessionId = (int) ($docRow['opd_session_id'] ?? 0);
+            $ccRef = 'OPD-' . $targetPatientId . '-S' . $targetSessionId . '-' . $cleanDate;
 
             return $this->linkAndPushOpdRecord($opdRow, $docRow, $ccRef, $visitDate, null);
         }

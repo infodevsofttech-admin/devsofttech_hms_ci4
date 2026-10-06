@@ -6215,8 +6215,9 @@ class AbdmGateway extends BaseController
         $careContextsV3 = [];
         $careContextsFull = [];
         $seenRefs = [];
+        $seenOpdSessions = [];
 
-        $addContext = function (array $item) use (&$careContextsV3, &$careContextsFull, &$seenRefs, $readyOnly) {
+        $addContext = function (array $item) use (&$careContextsV3, &$careContextsFull, &$seenRefs, &$seenOpdSessions, $readyOnly) {
             $ref = trim((string) ($item['referenceNumber'] ?? $item['careContextId'] ?? ''));
             if ($ref === '' || isset($seenRefs[$ref])) {
                 return;
@@ -6225,6 +6226,9 @@ class AbdmGateway extends BaseController
                 return;
             }
             $seenRefs[$ref] = true;
+            if (! empty($item['alias_reference'])) {
+                $seenRefs[trim((string) $item['alias_reference'])] = true;
+            }
             $recType = trim((string) ($item['record_type'] ?? ''));
             $hiType = $this->mapRecordTypeToAbdmHiType($recType);
 
@@ -6669,6 +6673,15 @@ class AbdmGateway extends BaseController
                     'is_primary'      => false,
                 ]);
                 $seenRefs[$aliasRef] = true;
+                $seenRefs['OPD-' . $opdId . '-S' . $sessionId . '-' . $visitDate] = true;
+                $seenRefs['OPD-' . $opdId . '-S' . $sessionId . '-' . $cleanDate] = true;
+                $seenRefs['OPD-' . $patientId . '-S' . $sessionId . '-' . $visitDate] = true;
+                if ($sessionId > 0) {
+                    $seenOpdSessions[$sessionId] = true;
+                }
+                if ($opdId > 0) {
+                    $seenOpdSessions[$opdId] = true;
+                }
             }
         }
 
@@ -6929,6 +6942,21 @@ class AbdmGateway extends BaseController
                 }
                 if (str_starts_with($ccRef, 'PRESC-') || str_starts_with($ccRef, 'WELLNESS-')) {
                     continue;
+                }
+                // Skip if this OPD session or OPD ID has already been included in step 4
+                if (str_starts_with($ccRef, 'OPD-')) {
+                    if (preg_match('/-S(\d+)-/i', $ccRef, $sm)) {
+                        $sId = (int) $sm[1];
+                        if ($sId > 0 && isset($seenOpdSessions[$sId])) {
+                            continue;
+                        }
+                    }
+                    if (preg_match('/^OPD-(\d+)-/i', $ccRef, $om)) {
+                        $oId = (int) $om[1];
+                        if ($oId > 0 && isset($seenOpdSessions[$oId])) {
+                            continue;
+                        }
+                    }
                 }
                 $hiType = trim((string) ($row['hi_type'] ?? 'HealthDocumentRecord'));
                 if (str_starts_with($ccRef, 'INVOICE-')) {
