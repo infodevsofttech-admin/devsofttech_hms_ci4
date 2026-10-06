@@ -6459,7 +6459,16 @@ class AbdmGateway extends BaseController
                 if ($ccRef === '') {
                     $ccRef = 'HR-' . (int) ($row['id'] ?? 0);
                 }
+                // Skip redundant/legacy separate PRESC- and WELLNESS- contexts (now unified under OPD-)
+                if (str_starts_with($ccRef, 'PRESC-') || str_starts_with($ccRef, 'WELLNESS-')) {
+                    continue;
+                }
                 $hiType = trim((string) ($row['hi_type'] ?? 'HealthDocumentRecord'));
+                if (str_starts_with($ccRef, 'INVOICE-') || stripos($hiType, 'invoice') !== false) {
+                    $hiType = 'InvoiceRecord';
+                } elseif (str_starts_with($ccRef, 'OPD-')) {
+                    $hiType = 'OPConsultRecord';
+                }
                 $dateStr = date('d M Y', strtotime((string) ($row['created_at'] ?? $row['updated_at'] ?? 'now')));
                 $display = $hiType . ' - ' . $dateStr;
 
@@ -6570,7 +6579,6 @@ class AbdmGateway extends BaseController
                 $aliasRef = 'OPD-' . $patientId . '-S' . $opdId . '-' . $cleanDate;
 
                 $docName = trim((string) ($om['doc_name'] ?? ''));
-                $display = 'OPConsultRecord - ' . ($docName !== '' ? 'Dr. ' . $docName . ' - ' : '') . $dateStr;
 
                 // Determine FHIR readiness: check stored doc, health_records, status, or clinical findings
                 $hasStoredDoc = false;
@@ -6622,8 +6630,35 @@ class AbdmGateway extends BaseController
                     }
                 }
 
-                $isReady = $hasStoredDoc || $hasHr || $isVisitDone || $hasFindings || $hasMeds;
+                // Check vitals / wellness
+                $hasVitals = ! empty($pr) && (! empty($pr['bp']) || ! empty($pr['pulse']) || ! empty($pr['temp']) || ! empty($pr['spo2']) || ! empty($pr['weight']) || ! empty($pr['height']));
 
+                // Check scanned or uploaded documents
+                $hasDocs = false;
+                if ($this->db->tableExists('file_upload_data')) {
+                    $hasDocs = ($this->db->table('file_upload_data')->where('opd_id', $opdId)->countAllResults() > 0);
+                }
+
+                // Build unified clinical components label
+                $components = ['OPD Consult'];
+                if ($hasVitals) {
+                    $components[] = 'Wellness';
+                }
+                if ($hasMeds) {
+                    $components[] = 'Prescription';
+                }
+                if ($hasDocs) {
+                    $components[] = 'HealthDocument';
+                }
+                $compStr = implode(', ', $components);
+                $display = $compStr . ' - ' . ($docName !== '' ? 'Dr. ' . $docName . ' - ' : '') . $dateStr;
+                if (strlen($display) > 85) {
+                    $display = $compStr . ' - ' . $dateStr;
+                }
+
+                $isReady = $hasStoredDoc || $hasHr || $isVisitDone || $hasFindings || $hasMeds || $hasVitals;
+
+                // Single unified care context covering consult note, wellness, prescription, and documents
                 $addContext([
                     'careContextId'   => $ccRef,
                     'referenceNumber' => $ccRef,
@@ -6635,37 +6670,6 @@ class AbdmGateway extends BaseController
                     'is_primary'      => false,
                 ]);
                 $seenRefs[$aliasRef] = true;
-
-                // 4b. Prescription Record (if prescribed medicines exist)
-                if ($hasMeds) {
-                    $prescCcRef = 'PRESC-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
-                    $prescDisplay = 'Prescription - ' . ($docName !== '' ? 'Dr. ' . $docName . ' - ' : '') . $dateStr;
-                    $addContext([
-                        'careContextId'   => $prescCcRef,
-                        'referenceNumber' => $prescCcRef,
-                        'display'         => $prescDisplay,
-                        'record_type'     => 'PrescriptionRecord',
-                        'patient_id'      => $patientId,
-                        'is_fhir_ready'   => true,
-                        'is_primary'      => false,
-                    ]);
-                }
-
-                // 4c. Wellness Record (if vitals exist)
-                $hasVitals = ! empty($pr) && (! empty($pr['bp']) || ! empty($pr['pulse']) || ! empty($pr['temp']) || ! empty($pr['spo2']) || ! empty($pr['weight']) || ! empty($pr['height']));
-                if ($hasVitals) {
-                    $wellCcRef = 'WELLNESS-' . $sessionId . '-' . $cleanDate;
-                    $wellDisplay = 'Wellness Record - ' . $dateStr;
-                    $addContext([
-                        'careContextId'   => $wellCcRef,
-                        'referenceNumber' => $wellCcRef,
-                        'display'         => $wellDisplay,
-                        'record_type'     => 'WellnessRecord',
-                        'patient_id'      => $patientId,
-                        'is_fhir_ready'   => true,
-                        'is_primary'      => false,
-                    ]);
-                }
             }
         }
 
@@ -6688,16 +6692,6 @@ class AbdmGateway extends BaseController
                     || trim((string) ($pr['diagnosis'] ?? '')) !== ''
                     || trim((string) ($pr['Provisional_diagnosis'] ?? '')) !== '';
                 $ccRef = 'OPD-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
-                $display = 'OPConsultRecord - ' . $dateStr;
-                $addContext([
-                    'careContextId'   => $ccRef,
-                    'referenceNumber' => $ccRef,
-                    'display'         => $display,
-                    'record_type'     => 'OPConsultRecord',
-                    'patient_id'      => $patientId,
-                    'is_fhir_ready'   => $hasFindings,
-                    'is_primary'      => false,
-                ]);
 
                 // Also check if prescribed medicines exist for orphan
                 $hasMeds = false;
@@ -6710,35 +6704,29 @@ class AbdmGateway extends BaseController
                         $hasMeds = ($this->db->table($tblPresc)->where($col, (int) $pr['id'])->countAllResults() > 0);
                     }
                 }
-                if ($hasMeds) {
-                    $prescCcRef = 'PRESC-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
-                    $prescDisplay = 'Prescription - ' . $dateStr;
-                    $addContext([
-                        'careContextId'   => $prescCcRef,
-                        'referenceNumber' => $prescCcRef,
-                        'display'         => $prescDisplay,
-                        'record_type'     => 'PrescriptionRecord',
-                        'patient_id'      => $patientId,
-                        'is_fhir_ready'   => true,
-                        'is_primary'      => false,
-                    ]);
-                }
 
                 // Also check if vitals exist for orphan
                 $hasVitals = ! empty($pr['bp']) || ! empty($pr['pulse']) || ! empty($pr['temp']) || ! empty($pr['spo2']) || ! empty($pr['weight']) || ! empty($pr['height']);
+
+                $components = ['OPD Consult'];
                 if ($hasVitals) {
-                    $wellCcRef = 'WELLNESS-' . $sessionId . '-' . $cleanDate;
-                    $wellDisplay = 'Wellness Record - ' . $dateStr;
-                    $addContext([
-                        'careContextId'   => $wellCcRef,
-                        'referenceNumber' => $wellCcRef,
-                        'display'         => $wellDisplay,
-                        'record_type'     => 'WellnessRecord',
-                        'patient_id'      => $patientId,
-                        'is_fhir_ready'   => true,
-                        'is_primary'      => false,
-                    ]);
+                    $components[] = 'Wellness';
                 }
+                if ($hasMeds) {
+                    $components[] = 'Prescription';
+                }
+                $compStr = implode(', ', $components);
+                $display = $compStr . ' - ' . $dateStr;
+
+                $addContext([
+                    'careContextId'   => $ccRef,
+                    'referenceNumber' => $ccRef,
+                    'display'         => $display,
+                    'record_type'     => 'OPConsultRecord',
+                    'patient_id'      => $patientId,
+                    'is_fhir_ready'   => $hasFindings || $hasMeds || $hasVitals,
+                    'is_primary'      => false,
+                ]);
             }
         }
 
