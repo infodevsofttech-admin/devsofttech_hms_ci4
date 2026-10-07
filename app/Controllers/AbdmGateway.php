@@ -364,13 +364,28 @@ class AbdmGateway extends BaseController
             }
         }
 
+        $patRow = $this->findPatientMasterRow(0, $abhaAddress, $abhaId);
+        $patId = (int) ($patRow['id'] ?? 0);
+        $allAbhaIdentifiers = array_values(array_filter(array_unique([
+            $abhaLookup,
+            $abhaAddress,
+            $abhaId,
+            str_replace('-', '', $abhaId),
+            (string) ($patRow['abha_id'] ?? ''),
+            (string) ($patRow['abha_address'] ?? ''),
+        ])));
+
         $rows = [];
         if ($this->db->tableExists('patient_records')) {
-            $rows = $this->db->table('patient_records')
+            $pRecBuilder = $this->db->table('patient_records')
                 ->select('record_id, patient_id, abha_id, consent_id, record_type, fhir_resource, created_at')
-                ->where('abha_id', $abhaLookup)
-                ->where('status', 'ACTIVE')
-                ->orderBy('record_id', 'DESC')
+                ->where('status', 'ACTIVE');
+            if (! empty($allAbhaIdentifiers)) {
+                $pRecBuilder->whereIn('abha_id', $allAbhaIdentifiers);
+            } else {
+                $pRecBuilder->where('abha_id', $abhaLookup);
+            }
+            $rows = $pRecBuilder->orderBy('record_id', 'DESC')
                 ->limit(300)
                 ->get()
                 ->getResultArray();
@@ -384,14 +399,24 @@ class AbdmGateway extends BaseController
             if (in_array('record_data', $healthFields, true) && in_array('care_context_reference', $healthFields, true)) {
                 $healthBuilder = $this->db->table('health_records')
                     ->select('id, care_context_reference, record_data, entity_type, entity_id, push_status')
-                    ->where('abha_id', $abhaLookup)
                     ->where('care_context_reference !=', '')
-                    ->whereIn('push_status', ['local_discovery_ready', 'queued', 'pushed', 'linked'])
-                    ->orderBy('id', 'DESC')
-                    ->limit(300);
+                    ->whereIn('push_status', ['local_discovery_ready', 'queued', 'pushed', 'linked']);
+
+                if (! empty($allAbhaIdentifiers) || $patId > 0) {
+                    $healthBuilder->groupStart();
+                    if (! empty($allAbhaIdentifiers)) {
+                        $healthBuilder->whereIn('abha_id', $allAbhaIdentifiers);
+                    }
+                    if ($patId > 0) {
+                        $healthBuilder->orWhere('patient_id', $patId);
+                    }
+                    $healthBuilder->groupEnd();
+                }
+
                 if (! empty($requestedRefs)) {
                     $healthBuilder->whereIn('care_context_reference', $requestedRefs);
                 }
+                $healthBuilder->orderBy('id', 'DESC')->limit(300);
                 foreach ($healthBuilder->get()->getResultArray() as $healthRow) {
                     $ccRef = trim((string) ($healthRow['care_context_reference'] ?? ''));
                     if ($ccRef === '' || isset($resolvedRefs[$ccRef])) {
@@ -5238,6 +5263,25 @@ class AbdmGateway extends BaseController
             if ($patientId === 0) {
                 $patientId = $extractedId;
             }
+        } elseif (preg_match('/WELLNESS-(\d+)(?:-W(\d+))?/i', $careContextRef, $matches)) {
+            $wellnessPatientId = (int) $matches[1];
+            $wellnessId = (int) ($matches[2] ?? 0);
+            if ($db->tableExists('patient_wellness_records')) {
+                $wBuilder = $db->table('patient_wellness_records');
+                if ($wellnessId > 0) {
+                    $wBuilder->where('id', $wellnessId);
+                } else {
+                    $wBuilder->where('patient_id', $wellnessPatientId)->orderBy('id', 'DESC');
+                }
+                $wRow = $wBuilder->get(1)->getRowArray();
+                if (! empty($wRow['fhir_bundle_json'])) {
+                    $wBundle = json_decode((string) $wRow['fhir_bundle_json'], true);
+                    if (is_array($wBundle)) {
+                        return $wBundle;
+                    }
+                }
+            }
+            $patientId = $wellnessPatientId;
         } elseif (preg_match('/(?:HR|PAT|REG|P)-(\d+)/i', $careContextRef, $matches)) {
             $patientId = (int) $matches[1];
         }
