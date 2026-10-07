@@ -1510,6 +1510,9 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             if ($abhaId !== '') {
                 $recordPushPayload['abha_id'] = $abhaId;
             }
+            if (! empty($data['skip_auto_link'])) {
+                $recordPushPayload['skip_auto_link'] = true;
+            }
 
             $res = $this->post('/v3/records/push', $recordPushPayload);
             return self::normalizePushRecordResponse($res);

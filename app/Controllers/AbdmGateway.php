@@ -5080,79 +5080,110 @@ class AbdmGateway extends BaseController
                 }
             }
 
-            // Strategy 0c: Live On-Demand Fresh Generation for Wellness Record
-            if (preg_match('/^WELLNESS-(?:(\d+)-)?(?:S)?(\d+)/i', $ref, $wMatch)) {
-                $wPart1 = (int) ($wMatch[1] ?? 0);
-                $wPart2 = (int) ($wMatch[2] ?? 0);
+            // Strategy 0c: Live Retrieval & On-Demand Fresh Generation for Wellness Record
+            if (str_starts_with(strtoupper($ref), 'WELLNESS-')) {
+                $foundBundle = null;
+                $foundDisplay = null;
 
-                $targetPatientId = 0;
-                $targetSessionId = 0;
+                // 1. Check health_records first for this exact care context reference
+                if ($db->tableExists('health_records')) {
+                    $hrRow = $db->table('health_records')
+                        ->where('care_context_reference', $ref)
+                        ->groupStart()
+                            ->where('record_data IS NOT NULL AND record_data !=', '')
+                            ->orWhere('fhir_bundle_enc IS NOT NULL AND fhir_bundle_enc !=', '')
+                        ->groupEnd()
+                        ->orderBy('id', 'DESC')
+                        ->get(1)
+                        ->getRowArray();
 
-                // Check if part2 is a date (e.g. 20261006)
-                $isDatePart2 = ($wPart2 >= 19700101 && $wPart2 <= 21001231);
-                $candidateEntityId = $isDatePart2 ? $wPart1 : $wPart2;
-                $candidatePatientId = $isDatePart2 ? 0 : $wPart1;
-
-                if ($db->tableExists('opd_prescription')) {
-                    // Try finding by prescription id
-                    if ($candidateEntityId > 0) {
-                        $pRow = $db->table('opd_prescription')
-                            ->select('id, p_id, opd_id')
-                            ->where('id', $candidateEntityId)
-                            ->get(1)
-                            ->getRowArray();
-                        if ($pRow) {
-                            $targetSessionId = (int) $pRow['id'];
-                            $targetPatientId = (int) $pRow['p_id'];
+                    if ($hrRow && ! empty($hrRow['record_data'])) {
+                        $bundleData = json_decode((string) $hrRow['record_data'], true);
+                        if (is_array($bundleData) && ! empty($bundleData)) {
+                            $foundBundle = $bundleData;
+                            $foundDisplay = $hrRow['care_context_display'] ?? null;
+                        }
+                    } elseif ($hrRow && ! empty($hrRow['fhir_bundle_enc'])) {
+                        try {
+                            $enc = new FhirEncryptionService();
+                            $decrypted = $enc->decrypt((string) $hrRow['fhir_bundle_enc']);
+                            $bundleData = json_decode($decrypted, true);
+                            if (is_array($bundleData) && ! empty($bundleData)) {
+                                $foundBundle = $bundleData;
+                                $foundDisplay = $hrRow['care_context_display'] ?? null;
+                            }
+                        } catch (\Throwable) {
                         }
                     }
-                    // If not found, check by session_id or opd_id
-                    if ($targetPatientId <= 0 && $candidateEntityId > 0) {
-                        $pRow = $db->table('opd_prescription')
-                            ->select('id, p_id, opd_id')
-                            ->where('session_id', $candidateEntityId)
-                            ->orWhere('opd_id', $candidateEntityId)
-                            ->orderBy('id', 'DESC')
-                            ->get(1)
-                            ->getRowArray();
-                        if ($pRow) {
-                            $targetSessionId = (int) $pRow['id'];
-                            $targetPatientId = (int) $pRow['p_id'];
-                        }
+                }
+
+                // 2. Check patient_wellness_records if not found in health_records
+                if ($foundBundle === null && $db->tableExists('patient_wellness_records')) {
+                    $wRow = $db->table('patient_wellness_records')->where('care_context_reference', $ref)->get(1)->getRowArray();
+                    if (! $wRow && preg_match('/-W(\d+)/i', $ref, $wIdM)) {
+                        $wRow = $db->table('patient_wellness_records')->where('id', (int) $wIdM[1])->get(1)->getRowArray();
                     }
-                    // If candidatePatientId is set, or if candidateEntityId was patient_id
-                    if ($targetPatientId <= 0) {
-                        $testPid = $candidatePatientId > 0 ? $candidatePatientId : $candidateEntityId;
-                        if ($testPid > 0) {
-                            $pRow = $db->table('opd_prescription')
-                                ->select('id, p_id, opd_id')
-                                ->where('p_id', $testPid)
-                                ->orderBy('id', 'DESC')
-                                ->get(1)
-                                ->getRowArray();
-                            if ($pRow) {
-                                $targetPatientId = (int) $pRow['p_id'];
-                                $targetSessionId = (int) $pRow['id'];
+                    if ($wRow) {
+                        if (! empty($wRow['fhir_bundle_json'])) {
+                            $foundBundle = json_decode((string) $wRow['fhir_bundle_json'], true);
+                        }
+                        if (empty($foundBundle)) {
+                            $wellnessPayload = $this->buildWellnessRecordPayload((int) $wRow['patient_id'], (int) $wRow['id'], '');
+                            if ($wellnessPayload !== null && ! empty($wellnessPayload['bundle'])) {
+                                $foundBundle = $wellnessPayload['bundle'];
+                                $foundDisplay = $wellnessPayload['care_context_display'] ?? null;
                             }
                         }
                     }
                 }
 
-                if ($targetPatientId > 0) {
-                    try {
-                        $wellnessPayload = $this->buildWellnessRecordPayload($targetPatientId, $targetSessionId, '');
-                        if ($wellnessPayload !== null && !empty($wellnessPayload['bundle'])) {
-                            $records[] = [
-                                'careContextReference' => $ref,
-                                'hiType'               => 'WellnessRecord',
-                                'display'              => $wellnessPayload['care_context_display'] ?? ('Wellness Record - ' . date('d M Y')),
-                                'bundle'               => $wellnessPayload['bundle'],
-                            ];
-                            continue;
+                // 3. Fallback: Parse patient ID and OPD session ID for legacy OPD vitals references
+                if ($foundBundle === null) {
+                    $targetPatientId = 0;
+                    $targetSessionId = 0;
+
+                    if (preg_match('/^WELLNESS-(?:(\d+)-)?(?:S(\d+)|W(\d+)|(\d+))(?:-(\d+))?/i', $ref, $wMatch)) {
+                        $pPart = (int) ($wMatch[1] ?? 0);
+                        $sPart = (int) (! empty($wMatch[2]) ? $wMatch[2] : (! empty($wMatch[3]) ? $wMatch[3] : ($wMatch[4] ?? 0)));
+                        $dPart = (int) ($wMatch[5] ?? 0);
+
+                        if ($pPart > 0) {
+                            $targetPatientId = $pPart;
+                            $targetSessionId = $sPart;
+                        } elseif ($sPart > 0) {
+                            if ($db->tableExists('patient_master') && $db->table('patient_master')->where('id', $sPart)->countAllResults() > 0) {
+                                $targetPatientId = $sPart;
+                            } elseif ($db->tableExists('opd_prescription')) {
+                                $pRow = $db->table('opd_prescription')->select('p_id, id')->where('id', $sPart)->get(1)->getRowArray();
+                                if ($pRow) {
+                                    $targetPatientId = (int) $pRow['p_id'];
+                                    $targetSessionId = (int) $pRow['id'];
+                                }
+                            }
                         }
-                    } catch (\Throwable $ex) {
-                        log_message('warning', 'Live Wellness FHIR generation in recordsFetch failed: ' . $ex->getMessage());
                     }
+
+                    if ($targetPatientId > 0) {
+                        try {
+                            $wellnessPayload = $this->buildWellnessRecordPayload($targetPatientId, $targetSessionId, '');
+                            if ($wellnessPayload !== null && ! empty($wellnessPayload['bundle'])) {
+                                $foundBundle = $wellnessPayload['bundle'];
+                                $foundDisplay = $wellnessPayload['care_context_display'] ?? null;
+                            }
+                        } catch (\Throwable $ex) {
+                            log_message('warning', 'Live Wellness FHIR generation in recordsFetch failed: ' . $ex->getMessage());
+                        }
+                    }
+                }
+
+                if ($foundBundle !== null && ! empty($foundBundle)) {
+                    $records[] = [
+                        'careContextReference' => $ref,
+                        'hiType'               => 'WellnessRecord',
+                        'display'              => $foundDisplay ?? ('Wellness Record - ' . date('d M Y')),
+                        'bundle'               => $foundBundle,
+                    ];
+                    continue;
                 }
             }
 
@@ -6584,15 +6615,15 @@ class AbdmGateway extends BaseController
                         ]);
                     }
                 }
-                if ($this->db->tableExists('opd_prescription')) {
-                    $wopd = $this->db->table('opd_prescription')->where('id', $taskEntityId)->get(1)->getRowArray();
+                if (empty($wRec) && $this->db->tableExists('opd_prescription')) {
+                    $wopd = $this->db->table('opd_prescription')->where('id', $taskEntityId)->where('p_id', $patientId)->get(1)->getRowArray();
                     if (! empty($wopd)) {
                         $vDate = ! empty($wopd['date_opd_visit']) ? $wopd['date_opd_visit'] : date('Y-m-d');
                         $dateStr = date('d M Y', strtotime((string) $vDate));
                         $cleanDate = date('Ymd', strtotime((string) $vDate));
                         // Reference format matching task board (e.g. WELLNESS-33723-20261006)
                         $ccRef = 'WELLNESS-' . $taskEntityId . '-' . $cleanDate;
-                        $display = 'WellnessRecord - ' . $dateStr;
+                        $display = 'Wellness Record - ' . $dateStr;
                         $addContext([
                             'careContextId'   => $ccRef,
                             'referenceNumber' => $ccRef,
@@ -6632,7 +6663,10 @@ class AbdmGateway extends BaseController
                 if (str_starts_with($ccRef, 'OPD-') || str_starts_with($ccRef, 'INVOICE-')) {
                     continue;
                 }
-                $hiType = trim((string) ($row['hi_type'] ?? 'HealthDocumentRecord'));
+                $hiType = trim((string) ($row['hi_type'] ?? ''));
+                if ($hiType === '' || ($hiType === 'HealthDocumentRecord' && str_starts_with($ccRef, 'WELLNESS-'))) {
+                    $hiType = str_starts_with($ccRef, 'WELLNESS-') ? 'WellnessRecord' : 'HealthDocumentRecord';
+                }
                 $dateStr = date('d M Y', strtotime((string) ($row['created_at'] ?? $row['updated_at'] ?? 'now')));
                 $display = ($hiType === 'WellnessRecord' ? 'Wellness & Vitals Record - ' : ($hiType . ' - ')) . $dateStr;
 
@@ -8478,12 +8512,9 @@ class AbdmGateway extends BaseController
             }
 
             $careContextReference = trim((string) ($data['care_context_reference'] ?? ''));
-            if (($data['reuse_existing'] ?? false) === true && $careContextReference !== '') {
+            if ($careContextReference !== '') {
                 $existing = $this->db->table('health_records')
                     ->select('id')
-                    ->where('hi_type', (string) ($data['hi_type'] ?? 'unknown'))
-                    ->where('entity_type', (string) ($data['entity_type'] ?? ''))
-                    ->where('entity_id', (string) ($data['entity_id'] ?? ''))
                     ->where('care_context_reference', $careContextReference)
                     ->orderBy('id', 'DESC')
                     ->get(1)
@@ -8491,7 +8522,7 @@ class AbdmGateway extends BaseController
                 if (! empty($existing)) {
                     $existingId = (int) ($existing['id'] ?? 0);
                     $update = $insert;
-                    unset($update['push_status'], $update['push_at'], $update['created_at']);
+                    unset($update['created_at']);
                     $this->db->table('health_records')->where('id', $existingId)->update($update);
                     return $existingId;
                 }
@@ -9514,6 +9545,7 @@ class AbdmGateway extends BaseController
                 'notes' => $ccDisplay,
                 'queue_id' => $ccRef,
                 'record_data' => $bundle,
+                'skip_auto_link' => true,
             ]);
             $this->logGatewayPushResolution('additional_hi_record', $result);
             $queueId = $this->extractGatewayPushQueueId($result);
@@ -9590,14 +9622,21 @@ class AbdmGateway extends BaseController
 
         // 1. Check patient_wellness_records first (New M2 Comprehensive Wellness & Vitals)
         if ($this->db->tableExists('patient_wellness_records')) {
-            $wBuilder = $this->db->table('patient_wellness_records')->where('patient_id', $patientId);
+            $wRow = null;
             if ($opdId > 0) {
-                $wBuilder->groupStart()
-                    ->where('id', $opdId)
-                    ->orWhere('patient_id', $patientId)
-                ->groupEnd();
+                $wRow = $this->db->table('patient_wellness_records')->where('id', $opdId)->get(1)->getRowArray();
+                if ($wRow && (int) ($wRow['patient_id'] ?? 0) !== $patientId) {
+                    $patientId = (int) $wRow['patient_id'];
+                    $patientRow = $this->loadPatientRow($patientId);
+                }
             }
-            $wRow = $wBuilder->orderBy('id', 'DESC')->get(1)->getRowArray();
+            if (empty($wRow)) {
+                $wRow = $this->db->table('patient_wellness_records')
+                    ->where('patient_id', $patientId)
+                    ->orderBy('id', 'DESC')
+                    ->get(1)
+                    ->getRowArray();
+            }
             if (! empty($wRow)) {
                 $bundle = ! empty($wRow['fhir_bundle_json']) ? json_decode((string) $wRow['fhir_bundle_json'], true) : [];
                 $visitDate = date('Y-m-d', strtotime((string) ($wRow['recorded_at'] ?? 'now')));
@@ -9607,6 +9646,25 @@ class AbdmGateway extends BaseController
                     ? (string) $wRow['care_context_reference']
                     : ('WELLNESS-' . $patientId . '-W' . $entityId . '-' . $cleanDate);
                 $ccDisplay = 'Wellness Record - ' . date('d/m/Y', strtotime($visitDate));
+
+                if (empty($bundle) && class_exists('\App\Controllers\DoctorDocument')) {
+                    try {
+                        $docCtrl = new \App\Controllers\DoctorDocument();
+                        $wSource = $docCtrl->buildWellnessRecordSource($patientId, (int) $wRow['id'], 'wellness');
+                        if (! empty($wSource)) {
+                            $wFactory = new FhirGeneratorFactory();
+                            $wGen = $wFactory->wellness()->generate($wSource);
+                            if (! empty($wGen['bundle'])) {
+                                $bundle = $wGen['bundle'];
+                                $this->db->table('patient_wellness_records')->where('id', (int) $wRow['id'])->update([
+                                    'fhir_bundle_json' => json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                                    'care_context_reference' => $ccRef,
+                                ]);
+                            }
+                        }
+                    } catch (\Throwable $e) {
+                    }
+                }
 
                 if (! empty($bundle)) {
                     return [

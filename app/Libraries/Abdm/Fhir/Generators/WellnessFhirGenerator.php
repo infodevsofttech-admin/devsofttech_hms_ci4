@@ -91,7 +91,7 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
         // Body measurement LOINC codes
         $bodyMeasLoincCodes = ['8302-2', '29463-7', '39156-5', '56115-9', '56114-2', '8280-0'];
         // General assessment LOINC codes (blood sugar, lab POC, Hb)
-        $generalAssessLoincCodes = ['2339-0', '1558-6', '1521-4', '4548-4', '718-7', '25428-4', '1753-3'];
+        $generalAssessLoincCodes = ['2339-0', '1558-6', '1521-4', '14760-3', '2345-7', '4548-4', '718-7', '25428-4', '1753-3'];
         // Physical activity LOINC codes
         $activityLoincCodes = ['55423-8', '93832-4', '55411-3', '41981-2'];
 
@@ -216,7 +216,7 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
                     $numericVal = round($numericVal, 1);
                 } elseif ($loincCode === '8280-0' || $loincCode === '4548-4') {
                     $numericVal = round($numericVal, 2);
-                } elseif (in_array($loincCode, ['8867-4', '59408-5', '9279-1', '2339-0', '1558-6', '1521-4'], true)) {
+                } elseif (in_array($loincCode, ['8867-4', '59408-5', '9279-1', '2339-0', '1558-6', '1521-4', '14760-3', '2345-7'], true)) {
                     $numericVal = (float) round($numericVal);
                 } else {
                     $numericVal = round($numericVal, 2);

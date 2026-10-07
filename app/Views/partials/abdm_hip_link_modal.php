@@ -852,6 +852,21 @@
             var ref = cb.value;
             var display = cb.nextElementSibling ? cb.nextElementSibling.textContent : ref;
             var itemHiType = cb.dataset.hiType || '';
+            if (/^WELLNESS-/i.test(ref)) {
+                itemHiType = 'WellnessRecord';
+            } else if (/^DOC-/i.test(ref)) {
+                itemHiType = 'HealthDocumentRecord';
+            } else if (/^INVOICE-/i.test(ref)) {
+                itemHiType = 'InvoiceRecord';
+            } else if (/^(?:LAB|RAD)-/i.test(ref)) {
+                itemHiType = 'DiagnosticReportRecord';
+            } else if (/^IMM-/i.test(ref)) {
+                itemHiType = 'ImmunizationRecord';
+            } else if (/^(?:DISCHARGE|IPD)-/i.test(ref)) {
+                itemHiType = 'DischargeSummaryRecord';
+            } else if (/^(?:OPD|PRESC)-/i.test(ref)) {
+                itemHiType = 'OPConsultRecord';
+            }
             if (!dominantHiType && itemHiType) {
                 dominantHiType = itemHiType;
             }

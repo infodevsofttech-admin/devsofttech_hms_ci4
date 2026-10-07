@@ -712,7 +712,7 @@ class DoctorDocument extends BaseController
         ]);
     }
 
-    public function buildWellnessRecordSource(int $patientId, int $opdSessionId = 0): array
+    public function buildWellnessRecordSource(int $patientId, int $opdSessionId = 0, string $sourceEntity = ''): array
     {
         if ($patientId <= 0 || ! $this->db->tableExists('patient_master')) {
             return [];
@@ -723,8 +723,26 @@ class DoctorDocument extends BaseController
             return [];
         }
 
+        $wRow = [];
+        $isWellnessDirect = ($sourceEntity === 'wellness');
+        if ($this->db->tableExists('patient_wellness_records')) {
+            if ($opdSessionId > 0) {
+                $wRow = $this->db->table('patient_wellness_records')->where('id', $opdSessionId)->get(1)->getRowArray() ?? [];
+                if (! empty($wRow)) {
+                    $isWellnessDirect = true;
+                    if (! empty($wRow['patient_id']) && (int) $wRow['patient_id'] !== $patientId) {
+                        $patientId = (int) $wRow['patient_id'];
+                        $patientRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? $patientRow;
+                    }
+                }
+            }
+            if (empty($wRow) && $isWellnessDirect) {
+                $wRow = $this->db->table('patient_wellness_records')->where('patient_id', $patientId)->orderBy('id', 'DESC')->get(1)->getRowArray() ?? [];
+            }
+        }
+
         $rxRow = [];
-        if ($this->db->tableExists('opd_prescription')) {
+        if (! $isWellnessDirect && $this->db->tableExists('opd_prescription')) {
             $builder = $this->db->table('opd_prescription')->where('p_id', $patientId);
             if ($opdSessionId > 0) {
                 $builder->groupStart()
@@ -758,53 +776,81 @@ class DoctorDocument extends BaseController
             }
         };
 
-        $addVital('8480-6', 'Systolic blood pressure', $rxRow['bp'] ?? null, 'mmHg', 'mm[Hg]');
-        $addVital('8462-4', 'Diastolic blood pressure', $rxRow['diastolic'] ?? null, 'mmHg', 'mm[Hg]');
-        $addVital('8867-4', 'Heart rate', $rxRow['pulse'] ?? null, '/min', '/min');
-        $addVital('8302-2', 'Body height', $rxRow['height'] ?? null, 'cm', 'cm');
-        $addVital('29463-7', 'Body weight', $rxRow['weight'] ?? null, 'kg', 'kg');
-        $addVital('39156-5', 'Body Mass Index', $rxRow['bmi'] ?? null, 'kg/m2', 'kg/m2');
-
-        $tempVal = $rxRow['temp'] ?? null;
-        if ($tempVal !== null && is_numeric($tempVal)) {
-            $tempVal = (float) $tempVal > 45 ? round((((float) $tempVal - 32) * 5) / 9, 1) : round((float) $tempVal, 1);
-        }
-        $addVital('8310-5', 'Body temperature', $tempVal, 'Cel', 'Cel');
-        $addVital('9279-1', 'Respiratory rate', $rxRow['rr_min'] ?? null, '/min', '/min');
-        $addVital('59408-5', 'Oxygen saturation in Arterial blood by Pulse oximetry', $rxRow['spo2'] ?? null, '%', '%');
-        $addVital('2339-0', 'Blood Glucose', $rxRow['glucose'] ?? null, 'mg/dL', 'mg/dL');
-
-        // If no vitals found in opd_prescription, check patient_wellness_records
-        if (empty($vitals) && $this->db->tableExists('patient_wellness_records')) {
-            $wBuilder = $this->db->table('patient_wellness_records')->where('patient_id', $patientId);
-            if ($opdSessionId > 0) {
-                $wBuilder->groupStart()
-                    ->where('id', $opdSessionId)
-                    ->orWhere('patient_id', $patientId)
-                ->groupEnd();
+        if (! empty($wRow)) {
+            // Populate comprehensive vitals directly from patient_wellness_records
+            $addVital('8480-6', 'Systolic blood pressure', $wRow['bp_systolic'] ?? null, 'mmHg', 'mm[Hg]');
+            $addVital('8462-4', 'Diastolic blood pressure', $wRow['bp_diastolic'] ?? null, 'mmHg', 'mm[Hg]');
+            $addVital('8867-4', 'Heart rate', $wRow['pulse_rate'] ?? null, '/min', '/min');
+            $addVital('8302-2', 'Body height', $wRow['height_cm'] ?? null, 'cm', 'cm');
+            $addVital('29463-7', 'Body weight', $wRow['weight_kg'] ?? null, 'kg', 'kg');
+            $addVital('39156-5', 'Body Mass Index', $wRow['bmi'] ?? null, 'kg/m2', 'kg/m2');
+            $tC = $wRow['temperature_c'] ?? null;
+            if ($tC === null && ! empty($wRow['temperature_f'])) {
+                $tC = round((((float) $wRow['temperature_f'] - 32) * 5) / 9, 1);
             }
-            $wRow = $wBuilder->orderBy('id', 'DESC')->get(1)->getRowArray();
-            if (! empty($wRow)) {
-                $addVital('8480-6', 'Systolic blood pressure', $wRow['bp_systolic'] ?? null, 'mmHg', 'mm[Hg]');
-                $addVital('8462-4', 'Diastolic blood pressure', $wRow['bp_diastolic'] ?? null, 'mmHg', 'mm[Hg]');
-                $addVital('8867-4', 'Heart rate', $wRow['pulse_rate'] ?? null, '/min', '/min');
-                $addVital('8302-2', 'Body height', $wRow['height_cm'] ?? null, 'cm', 'cm');
-                $addVital('29463-7', 'Body weight', $wRow['weight_kg'] ?? null, 'kg', 'kg');
-                $addVital('39156-5', 'Body Mass Index', $wRow['bmi'] ?? null, 'kg/m2', 'kg/m2');
-                $tC = $wRow['temperature_c'] ?? null;
-                if ($tC === null && ! empty($wRow['temperature_f'])) {
-                    $tC = round((((float) $wRow['temperature_f'] - 32) * 5) / 9, 1);
+            $addVital('8310-5', 'Body temperature', $tC, 'Cel', 'Cel');
+            $addVital('9279-1', 'Respiratory rate', $wRow['resp_rate'] ?? null, '/min', '/min');
+            $addVital('59408-5', 'Oxygen saturation in Arterial blood by Pulse oximetry', $wRow['spo2'] ?? null, '%', '%');
+            $addVital('2339-0', 'Random Blood Glucose', $wRow['sugar_random'] ?? null, 'mg/dL', 'mg/dL');
+            $addVital('1558-6', 'Fasting Blood Glucose', $wRow['sugar_fasting'] ?? null, 'mg/dL', 'mg/dL');
+            $addVital('14760-3', 'Glucose [Mass/volume] in Blood 2 hours post meal', $wRow['sugar_pp'] ?? null, 'mg/dL', 'mg/dL');
+            $addVital('4548-4', 'Hemoglobin A1c', $wRow['hba1c'] ?? null, '%', '%');
+            $addVital('718-7', 'Hemoglobin', $wRow['hemoglobin'] ?? null, 'g/dL', 'g/dL');
+            $addVital('56115-9', 'Waist circumference', $wRow['waist_circumference_cm'] ?? null, 'cm', 'cm');
+            $addVital('56114-2', 'Hip circumference', $wRow['hip_circumference_cm'] ?? null, 'cm', 'cm');
+            $addVital('8280-0', 'Waist to hip ratio', $wRow['waist_hip_ratio'] ?? null, 'ratio', '{ratio}');
+            $addVital('55423-8', 'Number of steps in 24 hour Measured', $wRow['daily_steps'] ?? null, '{steps}', '{steps}');
+            $addVital('93832-4', 'Sleep duration', $wRow['sleep_hours'] ?? null, 'h', 'h');
+            $addVital('55411-3', 'Exercise duration', $wRow['exercise_min_per_day'] ?? null, 'min/d', 'min/d');
+            $addVital('72514-3', 'Pain severity - 0-10 verbal numeric rating', $wRow['pain_score'] ?? null, '{score}', '{score}');
+        } else {
+            // OPD prescription vitals fallback
+            $addVital('8480-6', 'Systolic blood pressure', $rxRow['bp'] ?? null, 'mmHg', 'mm[Hg]');
+            $addVital('8462-4', 'Diastolic blood pressure', $rxRow['diastolic'] ?? null, 'mmHg', 'mm[Hg]');
+            $addVital('8867-4', 'Heart rate', $rxRow['pulse'] ?? null, '/min', '/min');
+            $addVital('8302-2', 'Body height', $rxRow['height'] ?? null, 'cm', 'cm');
+            $addVital('29463-7', 'Body weight', $rxRow['weight'] ?? null, 'kg', 'kg');
+            $addVital('39156-5', 'Body Mass Index', $rxRow['bmi'] ?? null, 'kg/m2', 'kg/m2');
+
+            $tempVal = $rxRow['temp'] ?? null;
+            if ($tempVal !== null && is_numeric($tempVal)) {
+                $tempVal = (float) $tempVal > 45 ? round((((float) $tempVal - 32) * 5) / 9, 1) : round((float) $tempVal, 1);
+            }
+            $addVital('8310-5', 'Body temperature', $tempVal, 'Cel', 'Cel');
+            $addVital('9279-1', 'Respiratory rate', $rxRow['rr_min'] ?? null, '/min', '/min');
+            $addVital('59408-5', 'Oxygen saturation in Arterial blood by Pulse oximetry', $rxRow['spo2'] ?? null, '%', '%');
+            $addVital('2339-0', 'Blood Glucose', $rxRow['glucose'] ?? null, 'mg/dL', 'mg/dL');
+
+            // If no vitals found in opd_prescription, check patient_wellness_records
+            if (empty($vitals) && $this->db->tableExists('patient_wellness_records')) {
+                $wBuilder = $this->db->table('patient_wellness_records')->where('patient_id', $patientId);
+                if ($opdSessionId > 0) {
+                    $wBuilder->where('id', $opdSessionId);
                 }
-                $addVital('8310-5', 'Body temperature', $tC, 'Cel', 'Cel');
-                $addVital('9279-1', 'Respiratory rate', $wRow['resp_rate'] ?? null, '/min', '/min');
-                $addVital('59408-5', 'Oxygen saturation in Arterial blood by Pulse oximetry', $wRow['spo2'] ?? null, '%', '%');
-                $addVital('2339-0', 'Random Blood Glucose', $wRow['sugar_random'] ?? null, 'mg/dL', 'mg/dL');
-                $addVital('1558-6', 'Fasting Blood Glucose', $wRow['sugar_fasting'] ?? null, 'mg/dL', 'mg/dL');
-                $addVital('4548-4', 'Hemoglobin A1c', $wRow['hba1c'] ?? null, '%', '%');
-                $addVital('718-7', 'Hemoglobin', $wRow['hemoglobin'] ?? null, 'g/dL', 'g/dL');
-                $addVital('8280-0', 'Waist Circumference', $wRow['waist_circumference_cm'] ?? null, 'cm', 'cm');
-                $addVital('98337-9', 'Hip Circumference', $wRow['hip_circumference_cm'] ?? null, 'cm', 'cm');
-                $addVital('72287-6', 'Waist-hip ratio', $wRow['waist_hip_ratio'] ?? null, '{ratio}', '{ratio}');
+                $wRow = $wBuilder->orderBy('id', 'DESC')->get(1)->getRowArray();
+                if (! empty($wRow)) {
+                    $addVital('8480-6', 'Systolic blood pressure', $wRow['bp_systolic'] ?? null, 'mmHg', 'mm[Hg]');
+                    $addVital('8462-4', 'Diastolic blood pressure', $wRow['bp_diastolic'] ?? null, 'mmHg', 'mm[Hg]');
+                    $addVital('8867-4', 'Heart rate', $wRow['pulse_rate'] ?? null, '/min', '/min');
+                    $addVital('8302-2', 'Body height', $wRow['height_cm'] ?? null, 'cm', 'cm');
+                    $addVital('29463-7', 'Body weight', $wRow['weight_kg'] ?? null, 'kg', 'kg');
+                    $addVital('39156-5', 'Body Mass Index', $wRow['bmi'] ?? null, 'kg/m2', 'kg/m2');
+                    $tC = $wRow['temperature_c'] ?? null;
+                    if ($tC === null && ! empty($wRow['temperature_f'])) {
+                        $tC = round((((float) $wRow['temperature_f'] - 32) * 5) / 9, 1);
+                    }
+                    $addVital('8310-5', 'Body temperature', $tC, 'Cel', 'Cel');
+                    $addVital('9279-1', 'Respiratory rate', $wRow['resp_rate'] ?? null, '/min', '/min');
+                    $addVital('59408-5', 'Oxygen saturation in Arterial blood by Pulse oximetry', $wRow['spo2'] ?? null, '%', '%');
+                    $addVital('2339-0', 'Random Blood Glucose', $wRow['sugar_random'] ?? null, 'mg/dL', 'mg/dL');
+                    $addVital('1558-6', 'Fasting Blood Glucose', $wRow['sugar_fasting'] ?? null, 'mg/dL', 'mg/dL');
+                    $addVital('14760-3', 'Glucose [Mass/volume] in Blood 2 hours post meal', $wRow['sugar_pp'] ?? null, 'mg/dL', 'mg/dL');
+                    $addVital('4548-4', 'Hemoglobin A1c', $wRow['hba1c'] ?? null, '%', '%');
+                    $addVital('718-7', 'Hemoglobin', $wRow['hemoglobin'] ?? null, 'g/dL', 'g/dL');
+                    $addVital('56115-9', 'Waist circumference', $wRow['waist_circumference_cm'] ?? null, 'cm', 'cm');
+                    $addVital('56114-2', 'Hip circumference', $wRow['hip_circumference_cm'] ?? null, 'cm', 'cm');
+                    $addVital('8280-0', 'Waist to hip ratio', $wRow['waist_hip_ratio'] ?? null, 'ratio', '{ratio}');
+                }
             }
         }
 
@@ -862,21 +908,36 @@ class DoctorDocument extends BaseController
             $hospitalName = (string) constant('H_Name');
         }
 
-        $doctorName = trim(trim((string) ($doctorRow['p_fname'] ?? '')) . ' ' . trim((string) ($doctorRow['p_lname'] ?? '')));
+        $doctorName = ! empty($wRow['recorded_by'])
+            ? trim((string) $wRow['recorded_by'])
+            : trim(trim((string) ($doctorRow['p_fname'] ?? '')) . ' ' . trim((string) ($doctorRow['p_lname'] ?? '')));
         if ($doctorName === '') {
-            $doctorName = 'Doctor';
+            $doctorName = 'Attending Medical Officer';
         }
 
-        $visitDate = ! empty($rxRow['date_opd_visit']) ? date('Y-m-d', strtotime((string) $rxRow['date_opd_visit'])) : date('Y-m-d');
-        $completedAt = ! empty($rxRow['insert_date']) ? date(DATE_ATOM, strtotime((string) $rxRow['insert_date'])) : date(DATE_ATOM);
+        $visitDate = ! empty($wRow['recorded_at'])
+            ? date('Y-m-d', strtotime((string) $wRow['recorded_at']))
+            : (! empty($rxRow['date_opd_visit']) ? date('Y-m-d', strtotime((string) $rxRow['date_opd_visit'])) : date('Y-m-d'));
+        $completedAt = ! empty($wRow['recorded_at'])
+            ? date(DATE_ATOM, strtotime((string) $wRow['recorded_at']))
+            : (! empty($rxRow['insert_date']) ? date(DATE_ATOM, strtotime((string) $rxRow['insert_date'])) : date(DATE_ATOM));
+
+        $recId = ! empty($wRow['id']) ? (string) $wRow['id'] : (string) ($rxRow['id'] ?? $patientId);
+
+        $rawGender = strtolower(trim((string) ($patientRow['gender'] ?? '')));
+        $cleanGender = match ($rawGender) {
+            '1', 'm', 'male'   => 'male',
+            '2', 'f', 'female' => 'female',
+            default            => 'unknown',
+        };
 
         return [
-            'record_id' => (string) ($rxRow['id'] ?? $patientId),
+            'record_id' => $recId,
             'session_id' => (string) $opdSessionId,
             'visit_date' => $visitDate,
             'completed_at' => $completedAt,
             'encounter' => [
-                'id' => (string) ($rxRow['id'] ?? $patientId),
+                'id' => $recId,
                 'class_code' => 'AMB',
                 'class_display' => 'ambulatory',
                 'start' => $completedAt,
@@ -897,14 +958,14 @@ class DoctorDocument extends BaseController
                 'id' => (string) $patientId,
                 'uhid' => (string) ($patientRow['uhid_no'] ?? $patientRow['uhid'] ?? $patientRow['patient_code'] ?? $patientId),
                 'name' => $patientName,
-                'gender' => strtolower((string) ($patientRow['gender'] ?? '')) === 'm' ? 'male' : (strtolower((string) ($patientRow['gender'] ?? '')) === 'f' ? 'female' : 'unknown'),
+                'gender' => $cleanGender,
                 'dob' => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
                 'abha_id' => $abhaDigits,
                 'abha_address' => $abhaAddress,
                 'mobile' => (string) ($patientRow['mphone1'] ?? ''),
             ],
             'practitioner' => [
-                'id' => (string) $drId,
+                'id' => (string) ($wRow['recorded_by_id'] ?? $drId ?: 1),
                 'name' => $doctorName,
             ],
         ];
