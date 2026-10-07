@@ -81,11 +81,21 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
         $encounterRef = is_array($encounter) ? 'urn:uuid:' . (string) ($encounter['id'] ?? '') : null;
 
         $vitalObsRefs = [];
-        $examObsRefs = [];
+        $bodyMeasObsRefs = [];
+        $generalAssessObsRefs = [];
+        $activityObsRefs = [];
         $womenObsRefs = [];
-        $wellnessObsRefs = [];
+        $lifestyleObsRefs = [];
+        $otherObsRefs = [];
 
-        // 1. Process Vital Signs
+        // Body measurement LOINC codes
+        $bodyMeasLoincCodes = ['8302-2', '29463-7', '39156-5', '56115-9', '56114-2', '8280-0'];
+        // General assessment LOINC codes (blood sugar, lab POC, Hb)
+        $generalAssessLoincCodes = ['2339-0', '1558-6', '1521-4', '4548-4', '718-7', '25428-4', '1753-3'];
+        // Physical activity LOINC codes
+        $activityLoincCodes = ['55423-8', '93832-4', '55411-3', '41981-2'];
+
+        // 1. Process Vital Signs & Standalone Measurements
         $vitalsList = (array) ($source['vitals'] ?? []);
         $sysBp = null;
         $diaBp = null;
@@ -191,8 +201,7 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
             $loinc = $this->codingResolver->resolveLoincForLabTest($loincCode, $display);
             $ucum = $this->codingResolver->resolveUnitUcUM($ucumCode ?: $unit);
 
-            $obsId = 'vital-' . $recordId . '-' . $idx;
-            $vitalObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+            $obsId = 'obs-vital-' . $recordId . '-' . $idx;
             $numericVal = is_numeric($val) ? (float) $val : null;
             if ($numericVal !== null) {
                 if ($loincCode === '8310-5' || strcasecmp($display, 'Body temperature') === 0 || in_array($unit, ['Cel', 'degF', '[degF]'], true)) {
@@ -203,23 +212,50 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
                     $numericVal = round($numericVal, 2);
                 } elseif ($loincCode === '8302-2' || strcasecmp($display, 'Body height') === 0) {
                     $numericVal = round($numericVal, 1);
-                } elseif (in_array($loincCode, ['8867-4', '59408-5', '9279-1'], true)) {
+                } elseif ($loincCode === '56115-9' || $loincCode === '56114-2') {
+                    $numericVal = round($numericVal, 1);
+                } elseif ($loincCode === '8280-0' || $loincCode === '4548-4') {
+                    $numericVal = round($numericVal, 2);
+                } elseif (in_array($loincCode, ['8867-4', '59408-5', '9279-1', '2339-0', '1558-6', '1521-4'], true)) {
                     $numericVal = (float) round($numericVal);
                 } else {
                     $numericVal = round($numericVal, 2);
                 }
             }
 
+            // Determine target composition section & profile
+            if (in_array($loincCode, $bodyMeasLoincCodes, true)) {
+                $categoryCode = 'vital-signs';
+                $categoryDisplay = 'Vital Signs';
+                $profile = 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation';
+                $bodyMeasObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+            } elseif (in_array($loincCode, $generalAssessLoincCodes, true)) {
+                $categoryCode = 'laboratory';
+                $categoryDisplay = 'Laboratory';
+                $profile = 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation';
+                $generalAssessObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+            } elseif (in_array($loincCode, $activityLoincCodes, true)) {
+                $categoryCode = 'activity';
+                $categoryDisplay = 'Activity';
+                $profile = 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation';
+                $activityObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+            } else {
+                $categoryCode = 'vital-signs';
+                $categoryDisplay = 'Vital Signs';
+                $profile = 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationVitalSigns';
+                $vitalObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+            }
+
             $builder->addObservation([
                 'resourceType' => 'Observation',
                 'id' => $obsId,
-                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationVitalSigns']],
+                'meta' => ['profile' => [$profile]],
                 'status' => 'final',
                 'category' => [[
                     'coding' => [[
                         'system' => 'http://terminology.hl7.org/CodeSystem/observation-category',
-                        'code' => 'vital-signs',
-                        'display' => 'Vital Signs',
+                        'code' => $categoryCode,
+                        'display' => $categoryDisplay,
                     ]],
                 ]],
                 'code' => [
@@ -242,8 +278,8 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
             ]);
         }
 
-        // 2. Process Physical Examination Findings
-        $examList = (array) ($source['physical_examination'] ?? $source['findings'] ?? []);
+        // 2. Process Physical Examination / General Assessments Findings
+        $examList = (array) ($source['physical_examination'] ?? $source['findings'] ?? $source['general_assessments'] ?? []);
         foreach ($examList as $idx => $examItem) {
             $text = trim((string) (is_array($examItem) ? ($examItem['text'] ?? $examItem['display'] ?? '') : $examItem));
             if (! $this->isMeaningfulValue($text)) {
@@ -251,7 +287,7 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
             }
 
             $obsId = 'exam-' . $recordId . '-' . $idx;
-            $examObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+            $generalAssessObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
 
             $builder->addObservation([
                 'resourceType' => 'Observation',
@@ -280,7 +316,7 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
             ]);
         }
 
-        // 3. Process Women Wellness / Reproductive Health (LMP, Gravida, Para, etc.)
+        // 3. Process Women Wellness / Reproductive Health (LMP, Pregnancy, etc.)
         $womenWellness = (array) ($source['women_wellness'] ?? []);
         $lmpDate = trim((string) ($womenWellness['lmp'] ?? $source['lmp'] ?? ''));
         if ($lmpDate !== '') {
@@ -347,13 +383,23 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
         // 4. Process General Wellness / Lifestyle & Diet Advice
         $adviceItems = (array) ($source['advice'] ?? $source['general_advice'] ?? $source['lifestyle'] ?? []);
         foreach ($adviceItems as $idx => $adviceText) {
-            $text = trim((string) (is_array($adviceText) ? ($adviceText['text'] ?? $adviceText['display'] ?? '') : $adviceText));
+            $text = trim((string) (is_array($adviceText) ? ($adviceText['text'] ?? ($adviceText['value'] ?? ($adviceText['display'] ?? ''))) : $adviceText));
             if (! $this->isMeaningfulValue($text)) {
                 continue;
             }
 
+            $codeStr = is_array($adviceText) ? ($adviceText['code'] ?? '') : '';
+            $displayStr = is_array($adviceText) ? ($adviceText['display'] ?? '') : '';
+
             $obsId = 'wellness-social-' . $recordId . '-' . $idx;
-            $wellnessObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+
+            if ($codeStr === 'general-nursing' || str_contains(strtolower($displayStr), 'nursing')) {
+                $otherObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+                $obsTitle = 'General Nursing Observations';
+            } else {
+                $lifestyleObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+                $obsTitle = ! empty($displayStr) ? $displayStr : 'Lifestyle & General Wellness Advice';
+            }
 
             $builder->addObservation([
                 'resourceType' => 'Observation',
@@ -373,7 +419,7 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
                         'code' => '8670-2',
                         'display' => 'History of Social history',
                     ]],
-                    'text' => 'Lifestyle & General Wellness Advice',
+                    'text' => $obsTitle,
                 ],
                 'subject' => ['reference' => $patientRef],
                 'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
@@ -398,10 +444,24 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
             ];
         }
 
-        if (! empty($examObsRefs)) {
+        if (! empty($bodyMeasObsRefs)) {
+            $sections[] = [
+                'title' => 'Body Measurement',
+                'entry' => $bodyMeasObsRefs,
+            ];
+        }
+
+        if (! empty($generalAssessObsRefs)) {
             $sections[] = [
                 'title' => 'General Assessment',
-                'entry' => $examObsRefs,
+                'entry' => $generalAssessObsRefs,
+            ];
+        }
+
+        if (! empty($activityObsRefs)) {
+            $sections[] = [
+                'title' => 'Physical Activity',
+                'entry' => $activityObsRefs,
             ];
         }
 
@@ -412,10 +472,17 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
             ];
         }
 
-        if (! empty($wellnessObsRefs)) {
+        if (! empty($lifestyleObsRefs)) {
             $sections[] = [
                 'title' => 'Lifestyle',
-                'entry' => $wellnessObsRefs,
+                'entry' => $lifestyleObsRefs,
+            ];
+        }
+
+        if (! empty($otherObsRefs)) {
+            $sections[] = [
+                'title' => 'Other Observations',
+                'entry' => $otherObsRefs,
             ];
         }
 

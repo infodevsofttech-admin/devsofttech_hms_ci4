@@ -486,9 +486,16 @@
 
             // ABDM M2 Wellness Vitals Modal State
             const [activeWellnessPatient, setActiveWellnessPatient] = useState(null);
+            const [wellnessModalTab, setWellnessModalTab] = useState('vitals'); // 'vitals', 'sugar', 'activity', 'lifestyle', 'women'
             const [wellnessForm, setWellnessForm] = useState({
                 temperature_f: '', pulse_rate: '', resp_rate: '',
                 bp_systolic: '', bp_diastolic: '', spo2: '', weight_kg: '', height_cm: '',
+                pain_score: '',
+                waist_circumference_cm: '', hip_circumference_cm: '', waist_hip_ratio: '',
+                sugar_random: '', sugar_fasting: '', sugar_pp: '', hba1c: '', hemoglobin: '',
+                daily_steps: '', sleep_hours: '', exercise_min_per_day: '',
+                diet_type: '', tobacco_status: '', alcohol_status: '',
+                women_lmp: '', women_pregnancy_status: '',
                 general_advice: '', diet_lifestyle_note: ''
             });
 
@@ -1048,6 +1055,7 @@
             // ABDM M2 Wellness Actions
             const openWellnessModal = (patient) => {
                 setActiveWellnessPatient(patient);
+                setWellnessModalTab('vitals');
                 const opdVitals = patient.opd_today || {};
                 setWellnessForm({
                     temperature_f: opdVitals.temp || '',
@@ -1058,6 +1066,23 @@
                     spo2: opdVitals.spo2 || '',
                     weight_kg: opdVitals.weight || '',
                     height_cm: opdVitals.height || '',
+                    pain_score: '',
+                    waist_circumference_cm: opdVitals.waist || '',
+                    hip_circumference_cm: '',
+                    waist_hip_ratio: '',
+                    sugar_random: opdVitals.glucose || '',
+                    sugar_fasting: '',
+                    sugar_pp: '',
+                    hba1c: '',
+                    hemoglobin: '',
+                    daily_steps: '',
+                    sleep_hours: '',
+                    exercise_min_per_day: '',
+                    diet_type: '',
+                    tobacco_status: '',
+                    alcohol_status: '',
+                    women_lmp: '',
+                    women_pregnancy_status: '',
                     general_advice: '',
                     diet_lifestyle_note: ''
                 });
@@ -1086,6 +1111,12 @@
                         setWellnessForm({
                             temperature_f: '', pulse_rate: '', resp_rate: '',
                             bp_systolic: '', bp_diastolic: '', spo2: '', weight_kg: '', height_cm: '',
+                            pain_score: '',
+                            waist_circumference_cm: '', hip_circumference_cm: '', waist_hip_ratio: '',
+                            sugar_random: '', sugar_fasting: '', sugar_pp: '', hba1c: '', hemoglobin: '',
+                            daily_steps: '', sleep_hours: '', exercise_min_per_day: '',
+                            diet_type: '', tobacco_status: '', alcohol_status: '',
+                            women_lmp: '', women_pregnancy_status: '',
                             general_advice: '', diet_lifestyle_note: ''
                         });
                     } else {
@@ -2490,7 +2521,7 @@
                         )}
 
                         {/* -------------------------------------------------------------
-                           MODAL 2: ABDM M2 WELLNESS & VITALS ENTRY
+                           MODAL 2: ABDM M2 WELLNESS & VITALS ENTRY (COMPREHENSIVE SUITE)
                            ------------------------------------------------------------- */}
                         {activeWellnessPatient && (
                             <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.65)', zIndex: 1060}}>
@@ -2501,7 +2532,7 @@
                                                 <i className="bi bi-heart-pulse-fill fs-5"></i>
                                                 <div>
                                                     <h6 className="modal-title fw-bold mb-0">Record ABDM M2 Wellness &amp; Vitals</h6>
-                                                    <small className="text-white-50" style={{fontSize: '11px'}}>Stores standardized vital signs observation bundle</small>
+                                                    <small className="text-white-50" style={{fontSize: '11px'}}>NRCES FHIR R4 Compliant Comprehensive Health &amp; Wellness Suite</small>
                                                 </div>
                                             </div>
                                             <button className="btn-close btn-close-white" onClick={() => setActiveWellnessPatient(null)}></button>
@@ -2510,80 +2541,369 @@
                                         <div className="modal-body p-3">
                                             {/* Patient Context Banner */}
                                             <div className="p-2.5 rounded-3 bg-light border mb-3">
-                                                <div className="d-flex justify-content-between align-items-start flex-wrap gap-1">
+                                                <div className="d-flex justify-content-between align-items-center flex-wrap gap-2">
                                                     <div>
-                                                        <strong className="fs-6 text-dark">{activeWellnessPatient.fullName || activeWellnessPatient.p_fname}</strong>
-                                                        <div className="small text-muted">
+                                                        <strong className="fs-6 text-dark me-2">{activeWellnessPatient.fullName || activeWellnessPatient.p_fname}</strong>
+                                                        <span className="badge bg-secondary me-1">{activeWellnessPatient.gender ? activeWellnessPatient.gender.toUpperCase() : 'PATIENT'}</span>
+                                                        {activeWellnessPatient.age && <span className="badge bg-light text-dark border me-1">{activeWellnessPatient.age} Yrs</span>}
+                                                        <div className="small text-muted mt-0.5">
                                                             UHID: <span className="text-danger fw-bold">{activeWellnessPatient.p_code || activeWellnessPatient.uhid}</span>
                                                             {activeWellnessPatient.mphone1 && ` • Phone: ${activeWellnessPatient.mphone1}`}
                                                         </div>
                                                     </div>
-                                                    {activeWellnessPatient.abha_id && (
-                                                        <span className="badge bg-success">
-                                                            <i className="bi bi-shield-check me-1"></i> ABHA: {activeWellnessPatient.abha_id}
-                                                        </span>
-                                                    )}
-                                                </div>
-                                            </div>
-
-                                            {/* Vitals Form Grid */}
-                                            <div className="row g-2 mb-3">
-                                                <div className="col-6 col-md-3">
-                                                    <label className="form-label small mb-1 fw-bold">BP Sys/Dia (mmHg)</label>
-                                                    <div className="input-group input-group-sm">
-                                                        <input type="number" className="form-control text-center" placeholder="120" value={wellnessForm.bp_systolic} onChange={e => setWellnessForm({...wellnessForm, bp_systolic: e.target.value})} />
-                                                        <span className="input-group-text">/</span>
-                                                        <input type="number" className="form-control text-center" placeholder="80" value={wellnessForm.bp_diastolic} onChange={e => setWellnessForm({...wellnessForm, bp_diastolic: e.target.value})} />
+                                                    <div>
+                                                        {activeWellnessPatient.abha_id ? (
+                                                            <span className="badge bg-success">
+                                                                <i className="bi bi-shield-check me-1"></i> ABHA: {activeWellnessPatient.abha_id}
+                                                            </span>
+                                                        ) : (
+                                                            <span className="badge bg-secondary-subtle text-secondary border">
+                                                                <i className="bi bi-shield-exclamation me-1"></i> ABHA Not Linked
+                                                            </span>
+                                                        )}
                                                     </div>
                                                 </div>
-                                                <div className="col-6 col-md-3">
-                                                    <label className="form-label small mb-1 fw-bold">Pulse Rate (bpm)</label>
-                                                    <input type="number" className="form-control form-control-sm text-center" placeholder="72" value={wellnessForm.pulse_rate} onChange={e => setWellnessForm({...wellnessForm, pulse_rate: e.target.value})} />
-                                                </div>
-                                                <div className="col-6 col-md-3">
-                                                    <label className="form-label small mb-1 fw-bold">SpO2 %</label>
-                                                    <input type="number" className="form-control form-control-sm text-center" placeholder="98" value={wellnessForm.spo2} onChange={e => setWellnessForm({...wellnessForm, spo2: e.target.value})} />
-                                                </div>
-                                                <div className="col-6 col-md-3">
-                                                    <label className="form-label small mb-1 fw-bold">Temp °F</label>
-                                                    <input type="number" step="0.1" className="form-control form-control-sm text-center" placeholder="98.6" value={wellnessForm.temperature_f} onChange={e => setWellnessForm({...wellnessForm, temperature_f: e.target.value})} />
-                                                </div>
-                                                <div className="col-6 col-md-3">
-                                                    <label className="form-label small mb-1 fw-bold">Resp Rate (/min)</label>
-                                                    <input type="number" className="form-control form-control-sm text-center" placeholder="18" value={wellnessForm.resp_rate} onChange={e => setWellnessForm({...wellnessForm, resp_rate: e.target.value})} />
-                                                </div>
-                                                <div className="col-6 col-md-3">
-                                                    <label className="form-label small mb-1 fw-bold">Height (cm)</label>
-                                                    <input type="number" step="0.1" className="form-control form-control-sm text-center" placeholder="165" value={wellnessForm.height_cm} onChange={e => setWellnessForm({...wellnessForm, height_cm: e.target.value})} />
-                                                </div>
-                                                <div className="col-6 col-md-3">
-                                                    <label className="form-label small mb-1 fw-bold">Weight (kg)</label>
-                                                    <input type="number" step="0.1" className="form-control form-control-sm text-center" placeholder="70" value={wellnessForm.weight_kg} onChange={e => setWellnessForm({...wellnessForm, weight_kg: e.target.value})} />
-                                                </div>
-                                                <div className="col-6 col-md-3">
-                                                    <label className="form-label small mb-1 fw-bold">Calculated BMI</label>
-                                                    <input 
-                                                        type="text" 
-                                                        className="form-control form-control-sm text-center bg-light fw-bold" 
-                                                        readOnly 
-                                                        value={
-                                                            wellnessForm.height_cm && wellnessForm.weight_kg && parseFloat(wellnessForm.height_cm) > 0
-                                                                ? (parseFloat(wellnessForm.weight_kg) / Math.pow(parseFloat(wellnessForm.height_cm) / 100, 2)).toFixed(2)
-                                                                : '-'
-                                                        } 
-                                                    />
-                                                </div>
-
-                                                <div className="col-12 col-md-6">
-                                                    <label className="form-label small mb-1 fw-bold">Diet &amp; Lifestyle Guidance (ABDM)</label>
-                                                    <input type="text" className="form-control form-control-sm" placeholder="e.g. Low sodium diet, 30 min daily walking" value={wellnessForm.diet_lifestyle_note} onChange={e => setWellnessForm({...wellnessForm, diet_lifestyle_note: e.target.value})} />
-                                                </div>
-
-                                                <div className="col-12 col-md-6">
-                                                    <label className="form-label small mb-1 fw-bold">General Nursing Observations</label>
-                                                    <input type="text" className="form-control form-control-sm" placeholder="e.g. Patient asymptomatic, alert and oriented" value={wellnessForm.general_advice} onChange={e => setWellnessForm({...wellnessForm, general_advice: e.target.value})} />
-                                                </div>
                                             </div>
+
+                                            {/* Category Tab Switcher */}
+                                            <ul className="nav nav-pills nav-fill bg-light p-1 rounded-3 mb-3 border small">
+                                                <li className="nav-item">
+                                                    <button 
+                                                        type="button" 
+                                                        className={`nav-link py-1.5 px-2 fw-semibold d-flex align-items-center justify-content-center gap-1 ${wellnessModalTab === 'vitals' ? 'active shadow-sm' : 'text-secondary'}`}
+                                                        onClick={() => setWellnessModalTab('vitals')}
+                                                    >
+                                                        <i className="bi bi-heart-pulse-fill text-danger"></i>
+                                                        <span>Vitals &amp; Triage</span>
+                                                        {(wellnessForm.bp_systolic || wellnessForm.pulse_rate || wellnessForm.temperature_f) && (
+                                                            <span className="badge rounded-pill bg-success p-1 ms-1" style={{fontSize: '7px'}}>✓</span>
+                                                        )}
+                                                    </button>
+                                                </li>
+                                                <li className="nav-item">
+                                                    <button 
+                                                        type="button" 
+                                                        className={`nav-link py-1.5 px-2 fw-semibold d-flex align-items-center justify-content-center gap-1 ${wellnessModalTab === 'sugar' ? 'active shadow-sm' : 'text-secondary'}`}
+                                                        onClick={() => setWellnessModalTab('sugar')}
+                                                    >
+                                                        <i className="bi bi-droplet-half text-danger"></i>
+                                                        <span>Sugar &amp; Labs</span>
+                                                        {(wellnessForm.sugar_random || wellnessForm.sugar_fasting || wellnessForm.sugar_pp || wellnessForm.hba1c || wellnessForm.hemoglobin) && (
+                                                            <span className="badge rounded-pill bg-success p-1 ms-1" style={{fontSize: '7px'}}>✓</span>
+                                                        )}
+                                                    </button>
+                                                </li>
+                                                <li className="nav-item">
+                                                    <button 
+                                                        type="button" 
+                                                        className={`nav-link py-1.5 px-2 fw-semibold d-flex align-items-center justify-content-center gap-1 ${wellnessModalTab === 'activity' ? 'active shadow-sm' : 'text-secondary'}`}
+                                                        onClick={() => setWellnessModalTab('activity')}
+                                                    >
+                                                        <i className="bi bi-person-bounding-box text-primary"></i>
+                                                        <span>Waist &amp; Activity</span>
+                                                        {(wellnessForm.waist_circumference_cm || wellnessForm.hip_circumference_cm || wellnessForm.daily_steps || wellnessForm.sleep_hours) && (
+                                                            <span className="badge rounded-pill bg-success p-1 ms-1" style={{fontSize: '7px'}}>✓</span>
+                                                        )}
+                                                    </button>
+                                                </li>
+                                                <li className="nav-item">
+                                                    <button 
+                                                        type="button" 
+                                                        className={`nav-link py-1.5 px-2 fw-semibold d-flex align-items-center justify-content-center gap-1 ${wellnessModalTab === 'lifestyle' ? 'active shadow-sm' : 'text-secondary'}`}
+                                                        onClick={() => setWellnessModalTab('lifestyle')}
+                                                    >
+                                                        <i className="bi bi-apple text-success"></i>
+                                                        <span>Lifestyle &amp; Notes</span>
+                                                        {(wellnessForm.diet_type || wellnessForm.tobacco_status || wellnessForm.diet_lifestyle_note || wellnessForm.general_advice) && (
+                                                            <span className="badge rounded-pill bg-success p-1 ms-1" style={{fontSize: '7px'}}>✓</span>
+                                                        )}
+                                                    </button>
+                                                </li>
+                                                {String(activeWellnessPatient.gender || '').toLowerCase() !== 'male' && (
+                                                    <li className="nav-item">
+                                                        <button 
+                                                            type="button" 
+                                                            className={`nav-link py-1.5 px-2 fw-semibold d-flex align-items-center justify-content-center gap-1 ${wellnessModalTab === 'women' ? 'active shadow-sm' : 'text-secondary'}`}
+                                                            onClick={() => setWellnessModalTab('women')}
+                                                        >
+                                                            <i className="bi bi-gender-female text-warning"></i>
+                                                            <span>Women's Health</span>
+                                                            {(wellnessForm.women_lmp || wellnessForm.women_pregnancy_status) && (
+                                                                <span className="badge rounded-pill bg-success p-1 ms-1" style={{fontSize: '7px'}}>✓</span>
+                                                            )}
+                                                        </button>
+                                                    </li>
+                                                )}
+                                            </ul>
+
+                                            {/* TAB 1: VITALS & TRIAGE */}
+                                            {wellnessModalTab === 'vitals' && (
+                                                <div className="row g-2.5 mb-2">
+                                                    <div className="col-6 col-md-3">
+                                                        <label className="form-label small mb-1 fw-bold">BP Sys/Dia (mmHg)</label>
+                                                        <div className="input-group input-group-sm">
+                                                            <input type="number" className="form-control text-center" placeholder="120" value={wellnessForm.bp_systolic} onChange={e => setWellnessForm({...wellnessForm, bp_systolic: e.target.value})} />
+                                                            <span className="input-group-text px-1">/</span>
+                                                            <input type="number" className="form-control text-center" placeholder="80" value={wellnessForm.bp_diastolic} onChange={e => setWellnessForm({...wellnessForm, bp_diastolic: e.target.value})} />
+                                                        </div>
+                                                    </div>
+                                                    <div className="col-6 col-md-3">
+                                                        <label className="form-label small mb-1 fw-bold">Pulse Rate (bpm)</label>
+                                                        <input type="number" className="form-control form-control-sm text-center" placeholder="72" value={wellnessForm.pulse_rate} onChange={e => setWellnessForm({...wellnessForm, pulse_rate: e.target.value})} />
+                                                    </div>
+                                                    <div className="col-6 col-md-3">
+                                                        <label className="form-label small mb-1 fw-bold">SpO2 %</label>
+                                                        <input type="number" className="form-control form-control-sm text-center" placeholder="98" value={wellnessForm.spo2} onChange={e => setWellnessForm({...wellnessForm, spo2: e.target.value})} />
+                                                    </div>
+                                                    <div className="col-6 col-md-3">
+                                                        <label className="form-label small mb-1 fw-bold">Temp °F</label>
+                                                        <input type="number" step="0.1" className="form-control form-control-sm text-center" placeholder="98.6" value={wellnessForm.temperature_f} onChange={e => setWellnessForm({...wellnessForm, temperature_f: e.target.value})} />
+                                                    </div>
+
+                                                    <div className="col-6 col-md-3">
+                                                        <label className="form-label small mb-1 fw-bold">Resp Rate (/min)</label>
+                                                        <input type="number" className="form-control form-control-sm text-center" placeholder="18" value={wellnessForm.resp_rate} onChange={e => setWellnessForm({...wellnessForm, resp_rate: e.target.value})} />
+                                                    </div>
+                                                    <div className="col-6 col-md-3">
+                                                        <label className="form-label small mb-1 fw-bold">Height (cm)</label>
+                                                        <input type="number" step="0.1" className="form-control form-control-sm text-center" placeholder="165" value={wellnessForm.height_cm} onChange={e => setWellnessForm({...wellnessForm, height_cm: e.target.value})} />
+                                                    </div>
+                                                    <div className="col-6 col-md-3">
+                                                        <label className="form-label small mb-1 fw-bold">Weight (kg)</label>
+                                                        <input type="number" step="0.1" className="form-control form-control-sm text-center" placeholder="70" value={wellnessForm.weight_kg} onChange={e => setWellnessForm({...wellnessForm, weight_kg: e.target.value})} />
+                                                    </div>
+                                                    <div className="col-6 col-md-3">
+                                                        <label className="form-label small mb-1 fw-bold">Calculated BMI</label>
+                                                        <div className="input-group input-group-sm">
+                                                            <input 
+                                                                type="text" 
+                                                                className="form-control form-control-sm text-center bg-light fw-bold" 
+                                                                readOnly 
+                                                                value={
+                                                                    wellnessForm.height_cm && wellnessForm.weight_kg && parseFloat(wellnessForm.height_cm) > 0
+                                                                        ? (parseFloat(wellnessForm.weight_kg) / Math.pow(parseFloat(wellnessForm.height_cm) / 100, 2)).toFixed(2)
+                                                                        : '-'
+                                                                } 
+                                                            />
+                                                        </div>
+                                                    </div>
+
+                                                    <div className="col-12 mt-2">
+                                                        <label className="form-label small mb-1 fw-bold d-flex justify-content-between">
+                                                            <span><i className="bi bi-emoji-frown me-1 text-warning"></i> Pain Severity Score (0 - 10 VRS)</span>
+                                                            <span className="text-muted fw-normal">
+                                                                {wellnessForm.pain_score === '' ? 'Not assessed' : (
+                                                                    wellnessForm.pain_score == 0 ? '0 - No Pain' :
+                                                                    wellnessForm.pain_score <= 3 ? `${wellnessForm.pain_score} - Mild Pain` :
+                                                                    wellnessForm.pain_score <= 6 ? `${wellnessForm.pain_score} - Moderate Pain` :
+                                                                    `${wellnessForm.pain_score} - Severe Pain`
+                                                                )}
+                                                            </span>
+                                                        </label>
+                                                        <div className="d-flex gap-1 flex-wrap">
+                                                            {[0,1,2,3,4,5,6,7,8,9,10].map(val => (
+                                                                <button
+                                                                    key={val}
+                                                                    type="button"
+                                                                    className={`btn btn-sm flex-fill py-1 px-1.5 ${wellnessForm.pain_score === String(val) ? (val === 0 ? 'btn-success text-white' : val <= 3 ? 'btn-info text-white' : val <= 6 ? 'btn-warning text-dark' : 'btn-danger text-white') : 'btn-outline-secondary'}`}
+                                                                    onClick={() => setWellnessForm({...wellnessForm, pain_score: wellnessForm.pain_score === String(val) ? '' : String(val)})}
+                                                                >
+                                                                    {val}
+                                                                </button>
+                                                            ))}
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* TAB 2: SUGAR & POC LABS */}
+                                            {wellnessModalTab === 'sugar' && (
+                                                <div className="row g-2.5 mb-2">
+                                                    <div className="col-12">
+                                                        <div className="alert alert-info py-1.5 px-3 small d-flex align-items-center gap-2 mb-2">
+                                                            <i className="bi bi-info-circle-fill fs-6 text-primary"></i>
+                                                            <span>Point-of-care capillary blood sugar &amp; POC lab values (NRCES <strong>GeneralAssessment</strong> slice)</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="col-6 col-md-4">
+                                                        <label className="form-label small mb-1 fw-bold">Random Blood Sugar (RBS)</label>
+                                                        <div className="input-group input-group-sm">
+                                                            <input type="number" step="1" className="form-control text-center" placeholder="110" value={wellnessForm.sugar_random} onChange={e => setWellnessForm({...wellnessForm, sugar_random: e.target.value})} />
+                                                            <span className="input-group-text">mg/dL</span>
+                                                        </div>
+                                                        <small className="text-muted" style={{fontSize: '10px'}}>Normal: &lt; 140 mg/dL</small>
+                                                    </div>
+                                                    <div className="col-6 col-md-4">
+                                                        <label className="form-label small mb-1 fw-bold">Fasting Blood Sugar (FBS)</label>
+                                                        <div className="input-group input-group-sm">
+                                                            <input type="number" step="1" className="form-control text-center" placeholder="95" value={wellnessForm.sugar_fasting} onChange={e => setWellnessForm({...wellnessForm, sugar_fasting: e.target.value})} />
+                                                            <span className="input-group-text">mg/dL</span>
+                                                        </div>
+                                                        <small className="text-muted" style={{fontSize: '10px'}}>Normal: 70 - 100 mg/dL</small>
+                                                    </div>
+                                                    <div className="col-6 col-md-4">
+                                                        <label className="form-label small mb-1 fw-bold">Post-Prandial (PPBS)</label>
+                                                        <div className="input-group input-group-sm">
+                                                            <input type="number" step="1" className="form-control text-center" placeholder="130" value={wellnessForm.sugar_pp} onChange={e => setWellnessForm({...wellnessForm, sugar_pp: e.target.value})} />
+                                                            <span className="input-group-text">mg/dL</span>
+                                                        </div>
+                                                        <small className="text-muted" style={{fontSize: '10px'}}>Normal: &lt; 140 mg/dL (2h post meal)</small>
+                                                    </div>
+                                                    <div className="col-6 col-md-6">
+                                                        <label className="form-label small mb-1 fw-bold">HbA1c (Glycated Hemoglobin)</label>
+                                                        <div className="input-group input-group-sm">
+                                                            <input type="number" step="0.1" className="form-control text-center" placeholder="5.6" value={wellnessForm.hba1c} onChange={e => setWellnessForm({...wellnessForm, hba1c: e.target.value})} />
+                                                            <span className="input-group-text">%</span>
+                                                        </div>
+                                                        <small className="text-muted" style={{fontSize: '10px'}}>Normal: &lt; 5.7% | Prediabetes: 5.7-6.4% | Diabetes: ≥ 6.5%</small>
+                                                    </div>
+                                                    <div className="col-6 col-md-6">
+                                                        <label className="form-label small mb-1 fw-bold">POC Hemoglobin (Hb)</label>
+                                                        <div className="input-group input-group-sm">
+                                                            <input type="number" step="0.1" className="form-control text-center" placeholder="13.5" value={wellnessForm.hemoglobin} onChange={e => setWellnessForm({...wellnessForm, hemoglobin: e.target.value})} />
+                                                            <span className="input-group-text">g/dL</span>
+                                                        </div>
+                                                        <small className="text-muted" style={{fontSize: '10px'}}>Normal: 12.0 - 17.5 g/dL</small>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* TAB 3: WAIST, HIP & ACTIVITY */}
+                                            {wellnessModalTab === 'activity' && (
+                                                <div className="row g-2.5 mb-2">
+                                                    <div className="col-12">
+                                                        <h6 className="fw-bold small text-primary mb-1 border-bottom pb-1"><i className="bi bi-rulers me-1"></i> Body Circumferences (NRCES BodyMeasurement)</h6>
+                                                    </div>
+                                                    <div className="col-6 col-md-4">
+                                                        <label className="form-label small mb-1 fw-bold">Waist Circumference</label>
+                                                        <div className="input-group input-group-sm">
+                                                            <input type="number" step="0.1" className="form-control text-center" placeholder="85" value={wellnessForm.waist_circumference_cm} onChange={e => setWellnessForm({...wellnessForm, waist_circumference_cm: e.target.value})} />
+                                                            <span className="input-group-text">cm</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="col-6 col-md-4">
+                                                        <label className="form-label small mb-1 fw-bold">Hip Circumference</label>
+                                                        <div className="input-group input-group-sm">
+                                                            <input type="number" step="0.1" className="form-control text-center" placeholder="95" value={wellnessForm.hip_circumference_cm} onChange={e => setWellnessForm({...wellnessForm, hip_circumference_cm: e.target.value})} />
+                                                            <span className="input-group-text">cm</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="col-12 col-md-4">
+                                                        <label className="form-label small mb-1 fw-bold">Waist-to-Hip Ratio (WHR)</label>
+                                                        <input 
+                                                            type="text" 
+                                                            className="form-control form-control-sm text-center bg-light fw-bold" 
+                                                            readOnly 
+                                                            value={
+                                                                wellnessForm.waist_circumference_cm && wellnessForm.hip_circumference_cm && parseFloat(wellnessForm.hip_circumference_cm) > 0
+                                                                    ? (parseFloat(wellnessForm.waist_circumference_cm) / parseFloat(wellnessForm.hip_circumference_cm)).toFixed(2)
+                                                                    : '-'
+                                                            } 
+                                                        />
+                                                        <small className="text-muted" style={{fontSize: '10px'}}>Normal: Men &lt; 0.90 | Women &lt; 0.85</small>
+                                                    </div>
+
+                                                    <div className="col-12 mt-2">
+                                                        <h6 className="fw-bold small text-success mb-1 border-bottom pb-1"><i className="bi bi-activity me-1"></i> Physical Activity &amp; Sleep (NRCES PhysicalActivity)</h6>
+                                                    </div>
+                                                    <div className="col-6 col-md-4">
+                                                        <label className="form-label small mb-1 fw-bold">Daily Steps (24h)</label>
+                                                        <div className="input-group input-group-sm">
+                                                            <input type="number" step="100" className="form-control text-center" placeholder="8000" value={wellnessForm.daily_steps} onChange={e => setWellnessForm({...wellnessForm, daily_steps: e.target.value})} />
+                                                            <span className="input-group-text">steps</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="col-6 col-md-4">
+                                                        <label className="form-label small mb-1 fw-bold">Sleep Duration</label>
+                                                        <div className="input-group input-group-sm">
+                                                            <input type="number" step="0.5" className="form-control text-center" placeholder="7.5" value={wellnessForm.sleep_hours} onChange={e => setWellnessForm({...wellnessForm, sleep_hours: e.target.value})} />
+                                                            <span className="input-group-text">hours</span>
+                                                        </div>
+                                                    </div>
+                                                    <div className="col-12 col-md-4">
+                                                        <label className="form-label small mb-1 fw-bold">Exercise Duration</label>
+                                                        <div className="input-group input-group-sm">
+                                                            <input type="number" step="5" className="form-control text-center" placeholder="30" value={wellnessForm.exercise_min_per_day} onChange={e => setWellnessForm({...wellnessForm, exercise_min_per_day: e.target.value})} />
+                                                            <span className="input-group-text">min/day</span>
+                                                        </div>
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* TAB 4: LIFESTYLE & GUIDANCE */}
+                                            {wellnessModalTab === 'lifestyle' && (
+                                                <div className="row g-2.5 mb-2">
+                                                    <div className="col-12 col-md-4">
+                                                        <label className="form-label small mb-1 fw-bold">Diet Pattern (ABDM)</label>
+                                                        <select className="form-select form-select-sm" value={wellnessForm.diet_type} onChange={e => setWellnessForm({...wellnessForm, diet_type: e.target.value})}>
+                                                            <option value="">Select diet...</option>
+                                                            <option value="Balanced Diet">Balanced Diet</option>
+                                                            <option value="Vegetarian">Vegetarian</option>
+                                                            <option value="Lacto-Vegetarian">Lacto-Vegetarian</option>
+                                                            <option value="Non-Vegetarian">Non-Vegetarian</option>
+                                                            <option value="Vegan">Vegan</option>
+                                                            <option value="Diabetic Diet">Diabetic Diet (Low GI)</option>
+                                                            <option value="Low Sodium / DASH Diet">Low Sodium / DASH Diet</option>
+                                                            <option value="Renal Diet">Renal Diet</option>
+                                                        </select>
+                                                    </div>
+                                                    <div className="col-6 col-md-4">
+                                                        <label className="form-label small mb-1 fw-bold">Tobacco / Smoking</label>
+                                                        <select className="form-select form-select-sm" value={wellnessForm.tobacco_status} onChange={e => setWellnessForm({...wellnessForm, tobacco_status: e.target.value})}>
+                                                            <option value="">Select status...</option>
+                                                            <option value="Never Smoked">Never Smoked</option>
+                                                            <option value="Former / Ex-Smoker">Former / Ex-Smoker</option>
+                                                            <option value="Current Smoker (Occasional)">Current Smoker (Occasional)</option>
+                                                            <option value="Current Smoker (Daily)">Current Smoker (Daily)</option>
+                                                            <option value="Tobacco Chewer">Tobacco Chewer</option>
+                                                        </select>
+                                                    </div>
+                                                    <div className="col-6 col-md-4">
+                                                        <label className="form-label small mb-1 fw-bold">Alcohol Consumption</label>
+                                                        <select className="form-select form-select-sm" value={wellnessForm.alcohol_status} onChange={e => setWellnessForm({...wellnessForm, alcohol_status: e.target.value})}>
+                                                            <option value="">Select status...</option>
+                                                            <option value="Lifetime Non-Drinker">Lifetime Non-Drinker</option>
+                                                            <option value="Former Drinker">Former Drinker</option>
+                                                            <option value="Occasional / Social Drinker">Occasional / Social Drinker</option>
+                                                            <option value="Regular Drinker">Regular Drinker</option>
+                                                        </select>
+                                                    </div>
+
+                                                    <div className="col-12">
+                                                        <label className="form-label small mb-1 fw-bold">Diet &amp; Lifestyle Guidance (ABDM)</label>
+                                                        <input type="text" className="form-control form-control-sm" placeholder="e.g. Low sodium diet, 30 min daily brisk walking, adequate hydration" value={wellnessForm.diet_lifestyle_note} onChange={e => setWellnessForm({...wellnessForm, diet_lifestyle_note: e.target.value})} />
+                                                    </div>
+
+                                                    <div className="col-12">
+                                                        <label className="form-label small mb-1 fw-bold">General Nursing Observations</label>
+                                                        <input type="text" className="form-control form-control-sm" placeholder="e.g. Patient conscious, oriented to time/place, vitals within acceptable limits" value={wellnessForm.general_advice} onChange={e => setWellnessForm({...wellnessForm, general_advice: e.target.value})} />
+                                                    </div>
+                                                </div>
+                                            )}
+
+                                            {/* TAB 5: WOMEN'S HEALTH */}
+                                            {wellnessModalTab === 'women' && (
+                                                <div className="row g-2.5 mb-2">
+                                                    <div className="col-12 col-md-6">
+                                                        <label className="form-label small mb-1 fw-bold">Last Menstrual Period (LMP Date)</label>
+                                                        <input type="date" className="form-control form-control-sm" value={wellnessForm.women_lmp} onChange={e => setWellnessForm({...wellnessForm, women_lmp: e.target.value})} />
+                                                    </div>
+                                                    <div className="col-12 col-md-6">
+                                                        <label className="form-label small mb-1 fw-bold">Pregnancy / Reproductive Status</label>
+                                                        <select className="form-select form-select-sm" value={wellnessForm.women_pregnancy_status} onChange={e => setWellnessForm({...wellnessForm, women_pregnancy_status: e.target.value})}>
+                                                            <option value="">Select reproductive status...</option>
+                                                            <option value="Not Pregnant">Not Pregnant</option>
+                                                            <option value="Pregnant - 1st Trimester (1 - 12 wks)">Pregnant - 1st Trimester (1 - 12 wks)</option>
+                                                            <option value="Pregnant - 2nd Trimester (13 - 26 wks)">Pregnant - 2nd Trimester (13 - 26 wks)</option>
+                                                            <option value="Pregnant - 3rd Trimester (27 - 40+ wks)">Pregnant - 3rd Trimester (27 - 40+ wks)</option>
+                                                            <option value="Postpartum (< 6 weeks post delivery)">Postpartum (&lt; 6 weeks post delivery)</option>
+                                                            <option value="Lactating / Breastfeeding">Lactating / Breastfeeding</option>
+                                                            <option value="Perimenopausal">Perimenopausal</option>
+                                                            <option value="Postmenopausal">Postmenopausal</option>
+                                                        </select>
+                                                    </div>
+                                                </div>
+                                            )}
                                         </div>
 
                                         <div className="modal-footer p-2 bg-light d-flex justify-content-between">
@@ -2592,7 +2912,7 @@
                                             </button>
                                             <div className="d-flex gap-2">
                                                 <button className="btn btn-secondary btn-sm" onClick={() => setActiveWellnessPatient(null)}>Cancel</button>
-                                                <button className="btn btn-success btn-sm fw-bold px-3" onClick={handleSaveWellness}>
+                                                <button className="btn btn-success btn-sm fw-bold px-3 shadow-sm" onClick={handleSaveWellness}>
                                                     <i className="bi bi-check-circle-fill me-1"></i> Save ABDM Wellness Vitals
                                                 </button>
                                             </div>
@@ -2708,11 +3028,11 @@
                         )}
 
                         {/* -------------------------------------------------------------
-                           MODAL 4: PATIENT VITALS & WELLNESS HISTORY
+                           MODAL 4: PATIENT VITALS & WELLNESS HISTORY (COMPREHENSIVE)
                            ------------------------------------------------------------- */}
                         {wellnessHistoryPatient && (
                             <div className="modal show d-block" style={{backgroundColor: 'rgba(0,0,0,0.65)', zIndex: 1070}}>
-                                <div className="modal-dialog modal-dialog-centered modal-lg">
+                                <div className="modal-dialog modal-dialog-centered modal-xl">
                                     <div className="modal-content rounded-4 border-0 shadow-lg overflow-hidden">
                                         <div className="modal-header bg-dark text-white py-2.5">
                                             <div className="d-flex align-items-center gap-2">
@@ -2744,11 +3064,11 @@
                                                         <thead className="table-light">
                                                             <tr>
                                                                 <th>Date &amp; Time</th>
-                                                                <th>BP</th>
-                                                                <th>Pulse</th>
-                                                                <th>Temp</th>
-                                                                <th>SpO2</th>
-                                                                <th>BMI</th>
+                                                                <th>Vitals (BP / Pulse / SpO2 / Temp)</th>
+                                                                <th>Body / BMI</th>
+                                                                <th>Blood Glucose (mg/dL)</th>
+                                                                <th>POC Labs</th>
+                                                                <th>Activity / Lifestyle</th>
                                                                 <th>Staff</th>
                                                                 <th>Advice / Remarks</th>
                                                             </tr>
@@ -2757,13 +3077,57 @@
                                                             {wellnessHistoryList.map(rec => (
                                                                 <tr key={rec.id}>
                                                                     <td className="fw-semibold text-nowrap">{formatDateTime(rec.recorded_at)}</td>
-                                                                    <td><span className="badge bg-light text-dark border">{rec.bp_systolic ? `${rec.bp_systolic}/${rec.bp_diastolic}` : '-'}</span></td>
-                                                                    <td>{rec.pulse_rate ? `${rec.pulse_rate} bpm` : '-'}</td>
-                                                                    <td><span className="badge bg-danger-subtle text-danger">{rec.temperature_f ? `${rec.temperature_f} °F` : '-'}</span></td>
-                                                                    <td>{rec.spo2 ? `${rec.spo2}%` : '-'}</td>
-                                                                    <td><span className="badge bg-info-subtle text-info">{rec.bmi || '-'}</span></td>
+                                                                    <td>
+                                                                        <div className="d-flex flex-wrap gap-1 align-items-center">
+                                                                            {rec.bp_systolic && <span className="badge bg-light text-dark border">BP {rec.bp_systolic}/{rec.bp_diastolic}</span>}
+                                                                            {rec.pulse_rate && <span className="badge bg-light text-dark border">{rec.pulse_rate} bpm</span>}
+                                                                            {rec.spo2 && <span className="badge bg-info-subtle text-info border border-info-subtle">{rec.spo2}% O2</span>}
+                                                                            {rec.temperature_f && <span className="badge bg-danger-subtle text-danger border border-danger-subtle">{rec.temperature_f}°F</span>}
+                                                                            {rec.pain_score !== null && rec.pain_score !== undefined && rec.pain_score !== '' && (
+                                                                                <span className={`badge ${rec.pain_score == 0 ? 'bg-success-subtle text-success' : rec.pain_score <= 3 ? 'bg-info-subtle text-info' : 'bg-warning-subtle text-warning-emphasis'}`}>
+                                                                                    Pain: {rec.pain_score}/10
+                                                                                </span>
+                                                                            )}
+                                                                        </div>
+                                                                    </td>
+                                                                    <td>
+                                                                        <div>
+                                                                            {rec.bmi && <span className="badge bg-secondary-subtle text-secondary me-1">BMI {rec.bmi}</span>}
+                                                                            {rec.weight_kg && <small className="text-muted">{rec.weight_kg}kg </small>}
+                                                                            {rec.height_cm && <small className="text-muted">{rec.height_cm}cm</small>}
+                                                                        </div>
+                                                                        {(rec.waist_circumference_cm || rec.waist_hip_ratio) && (
+                                                                            <small className="text-muted d-block" style={{fontSize: '11px'}}>
+                                                                                {rec.waist_circumference_cm ? `Waist: ${rec.waist_circumference_cm}cm` : ''}
+                                                                                {rec.waist_hip_ratio ? ` • WHR: ${rec.waist_hip_ratio}` : ''}
+                                                                            </small>
+                                                                        )}
+                                                                    </td>
+                                                                    <td>
+                                                                        <div className="d-flex flex-wrap gap-1">
+                                                                            {rec.sugar_random && <span className="badge bg-warning-subtle text-warning-emphasis border">RBS: {rec.sugar_random}</span>}
+                                                                            {rec.sugar_fasting && <span className="badge bg-primary-subtle text-primary border">FBS: {rec.sugar_fasting}</span>}
+                                                                            {rec.sugar_pp && <span className="badge bg-secondary-subtle text-secondary border">PP: {rec.sugar_pp}</span>}
+                                                                            {!rec.sugar_random && !rec.sugar_fasting && !rec.sugar_pp && <span className="text-muted">-</span>}
+                                                                        </div>
+                                                                    </td>
+                                                                    <td>
+                                                                        <div className="d-flex flex-wrap gap-1">
+                                                                            {rec.hemoglobin && <span className="badge bg-danger-subtle text-danger border">Hb: {rec.hemoglobin} g/dL</span>}
+                                                                            {rec.hba1c && <span className="badge bg-success-subtle text-success border">A1c: {rec.hba1c}%</span>}
+                                                                            {!rec.hemoglobin && !rec.hba1c && <span className="text-muted">-</span>}
+                                                                        </div>
+                                                                    </td>
+                                                                    <td>
+                                                                        <div className="small">
+                                                                            {rec.diet_type && <span className="badge bg-light text-dark border me-1">{rec.diet_type}</span>}
+                                                                            {rec.daily_steps && <span className="text-muted me-1">{rec.daily_steps} steps</span>}
+                                                                            {rec.sleep_hours && <span className="text-muted">{rec.sleep_hours}h sleep</span>}
+                                                                            {!rec.diet_type && !rec.daily_steps && !rec.sleep_hours && <span className="text-muted">-</span>}
+                                                                        </div>
+                                                                    </td>
                                                                     <td><small className="text-muted">{rec.recorded_by || 'Staff'}</small></td>
-                                                                    <td><small>{rec.general_advice || rec.diet_lifestyle_note || '-'}</small></td>
+                                                                    <td><small className="text-truncate d-inline-block" style={{maxWidth: '180px'}} title={rec.general_advice || rec.diet_lifestyle_note}>{rec.general_advice || rec.diet_lifestyle_note || '-'}</small></td>
                                                                 </tr>
                                                             ))}
                                                         </tbody>

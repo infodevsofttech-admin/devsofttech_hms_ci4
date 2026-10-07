@@ -728,7 +728,7 @@ class NursingApi extends BaseController
 
             // Check Today OPD appointment
             $opdRow = $db->table('opd_master o')
-                ->select('o.opd_id, o.opd_code, o.opd_no as token_no, o.doc_id, o.doc_name as doctor_name, o.apointment_date, o.opd_book_date, pr.temp, pr.pulse, pr.bp, pr.diastolic, pr.spo2, pr.weight, pr.height, pr.rr_min')
+                ->select('o.opd_id, o.opd_code, o.opd_no as token_no, o.doc_id, o.doc_name as doctor_name, o.apointment_date, o.opd_book_date, pr.temp, pr.pulse, pr.bp, pr.diastolic, pr.spo2, pr.weight, pr.height, pr.rr_min, pr.glucose, pr.waist')
                 ->join('opd_prescription pr', 'pr.opd_id = o.opd_id', 'left')
                 ->where('o.p_id', $pId)
                 ->groupStart()
@@ -795,6 +795,38 @@ class NursingApi extends BaseController
             $bmi = round($weightKg / ($heightM * $heightM), 2);
         }
 
+        // Anthropometry & Body Measurements
+        $waistCm = isset($post['waist_circumference_cm']) && $post['waist_circumference_cm'] !== '' ? (float) $post['waist_circumference_cm'] : null;
+        $hipCm = isset($post['hip_circumference_cm']) && $post['hip_circumference_cm'] !== '' ? (float) $post['hip_circumference_cm'] : null;
+        $waistHipRatio = null;
+        if ($waistCm && $waistCm > 0 && $hipCm && $hipCm > 0) {
+            $waistHipRatio = round($waistCm / $hipCm, 2);
+        } elseif (isset($post['waist_hip_ratio']) && $post['waist_hip_ratio'] !== '') {
+            $waistHipRatio = (float) $post['waist_hip_ratio'];
+        }
+
+        // Blood Glucose & POC Lab tests
+        $sugarRandom = isset($post['sugar_random']) && $post['sugar_random'] !== '' ? (float) $post['sugar_random'] : null;
+        $sugarFasting = isset($post['sugar_fasting']) && $post['sugar_fasting'] !== '' ? (float) $post['sugar_fasting'] : null;
+        $sugarPp = isset($post['sugar_pp']) && $post['sugar_pp'] !== '' ? (float) $post['sugar_pp'] : null;
+        $hba1c = isset($post['hba1c']) && $post['hba1c'] !== '' ? (float) $post['hba1c'] : null;
+        $hemoglobin = isset($post['hemoglobin']) && $post['hemoglobin'] !== '' ? (float) $post['hemoglobin'] : null;
+
+        // Pain score & Physical Activity
+        $painScore = isset($post['pain_score']) && $post['pain_score'] !== '' ? (int) $post['pain_score'] : null;
+        $dailySteps = isset($post['daily_steps']) && $post['daily_steps'] !== '' ? (int) $post['daily_steps'] : null;
+        $sleepHours = isset($post['sleep_hours']) && $post['sleep_hours'] !== '' ? (float) $post['sleep_hours'] : null;
+        $exerciseMin = isset($post['exercise_min_per_day']) && $post['exercise_min_per_day'] !== '' ? (int) $post['exercise_min_per_day'] : null;
+
+        // Lifestyle & Social History
+        $dietType = ! empty($post['diet_type']) ? trim((string) $post['diet_type']) : null;
+        $tobaccoStatus = ! empty($post['tobacco_status']) ? trim((string) $post['tobacco_status']) : null;
+        $alcoholStatus = ! empty($post['alcohol_status']) ? trim((string) $post['alcohol_status']) : null;
+
+        // Women's Health
+        $womenLmp = ! empty($post['women_lmp']) ? trim((string) $post['women_lmp']) : null;
+        $womenPregnancy = ! empty($post['women_pregnancy_status']) ? trim((string) $post['women_pregnancy_status']) : null;
+
         $wellnessData = [
             'patient_id' => $patientId,
             'uhid' => $patient['p_code'] ?? '',
@@ -811,6 +843,23 @@ class NursingApi extends BaseController
             'weight_kg' => $weightKg,
             'height_cm' => $heightCm,
             'bmi' => $bmi,
+            'sugar_random' => $sugarRandom,
+            'sugar_fasting' => $sugarFasting,
+            'sugar_pp' => $sugarPp,
+            'hba1c' => $hba1c,
+            'hemoglobin' => $hemoglobin,
+            'waist_circumference_cm' => $waistCm,
+            'hip_circumference_cm' => $hipCm,
+            'waist_hip_ratio' => $waistHipRatio,
+            'daily_steps' => $dailySteps,
+            'sleep_hours' => $sleepHours,
+            'exercise_min_per_day' => $exerciseMin,
+            'diet_type' => $dietType,
+            'tobacco_status' => $tobaccoStatus,
+            'alcohol_status' => $alcoholStatus,
+            'women_lmp' => $womenLmp,
+            'women_pregnancy_status' => $womenPregnancy,
+            'pain_score' => $painScore,
             'general_advice' => (string) ($post['general_advice'] ?? ''),
             'diet_lifestyle_note' => (string) ($post['diet_lifestyle_note'] ?? ''),
             'recorded_by' => (string) ($post['recorded_by'] ?? 'Staff Nurse'),
@@ -838,6 +887,23 @@ class NursingApi extends BaseController
               `weight_kg` decimal(5,2) DEFAULT NULL,
               `height_cm` decimal(5,2) DEFAULT NULL,
               `bmi` decimal(5,2) DEFAULT NULL,
+              `sugar_random` decimal(6,2) DEFAULT NULL,
+              `sugar_fasting` decimal(6,2) DEFAULT NULL,
+              `sugar_pp` decimal(6,2) DEFAULT NULL,
+              `hba1c` decimal(4,2) DEFAULT NULL,
+              `hemoglobin` decimal(4,2) DEFAULT NULL,
+              `waist_circumference_cm` decimal(5,2) DEFAULT NULL,
+              `hip_circumference_cm` decimal(5,2) DEFAULT NULL,
+              `waist_hip_ratio` decimal(4,2) DEFAULT NULL,
+              `daily_steps` int DEFAULT NULL,
+              `sleep_hours` decimal(4,2) DEFAULT NULL,
+              `exercise_min_per_day` int DEFAULT NULL,
+              `diet_type` varchar(100) DEFAULT NULL,
+              `tobacco_status` varchar(100) DEFAULT NULL,
+              `alcohol_status` varchar(100) DEFAULT NULL,
+              `women_lmp` date DEFAULT NULL,
+              `women_pregnancy_status` varchar(100) DEFAULT NULL,
+              `pain_score` tinyint DEFAULT NULL,
               `general_advice` text,
               `diet_lifestyle_note` text,
               `recorded_by` varchar(120) DEFAULT 'Staff Nurse',
@@ -851,6 +917,28 @@ class NursingApi extends BaseController
               KEY `idx_uhid` (`uhid`),
               KEY `idx_recorded_at` (`recorded_at`)
             ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        } else {
+            // Defensive check for newly added Option B columns
+            if (! $db->fieldExists('sugar_random', 'patient_wellness_records')) {
+                @$db->query("ALTER TABLE `patient_wellness_records`
+                  ADD COLUMN `sugar_random` decimal(6,2) DEFAULT NULL AFTER `bmi`,
+                  ADD COLUMN `sugar_fasting` decimal(6,2) DEFAULT NULL AFTER `sugar_random`,
+                  ADD COLUMN `sugar_pp` decimal(6,2) DEFAULT NULL AFTER `sugar_fasting`,
+                  ADD COLUMN `hba1c` decimal(4,2) DEFAULT NULL AFTER `sugar_pp`,
+                  ADD COLUMN `hemoglobin` decimal(4,2) DEFAULT NULL AFTER `hba1c`,
+                  ADD COLUMN `waist_circumference_cm` decimal(5,2) DEFAULT NULL AFTER `hemoglobin`,
+                  ADD COLUMN `hip_circumference_cm` decimal(5,2) DEFAULT NULL AFTER `waist_circumference_cm`,
+                  ADD COLUMN `waist_hip_ratio` decimal(4,2) DEFAULT NULL AFTER `hip_circumference_cm`,
+                  ADD COLUMN `daily_steps` int DEFAULT NULL AFTER `waist_hip_ratio`,
+                  ADD COLUMN `sleep_hours` decimal(4,2) DEFAULT NULL AFTER `daily_steps`,
+                  ADD COLUMN `exercise_min_per_day` int DEFAULT NULL AFTER `sleep_hours`,
+                  ADD COLUMN `diet_type` varchar(100) DEFAULT NULL AFTER `exercise_min_per_day`,
+                  ADD COLUMN `tobacco_status` varchar(100) DEFAULT NULL AFTER `diet_type`,
+                  ADD COLUMN `alcohol_status` varchar(100) DEFAULT NULL AFTER `tobacco_status`,
+                  ADD COLUMN `women_lmp` date DEFAULT NULL AFTER `alcohol_status`,
+                  ADD COLUMN `women_pregnancy_status` varchar(100) DEFAULT NULL AFTER `women_lmp`,
+                  ADD COLUMN `pain_score` tinyint DEFAULT NULL AFTER `women_pregnancy_status`");
+            }
         }
 
         $db->table('patient_wellness_records')->insert($wellnessData);
@@ -877,6 +965,7 @@ class NursingApi extends BaseController
                 }
             };
 
+            // Standard Vital Signs
             $addVital('8480-6', 'Systolic blood pressure', $wellnessData['bp_systolic'], 'mmHg', 'mm[Hg]');
             $addVital('8462-4', 'Diastolic blood pressure', $wellnessData['bp_diastolic'], 'mmHg', 'mm[Hg]');
             $addVital('8867-4', 'Heart rate', $wellnessData['pulse_rate'], '/min', '/min');
@@ -886,8 +975,47 @@ class NursingApi extends BaseController
             $addVital('8310-5', 'Body temperature', $wellnessData['temperature_c'] ?? $wellnessData['temperature_f'], 'Cel', 'Cel');
             $addVital('9279-1', 'Respiratory rate', $wellnessData['resp_rate'], '/min', '/min');
             $addVital('59408-5', 'Oxygen saturation in Arterial blood by Pulse oximetry', $wellnessData['spo2'], '%', '%');
+            $addVital('72514-3', 'Pain severity - 0-10 verbal numeric rating', $wellnessData['pain_score'], '{score}', '{score}');
+
+            // Body Measurements / Anthropometry
+            $addVital('56115-9', 'Waist circumference', $wellnessData['waist_circumference_cm'], 'cm', 'cm');
+            $addVital('56114-2', 'Hip circumference', $wellnessData['hip_circumference_cm'], 'cm', 'cm');
+            $addVital('8280-0', 'Waist to hip ratio', $wellnessData['waist_hip_ratio'], 'ratio', '{ratio}');
+
+            // Blood Sugar & POC Laboratory Measurements
+            $addVital('2339-0', 'Glucose [Mass/volume] in Blood', $wellnessData['sugar_random'], 'mg/dL', 'mg/dL');
+            $addVital('1558-6', 'Fasting glucose [Mass/volume] in Blood', $wellnessData['sugar_fasting'], 'mg/dL', 'mg/dL');
+            $addVital('1521-4', 'Glucose [Mass/volume] in Blood 2 hours post meal', $wellnessData['sugar_pp'], 'mg/dL', 'mg/dL');
+            $addVital('4548-4', 'Hemoglobin A1c/Hemoglobin.total in Blood', $wellnessData['hba1c'], '%', '%');
+            $addVital('718-7', 'Hemoglobin [Mass/volume] in Blood', $wellnessData['hemoglobin'], 'g/dL', 'g/dL');
+
+            // Physical Activity & Sleep
+            $addVital('55423-8', 'Number of steps in 24 hour Measured', $wellnessData['daily_steps'], '{steps}', '{steps}');
+            $addVital('93832-4', 'Sleep duration', $wellnessData['sleep_hours'], 'h', 'h');
+            $addVital('55411-3', 'Exercise duration', $wellnessData['exercise_min_per_day'], 'min/d', 'min/d');
 
             $lifestyle = [];
+            if (! empty($wellnessData['diet_type'])) {
+                $lifestyle[] = [
+                    'code' => '81663-7',
+                    'display' => 'Diet Type',
+                    'value' => $wellnessData['diet_type'],
+                ];
+            }
+            if (! empty($wellnessData['tobacco_status'])) {
+                $lifestyle[] = [
+                    'code' => '365981007',
+                    'display' => 'Tobacco Smoking Status',
+                    'value' => $wellnessData['tobacco_status'],
+                ];
+            }
+            if (! empty($wellnessData['alcohol_status'])) {
+                $lifestyle[] = [
+                    'code' => '228273003',
+                    'display' => 'Alcohol Consumption Status',
+                    'value' => $wellnessData['alcohol_status'],
+                ];
+            }
             if (! empty($wellnessData['diet_lifestyle_note'])) {
                 $lifestyle[] = [
                     'code' => 'diet-lifestyle',
@@ -901,6 +1029,14 @@ class NursingApi extends BaseController
                     'display' => 'General Nursing Observations',
                     'value' => $wellnessData['general_advice'],
                 ];
+            }
+
+            $womenWellness = [];
+            if (! empty($wellnessData['women_lmp'])) {
+                $womenWellness['lmp'] = $wellnessData['women_lmp'];
+            }
+            if (! empty($wellnessData['women_pregnancy_status'])) {
+                $womenWellness['pregnancy_status'] = $wellnessData['women_pregnancy_status'];
             }
 
             $source = [
@@ -923,6 +1059,7 @@ class NursingApi extends BaseController
                     'name' => (string) ($wellnessData['recorded_by'] ?? 'Staff Nurse'),
                 ],
                 'vitals' => $sourceVitals,
+                'women_wellness' => $womenWellness,
                 'lifestyle' => $lifestyle,
             ];
 
