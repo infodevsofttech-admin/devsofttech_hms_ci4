@@ -1048,8 +1048,13 @@ class NursingApi extends BaseController
                 'hfr_id' => 'IN0510000828',
                 'patient' => [
                     'id' => $patientId,
-                    'name' => trim(($patient['p_fname'] ?? '') . ' ' . ($patient['p_lname'] ?? '')),
-                    'gender' => strtolower((string) ($patient['gender'] ?? 'male')),
+                    'name' => trim(($patient['p_fname'] ?? '') . (($patient['p_lname'] ?? '') !== '' && ($patient['p_lname'] ?? '') !== '0' && strcasecmp((string)($patient['p_lname'] ?? ''), 'NA') !== 0 ? ' ' . $patient['p_lname'] : '')),
+                    'gender' => match (strtolower(trim((string) ($patient['gender'] ?? '')))) {
+                        '2', 'f', 'female' => 'female',
+                        '1', 'm', 'male' => 'male',
+                        '3', 'o', 'other' => 'other',
+                        default => 'female',
+                    },
                     'dob' => ! empty($patient['dob']) ? date('Y-m-d', strtotime((string) $patient['dob'])) : null,
                     'mobile' => (string) ($patient['mphone1'] ?? ''),
                     'abha_id' => (string) ($patient['abha_id'] ?? ''),
@@ -1108,12 +1113,24 @@ class NursingApi extends BaseController
 
         if ($effectiveAbha !== '') {
             try {
+                $rawGender = strtolower(trim((string) ($patient['gender'] ?? '')));
+                $genderCode = match ($rawGender) {
+                    '2', 'f', 'female' => 'F',
+                    '1', 'm', 'male' => 'M',
+                    '3', 'o', 'other' => 'O',
+                    default => 'F',
+                };
+                $pFname = trim((string) ($patient['p_fname'] ?? ''));
+                $pLname = trim((string) ($patient['p_lname'] ?? ''));
+                $cleanPatientName = trim($pFname . ($pLname !== '' && $pLname !== '0' && strcasecmp($pLname, 'NA') !== 0 ? ' ' . $pLname : ''));
+
                 $connector = \App\Libraries\Abdm\AbdmConnectorFactory::make();
                 $pushPayload = [
                     'patient_id' => (string) $patientId,
                     'patient_ref' => (string) ($patient['p_code'] ?? ('P' . $patientId)),
                     'local_patient_id' => (string) ($patient['p_code'] ?? ('P' . $patientId)),
-                    'patient_name' => trim(($patient['p_fname'] ?? '') . ' ' . ($patient['p_lname'] ?? '')),
+                    'patient_name' => $cleanPatientName !== '' ? $cleanPatientName : 'Patient',
+                    'gender' => $genderCode,
                     'abha_id' => (string) ($patient['abha_id'] ?? ''),
                     'abha_address' => (string) ($patient['abha_address'] ?? ''),
                     'year_of_birth' => ! empty($patient['dob']) ? date('Y', strtotime((string) $patient['dob'])) : null,
