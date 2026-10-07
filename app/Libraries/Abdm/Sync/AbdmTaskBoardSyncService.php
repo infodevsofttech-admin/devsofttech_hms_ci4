@@ -168,7 +168,8 @@ class AbdmTaskBoardSyncService
             }
 
             $opdId = (int) ($row['opd_id'] ?? 0);
-            if ($opdId <= 0) {
+            $patientId = (int) ($row['p_id'] ?? 0);
+            if ($opdId <= 0 || $patientId <= 0) {
                 continue;
             }
 
@@ -893,6 +894,23 @@ class AbdmTaskBoardSyncService
                     }
                 } catch (\Throwable $we) {
                     log_message('warning', '[processIndividualWorkTask] Wellness bundle generation error: ' . $we->getMessage());
+                }
+            }
+        } elseif ($taskType === 'ipd_discharge_publish') {
+            if ($this->db->tableExists('abdm_sync_record')) {
+                $syncRec = $this->db->table('abdm_sync_record')
+                    ->where('local_record_id', 'ipd-discharge-' . $entityId)
+                    ->orWhere('care_context_reference', $careContextRef)
+                    ->get(1)
+                    ->getRowArray();
+                if (! empty($syncRec['fhir_bundle_json'])) {
+                    $decodedBundle = json_decode((string) $syncRec['fhir_bundle_json'], true);
+                    if (is_array($decodedBundle) && ! empty($decodedBundle)) {
+                        $pushData['bundle'] = $decodedBundle;
+                        $pushData['fhir_bundle'] = $decodedBundle;
+                        $pushData['record_data'] = $decodedBundle;
+                        $bundleJson = (string) $syncRec['fhir_bundle_json'];
+                    }
                 }
             }
         }

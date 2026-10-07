@@ -9420,6 +9420,13 @@ class Ipd_discharge extends BaseController
             $chiefComplaintsList[] = ['text' => $complaintRemarkText, 'code' => ''];
         }
 
+        if (empty($conditionRows) && ! empty($chiefComplaintsList)) {
+            $conditionRows = $chiefComplaintsList;
+        }
+        if (empty($conditionRows)) {
+            $conditionRows[] = ['text' => 'Medical care and evaluation', 'code' => ''];
+        }
+
         $procedureRows = [];
         foreach ($this->byIpdRows('ipd_discharge_surgery', ['surgery_name', 'surgery_date'], 'id ASC', $ipdId) as $row) {
             $text = trim((string) ($row['surgery_name'] ?? ''));
@@ -9686,8 +9693,13 @@ class Ipd_discharge extends BaseController
         $patientPin = trim((string) ($patientRow['p_pin'] ?? $patientRow['pincode'] ?? ''));
         $dischargeStatus = trim((string) ($ipdRow['discarge_patient_status'] ?? ''));
 
+        $ccRef = 'DISCHARGE-' . $ipdId . '-' . str_replace('-', '', (string) $visitDate);
+        $ccDisplay = 'DischargeSummaryRecord - ' . date('d M Y', strtotime((string) $visitDate));
+
         $source = [
             'record_id' => (string) $ipdId,
+            'care_context_reference' => $ccRef,
+            'care_context_display' => $ccDisplay,
             'bundle_identifier' => 'discharge-' . $ipdNo,
             'session_id' => (string) $ipdId,
             'visit_date' => $visitDate,
@@ -9696,6 +9708,9 @@ class Ipd_discharge extends BaseController
             'doctor_name' => trim((string) ($ipdRow['r_doc_name'] ?? '')),
             'discharge_status' => $dischargeStatus,
             'problem' => trim((string) ($ipdRow['problem'] ?? '')),
+            'diagnoses' => $conditionRows,
+            'conditions' => $conditionRows,
+            'chief_complaints' => $chiefComplaintsList,
             'organization' => [
                 'id' => $hfrId,
                 'name' => $hospitalName,
@@ -9773,6 +9788,30 @@ class Ipd_discharge extends BaseController
 
         $outbox = new AbdmSyncOutboxService();
         $outbox->enqueueRecordSync($syncPayload);
+
+        // Also push synchronously to E-Atria bridge so the bundle is immediately accessible to PHR apps
+        try {
+            $connector = new \App\Libraries\Abdm\EAtriaBridgeConnector();
+            $pushData = [
+                'patient_id'             => (string) $patientId,
+                'patient_name'           => (string) ($gatewayPayload['patient_name'] ?? $patientName),
+                'abha_id'                => (string) ($gatewayPayload['abha_id'] ?? $abhaDigits),
+                'abha_address'           => (string) ($gatewayPayload['abha_address'] ?? $abhaAddress),
+                'hi_type'                => 'DischargeSummaryRecord',
+                'record_type'            => 'DischargeSummaryRecord',
+                'visit_date'             => (string) ($gatewayPayload['visit_date'] ?? $visitDate),
+                'care_context_reference' => $ccRef,
+                'care_context_display'   => $ccDisplay,
+                'notes'                  => $ccDisplay,
+                'queue_id'               => $ccRef,
+                'bundle'                 => (array) ($gatewayPayload['fhir_bundle'] ?? []),
+                'fhir_bundle'            => (array) ($gatewayPayload['fhir_bundle'] ?? []),
+                'record_data'            => (array) ($gatewayPayload['fhir_bundle'] ?? []),
+            ];
+            $connector->pushRecord($pushData);
+        } catch (\Throwable $pe) {
+            log_message('warning', '[enqueueIpdDischargeFhirSync] Direct bridge push error: ' . $pe->getMessage());
+        }
     }
 
     private function normalizeFhirGender(string $gender): string

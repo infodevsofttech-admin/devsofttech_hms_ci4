@@ -2218,7 +2218,8 @@ class AbdmGateway extends BaseController
             $dateClean = str_replace('-', '', $visitDate);
             $ccRef = $prefix . '-' . $labReqId . '-' . $dateClean;
         }
-        $careContextDisplay = ($isImaging ? 'Radiology Report - ' : 'Diagnostic Report - ') . ($testTitle !== '' ? $testTitle : ($isImaging ? 'Radiology Report' : 'Lab Report')) . ' (' . date('d M Y', strtotime($visitDate)) . ')';
+        $cleanTestTitle = self::sanitizeCareContextDisplay($testTitle !== '' ? $testTitle : ($isImaging ? 'Radiology Report' : 'Lab Report'));
+        $careContextDisplay = self::sanitizeCareContextDisplay(($isImaging ? 'Radiology Report - ' : 'Diagnostic Report - ') . $cleanTestTitle . ' ' . date('d M Y', strtotime($visitDate)));
 
         $healthRecordId = $this->storeHealthRecord([
             'patient_id'     => $patientId,
@@ -3190,6 +3191,12 @@ class AbdmGateway extends BaseController
                 $diagnoses[] = ['text' => $problem, 'code' => ''];
             }
         }
+        if (empty($diagnoses) && ! empty($chiefComplaints)) {
+            $diagnoses = $chiefComplaints;
+        }
+        if (empty($diagnoses) && empty($procedures)) {
+            $diagnoses[] = ['text' => 'Medical care and evaluation', 'code' => ''];
+        }
         $chiefComplaintNarrative = trim((string) (($this->ipdRows('ipd_discharge_complaint_remark', ['comp_remark'], $ipdId)[0]['comp_remark'] ?? '')));
         $diagnosisNarrative = trim((string) (($this->ipdRows('ipd_discharge_diagnosis_remark', ['comp_remark'], $ipdId)[0]['comp_remark'] ?? '')));
 
@@ -3368,9 +3375,13 @@ class AbdmGateway extends BaseController
 
         $uniqueSuffix = $isNewRecord ? ('-v' . time()) : '';
 
+        $ccRef = 'DISCHARGE-' . $ipdId . '-' . str_replace('-', '', (string) $visitDate) . $uniqueSuffix;
+        $ccDisplay = 'DischargeSummaryRecord - ' . date('d M Y', strtotime((string) $visitDate));
+
         $source = [
             'record_id' => (string) $ipdId,
-            'care_context_reference' => 'DISCHARGE-' . $ipdId . '-S' . $ipdId . '-' . $visitDate . $uniqueSuffix,
+            'care_context_reference' => $ccRef,
+            'care_context_display' => $ccDisplay,
             'bundle_identifier' => 'discharge-' . (trim((string) ($ipdRow['ipd_code'] ?? '')) ?: (string) $ipdId) . $uniqueSuffix,
             'session_id' => (string) $ipdId,
             'visit_date' => $visitDate,
@@ -3379,6 +3390,9 @@ class AbdmGateway extends BaseController
             'doctor_name' => $doctorName,
             'discharge_status' => $dischargeStatus,
             'problem' => trim((string) ($ipdRow['problem'] ?? '')),
+            'diagnoses' => $diagnoses,
+            'conditions' => $diagnoses,
+            'chief_complaints' => $chiefComplaints,
             'doctor' => [
                 'id' => $doctorId > 0 ? (string) $doctorId : '',
                 'name' => $doctorName,
@@ -6398,7 +6412,8 @@ class AbdmGateway extends BaseController
                     $visitDate = date('Y-m-d', strtotime((string) $reportedDate));
                     $dateStr = date('d M Y', strtotime($visitDate));
                     $ccRef = $prefix . '-' . $taskEntityId . '-' . str_replace('-', '', $visitDate);
-                    $display = ($isImaging ? 'Radiology Report - ' : 'Diagnostic Report - ') . $title . ' (' . $dateStr . ')';
+                    $cleanTitle = self::sanitizeCareContextDisplay($title);
+                    $display = self::sanitizeCareContextDisplay(($isImaging ? 'Radiology Report - ' : 'Diagnostic Report - ') . $cleanTitle . ' ' . $dateStr);
 
                     $hasFindings = trim((string) ($labReq['Report_Data'] ?? '')) !== '' || trim((string) ($labReq['report_data_Impression'] ?? '')) !== '';
                     $statusVal = (int) ($labReq['status'] ?? 0);
@@ -6711,7 +6726,8 @@ class AbdmGateway extends BaseController
                 $visitDate = date('Y-m-d', strtotime((string) $reportedDate));
                 $dateStr = date('d M Y', strtotime($visitDate));
                 $ccRef = $prefix . '-' . $lr['id'] . '-' . str_replace('-', '', $visitDate);
-                $display = ($isImaging ? 'Radiology Report - ' : 'Diagnostic Report - ') . $title . ' (' . $dateStr . ')';
+                $cleanTitle = self::sanitizeCareContextDisplay($title);
+                $display = self::sanitizeCareContextDisplay(($isImaging ? 'Radiology Report - ' : 'Diagnostic Report - ') . $cleanTitle . ' ' . $dateStr);
 
                 $hasFindings = trim((string) ($lr['Report_Data'] ?? '')) !== '' || trim((string) ($lr['report_data_Impression'] ?? '')) !== '';
                 $statusVal = (int) ($lr['status'] ?? 0);
@@ -11939,6 +11955,17 @@ class AbdmGateway extends BaseController
     // Body: { abha_address, link_token_id, patient_ref, display, hi_type, care_contexts[] }
     // =========================================================================
 
+    public static function sanitizeCareContextDisplay(string $display): string
+    {
+        $display = str_replace('&', 'and', $display);
+        $display = preg_replace('/[^a-zA-Z0-9 \-_.]/', ' ', $display);
+        $display = trim(preg_replace('/\s+/', ' ', (string) $display));
+        if (mb_strlen($display) > 100) {
+            $display = mb_substr($display, 0, 100);
+        }
+        return $display;
+    }
+
     public function hipLinkCareContext()
     {
         if (ENVIRONMENT !== 'testing' && ! $this->request->isAJAX()) {
@@ -12012,6 +12039,46 @@ class AbdmGateway extends BaseController
                 $body['abha_number'] = $cleanedAbhaNum;
             } else {
                 unset($body['abha_number']);
+            }
+        }
+
+        if (! empty($body['display'])) {
+            $body['display'] = self::sanitizeCareContextDisplay((string) $body['display']);
+        }
+        if (! empty($body['care_contexts']) && is_array($body['care_contexts'])) {
+            foreach ($body['care_contexts'] as &$cc) {
+                if (isset($cc['display'])) {
+                    $cc['display'] = self::sanitizeCareContextDisplay((string) $cc['display']);
+                }
+            }
+            unset($cc);
+        }
+
+        // Auto-ensure health record bundle is pushed to bridge for linked discharge care contexts
+        if (! empty($body['care_contexts']) && is_array($body['care_contexts'])) {
+            foreach ($body['care_contexts'] as $ccItem) {
+                $refNo = (string) ($ccItem['referenceNumber'] ?? $ccItem['reference_number'] ?? $ccItem['ref'] ?? $ccItem['careContextId'] ?? '');
+                if (str_starts_with($refNo, 'DISCHARGE-')) {
+                    if (preg_match('/^DISCHARGE-(\d+)/', $refNo, $mIpd)) {
+                        $targetIpdId = (int) $mIpd[1];
+                        if ($targetIpdId > 0 && class_exists('\App\Controllers\Ipd_discharge')) {
+                            try {
+                                $ipdCtrl = new \App\Controllers\Ipd_discharge();
+                                $ipdCtrl->initController($this->request, $this->response, $this->logger);
+                                $refIpd = new \ReflectionClass($ipdCtrl);
+                                if ($refIpd->hasMethod('enqueueIpdDischargeFhirSync')) {
+                                    $mSync = $refIpd->getMethod('enqueueIpdDischargeFhirSync');
+                                    $mSync->setAccessible(true);
+                                    $ipdRow = $this->db->table('ipd_master')->where('id', $targetIpdId)->get(1)->getRowArray() ?? [];
+                                    $pRow = $this->db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
+                                    $mSync->invoke($ipdCtrl, $targetIpdId, $patientId, $ipdRow, $pRow);
+                                }
+                            } catch (\Throwable $eIpd) {
+                                log_message('warning', 'hipLinkCareContext IPD sync error: ' . $eIpd->getMessage());
+                            }
+                        }
+                    }
+                }
             }
         }
 

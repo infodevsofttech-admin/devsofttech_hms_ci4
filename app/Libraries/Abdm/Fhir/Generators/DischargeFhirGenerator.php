@@ -94,8 +94,17 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         $patientRef = 'urn:uuid:patient-' . $patientId;
         $encounterRef = is_array($encounter) ? 'urn:uuid:' . (string) ($encounter['id'] ?? '') : null;
 
-        $diagnosesList = (array) ($source['diagnoses'] ?? $source['conditions'] ?? []);
-        $chiefComplaintsList = (array) ($source['chief_complaints'] ?? []);
+        $diagnosesList = (array) ($source['diagnoses'] ?? $source['conditions'] ?? $source['ui_final_diagnosis'] ?? []);
+        $chiefComplaintsList = (array) ($source['chief_complaints'] ?? $source['ui_complaints'] ?? []);
+
+        if (empty($diagnosesList) && empty($chiefComplaintsList)) {
+            $problem = trim((string) ($source['problem'] ?? ''));
+            if ($problem !== '') {
+                $diagnosesList = [['text' => $problem, 'code' => '']];
+            } else {
+                $diagnosesList = [['text' => 'Medical care and evaluation', 'code' => '']];
+            }
+        }
 
         $conditionGroups = [
             [
