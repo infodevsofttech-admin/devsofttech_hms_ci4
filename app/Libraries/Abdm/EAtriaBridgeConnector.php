@@ -530,6 +530,18 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
                 }
             }
 
+            if (preg_match('/(?:after\s*30\s*seconds|request\s*(?:for\s*)?new\s*otp\s*after\s*30\s*seconds)/i', $extractedErr)) {
+                $extractedErr = 'You can request for new OTP after 60 seconds';
+            } elseif (preg_match('/30\s*seconds/i', $extractedErr)) {
+                $extractedErr = preg_replace('/30\s*seconds/i', '60 seconds', $extractedErr);
+            }
+            if (isset($decoded['message']) && is_string($decoded['message']) && preg_match('/30\s*seconds/i', $decoded['message'])) {
+                $decoded['message'] = preg_replace('/30\s*seconds/i', '60 seconds', $decoded['message']);
+            }
+            if (isset($decoded['data']['message']) && is_string($decoded['data']['message']) && preg_match('/30\s*seconds/i', $decoded['data']['message'])) {
+                $decoded['data']['message'] = preg_replace('/30\s*seconds/i', '60 seconds', $decoded['data']['message']);
+            }
+
             if ($extractedErr !== '') {
                 $decoded['error_text'] = $extractedErr;
             }

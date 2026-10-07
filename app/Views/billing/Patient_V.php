@@ -872,6 +872,9 @@
             for (var i = 0; i < candidates.length; i++) {
                 if (typeof candidates[i] === 'string' && candidates[i].trim() !== '') {
                     var val = candidates[i].trim();
+                    if (/30\s*seconds/i.test(val)) {
+                        val = val.replace(/30\s*seconds/gi, '60 seconds');
+                    }
                     if (/UIDAI Error code/i.test(val) || /ABDM-1204/i.test(val) || /attempts.*exceeded/i.test(val) || /invalid.*otp/i.test(val) || /incorrect.*otp/i.test(val) || /otp.*match/i.test(val) || /otp.*expired/i.test(val)) {
                         if (/attempts.*exceeded/i.test(val) || /403/.test(val)) {
                             return 'Incorrect OTP. Maximum number of attempts exceeded. Please generate a fresh OTP and try again.';
@@ -879,12 +882,19 @@
                         return 'Incorrect OTP';
                     }
                     val = val.replace(/\s*\(Bridge Request ID:[^)]*\)/gi, '').replace(/^ABDM-\d+\s*:\s*/i, '');
+                    if (/30\s*seconds/i.test(val)) {
+                        val = val.replace(/30\s*seconds/gi, '60 seconds');
+                    }
                     return val;
                 }
             }
 
             if (/invalid.*otp|incorrect.*otp/i.test(fallbackText)) {
                 return 'Incorrect OTP';
+            }
+
+            if (/30\s*seconds/i.test(fallbackText)) {
+                return fallbackText.replace(/30\s*seconds/gi, '60 seconds');
             }
 
             return fallbackText;

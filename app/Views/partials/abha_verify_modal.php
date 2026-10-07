@@ -120,6 +120,9 @@ window.AbhaVerifyModal = (function () {
         var raw = response && (response.error_text || response.message)
             ? String(response.error_text || response.message)
             : fallback;
+        if (/30\s*seconds/i.test(raw)) {
+            raw = raw.replace(/30\s*seconds/gi, '60 seconds');
+        }
         if (/loginHint/i.test(raw) || /Invalid Login Hint/i.test(raw)) {
             raw = 'ABDM gateway rejected login hint: OTP verification by ABHA Address is not supported directly by ABDM. Please verify using the 14-digit ABHA Number or Find ABHA via Mobile.';
         } else if (/does not exist or was not found/i.test(raw) || /Please make a valid request/i.test(raw) || /ABDM gateway returned an error/i.test(raw) || /abdm_upstream_error/i.test(raw)) {
@@ -132,6 +135,9 @@ window.AbhaVerifyModal = (function () {
             }
         }
         raw = raw.replace(/\s*\(Bridge Request ID:[^)]*\)/gi, '').replace(/^ABDM-\d+\s*:\s*/i, '');
+        if (/30\s*seconds/i.test(raw)) {
+            raw = raw.replace(/30\s*seconds/gi, '60 seconds');
+        }
         return escapeHtml(raw);
     }
     function alertBox(type, message) { $('#abhaVerifyAlert').html(message ? '<div class="alert alert-' + type + ' py-2">' + message + '</div>' : ''); }

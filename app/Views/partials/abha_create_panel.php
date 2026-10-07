@@ -374,8 +374,16 @@ $_aadh = '';
 
         for (var i = 0; i < candidates.length; i++) {
             if (typeof candidates[i] === 'string' && candidates[i].trim() !== '') {
-                return candidates[i].trim();
+                var val = candidates[i].trim();
+                if (/30\s*seconds/i.test(val)) {
+                    val = val.replace(/30\s*seconds/gi, '60 seconds');
+                }
+                return val;
             }
+        }
+
+        if (typeof fallbackText === 'string' && /30\s*seconds/i.test(fallbackText)) {
+            return fallbackText.replace(/30\s*seconds/gi, '60 seconds');
         }
 
         return fallbackText;

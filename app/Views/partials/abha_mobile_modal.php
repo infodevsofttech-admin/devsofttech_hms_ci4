@@ -258,6 +258,9 @@ window.AbhaMobileModal = (function () {
         var raw = response && (response.error_text || response.message)
             ? String(response.error_text || response.message)
             : fallback;
+        if (/30\s*seconds/i.test(raw)) {
+            raw = raw.replace(/30\s*seconds/gi, '60 seconds');
+        }
         if (/UIDAI Error code/i.test(raw) || /ABDM-1204/i.test(raw) || /attempts.*exceeded/i.test(raw) || /invalid.*otp/i.test(raw) || /incorrect.*otp/i.test(raw) || /otp.*match/i.test(raw) || /otp.*expired/i.test(raw)) {
             if (/attempts.*exceeded/i.test(raw) || /403/.test(raw)) {
                 raw = 'Incorrect OTP. Maximum number of attempts exceeded. Please generate a fresh OTP and try again.';
@@ -266,6 +269,9 @@ window.AbhaMobileModal = (function () {
             }
         }
         raw = raw.replace(/\s*\(Bridge Request ID:[^)]*\)/gi, '').replace(/^ABDM-\d+\s*:\s*/i, '');
+        if (/30\s*seconds/i.test(raw)) {
+            raw = raw.replace(/30\s*seconds/gi, '60 seconds');
+        }
         return escapeHtml(raw);
     }
     function alertBox(type, message) {

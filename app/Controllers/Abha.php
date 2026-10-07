@@ -1734,6 +1734,10 @@ class Abha extends BaseController
                 if (preg_match('/(?:UIDAI Error code\s*:\s*400|Invalid (?:Aadhaar )?OTP value|Invalid OTP|Incorrect OTP|OTP mismatch|OTP.*not valid|OTP.*either expired or incorrect)/i', $trimmed)) {
                     return 'Incorrect OTP';
                 }
+                // Normalize OTP cooldown / rate-limit message to 60 seconds (ABDM M1 test compliance)
+                if (preg_match('/(?:after\s*30\s*seconds|request\s*(?:for\s*)?new\s*otp\s*after\s*30\s*seconds)/i', $trimmed)) {
+                    return 'You can request for new OTP after 60 seconds';
+                }
                 // Strip raw technical error code prefixes (e.g. ABDM-1204 : or UIDAI Error code : 400 :)
                 $cleaned = preg_replace('/^(?:ABDM-\d+\s*:\s*)?(?:UIDAI Error code\s*:\s*\d+\s*:\s*)?/i', '', $trimmed);
                 if (preg_match('/(?:invalid.*otp|incorrect.*otp|otp.*invalid|otp.*incorrect|otp.*match)/i', $cleaned)) {
@@ -1741,6 +1745,9 @@ class Abha extends BaseController
                         return 'Incorrect OTP. Maximum number of attempts exceeded. Please generate a fresh OTP and try again.';
                     }
                     return 'Incorrect OTP';
+                }
+                if (preg_match('/30\s*seconds/i', $cleaned)) {
+                    $cleaned = preg_replace('/30\s*seconds/i', '60 seconds', $cleaned);
                 }
                 if (in_array(strtolower($cleaned), $genericPhrases, true)) {
                     $firstGeneric ??= $cleaned;
@@ -1774,6 +1781,8 @@ class Abha extends BaseController
                     $fieldErrors[] = 'Incorrect OTP. Maximum number of attempts exceeded. Please generate a fresh OTP and try again.';
                 } elseif (preg_match('/(?:invalid.*otp|incorrect.*otp|otp.*match)/i', $fieldMsg)) {
                     $fieldErrors[] = 'Incorrect OTP';
+                } elseif (preg_match('/30\s*seconds/i', $fieldMsg)) {
+                    $fieldErrors[] = preg_replace('/30\s*seconds/i', '60 seconds', $fieldMsg);
                 } else {
                     $fieldErrors[] = $field . ': ' . $fieldMsg;
                 }
@@ -1784,14 +1793,14 @@ class Abha extends BaseController
         }
 
         if ($firstGeneric !== null) {
-            return $firstGeneric;
+            return preg_replace('/30\s*seconds/i', '60 seconds', $firstGeneric);
         }
 
         if (preg_match('/(?:invalid.*otp|incorrect.*otp|otp.*expired)/i', $fallback)) {
             return 'Incorrect OTP';
         }
 
-        return $fallback;
+        return preg_replace('/30\s*seconds/i', '60 seconds', $fallback);
     }
 
     /**

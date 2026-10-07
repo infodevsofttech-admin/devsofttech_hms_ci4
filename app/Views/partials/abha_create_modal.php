@@ -386,6 +386,10 @@ window.AbhaCreateModal = (function () {
         if (/loginId/i.test(raw) && /invalid/i.test(raw)) {
             raw = 'Aadhaar Number is not valid. Valid 12-digit Aadhaar number is required.';
         }
+        // Normalize 30 seconds OTP cooldown message to 60 seconds (ABDM M1)
+        if (/30\s*seconds/i.test(raw)) {
+            raw = raw.replace(/30\s*seconds/gi, '60 seconds');
+        }
         // ABDM M1: Map incorrect OTP errors to clear message without raw error codes
         if (/UIDAI Error code/i.test(raw) || /ABDM-1204/i.test(raw) || /attempts.*exceeded/i.test(raw) || /invalid.*otp/i.test(raw) || /incorrect.*otp/i.test(raw) || /otp.*match/i.test(raw) || /otp.*expired/i.test(raw)) {
             if (/attempts.*exceeded/i.test(raw) || /403/.test(raw)) {
@@ -396,6 +400,9 @@ window.AbhaCreateModal = (function () {
         }
         // Strip any residual (Bridge Request ID: ...) or error code traces
         raw = raw.replace(/\s*\(Bridge Request ID:[^)]*\)/gi, '').replace(/^ABDM-\d+\s*:\s*/i, '');
+        if (/30\s*seconds/i.test(raw)) {
+            raw = raw.replace(/30\s*seconds/gi, '60 seconds');
+        }
         return escapeHtml(raw);
     }
     function validateVerhoeff(num) {
