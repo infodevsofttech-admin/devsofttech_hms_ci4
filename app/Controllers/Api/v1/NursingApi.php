@@ -949,7 +949,7 @@ class NursingApi extends BaseController
         // Build compliant ABDM NRCES FHIR R4 WellnessRecord Document Bundle
         $cleanDate = date('Ymd', strtotime($recordedAt));
         $careContextRef = 'WELLNESS-' . $patientId . '-W' . $wellnessId . '-' . $cleanDate;
-        $careContextDisplay = 'Wellness & Vitals Record - ' . date('d M Y', strtotime($recordedAt));
+        $careContextDisplay = 'Wellness and Vitals Record - ' . date('d M Y', strtotime($recordedAt));
         $fhirBundleJson = null;
 
         try {
@@ -1121,8 +1121,8 @@ class NursingApi extends BaseController
                     'record_type' => 'WellnessRecord',
                     'visit_date' => date('Y-m-d', strtotime($recordedAt)),
                     'care_context_reference' => $careContextRef,
-                    'care_context_display' => 'Wellness Record - ' . date('d/m/Y', strtotime($recordedAt)),
-                    'notes' => 'Wellness & Vitals Record',
+                    'care_context_display' => 'Wellness Record - ' . date('d M Y', strtotime($recordedAt)),
+                    'notes' => 'Wellness and Vitals Record',
                     'queue_id' => $careContextRef,
                     'record_data' => ! empty($fhirBundle) ? $fhirBundle : json_decode((string) ($fhirBundleJson ?? '{}'), true),
                 ];

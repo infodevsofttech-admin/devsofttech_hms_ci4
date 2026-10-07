@@ -17,7 +17,7 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
         $visitDate = (string) ($source['visit_date'] ?? date('Y-m-d'));
 
         $careContextReference = 'WELLNESS-' . $recordId . ($sessionId !== '0' ? '-S' . $sessionId : '') . '-' . $visitDate . '-' . date('His');
-        $careContextDisplay = 'Wellness & Vitals Record ' . $visitDate;
+        $careContextDisplay = 'Wellness and Vitals Record ' . $visitDate;
 
         $builder = new \App\Libraries\Abdm\Fhir\FhirDocumentBuilder();
 
@@ -587,7 +587,7 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
                 'code' => ['text' => 'General Wellness Note'],
                 'subject' => ['reference' => $patientRef, 'display' => (string) ($source['patient']['name'] ?? 'Patient')],
                 'effectiveDateTime' => $timestamp,
-                'valueString' => 'General Wellness & Vitals Assessment for ' . $visitDate,
+                'valueString' => 'General Wellness and Vitals Assessment for ' . $visitDate,
             ]);
             $sections[] = [
                 'title' => 'Vital Signs',
