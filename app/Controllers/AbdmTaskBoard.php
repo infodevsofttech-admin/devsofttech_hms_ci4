@@ -1831,9 +1831,10 @@ class AbdmTaskBoard extends BaseController
 
                     if ($isPushed && $taskId > 0) {
                         $this->db->table('abdm_work_tasks')->where('id', $taskId)->update([
-                            'status'         => 'completed',
-                            'result_summary' => 'Pushed to ABDM Bridge (ID #' . ($wRow['bridge_record_id'] ?? '') . ')',
-                            'updated_at'     => date('Y-m-d H:i:s'),
+                            'status'             => 'completed',
+                            'last_action_result' => 'Pushed to ABDM Bridge (ID #' . ($wRow['bridge_record_id'] ?? '') . ')',
+                            'completed_at'       => date('Y-m-d H:i:s'),
+                            'updated_at'         => date('Y-m-d H:i:s'),
                         ]);
                     }
                 }

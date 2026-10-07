@@ -1185,7 +1185,8 @@ class NursingApi extends BaseController
                 if ($pushStatus === 'queued' && $tId > 0) {
                     $db->table('abdm_work_tasks')->where('id', $tId)->update([
                         'status' => 'completed',
-                        'result_summary' => 'Pushed to ABDM Bridge (ID #' . $bridgeRecordId . ', Queue: ' . $queueId . ')',
+                        'last_action_result' => 'Pushed to ABDM Bridge (ID #' . $bridgeRecordId . ', Queue: ' . $queueId . ')',
+                        'completed_at' => date('Y-m-d H:i:s'),
                         'updated_at' => date('Y-m-d H:i:s'),
                     ]);
                 }
