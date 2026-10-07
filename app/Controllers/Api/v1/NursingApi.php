@@ -1111,6 +1111,8 @@ class NursingApi extends BaseController
                 $connector = \App\Libraries\Abdm\AbdmConnectorFactory::make();
                 $pushPayload = [
                     'patient_id' => (string) $patientId,
+                    'patient_ref' => (string) ($patient['p_code'] ?? ('P' . $patientId)),
+                    'local_patient_id' => (string) ($patient['p_code'] ?? ('P' . $patientId)),
                     'patient_name' => trim(($patient['p_fname'] ?? '') . ' ' . ($patient['p_lname'] ?? '')),
                     'abha_id' => (string) ($patient['abha_id'] ?? ''),
                     'abha_address' => (string) ($patient['abha_address'] ?? ''),

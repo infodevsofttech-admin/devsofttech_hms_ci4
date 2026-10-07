@@ -1492,9 +1492,12 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         if (! empty($bundle) && is_array($bundle)) {
             // When a FHIR bundle is attached, push to /api/v3/records/push so the bridge
             // validates the FHIR resources and holds the bundle for on-demand patient fetch.
+            $patientRef = trim((string) ($data['patient_ref'] ?? $data['patient_code'] ?? $data['local_patient_id'] ?? $data['patient_id'] ?? ''));
             $recordPushPayload = [
                 'hfr_id'                 => $this->hfrId,
                 'patient_id'             => (string) ($data['patient_id'] ?? ''),
+                'patient_ref'            => $patientRef,
+                'local_patient_id'       => $patientRef,
                 'patient_name'           => $patientName,
                 'abha_address'           => $effectiveAbha,
                 'care_context_reference' => $careContextReference,
