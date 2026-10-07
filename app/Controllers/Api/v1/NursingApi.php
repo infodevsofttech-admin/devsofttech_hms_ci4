@@ -1068,17 +1068,22 @@ class NursingApi extends BaseController
             $fhirBundle = $genResult['fhir_bundle'] ?? [];
             if (! empty($fhirBundle)) {
                 $fhirBundleJson = json_encode($fhirBundle, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
-                $db->table('patient_wellness_records')->where('id', $wellnessId)->update(['fhir_bundle_json' => $fhirBundleJson]);
+                $db->table('patient_wellness_records')->where('id', $wellnessId)->update([
+                    'fhir_bundle_json' => $fhirBundleJson,
+                    'care_context_reference' => $careContextRef,
+                ]);
             }
         } catch (\Throwable $e) {
             log_message('warning', '[savePatientWellness] FHIR generation error: ' . $e->getMessage());
         }
 
-        // Also register in health_records for ABDM discovery & push
+        // Register in health_records for ABDM discovery & push
+        $healthRecordId = 0;
         if ($db->tableExists('health_records')) {
+            $effectiveAbha = trim((string) ($patient['abha_address'] ?? $patient['abha_id'] ?? ''));
             $db->table('health_records')->insert([
                 'patient_id' => $patientId,
-                'abha_id' => $patient['abha_address'] ?? $patient['abha_id'] ?? null,
+                'abha_id' => $effectiveAbha !== '' ? $effectiveAbha : null,
                 'hi_type' => 'WellnessRecord',
                 'entity_type' => 'wellness',
                 'entity_id' => (string) $wellnessId,
@@ -1089,13 +1094,113 @@ class NursingApi extends BaseController
                 'created_at' => date('Y-m-d H:i:s'),
                 'updated_at' => date('Y-m-d H:i:s'),
             ]);
+            $healthRecordId = (int) $db->insertID();
+        }
+
+        // Proactive push to ABDM Bridge when patient has ABHA ID or Address
+        $pushStatus = 'local_discovery_ready';
+        $bridgeRecordId = null;
+        $queueId = null;
+        $pushMsg = '';
+        $effectiveAbha = trim((string) ($patient['abha_address'] ?? $patient['abha_id'] ?? ''));
+
+        if ($effectiveAbha !== '') {
+            try {
+                $connector = \App\Libraries\Abdm\AbdmConnectorFactory::make();
+                $pushPayload = [
+                    'patient_id' => (string) $patientId,
+                    'patient_name' => trim(($patient['p_fname'] ?? '') . ' ' . ($patient['p_lname'] ?? '')),
+                    'abha_id' => (string) ($patient['abha_id'] ?? ''),
+                    'abha_address' => (string) ($patient['abha_address'] ?? ''),
+                    'year_of_birth' => ! empty($patient['dob']) ? date('Y', strtotime((string) $patient['dob'])) : null,
+                    'hi_type' => 'WellnessRecord',
+                    'record_type' => 'WellnessRecord',
+                    'visit_date' => date('Y-m-d', strtotime($recordedAt)),
+                    'care_context_reference' => $careContextRef,
+                    'care_context_display' => 'Wellness Record - ' . date('d/m/Y', strtotime($recordedAt)),
+                    'notes' => 'Wellness & Vitals Record',
+                    'queue_id' => $careContextRef,
+                    'record_data' => ! empty($fhirBundle) ? $fhirBundle : json_decode((string) ($fhirBundleJson ?? '{}'), true),
+                ];
+                $pushRes = $connector->pushRecord($pushPayload);
+                $pushOk = (int) ($pushRes['ok'] ?? 0);
+                $httpCode = (int) ($pushRes['http_code'] ?? 0);
+                $statusVal = strtolower((string) ($pushRes['status'] ?? ''));
+
+                if ($pushOk === 1 || in_array($httpCode, [200, 201, 202, 409], true) || in_array($statusVal, ['queued', 'pushed', 'linked'], true)) {
+                    $pushStatus = 'queued';
+                    $bridgeRecordId = (int) ($pushRes['record_id'] ?? 0);
+                    $queueId = (string) ($pushRes['queue_id'] ?? '');
+                    $pushMsg = ' & pushed to ABDM Bridge' . ($bridgeRecordId > 0 ? " (Record #{$bridgeRecordId})" : '');
+                } else {
+                    $pushStatus = 'failed';
+                    $pushMsg = ' (ABDM Bridge push pending: ' . ($pushRes['error_text'] ?? 'Connection error') . ')';
+                }
+            } catch (\Throwable $pe) {
+                log_message('warning', '[savePatientWellness] Bridge push error: ' . $pe->getMessage());
+                $pushStatus = 'failed';
+            }
+        }
+
+        // Update patient_wellness_records with push status & references
+        $db->table('patient_wellness_records')->where('id', $wellnessId)->update([
+            'care_context_reference' => $careContextRef,
+            'bridge_record_id' => $bridgeRecordId > 0 ? $bridgeRecordId : null,
+            'queue_id' => $queueId !== '' ? $queueId : null,
+            'abdm_status' => $pushStatus,
+        ]);
+
+        // Update health_records
+        if ($healthRecordId > 0) {
+            $db->table('health_records')->where('id', $healthRecordId)->update([
+                'push_status' => $pushStatus,
+                'bridge_record_id' => $bridgeRecordId > 0 ? $bridgeRecordId : null,
+                'abdm_txn_id' => $queueId !== '' ? $queueId : null,
+                'push_at' => $pushStatus === 'queued' ? date('Y-m-d H:i:s') : null,
+                'updated_at' => date('Y-m-d H:i:s'),
+            ]);
+        }
+
+        // Create or refresh task in abdm_work_tasks
+        if ($db->tableExists('abdm_work_tasks')) {
+            try {
+                $taskService = new \App\Libraries\AbdmWorkTaskService();
+                $tId = $taskService->createOrRefreshTask(
+                    'wellness_record_publish',
+                    'patient_wellness_records',
+                    'wellness',
+                    (string) $wellnessId,
+                    $patientId,
+                    trim(($patient['p_fname'] ?? '') . ' ' . ($patient['p_lname'] ?? '')),
+                    $effectiveAbha,
+                    'submit',
+                    [
+                        'wellness_id' => $wellnessId,
+                        'care_context_reference' => $careContextRef,
+                        'bridge_record_id' => $bridgeRecordId,
+                        'clinical_timestamp' => $recordedAt,
+                        'trigger' => 'nursing.wellness_saved',
+                    ]
+                );
+                if ($pushStatus === 'queued' && $tId > 0) {
+                    $db->table('abdm_work_tasks')->where('id', $tId)->update([
+                        'status' => 'completed',
+                        'result_summary' => 'Pushed to ABDM Bridge (ID #' . $bridgeRecordId . ', Queue: ' . $queueId . ')',
+                        'updated_at' => date('Y-m-d H:i:s'),
+                    ]);
+                }
+            } catch (\Throwable $te) {
+                log_message('warning', '[savePatientWellness] Task create error: ' . $te->getMessage());
+            }
         }
 
         return $this->response->setJSON([
             'status' => 1,
-            'message' => 'ABDM M2 Wellness & Vitals recorded successfully',
+            'message' => 'ABDM M2 Wellness & Vitals recorded' . $pushMsg,
             'wellness_id' => $wellnessId,
             'care_context_reference' => $careContextRef,
+            'abdm_push_status' => $pushStatus,
+            'bridge_record_id' => $bridgeRecordId,
             'bmi' => $bmi,
         ]);
     }

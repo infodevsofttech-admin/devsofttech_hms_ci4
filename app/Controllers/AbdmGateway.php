@@ -6469,6 +6469,25 @@ class AbdmGateway extends BaseController
                     }
                 }
             } elseif ($taskType === 'wellness_record_publish') {
+                if ($this->db->tableExists('patient_wellness_records')) {
+                    $wRec = $this->db->table('patient_wellness_records')->where('id', $taskEntityId)->get(1)->getRowArray();
+                    if (! empty($wRec)) {
+                        $vDate = ! empty($wRec['recorded_at']) ? $wRec['recorded_at'] : date('Y-m-d');
+                        $dateStr = date('d M Y', strtotime((string) $vDate));
+                        $cleanDate = date('Ymd', strtotime((string) $vDate));
+                        $ccRef = ! empty($wRec['care_context_reference']) ? $wRec['care_context_reference'] : ('WELLNESS-' . $patientId . '-W' . $taskEntityId . '-' . $cleanDate);
+                        $display = 'Wellness Record - ' . $dateStr;
+                        $addContext([
+                            'careContextId'   => $ccRef,
+                            'referenceNumber' => $ccRef,
+                            'display'         => $display,
+                            'record_type'     => 'WellnessRecord',
+                            'patient_id'      => $patientId,
+                            'is_fhir_ready'   => true,
+                            'is_primary'      => true,
+                        ]);
+                    }
+                }
                 if ($this->db->tableExists('opd_prescription')) {
                     $wopd = $this->db->table('opd_prescription')->where('id', $taskEntityId)->get(1)->getRowArray();
                     if (! empty($wopd)) {
@@ -9244,7 +9263,7 @@ class AbdmGateway extends BaseController
         };
     }
 
-    private function pushAdditionalHiRecord(array $payload, int $patientId, string $abhaId, string $consentHandle)
+    public function pushAdditionalHiRecord(array $payload, int $patientId, string $abhaId, string $consentHandle = '')
     {
         $abhaIdentity = $this->resolvePatientAbhaIdentity($patientId, $abhaId);
         $abhaNumber = $abhaIdentity['abha_id'];
@@ -9392,6 +9411,42 @@ class AbdmGateway extends BaseController
         $patientRow = $this->loadPatientRow($patientId);
         if (empty($patientRow)) {
             return null;
+        }
+
+        // 1. Check patient_wellness_records first (New M2 Comprehensive Wellness & Vitals)
+        if ($this->db->tableExists('patient_wellness_records')) {
+            $wBuilder = $this->db->table('patient_wellness_records')->where('patient_id', $patientId);
+            if ($opdId > 0) {
+                $wBuilder->groupStart()
+                    ->where('id', $opdId)
+                    ->orWhere('patient_id', $patientId)
+                ->groupEnd();
+            }
+            $wRow = $wBuilder->orderBy('id', 'DESC')->get(1)->getRowArray();
+            if (! empty($wRow)) {
+                $bundle = ! empty($wRow['fhir_bundle_json']) ? json_decode((string) $wRow['fhir_bundle_json'], true) : [];
+                $visitDate = date('Y-m-d', strtotime((string) ($wRow['recorded_at'] ?? 'now')));
+                $entityId = (string) $wRow['id'];
+                $cleanDate = date('Ymd', strtotime($visitDate));
+                $ccRef = ! empty($wRow['care_context_reference'])
+                    ? (string) $wRow['care_context_reference']
+                    : ('WELLNESS-' . $patientId . '-W' . $entityId . '-' . $cleanDate);
+                $ccDisplay = 'Wellness Record - ' . date('d/m/Y', strtotime($visitDate));
+
+                if (! empty($bundle)) {
+                    return [
+                        'hi_type' => 'WellnessRecord',
+                        'entity_type' => 'wellness',
+                        'entity_id' => $entityId,
+                        'patient_id' => $patientId,
+                        'patient_name' => $this->patientDisplayName($patientRow),
+                        'visit_date' => $visitDate,
+                        'care_context_reference' => $ccRef,
+                        'care_context_display' => $ccDisplay,
+                        'bundle' => $bundle,
+                    ];
+                }
+            }
         }
 
         $row = [];

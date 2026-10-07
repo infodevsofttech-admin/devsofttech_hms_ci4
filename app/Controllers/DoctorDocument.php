@@ -659,6 +659,36 @@ class DoctorDocument extends BaseController
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'patient_id is required']);
         }
 
+        // Check if there is an existing patient_wellness_records row with fhir_bundle_json
+        if ($this->db->tableExists('patient_wellness_records')) {
+            $wBuilder = $this->db->table('patient_wellness_records')->where('patient_id', $patientId);
+            if ($opdSessionId > 0) {
+                $wBuilder->groupStart()
+                    ->where('id', $opdSessionId)
+                    ->orWhere('patient_id', $patientId)
+                ->groupEnd();
+            }
+            $wRow = $wBuilder->orderBy('id', 'DESC')->get(1)->getRowArray();
+            if (! empty($wRow['fhir_bundle_json'])) {
+                $decoded = json_decode((string) $wRow['fhir_bundle_json'], true);
+                if (is_array($decoded) && ! empty($decoded)) {
+                    $cleanDate = date('Ymd', strtotime((string) ($wRow['recorded_at'] ?? 'now')));
+                    $ccRef = ! empty($wRow['care_context_reference'])
+                        ? (string) $wRow['care_context_reference']
+                        : ('WELLNESS-' . $patientId . '-W' . $wRow['id'] . '-' . $cleanDate);
+                    return $this->response->setJSON([
+                        'ok' => 1,
+                        'source' => $wRow,
+                        'bundle' => $decoded,
+                        'fhir_bundle' => $decoded,
+                        'validation' => ['valid' => true, 'errors' => []],
+                        'care_context_reference' => $ccRef,
+                        'care_context_display' => 'Wellness Record - ' . date('d/m/Y', strtotime((string) ($wRow['recorded_at'] ?? 'now'))),
+                    ]);
+                }
+            }
+        }
+
         $source = $this->buildWellnessRecordSource($patientId, $opdSessionId);
         if (empty($source)) {
             return $this->response->setStatusCode(404)->setJSON(['ok' => 0, 'error_text' => 'Wellness source data (vitals/prescription) not found for patient #' . $patientId]);
@@ -743,6 +773,40 @@ class DoctorDocument extends BaseController
         $addVital('9279-1', 'Respiratory rate', $rxRow['rr_min'] ?? null, '/min', '/min');
         $addVital('59408-5', 'Oxygen saturation in Arterial blood by Pulse oximetry', $rxRow['spo2'] ?? null, '%', '%');
         $addVital('2339-0', 'Blood Glucose', $rxRow['glucose'] ?? null, 'mg/dL', 'mg/dL');
+
+        // If no vitals found in opd_prescription, check patient_wellness_records
+        if (empty($vitals) && $this->db->tableExists('patient_wellness_records')) {
+            $wBuilder = $this->db->table('patient_wellness_records')->where('patient_id', $patientId);
+            if ($opdSessionId > 0) {
+                $wBuilder->groupStart()
+                    ->where('id', $opdSessionId)
+                    ->orWhere('patient_id', $patientId)
+                ->groupEnd();
+            }
+            $wRow = $wBuilder->orderBy('id', 'DESC')->get(1)->getRowArray();
+            if (! empty($wRow)) {
+                $addVital('8480-6', 'Systolic blood pressure', $wRow['bp_systolic'] ?? null, 'mmHg', 'mm[Hg]');
+                $addVital('8462-4', 'Diastolic blood pressure', $wRow['bp_diastolic'] ?? null, 'mmHg', 'mm[Hg]');
+                $addVital('8867-4', 'Heart rate', $wRow['pulse_rate'] ?? null, '/min', '/min');
+                $addVital('8302-2', 'Body height', $wRow['height_cm'] ?? null, 'cm', 'cm');
+                $addVital('29463-7', 'Body weight', $wRow['weight_kg'] ?? null, 'kg', 'kg');
+                $addVital('39156-5', 'Body Mass Index', $wRow['bmi'] ?? null, 'kg/m2', 'kg/m2');
+                $tC = $wRow['temperature_c'] ?? null;
+                if ($tC === null && ! empty($wRow['temperature_f'])) {
+                    $tC = round((((float) $wRow['temperature_f'] - 32) * 5) / 9, 1);
+                }
+                $addVital('8310-5', 'Body temperature', $tC, 'Cel', 'Cel');
+                $addVital('9279-1', 'Respiratory rate', $wRow['resp_rate'] ?? null, '/min', '/min');
+                $addVital('59408-5', 'Oxygen saturation in Arterial blood by Pulse oximetry', $wRow['spo2'] ?? null, '%', '%');
+                $addVital('2339-0', 'Random Blood Glucose', $wRow['sugar_random'] ?? null, 'mg/dL', 'mg/dL');
+                $addVital('1558-6', 'Fasting Blood Glucose', $wRow['sugar_fasting'] ?? null, 'mg/dL', 'mg/dL');
+                $addVital('4548-4', 'Hemoglobin A1c', $wRow['hba1c'] ?? null, '%', '%');
+                $addVital('718-7', 'Hemoglobin', $wRow['hemoglobin'] ?? null, 'g/dL', 'g/dL');
+                $addVital('8280-0', 'Waist Circumference', $wRow['waist_circumference_cm'] ?? null, 'cm', 'cm');
+                $addVital('98337-9', 'Hip Circumference', $wRow['hip_circumference_cm'] ?? null, 'cm', 'cm');
+                $addVital('72287-6', 'Waist-hip ratio', $wRow['waist_hip_ratio'] ?? null, '{ratio}', '{ratio}');
+            }
+        }
 
         $physicalExam = [];
         foreach (['complaints', 'diagnosis', 'investigation'] as $f) {

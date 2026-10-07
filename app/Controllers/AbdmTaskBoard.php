@@ -1776,6 +1776,71 @@ class AbdmTaskBoard extends BaseController
 
     private function backfillWellnessTasks(): void
     {
+        // 1. Backfill from patient_wellness_records (ABDM M2 Comprehensive Wellness & Vitals)
+        if ($this->db->tableExists('patient_wellness_records') && $this->db->tableExists('patient_master')) {
+            $patientFields = $this->db->getFieldNames('patient_master') ?? [];
+            $abhaCol = $this->resolveExistingColumn($patientFields, ['abha_address', 'abha_id', 'abha_no', 'abha']);
+            if ($abhaCol !== null) {
+                $wellnessRows = $this->db->table('patient_wellness_records w')
+                    ->select('w.id, w.patient_id, w.recorded_at, w.care_context_reference, w.bridge_record_id, w.abdm_status, p.p_fname, p.p_lname, p.' . $abhaCol . ' as abha_id', false)
+                    ->join('patient_master p', 'p.id = w.patient_id', 'inner')
+                    ->where('p.' . $abhaCol . ' !=', '')
+                    ->orderBy('w.id', 'DESC')
+                    ->limit(200)
+                    ->get()
+                    ->getResultArray();
+
+                foreach ($wellnessRows as $wRow) {
+                    $patientId = (int) ($wRow['patient_id'] ?? 0);
+                    $wellnessId = (int) ($wRow['id'] ?? 0);
+                    $abhaId = trim((string) ($wRow['abha_id'] ?? ''));
+                    if ($patientId <= 0 || $wellnessId <= 0 || ! $this->isValidAbhaNumber($abhaId)) {
+                        continue;
+                    }
+
+                    $exists = $this->db->table('abdm_work_tasks')
+                        ->select('id, status')
+                        ->where('task_type', 'wellness_record_publish')
+                        ->where('entity_type', 'wellness')
+                        ->where('entity_id', (string) $wellnessId)
+                        ->get(1)
+                        ->getRowArray();
+                    if (! empty($exists)) {
+                        continue;
+                    }
+
+                    $patientName = trim(($wRow['p_fname'] ?? '') . ' ' . ($wRow['p_lname'] ?? ''));
+                    $isPushed = (! empty($wRow['bridge_record_id']) || in_array($wRow['abdm_status'] ?? '', ['queued', 'pushed', 'linked'], true));
+                    $taskId = $this->taskService->createOrRefreshTask(
+                        'wellness_record_publish',
+                        'patient_wellness_records',
+                        'wellness',
+                        (string) $wellnessId,
+                        $patientId,
+                        $patientName,
+                        $abhaId,
+                        'submit',
+                        [
+                            'wellness_id'            => $wellnessId,
+                            'care_context_reference' => (string) ($wRow['care_context_reference'] ?? ''),
+                            'bridge_record_id'       => (int) ($wRow['bridge_record_id'] ?? 0),
+                            'clinical_timestamp'     => (string) ($wRow['recorded_at'] ?? ''),
+                            'trigger'                => 'wellness_records.backfilled',
+                        ]
+                    );
+
+                    if ($isPushed && $taskId > 0) {
+                        $this->db->table('abdm_work_tasks')->where('id', $taskId)->update([
+                            'status'         => 'completed',
+                            'result_summary' => 'Pushed to ABDM Bridge (ID #' . ($wRow['bridge_record_id'] ?? '') . ')',
+                            'updated_at'     => date('Y-m-d H:i:s'),
+                        ]);
+                    }
+                }
+            }
+        }
+
+        // 2. Also backfill from opd_prescription (for legacy OPD vitals)
         if (! $this->db->tableExists('opd_prescription') || ! $this->db->tableExists('patient_master')) {
             return;
         }

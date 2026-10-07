@@ -835,6 +835,16 @@ class AbdmTaskBoardSyncService
                 $careContextRef = trim((string) $immRec['abdm_care_context_reference']);
             }
         }
+        if ($taskType === 'wellness_record_publish' && $this->db->tableExists('patient_wellness_records')) {
+            $wRec = $this->db->table('patient_wellness_records')->where('id', (int) $entityId)->get(1)->getRowArray();
+            if (! empty($wRec)) {
+                if (! empty($wRec['care_context_reference'])) {
+                    $careContextRef = trim((string) $wRec['care_context_reference']);
+                } else {
+                    $careContextRef = 'WELLNESS-' . $patientId . '-W' . $entityId . '-' . $cleanVisitDate;
+                }
+            }
+        }
         $careContextDisplay = $hiType . ' ' . $visitDate;
 
         $pushData = [
@@ -854,21 +864,36 @@ class AbdmTaskBoardSyncService
         ];
 
         $bundleJson = null;
-        if ($taskType === 'wellness_record_publish' && class_exists('\App\Controllers\DoctorDocument')) {
-            try {
-                $docCtrl = new \App\Controllers\DoctorDocument();
-                $wSource = $docCtrl->buildWellnessRecordSource($patientId, $entityId);
-                if (! empty($wSource)) {
-                    $wFactory = new \App\Libraries\Abdm\Fhir\FhirGeneratorFactory();
-                    $wGen = $wFactory->wellness()->generate($wSource);
-                    if (! empty($wGen['bundle'])) {
-                        $pushData['bundle'] = $wGen['bundle'];
-                        $pushData['fhir_bundle'] = $wGen['bundle'];
-                        $bundleJson = (string) json_encode($wGen['bundle'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+        if ($taskType === 'wellness_record_publish') {
+            if ($this->db->tableExists('patient_wellness_records')) {
+                $wRec = $this->db->table('patient_wellness_records')->where('id', (int) $entityId)->get(1)->getRowArray();
+                if (! empty($wRec['fhir_bundle_json'])) {
+                    $decodedBundle = json_decode((string) $wRec['fhir_bundle_json'], true);
+                    if (is_array($decodedBundle) && ! empty($decodedBundle)) {
+                        $pushData['bundle'] = $decodedBundle;
+                        $pushData['fhir_bundle'] = $decodedBundle;
+                        $pushData['record_data'] = $decodedBundle;
+                        $bundleJson = (string) $wRec['fhir_bundle_json'];
                     }
                 }
-            } catch (\Throwable $we) {
-                log_message('warning', '[processIndividualWorkTask] Wellness bundle generation error: ' . $we->getMessage());
+            }
+            if (empty($pushData['bundle']) && class_exists('\App\Controllers\DoctorDocument')) {
+                try {
+                    $docCtrl = new \App\Controllers\DoctorDocument();
+                    $wSource = $docCtrl->buildWellnessRecordSource($patientId, $entityId);
+                    if (! empty($wSource)) {
+                        $wFactory = new \App\Libraries\Abdm\Fhir\FhirGeneratorFactory();
+                        $wGen = $wFactory->wellness()->generate($wSource);
+                        if (! empty($wGen['bundle'])) {
+                            $pushData['bundle'] = $wGen['bundle'];
+                            $pushData['fhir_bundle'] = $wGen['bundle'];
+                            $pushData['record_data'] = $wGen['bundle'];
+                            $bundleJson = (string) json_encode($wGen['bundle'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                        }
+                    }
+                } catch (\Throwable $we) {
+                    log_message('warning', '[processIndividualWorkTask] Wellness bundle generation error: ' . $we->getMessage());
+                }
             }
         }
 
@@ -893,6 +918,15 @@ class AbdmTaskBoardSyncService
                     (int) ($result['record_id'] ?? 0),
                     $bundleJson
                 );
+
+                if ($taskType === 'wellness_record_publish' && $this->db->tableExists('patient_wellness_records')) {
+                    $this->db->table('patient_wellness_records')->where('id', (int) $entityId)->update([
+                        'care_context_reference' => $careContextRef,
+                        'bridge_record_id'       => (int) ($result['record_id'] ?? 0) > 0 ? (int) $result['record_id'] : null,
+                        'queue_id'               => $queueId,
+                        'abdm_status'            => 'queued',
+                    ]);
+                }
 
                 return ['ok' => 1, 'queue_id' => $queueId];
             }
