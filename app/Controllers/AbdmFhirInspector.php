@@ -17,8 +17,7 @@ use App\Libraries\Abdm\EAtriaBridgeConnector;
  */
 class AbdmFhirInspector extends BaseController
 {
-    private $db;
-    private ?EAtriaBridgeConnector $connector = null;
+    protected ?EAtriaBridgeConnector $connector = null;
 
     public function initController(
         \CodeIgniter\HTTP\RequestInterface $request,
