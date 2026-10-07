@@ -6451,7 +6451,7 @@ class AbdmGateway extends BaseController
         // 2. Query health_records table (persisted FHIR bundles)
         if ($this->db->tableExists('health_records')) {
             $rows = $this->db->table('health_records')
-                ->select('id, patient_id, abha_id, hi_type, care_context_reference, created_at, updated_at')
+                ->select('id, patient_id, abha_id, hi_type, entity_type, care_context_reference, created_at, updated_at')
                 ->where('patient_id', $patientId)
                 ->orderBy('id', 'DESC')
                 ->limit(100)
