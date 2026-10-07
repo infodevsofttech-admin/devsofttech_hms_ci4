@@ -32,6 +32,21 @@ class CodingResolver
     /** @return array<string,mixed> */
     public function resolveLoincForLabTest(string $localCode, string $displayName, string $department = '', string $specimenType = ''): array
     {
+        $trimmedCode = trim($localCode);
+        if (preg_match('/^\d{3,5}-\d$/', $trimmedCode)) {
+            return [
+                'coding' => [[
+                    'system' => 'http://loinc.org',
+                    'code' => $trimmedCode,
+                    'display' => trim($displayName) !== '' ? trim($displayName) : $trimmedCode,
+                ]],
+                'coding_source' => 'loinc_direct',
+                'confidence' => 1.0,
+                'warnings' => [],
+                'unresolved' => false,
+            ];
+        }
+
         return $this->resolveByHeuristic($localCode, $displayName, $this->labLoincMap, 'http://loinc.org');
     }
 

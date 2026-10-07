@@ -66,6 +66,9 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
         }
         $builder->addPractitioner($practitioner);
 
+        $practitionerRef = 'urn:uuid:' . (string) ($practitioner['id'] ?? 'practitioner-1');
+        $practitionerDisplay = (string) ($practitioner['name'][0]['text'] ?? 'Practitioner');
+
         $organization = $this->buildOrganization($source);
         if (! is_array($organization)) {
             $orgId = (string) ($source['organization']['id'] ?? $source['hfr_id'] ?? 'IN0510000871');
@@ -115,7 +118,10 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
 
         if ($sysBp !== null || $diaBp !== null) {
             $obsId = 'obs-bp-' . $recordId;
-            $vitalObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+            $vitalObsRefs[] = [
+                'reference' => 'urn:uuid:' . $obsId,
+                'display' => 'ObservationVitalSigns',
+            ];
 
             $bpComponents = [];
             if ($sysBp !== null && is_numeric($sysBp['value'] ?? null)) {
@@ -156,7 +162,12 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
             $bpObs = [
                 'resourceType' => 'Observation',
                 'id' => $obsId,
-                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationVitalSigns']],
+                'meta' => [
+                    'profile' => [
+                        'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation',
+                        'https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationVitalSigns',
+                    ],
+                ],
                 'status' => 'final',
                 'category' => [[
                     'coding' => [[
@@ -174,6 +185,10 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
                     'text' => 'Blood Pressure',
                 ],
                 'subject' => ['reference' => $patientRef],
+                'performer' => [[
+                    'reference' => $practitionerRef,
+                    'display' => $practitionerDisplay,
+                ]],
                 'effectiveDateTime' => $timestamp,
             ];
 
@@ -223,33 +238,57 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
                 }
             }
 
-            // Determine target composition section & profile
+            // Determine target composition section & profile adhering to NRCES ABDM FHIR R4
             if (in_array($loincCode, $bodyMeasLoincCodes, true)) {
                 $categoryCode = 'vital-signs';
                 $categoryDisplay = 'Vital Signs';
-                $profile = 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation';
-                $bodyMeasObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+                $profiles = [
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation',
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationBodyMeasurement',
+                ];
+                $bodyMeasObsRefs[] = [
+                    'reference' => 'urn:uuid:' . $obsId,
+                    'display' => 'ObservationBodyMeasurements',
+                ];
             } elseif (in_array($loincCode, $generalAssessLoincCodes, true)) {
                 $categoryCode = 'laboratory';
                 $categoryDisplay = 'Laboratory';
-                $profile = 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation';
-                $generalAssessObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+                $profiles = [
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation',
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationGeneralAssessment',
+                ];
+                $generalAssessObsRefs[] = [
+                    'reference' => 'urn:uuid:' . $obsId,
+                    'display' => 'ObservationGeneralAssessment',
+                ];
             } elseif (in_array($loincCode, $activityLoincCodes, true)) {
                 $categoryCode = 'activity';
                 $categoryDisplay = 'Activity';
-                $profile = 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation';
-                $activityObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+                $profiles = [
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation',
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationPhysicalActivity',
+                ];
+                $activityObsRefs[] = [
+                    'reference' => 'urn:uuid:' . $obsId,
+                    'display' => 'ObservationPhysicalActivity',
+                ];
             } else {
                 $categoryCode = 'vital-signs';
                 $categoryDisplay = 'Vital Signs';
-                $profile = 'https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationVitalSigns';
-                $vitalObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+                $profiles = [
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation',
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationVitalSigns',
+                ];
+                $vitalObsRefs[] = [
+                    'reference' => 'urn:uuid:' . $obsId,
+                    'display' => 'ObservationVitalSigns',
+                ];
             }
 
-            $builder->addObservation([
+            $obsPayload = [
                 'resourceType' => 'Observation',
                 'id' => $obsId,
-                'meta' => ['profile' => [$profile]],
+                'meta' => ['profile' => $profiles],
                 'status' => 'final',
                 'category' => [[
                     'coding' => [[
@@ -267,7 +306,10 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
                     'text' => $display,
                 ],
                 'subject' => ['reference' => $patientRef],
-                'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
+                'performer' => [[
+                    'reference' => $practitionerRef,
+                    'display' => $practitionerDisplay,
+                ]],
                 'effectiveDateTime' => $timestamp,
                 'valueQuantity' => [
                     'value' => $numericVal !== null ? $numericVal : (string) $val,
@@ -275,7 +317,12 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
                     'system' => 'http://unitsofmeasure.org',
                     'code' => (string) ($ucum['code'] ?? $ucumCode ?: $unit),
                 ],
-            ]);
+            ];
+            if ($encounterRef) {
+                $obsPayload['encounter'] = ['reference' => $encounterRef];
+            }
+
+            $builder->addObservation($obsPayload);
         }
 
         // 2. Process Physical Examination / General Assessments Findings
@@ -287,12 +334,18 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
             }
 
             $obsId = 'exam-' . $recordId . '-' . $idx;
-            $generalAssessObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+            $generalAssessObsRefs[] = [
+                'reference' => 'urn:uuid:' . $obsId,
+                'display' => 'ObservationGeneralAssessment',
+            ];
 
             $builder->addObservation([
                 'resourceType' => 'Observation',
                 'id' => $obsId,
-                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation']],
+                'meta' => ['profile' => [
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation',
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationGeneralAssessment',
+                ]],
                 'status' => 'final',
                 'category' => [[
                     'coding' => [[
@@ -310,6 +363,10 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
                     'text' => 'Physical Examination',
                 ],
                 'subject' => ['reference' => $patientRef],
+                'performer' => [[
+                    'reference' => $practitionerRef,
+                    'display' => $practitionerDisplay,
+                ]],
                 'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
                 'effectiveDateTime' => $timestamp,
                 'valueString' => $text,
@@ -321,12 +378,18 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
         $lmpDate = trim((string) ($womenWellness['lmp'] ?? $source['lmp'] ?? ''));
         if ($lmpDate !== '') {
             $obsId = 'women-lmp-' . $recordId;
-            $womenObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+            $womenObsRefs[] = [
+                'reference' => 'urn:uuid:' . $obsId,
+                'display' => 'ObservationWomenHealth',
+            ];
 
             $builder->addObservation([
                 'resourceType' => 'Observation',
                 'id' => $obsId,
-                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation']],
+                'meta' => ['profile' => [
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation',
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationWomenHealth',
+                ]],
                 'status' => 'final',
                 'category' => [[
                     'coding' => [[
@@ -344,6 +407,10 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
                     'text' => 'Last Menstrual Period (LMP)',
                 ],
                 'subject' => ['reference' => $patientRef],
+                'performer' => [[
+                    'reference' => $practitionerRef,
+                    'display' => $practitionerDisplay,
+                ]],
                 'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
                 'effectiveDateTime' => $timestamp,
                 'valueDateTime' => date(DATE_ATOM, strtotime($lmpDate) ?: time()),
@@ -356,12 +423,18 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
             }
 
             $obsId = 'women-obs-' . $recordId . '-' . $key;
-            $womenObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+            $womenObsRefs[] = [
+                'reference' => 'urn:uuid:' . $obsId,
+                'display' => 'ObservationWomenHealth',
+            ];
 
             $builder->addObservation([
                 'resourceType' => 'Observation',
                 'id' => $obsId,
-                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation']],
+                'meta' => ['profile' => [
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation',
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationWomenHealth',
+                ]],
                 'status' => 'final',
                 'category' => [[
                     'coding' => [[
@@ -374,6 +447,10 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
                     'text' => ucwords(str_replace('_', ' ', $key)),
                 ],
                 'subject' => ['reference' => $patientRef],
+                'performer' => [[
+                    'reference' => $practitionerRef,
+                    'display' => $practitionerDisplay,
+                ]],
                 'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
                 'effectiveDateTime' => $timestamp,
                 'valueString' => trim($valStr),
@@ -394,17 +471,28 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
             $obsId = 'wellness-social-' . $recordId . '-' . $idx;
 
             if ($codeStr === 'general-nursing' || str_contains(strtolower($displayStr), 'nursing')) {
-                $otherObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+                $otherObsRefs[] = [
+                    'reference' => 'urn:uuid:' . $obsId,
+                    'display' => 'Observation',
+                ];
                 $obsTitle = 'General Nursing Observations';
+                $obsProfile = ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation'];
             } else {
-                $lifestyleObsRefs[] = ['reference' => 'urn:uuid:' . $obsId];
+                $lifestyleObsRefs[] = [
+                    'reference' => 'urn:uuid:' . $obsId,
+                    'display' => 'ObservationLifestyle',
+                ];
                 $obsTitle = ! empty($displayStr) ? $displayStr : 'Lifestyle & General Wellness Advice';
+                $obsProfile = [
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation',
+                    'https://nrces.in/ndhm/fhir/r4/StructureDefinition/ObservationLifestyle',
+                ];
             }
 
             $builder->addObservation([
                 'resourceType' => 'Observation',
                 'id' => $obsId,
-                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation']],
+                'meta' => ['profile' => $obsProfile],
                 'status' => 'final',
                 'category' => [[
                     'coding' => [[
@@ -422,6 +510,10 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
                     'text' => $obsTitle,
                 ],
                 'subject' => ['reference' => $patientRef],
+                'performer' => [[
+                    'reference' => $practitionerRef,
+                    'display' => $practitionerDisplay,
+                ]],
                 'encounter' => $encounterRef ? ['reference' => $encounterRef] : null,
                 'effectiveDateTime' => $timestamp,
                 'valueString' => $text,
