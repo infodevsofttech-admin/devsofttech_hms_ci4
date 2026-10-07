@@ -461,6 +461,12 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
             </a>
         </li>
         <li class="nav-item">
+            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('AbdmFhirInspector') ?>','ABHA Filter & FHIR Inspector')">
+                <i class="bi bi-funnel"></i>
+                <span>ABHA Filter & FHIR Inspector</span>
+            </a>
+        </li>
+        <li class="nav-item">
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('AbdmHiu') ?>','ABHA Patient Request List')">
                 <i class="bi bi-clipboard2-pulse"></i>
                 <span>ABHA Patient Request List</span>

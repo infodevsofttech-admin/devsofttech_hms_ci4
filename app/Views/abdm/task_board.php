@@ -25,13 +25,16 @@
             <div class="small text-muted">ABDM operational dashboard and work queues</div>
         </div>
         <div class="d-flex align-items-center gap-2">
+            <a href="javascript:load_form('<?= base_url('AbdmFhirInspector') ?>','ABHA Filter & FHIR Inspector')" class="btn btn-sm btn-outline-primary fw-semibold">
+                <i class="bi bi-funnel me-1"></i> ABHA Filter & FHIR Inspector
+            </a>
             <button type="button" class="btn btn-sm btn-outline-success fw-semibold" onclick="openAbdmHipLinkModal()">
                 <i class="bi bi-link-45deg"></i> Link Records to ABHA (HIP)
             </button>
             <button type="button" class="btn btn-sm btn-outline-info fw-semibold" onclick="openAbdmHipSmsModal()">
                 <i class="bi bi-chat-dots"></i> Deep Link SMS (sms/notify2)
             </button>
-            <button type="button" class="btn btn-sm btn-outline-primary" id="btnRefresh">Refresh</button>
+            <button type="button" class="btn btn-sm btn-outline-secondary" id="btnRefresh">Refresh</button>
         </div>
     </div>
 
@@ -57,7 +60,12 @@
                         <i class="bi bi-person-badge fs-6"></i>
                     </span>
                     <div>
-                        <strong class="small d-block text-dark">ABHA Filter & FHIR Inspector</strong>
+                        <strong class="small d-block text-dark">
+                            ABHA Filter & FHIR Inspector
+                            <a href="javascript:load_form('<?= base_url('AbdmFhirInspector') ?>','ABHA Filter & FHIR Inspector')" class="btn btn-link btn-sm p-0 ms-1 text-decoration-none" title="Open full dedicated page" style="font-size: 11px;">
+                                [Open Full Page <i class="bi bi-box-arrow-up-right"></i>]
+                            </a>
+                        </strong>
                         <span class="text-muted" style="font-size: 11px;">Filter board & inspect patient care contexts</span>
                     </div>
                 </div>

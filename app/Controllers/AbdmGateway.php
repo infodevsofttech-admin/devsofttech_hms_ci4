@@ -6450,13 +6450,58 @@ class AbdmGateway extends BaseController
                     ]);
                 }
             } elseif ($taskType === 'health_document_publish') {
-                if ($this->db->tableExists('patient_doc')) {
+                $foundDoc = false;
+                if ($this->db->tableExists('file_upload_data')) {
+                    $fileRow = $this->db->table('file_upload_data')->where('id', $taskEntityId)->get(1)->getRowArray();
+                    if (! empty($fileRow)) {
+                        $vDate = ! empty($fileRow['insert_date']) ? $fileRow['insert_date'] : date('Y-m-d');
+                        $dateStr = date('d M Y', strtotime((string) $vDate));
+                        $cleanDate = date('Ymd', strtotime((string) $vDate));
+                        $docTitle = trim((string) ($fileRow['document_type'] ?? $fileRow['scan_type'] ?? $fileRow['content_description'] ?? ''));
+                        if ($docTitle === '' || strcasecmp($docTitle, 'Queued for AI analysis') === 0) {
+                            $docTitle = 'Health Document';
+                        }
+                        $ccRef = 'DOC-file-' . $taskEntityId . '-' . $cleanDate;
+                        $aliasRef = 'DOC-' . $taskEntityId . '-' . $cleanDate;
+
+                        if ($this->db->tableExists('health_records')) {
+                            $existingHr = $this->db->table('health_records')
+                                ->where('patient_id', $patientId)
+                                ->groupStart()
+                                    ->where('entity_id', (string) $taskEntityId)
+                                    ->orWhere('care_context_reference LIKE', 'DOC-%' . $taskEntityId . '%')
+                                ->groupEnd()
+                                ->orderBy('id', 'DESC')
+                                ->get(1)
+                                ->getRowArray();
+                            if (! empty($existingHr['care_context_reference'])) {
+                                $ccRef = trim((string) $existingHr['care_context_reference']);
+                            }
+                        }
+
+                        $display = 'HealthDocumentRecord - ' . $docTitle . ' (' . $dateStr . ')';
+                        $addContext([
+                            'careContextId'   => $ccRef,
+                            'referenceNumber' => $ccRef,
+                            'alias_reference' => $aliasRef,
+                            'display'         => $display,
+                            'record_type'     => 'HealthDocumentRecord',
+                            'patient_id'      => $patientId,
+                            'is_fhir_ready'   => true,
+                            'is_primary'      => true,
+                        ]);
+                        $foundDoc = true;
+                    }
+                }
+                if (! $foundDoc && $this->db->tableExists('patient_doc')) {
                     $pdoc = $this->db->table('patient_doc')->where('id', $taskEntityId)->get(1)->getRowArray();
                     if (! empty($pdoc)) {
                         $docDate = ! empty($pdoc['date_issue']) ? $pdoc['date_issue'] : (! empty($pdoc['created_at']) ? $pdoc['created_at'] : date('Y-m-d'));
                         $dateStr = date('d M Y', strtotime((string) $docDate));
-                        $ccRef = 'DOC-' . $taskEntityId . '-' . date('Ymd', strtotime((string) $docDate));
-                        $display = 'HealthDocumentRecord - ' . (! empty($pdoc['doc_name']) ? $pdoc['doc_name'] : 'Medical Document') . ' (' . $dateStr . ')';
+                        $cleanDate = date('Ymd', strtotime((string) $docDate));
+                        $ccRef = 'DOC-' . $taskEntityId . '-' . $cleanDate;
+                        $docName = ! empty($pdoc['doc_name']) ? $pdoc['doc_name'] : 'Medical Document';
+                        $display = 'HealthDocumentRecord - ' . $docName . ' (' . $dateStr . ')';
                         $addContext([
                             'careContextId'   => $ccRef,
                             'referenceNumber' => $ccRef,
@@ -7036,6 +7081,79 @@ class AbdmGateway extends BaseController
                     'referenceNumber' => $ccRef,
                     'display'         => $display,
                     'record_type'     => $hiType,
+                    'patient_id'      => $patientId,
+                    'is_fhir_ready'   => true,
+                    'is_primary'      => false,
+                ]);
+            }
+        }
+
+        // 6d. Query patient health documents (file_upload_data & patient_doc)
+        if ($this->db->tableExists('file_upload_data')) {
+            $fileDocs = $this->db->table('file_upload_data')
+                ->where('pid', $patientId)
+                ->orderBy('id', 'DESC')
+                ->limit(20)
+                ->get()
+                ->getResultArray();
+            foreach ($fileDocs as $fd) {
+                $vDate = ! empty($fd['insert_date']) ? $fd['insert_date'] : date('Y-m-d');
+                $dateStr = date('d M Y', strtotime((string) $vDate));
+                $cleanDate = date('Ymd', strtotime((string) $vDate));
+                $docTitle = trim((string) ($fd['document_type'] ?? $fd['scan_type'] ?? $fd['content_description'] ?? ''));
+                if ($docTitle === '' || strcasecmp($docTitle, 'Queued for AI analysis') === 0) {
+                    $docTitle = 'Health Document';
+                }
+                $ccRef = 'DOC-file-' . $fd['id'] . '-' . $cleanDate;
+                $aliasRef = 'DOC-' . $fd['id'] . '-' . $cleanDate;
+
+                if ($this->db->tableExists('health_records')) {
+                    $existingHr = $this->db->table('health_records')
+                        ->where('patient_id', $patientId)
+                        ->groupStart()
+                            ->where('entity_id', (string) $fd['id'])
+                            ->orWhere('care_context_reference LIKE', 'DOC-%' . $fd['id'] . '%')
+                        ->groupEnd()
+                        ->orderBy('id', 'DESC')
+                        ->get(1)
+                        ->getRowArray();
+                    if (! empty($existingHr['care_context_reference'])) {
+                        $ccRef = trim((string) $existingHr['care_context_reference']);
+                    }
+                }
+
+                $display = 'HealthDocumentRecord - ' . $docTitle . ' (' . $dateStr . ')';
+                $addContext([
+                    'careContextId'   => $ccRef,
+                    'referenceNumber' => $ccRef,
+                    'alias_reference' => $aliasRef,
+                    'display'         => $display,
+                    'record_type'     => 'HealthDocumentRecord',
+                    'patient_id'      => $patientId,
+                    'is_fhir_ready'   => true,
+                    'is_primary'      => false,
+                ]);
+            }
+        }
+        if ($this->db->tableExists('patient_doc')) {
+            $pDocs = $this->db->table('patient_doc')
+                ->where('p_id', $patientId)
+                ->orderBy('id', 'DESC')
+                ->limit(20)
+                ->get()
+                ->getResultArray();
+            foreach ($pDocs as $pd) {
+                $docDate = ! empty($pd['date_issue']) ? $pd['date_issue'] : (! empty($pd['created_at']) ? $pd['created_at'] : date('Y-m-d'));
+                $dateStr = date('d M Y', strtotime((string) $docDate));
+                $cleanDate = date('Ymd', strtotime((string) $docDate));
+                $ccRef = 'DOC-' . $pd['id'] . '-' . $cleanDate;
+                $docName = ! empty($pd['doc_name']) ? $pd['doc_name'] : 'Medical Document';
+                $display = 'HealthDocumentRecord - ' . $docName . ' (' . $dateStr . ')';
+                $addContext([
+                    'careContextId'   => $ccRef,
+                    'referenceNumber' => $ccRef,
+                    'display'         => $display,
+                    'record_type'     => 'HealthDocumentRecord',
                     'patient_id'      => $patientId,
                     'is_fhir_ready'   => true,
                     'is_primary'      => false,
@@ -9547,14 +9665,18 @@ class AbdmGateway extends BaseController
                     $adapter = new \App\Libraries\Abdm\Fhir\Support\GatewayPayloadAdapter();
                     $gatewayPayload = $adapter->toGatewayPayload($output, $source, $hfrId);
 
+                    $isFromFile = isset($source['record_id']) && str_starts_with((string)$source['record_id'], 'file-');
+                    $reqCcRef = trim((string) ($this->request->getPost('care_context_reference') ?? ''));
+                    $resolvedCcRef = $reqCcRef !== '' ? $reqCcRef : (string) ($gatewayPayload['care_context_reference'] ?? ('DOC-' . ($source['record_id'] ?? $targetRecordId) . '-' . date('Ymd', strtotime((string)($source['visit_date'] ?? date('Y-m-d'))))));
+
                     return [
                         'hi_type' => 'HealthDocumentRecord',
-                        'entity_type' => 'patient_doc',
+                        'entity_type' => $isFromFile ? 'patient_document' : 'patient_doc',
                         'entity_id' => (string) $targetRecordId,
                         'patient_id' => $patientId,
                         'patient_name' => $this->patientDisplayName($patientRow),
                         'visit_date' => (string) ($source['visit_date'] ?? date('Y-m-d')),
-                        'care_context_reference' => (string) ($gatewayPayload['care_context_reference'] ?? ('HDOC-' . $patientId . '-' . $targetRecordId)),
+                        'care_context_reference' => $resolvedCcRef,
                         'care_context_display' => (string) ($source['document_title'] ?? 'Health Document'),
                         'bundle' => (array) ($gatewayPayload['fhir_bundle'] ?? []),
                     ];

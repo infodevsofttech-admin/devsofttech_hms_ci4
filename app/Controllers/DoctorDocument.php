@@ -2279,11 +2279,16 @@ class DoctorDocument extends BaseController
             'hospitalization' => false,
         ];
 
+        $cleanVisitDate = date('Ymd', strtotime($visitDate));
+        $ccRef = 'DOC-' . $patientDocId . '-' . $cleanVisitDate;
+
         return [
             'record_id' => (string) $patientDocId,
             'session_id' => (string) $patientDocId,
             'visit_date' => $visitDate,
             'completed_at' => $issueIso,
+            'care_context_reference' => $ccRef,
+            'care_context_display' => $docTitle . ' (' . date('d M Y', strtotime($visitDate)) . ')',
             'document_title' => $docTitle,
             'document_data_base64' => $docDataBase64,
             'content_type' => $contentType,
@@ -2551,11 +2556,16 @@ class DoctorDocument extends BaseController
             'hospitalization' => false,
         ];
 
+        $cleanVisitDate = date('Ymd', strtotime($visitDate));
+        $ccRef = 'DOC-file-' . $fileUploadId . '-' . $cleanVisitDate;
+
         return [
             'record_id' => 'file-' . $fileUploadId,
             'session_id' => (string) ($fileRow['opd_id'] ?? $fileUploadId),
             'visit_date' => $visitDate,
             'completed_at' => $completedAt,
+            'care_context_reference' => $ccRef,
+            'care_context_display' => $docTitle . ' (' . date('d M Y', strtotime($visitDate)) . ')',
             'document_title' => $docTitle,
             'document_data_base64' => $bytes !== '' ? base64_encode($bytes) : '',
             'content_type' => $mimeType,

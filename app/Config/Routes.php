@@ -857,6 +857,11 @@ $routes->get('AbdmTaskBoard', 'AbdmTaskBoard::index', ['filter' => $abdmPermFilt
 $routes->get('AbdmTaskBoard/list', 'AbdmTaskBoard::list', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmTaskBoard/perform_action', 'AbdmTaskBoard::performAction', ['filter' => $abdmPermFilter]);
 $routes->post('AbdmTaskBoard/mark_status', 'AbdmTaskBoard::markStatus', ['filter' => $abdmPermFilter]);
+// ABHA Filter & FHIR Inspector
+$routes->get('AbdmFhirInspector', 'AbdmFhirInspector::index', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmFhirInspector/patient_data', 'AbdmFhirInspector::patientData', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmFhirInspector/gateway_check', 'AbdmFhirInspector::gatewayCheck', ['filter' => $abdmPermFilter]);
+$routes->get('AbdmFhirInspector/preview_bundle', 'AbdmFhirInspector::previewBundle', ['filter' => $abdmPermFilter]);
 // ABDM Bridge Log viewer
 $routes->get('AbdmBridgeLog', 'AbdmBridgeLog::index', ['filter' => 'permission:abdm.access,abdm.taskboard.access,abdm.gateway.use,abdm.bridge_log.view']);
 $routes->get('AbdmBridgeLog/list', 'AbdmBridgeLog::list', ['filter' => 'permission:abdm.access,abdm.taskboard.access,abdm.gateway.use,abdm.bridge_log.view']);
