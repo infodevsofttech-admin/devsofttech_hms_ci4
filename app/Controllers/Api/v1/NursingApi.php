@@ -820,21 +820,134 @@ class NursingApi extends BaseController
             'updated_at' => date('Y-m-d H:i:s'),
         ];
 
+        if (! $db->tableExists('patient_wellness_records')) {
+            $db->query("CREATE TABLE IF NOT EXISTS `patient_wellness_records` (
+              `id` bigint unsigned NOT NULL AUTO_INCREMENT,
+              `patient_id` int unsigned NOT NULL,
+              `uhid` varchar(50) DEFAULT NULL,
+              `abha_id` varchar(30) DEFAULT NULL,
+              `abha_address` varchar(120) DEFAULT NULL,
+              `recorded_at` datetime NOT NULL,
+              `temperature_f` decimal(5,2) DEFAULT NULL,
+              `temperature_c` decimal(5,2) DEFAULT NULL,
+              `pulse_rate` int DEFAULT NULL,
+              `resp_rate` int DEFAULT NULL,
+              `bp_systolic` int DEFAULT NULL,
+              `bp_diastolic` int DEFAULT NULL,
+              `spo2` int DEFAULT NULL,
+              `weight_kg` decimal(5,2) DEFAULT NULL,
+              `height_cm` decimal(5,2) DEFAULT NULL,
+              `bmi` decimal(5,2) DEFAULT NULL,
+              `general_advice` text,
+              `diet_lifestyle_note` text,
+              `recorded_by` varchar(120) DEFAULT 'Staff Nurse',
+              `recorded_by_id` int DEFAULT NULL,
+              `fhir_bundle_json` longtext,
+              `abdm_status` varchar(30) DEFAULT 'ready',
+              `created_at` datetime DEFAULT CURRENT_TIMESTAMP,
+              `updated_at` datetime DEFAULT CURRENT_TIMESTAMP ON UPDATE CURRENT_TIMESTAMP,
+              PRIMARY KEY (`id`),
+              KEY `idx_patient_id` (`patient_id`),
+              KEY `idx_uhid` (`uhid`),
+              KEY `idx_recorded_at` (`recorded_at`)
+            ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4");
+        }
+
         $db->table('patient_wellness_records')->insert($wellnessData);
         $wellnessId = $db->insertID();
 
-        // Also register in health_records for ABDM M2 / M3 discovery & push
+        // Build compliant ABDM NRCES FHIR R4 WellnessRecord Document Bundle
+        $cleanDate = date('Ymd', strtotime($recordedAt));
+        $careContextRef = 'WELLNESS-' . $patientId . '-W' . $wellnessId . '-' . $cleanDate;
+        $careContextDisplay = 'Wellness & Vitals Record - ' . date('d M Y', strtotime($recordedAt));
+        $fhirBundleJson = null;
+
+        try {
+            $sourceVitals = [];
+            $addVital = static function (string $code, string $display, mixed $val, string $unit, string $ucum) use (&$sourceVitals): void {
+                if ($val !== null && trim((string) $val) !== '') {
+                    $sourceVitals[] = [
+                        'loinc_code' => $code,
+                        'code' => $code,
+                        'display' => $display,
+                        'value' => (float) $val,
+                        'unit' => $unit,
+                        'ucum_code' => $ucum,
+                    ];
+                }
+            };
+
+            $addVital('8480-6', 'Systolic blood pressure', $wellnessData['bp_systolic'], 'mmHg', 'mm[Hg]');
+            $addVital('8462-4', 'Diastolic blood pressure', $wellnessData['bp_diastolic'], 'mmHg', 'mm[Hg]');
+            $addVital('8867-4', 'Heart rate', $wellnessData['pulse_rate'], '/min', '/min');
+            $addVital('8302-2', 'Body height', $wellnessData['height_cm'], 'cm', 'cm');
+            $addVital('29463-7', 'Body weight', $wellnessData['weight_kg'], 'kg', 'kg');
+            $addVital('39156-5', 'Body Mass Index', $wellnessData['bmi'], 'kg/m2', 'kg/m2');
+            $addVital('8310-5', 'Body temperature', $wellnessData['temperature_c'] ?? $wellnessData['temperature_f'], 'Cel', 'Cel');
+            $addVital('9279-1', 'Respiratory rate', $wellnessData['resp_rate'], '/min', '/min');
+            $addVital('59408-5', 'Oxygen saturation in Arterial blood by Pulse oximetry', $wellnessData['spo2'], '%', '%');
+
+            $lifestyle = [];
+            if (! empty($wellnessData['diet_lifestyle_note'])) {
+                $lifestyle[] = [
+                    'code' => 'diet-lifestyle',
+                    'display' => 'Diet & Lifestyle Guidance',
+                    'value' => $wellnessData['diet_lifestyle_note'],
+                ];
+            }
+            if (! empty($wellnessData['general_advice'])) {
+                $lifestyle[] = [
+                    'code' => 'general-nursing',
+                    'display' => 'General Nursing Observations',
+                    'value' => $wellnessData['general_advice'],
+                ];
+            }
+
+            $source = [
+                'record_id' => (string) $wellnessId,
+                'visit_date' => date('Y-m-d', strtotime($recordedAt)),
+                'completed_at' => date(DATE_ATOM, strtotime($recordedAt)),
+                'hfr_id' => 'IN0510000828',
+                'patient' => [
+                    'id' => $patientId,
+                    'name' => trim(($patient['p_fname'] ?? '') . ' ' . ($patient['p_lname'] ?? '')),
+                    'gender' => strtolower((string) ($patient['gender'] ?? 'male')),
+                    'dob' => ! empty($patient['dob']) ? date('Y-m-d', strtotime((string) $patient['dob'])) : null,
+                    'mobile' => (string) ($patient['mphone1'] ?? ''),
+                    'abha_id' => (string) ($patient['abha_id'] ?? ''),
+                    'abha_address' => (string) ($patient['abha_address'] ?? ''),
+                    'p_code' => (string) ($patient['p_code'] ?? ''),
+                ],
+                'practitioner' => [
+                    'id' => (string) ($wellnessData['recorded_by_id'] ?? '1'),
+                    'name' => (string) ($wellnessData['recorded_by'] ?? 'Staff Nurse'),
+                ],
+                'vitals' => $sourceVitals,
+                'lifestyle' => $lifestyle,
+            ];
+
+            $generator = new \App\Libraries\Abdm\Fhir\Generators\WellnessFhirGenerator();
+            $genResult = $generator->generate($source);
+            $fhirBundle = $genResult['fhir_bundle'] ?? [];
+            if (! empty($fhirBundle)) {
+                $fhirBundleJson = json_encode($fhirBundle, JSON_UNESCAPED_SLASHES | JSON_UNESCAPED_UNICODE);
+                $db->table('patient_wellness_records')->where('id', $wellnessId)->update(['fhir_bundle_json' => $fhirBundleJson]);
+            }
+        } catch (\Throwable $e) {
+            log_message('warning', '[savePatientWellness] FHIR generation error: ' . $e->getMessage());
+        }
+
+        // Also register in health_records for ABDM discovery & push
         if ($db->tableExists('health_records')) {
-            $careContextRef = 'WELLNESS-' . $wellnessId . '-' . date('Ymd');
             $db->table('health_records')->insert([
                 'patient_id' => $patientId,
-                'abha_id' => $patient['abha_id'] ?? null,
+                'abha_id' => $patient['abha_address'] ?? $patient['abha_id'] ?? null,
                 'hi_type' => 'WellnessRecord',
                 'entity_type' => 'wellness',
                 'entity_id' => (string) $wellnessId,
-                'push_status' => 'pending',
+                'push_status' => 'local_discovery_ready',
                 'care_context_reference' => $careContextRef,
-                'record_data' => json_encode($wellnessData),
+                'record_data' => $fhirBundleJson ?? json_encode($wellnessData),
                 'created_by_name' => (string) ($post['recorded_by'] ?? 'Staff Nurse'),
                 'created_at' => date('Y-m-d H:i:s'),
                 'updated_at' => date('Y-m-d H:i:s'),
@@ -845,6 +958,7 @@ class NursingApi extends BaseController
             'status' => 1,
             'message' => 'ABDM M2 Wellness & Vitals recorded successfully',
             'wellness_id' => $wellnessId,
+            'care_context_reference' => $careContextRef,
             'bmi' => $bmi,
         ]);
     }

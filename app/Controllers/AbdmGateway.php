@@ -6463,8 +6463,10 @@ class AbdmGateway extends BaseController
                 if ($ccRef === '') {
                     $ccRef = 'HR-' . (int) ($row['id'] ?? 0);
                 }
-                // Skip redundant/legacy separate PRESC- and WELLNESS- contexts (now unified under OPD-)
-                if (str_starts_with($ccRef, 'PRESC-') || str_starts_with($ccRef, 'WELLNESS-')) {
+                $rowEntType = strtolower(trim((string) ($row['entity_type'] ?? '')));
+                // Skip redundant/legacy separate PRESC- and WELLNESS- contexts (now unified under OPD-),
+                // but allow genuine standalone nursing Wellness records (entity_type = 'wellness')
+                if ($rowEntType !== 'wellness' && (str_starts_with($ccRef, 'PRESC-') || str_starts_with($ccRef, 'WELLNESS-'))) {
                     continue;
                 }
                 // OPD- and INVOICE- contexts are enriched with doctor/session/bill details in steps 4 & 6
@@ -6473,7 +6475,7 @@ class AbdmGateway extends BaseController
                 }
                 $hiType = trim((string) ($row['hi_type'] ?? 'HealthDocumentRecord'));
                 $dateStr = date('d M Y', strtotime((string) ($row['created_at'] ?? $row['updated_at'] ?? 'now')));
-                $display = $hiType . ' - ' . $dateStr;
+                $display = ($hiType === 'WellnessRecord' ? 'Wellness & Vitals Record - ' : ($hiType . ' - ')) . $dateStr;
 
                 $addContext([
                     'careContextId'   => $ccRef,
