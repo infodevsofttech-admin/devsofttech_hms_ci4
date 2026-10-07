@@ -17,20 +17,13 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
         $visitDate = (string) ($source['visit_date'] ?? date('Y-m-d'));
 
         $careContextReference = 'WELLNESS-' . $recordId . ($sessionId !== '0' ? '-S' . $sessionId : '') . '-' . $visitDate . '-' . date('His');
-        $careContextDisplay = 'Wellness and Vitals Record ' . $visitDate;
+        $careContextDisplay = 'Wellness Record ' . $visitDate;
 
         $builder = new \App\Libraries\Abdm\Fhir\FhirDocumentBuilder();
 
         $composition = $this->buildBaseComposition($source, 'Wellness Record', '94500-6', 'Health and Wellness Record');
         $composition['meta']['profile'] = ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/WellnessRecord'];
         $composition['type'] = [
-            'coding' => [
-                [
-                    'system' => 'http://snomed.info/sct',
-                    'code' => '419891008',
-                    'display' => 'Wellness Record',
-                ],
-            ],
             'text' => 'Wellness Record',
         ];
 

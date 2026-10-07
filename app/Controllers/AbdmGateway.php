@@ -6668,7 +6668,7 @@ class AbdmGateway extends BaseController
                     $hiType = str_starts_with($ccRef, 'WELLNESS-') ? 'WellnessRecord' : 'HealthDocumentRecord';
                 }
                 $dateStr = date('d M Y', strtotime((string) ($row['created_at'] ?? $row['updated_at'] ?? 'now')));
-                $display = ($hiType === 'WellnessRecord' ? 'Wellness and Vitals Record - ' : ($hiType . ' - ')) . $dateStr;
+                $display = ($hiType === 'WellnessRecord' ? 'Wellness Record - ' : ($hiType . ' - ')) . $dateStr;
 
                 $addContext([
                     'careContextId'   => $ccRef,

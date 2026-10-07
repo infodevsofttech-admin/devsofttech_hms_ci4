@@ -949,7 +949,7 @@ class NursingApi extends BaseController
         // Build compliant ABDM NRCES FHIR R4 WellnessRecord Document Bundle
         $cleanDate = date('Ymd', strtotime($recordedAt));
         $careContextRef = 'WELLNESS-' . $patientId . '-W' . $wellnessId . '-' . $cleanDate;
-        $careContextDisplay = 'Wellness and Vitals Record - ' . date('d M Y', strtotime($recordedAt));
+        $careContextDisplay = 'Wellness Record - ' . date('d M Y', strtotime($recordedAt));
         $fhirBundleJson = null;
 
         try {
