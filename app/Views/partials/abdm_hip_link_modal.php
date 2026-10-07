@@ -406,7 +406,11 @@
     /**
      * Load patient demographics and care contexts from server.
      */
+    window._hipLoadSeq = 0;
     window.loadPatientCareContexts = function(patientId, abhaAddress, taskType, entityId, taskId, source) {
+        window._hipLoadSeq = (window._hipLoadSeq || 0) + 1;
+        var thisSeq = window._hipLoadSeq;
+
         var loading = document.getElementById('hipCareContextsLoading');
         var container = document.getElementById('hipCareContextsContainer');
         if (loading) loading.classList.remove('d-none');
@@ -435,6 +439,18 @@
         })
         .then(function(r) { return r.json(); })
         .then(function(data) {
+            // Discard stale response if a newer request was made
+            if (thisSeq !== window._hipLoadSeq) {
+                return;
+            }
+            // Discard response if patient mismatch with current context
+            if (window.currentHipTaskContext && window.currentHipTaskContext.patientId) {
+                var expectedPid = parseInt(window.currentHipTaskContext.patientId, 10);
+                if (data.patient && data.patient.id && parseInt(data.patient.id, 10) !== expectedPid) {
+                    return;
+                }
+            }
+
             if (loading) loading.classList.add('d-none');
             updateCsrf(data);
 
@@ -554,6 +570,12 @@
         document.getElementById('hipGender').value = prefill.gender || 'M';
         document.getElementById('hipYob').value = prefill.year_of_birth || prefill.yob || '';
         document.getElementById('hipSmsPhone').value = prefill.phone || prefill.mphone1 || '';
+
+        var uhidBadge = document.getElementById('hipPatientUhidBadge');
+        var initialUhid = prefill.uhid || prefill.patient_ref || prefill.p_code || prefill.uhid_no || '';
+        if (uhidBadge && initialUhid) {
+            uhidBadge.textContent = 'UHID: ' + initialUhid;
+        }
         
         var alertBox = document.getElementById('hipLinkStatusAlert');
         if (alertBox) { alertBox.classList.add('d-none'); alertBox.innerHTML = ''; }
@@ -601,14 +623,40 @@
     };
 
     function syncAndPushTaskFhirRecord(selectedContexts, alertBox, abhaAddress) {
-        if (!window.currentHipTaskContext || !window.currentHipTaskContext.taskType || !window.currentHipTaskContext.entityId) {
-            return;
-        }
-        var ctxTaskType = window.currentHipTaskContext.taskType;
-        var ctxEntityId = window.currentHipTaskContext.entityId;
-        var ctxPatientId = window.currentHipTaskContext.patientId || 0;
+        var ctxTaskType = (window.currentHipTaskContext && window.currentHipTaskContext.taskType) ? window.currentHipTaskContext.taskType : '';
+        var ctxEntityId = (window.currentHipTaskContext && window.currentHipTaskContext.entityId) ? window.currentHipTaskContext.entityId : '';
+        var ctxPatientId = (window.currentHipTaskContext && window.currentHipTaskContext.patientId) ? window.currentHipTaskContext.patientId : 0;
         var firstRef = (selectedContexts && selectedContexts.length > 0) ? selectedContexts[0].ref : '';
         var csrf = getCsrfData();
+
+        // Auto-infer task type and entity ID from reference if not explicitly set
+        if (!ctxTaskType && firstRef) {
+            if (/^DOC-/i.test(firstRef)) {
+                ctxTaskType = 'health_document_publish';
+                var dm = firstRef.match(/^DOC-(?:file-)?(\d+)/i);
+                if (dm && !ctxEntityId) ctxEntityId = dm[1];
+            } else if (/^(?:OPD|PRESCRIPTION)-/i.test(firstRef)) {
+                ctxTaskType = 'opd_prescription_publish';
+                var om = firstRef.match(/^(?:OPD|PRESCRIPTION)-(\d+)/i);
+                if (om && !ctxEntityId) ctxEntityId = om[1];
+            } else if (/^WELLNESS-/i.test(firstRef)) {
+                ctxTaskType = 'wellness_record_publish';
+                var wm = firstRef.match(/^WELLNESS-(?:(\d+)-W)?(\d+)/i);
+                if (wm && !ctxEntityId) ctxEntityId = wm[2] || wm[1];
+            } else if (/^INV-/i.test(firstRef)) {
+                ctxTaskType = 'invoice_publish';
+                var im = firstRef.match(/^INV-(?:[A-Z]+-)?(\d+)/i);
+                if (im && !ctxEntityId) ctxEntityId = im[1];
+            } else if (/^(?:LAB|RAD)-/i.test(firstRef)) {
+                ctxTaskType = 'lab_report_publish';
+                var lm = firstRef.match(/^(?:LAB|RAD)-(\d+)/i);
+                if (lm && !ctxEntityId) ctxEntityId = lm[1];
+            }
+        }
+
+        if (!ctxTaskType) {
+            return;
+        }
 
         if (ctxTaskType === 'radiology_report_publish' || ctxTaskType === 'lab_report_publish') {
             var pushData = new URLSearchParams();
@@ -748,6 +796,10 @@
                 }
             }).catch(function() {});
         } else if (ctxTaskType === 'health_document_publish') {
+            if (!ctxEntityId && firstRef) {
+                var dm = firstRef.match(/^DOC-(?:file-)?(\d+)/i);
+                if (dm) ctxEntityId = dm[1];
+            }
             var pushData = new URLSearchParams();
             pushData.append('record_id', ctxEntityId);
             pushData.append('entity_id', ctxEntityId);

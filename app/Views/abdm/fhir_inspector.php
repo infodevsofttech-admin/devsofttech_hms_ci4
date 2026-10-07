@@ -39,7 +39,7 @@
             <a href="javascript:load_form('<?= base_url('AbdmTaskBoard') ?>','ABDM Task Board')" class="btn btn-sm btn-outline-primary fw-semibold">
                 <i class="bi bi-kanban me-1"></i> ABDM Task Board
             </a>
-            <button type="button" class="btn btn-sm btn-outline-success fw-semibold" onclick="openAbdmHipLinkModal()">
+            <button type="button" class="btn btn-sm btn-outline-success fw-semibold" onclick="if (window.inspCurrentPatientData) { openAbdmHipLinkModal(window.inspCurrentPatientData.id, window.inspCurrentPatientData.abha_address, { name: window.inspCurrentPatientData.name, gender: window.inspCurrentPatientData.gender, yob: window.inspCurrentPatientData.year_of_birth, phone: window.inspCurrentPatientData.phone, uhid: window.inspCurrentPatientData.patient_ref || window.inspCurrentPatientData.p_code, onLinked: function() { if (typeof window.inspectPatient === 'function' && window.inspCurrentPatientData && window.inspCurrentPatientData.abha_address) { window.inspectPatient(window.inspCurrentPatientData.abha_address); } } }); } else { openAbdmHipLinkModal(); }">
                 <i class="bi bi-link-45deg me-1"></i> Link Records to ABHA (HIP)
             </button>
             <button type="button" class="btn btn-sm btn-outline-info fw-semibold" onclick="openAbdmHipSmsModal()">
@@ -364,11 +364,13 @@
                 document.getElementById('kpiUnlinked').textContent = '0';
                 document.getElementById('kpiFhir').textContent = '0';
                 currentPatientData = null;
+                window.inspCurrentPatientData = null;
                 currentCareContexts = [];
                 return;
             }
 
             currentPatientData = res.patient;
+            window.inspCurrentPatientData = res.patient;
             currentCareContexts = res.care_contexts || [];
             var linkedRefs = res.linked_refs || [];
 
@@ -458,7 +460,7 @@
             } else if (!isFhir) {
                 actionBtn = '<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" disabled title="Clinical findings must be documented before linking to ABDM"><i class="bi bi-clock me-1"></i>Incomplete</button>';
             } else {
-                actionBtn = '<button type="button" class="btn btn-sm btn-outline-success py-0 px-2 btn-table-link" data-ref="' + hesc(ref) + '" data-type="' + hesc(hiType) + '"><i class="bi bi-link-45deg me-1"></i>Link to ABHA</button>';
+                actionBtn = '<button type="button" class="btn btn-sm btn-outline-success py-0 px-2 btn-table-link" data-ref="' + hesc(ref) + '" data-type="' + hesc(hiType) + '" data-entity-id="' + hesc(c.entity_id || '') + '"><i class="bi bi-link-45deg me-1"></i>Link to ABHA</button>';
             }
 
             html += '<tr class="care-context-row">';
@@ -605,14 +607,18 @@
     var btnLinkHead = document.getElementById('btnLinkThisPatient');
     if (btnLinkHead) {
         btnLinkHead.addEventListener('click', function() {
-            if (currentPatientData) {
-                openAbdmHipLinkModal(currentPatientData.id, currentPatientData.abha_address, {
-                    name: currentPatientData.name,
-                    gender: currentPatientData.gender,
-                    yob: currentPatientData.year_of_birth,
-                    phone: currentPatientData.phone,
+            var pData = window.inspCurrentPatientData || currentPatientData;
+            if (pData) {
+                openAbdmHipLinkModal(pData.id, pData.abha_address, {
+                    name: pData.name,
+                    gender: pData.gender,
+                    yob: pData.year_of_birth,
+                    phone: pData.phone,
+                    uhid: pData.patient_ref || pData.p_code,
                     onLinked: function() {
-                        inspectPatient(currentPatientData.abha_address);
+                        if (typeof window.inspectPatient === 'function' && pData.abha_address) {
+                            window.inspectPatient(pData.abha_address);
+                        }
                     }
                 });
             } else {
@@ -621,35 +627,59 @@
         });
     }
 
-    // Link Context Button (Row action)
-    document.addEventListener('click', function(e) {
-        var linkBtn = e.target.closest('.btn-table-link');
-        if (linkBtn && currentPatientData) {
-            var ref = linkBtn.dataset.ref;
-            var type = linkBtn.dataset.type;
-            openAbdmHipLinkModal(currentPatientData.id, currentPatientData.abha_address, {
-                name: currentPatientData.name,
-                gender: currentPatientData.gender,
-                yob: currentPatientData.year_of_birth,
-                phone: currentPatientData.phone,
-                care_context: ref,
-                task_type: type,
-                onLinked: function() {
-                    inspectPatient(currentPatientData.abha_address);
-                }
-            });
-        }
-    });
+    window.inspOpenFhirBundleModal = openFhirBundleModal;
 
-    // Preview FHIR Button (Row action)
-    document.addEventListener('click', function(e) {
-        var fhirBtn = e.target.closest('.btn-open-fhir');
-        if (fhirBtn) {
-            var ref = fhirBtn.dataset.ref;
-            var hiType = fhirBtn.dataset.hitype || 'Record';
-            openFhirBundleModal(ref, hiType);
-        }
-    });
+    // Singleton Document-level Click Handler to prevent multiple listener duplication on SPA reloads
+    if (!window._inspDocClickListenerAttached) {
+        window._inspDocClickListenerAttached = true;
+
+        document.addEventListener('click', function(e) {
+            var linkBtn = e.target.closest('.btn-table-link');
+            if (linkBtn && window.inspCurrentPatientData) {
+                var pData = window.inspCurrentPatientData;
+                var ref = linkBtn.dataset.ref;
+                var type = linkBtn.dataset.type;
+                var entityId = linkBtn.dataset.entityId || '';
+                var taskType = '';
+                if (type === 'HealthDocumentRecord') {
+                    taskType = 'health_document_publish';
+                } else if (type === 'OPConsultRecord') {
+                    taskType = 'opd_prescription_publish';
+                } else if (type === 'DiagnosticReportRecord' || type === 'DiagnosticReport') {
+                    taskType = 'lab_report_publish';
+                } else if (type === 'WellnessRecord') {
+                    taskType = 'wellness_record_publish';
+                } else if (type === 'InvoiceRecord') {
+                    taskType = 'invoice_publish';
+                }
+
+                openAbdmHipLinkModal(pData.id, pData.abha_address, {
+                    name: pData.name,
+                    gender: pData.gender,
+                    yob: pData.year_of_birth,
+                    phone: pData.phone,
+                    uhid: pData.patient_ref || pData.p_code,
+                    care_context: ref,
+                    task_type: taskType,
+                    entity_id: entityId,
+                    onLinked: function() {
+                        if (typeof window.inspectPatient === 'function' && pData.abha_address) {
+                            window.inspectPatient(pData.abha_address);
+                        }
+                    }
+                });
+                return;
+            }
+
+            var fhirBtn = e.target.closest('.btn-open-fhir');
+            if (fhirBtn && typeof window.inspOpenFhirBundleModal === 'function') {
+                var ref = fhirBtn.dataset.ref;
+                var hiType = fhirBtn.dataset.hitype || 'Record';
+                window.inspOpenFhirBundleModal(ref, hiType);
+                return;
+            }
+        });
+    }
 
     function openFhirBundleModal(ref, hiType) {
         var modalEl = document.getElementById('inspFhirModal');

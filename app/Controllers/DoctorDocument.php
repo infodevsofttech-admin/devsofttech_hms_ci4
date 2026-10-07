@@ -2134,6 +2134,22 @@ class DoctorDocument extends BaseController
                 if (is_array($fileRow) && ! empty($fileRow)) {
                     return $this->buildFileUploadHealthDocumentSource($fileRow);
                 }
+                if ($patientDocId > 1000000000) {
+                    $fileRow = $this->db->table('file_upload_data')->where('file_name LIKE', '%' . $patientDocId . '%')->get(1)->getRowArray();
+                    if (is_array($fileRow) && ! empty($fileRow)) {
+                        return $this->buildFileUploadHealthDocumentSource($fileRow);
+                    }
+                }
+            }
+            if ($this->db->tableExists('health_records')) {
+                $hr = $this->db->table('health_records')->groupStart()->where('care_context_reference LIKE', '%' . $patientDocId . '%')->orWhere('entity_id', (string) $patientDocId)->groupEnd()->get(1)->getRowArray();
+                if ($hr && ! empty($hr['attachment_path']) && $this->db->tableExists('file_upload_data')) {
+                    $attFileName = basename((string) $hr['attachment_path']);
+                    $fileRow = $this->db->table('file_upload_data')->where('file_name', $attFileName)->orWhere('orig_name', $attFileName)->get(1)->getRowArray();
+                    if (is_array($fileRow) && ! empty($fileRow)) {
+                        return $this->buildFileUploadHealthDocumentSource($fileRow);
+                    }
+                }
             }
             return [];
         }
@@ -2559,6 +2575,28 @@ class DoctorDocument extends BaseController
         $cleanVisitDate = date('Ymd', strtotime($visitDate));
         $ccRef = 'DOC-file-' . $fileUploadId . '-' . $cleanVisitDate;
 
+        if ($this->db->tableExists('health_records')) {
+            $hrQuery = $this->db->table('health_records')
+                ->where('patient_id', $pid)
+                ->groupStart()
+                    ->where('entity_id', (string) $fileUploadId)
+                    ->orWhere('care_context_reference LIKE', 'DOC-%' . $fileUploadId . '%');
+            $fileName = trim((string) ($fileRow['file_name'] ?? ''));
+            if ($fileName !== '') {
+                $hrQuery->orWhere('attachment_path LIKE', '%' . $fileName);
+                $hrQuery->orWhere('record_data LIKE', '%' . $fileName . '%');
+                if (preg_match('/_(\d{10})_/', $fileName, $tsM)) {
+                    $hrQuery->orWhere('care_context_reference LIKE', 'DOC-%' . $tsM[1] . '%');
+                    $hrQuery->orWhere('entity_id', $tsM[1]);
+                }
+            }
+            $hrQuery->groupEnd();
+            $existingHr = $hrQuery->orderBy('id', 'DESC')->get(1)->getRowArray();
+            if (! empty($existingHr['care_context_reference'])) {
+                $ccRef = trim((string) $existingHr['care_context_reference']);
+            }
+        }
+
         return [
             'record_id' => 'file-' . $fileUploadId,
             'session_id' => (string) ($fileRow['opd_id'] ?? $fileUploadId),
@@ -2673,6 +2711,7 @@ class DoctorDocument extends BaseController
         $fileName = trim((string) ($fileRow['file_name'] ?? $fileRow['orig_name'] ?? ''));
         $fullPath = trim((string) ($fileRow['full_path'] ?? ''));
         $dirPath = trim((string) ($fileRow['file_path'] ?? ''));
+        $publicPath = trim((string) ($fileRow['public_path'] ?? ''));
 
         $candidates = [];
         if ($fullPath !== '') {
@@ -2682,11 +2721,19 @@ class DoctorDocument extends BaseController
         if ($dirPath !== '' && $fileName !== '') {
             $candidates[] = rtrim($dirPath, '/\\') . DIRECTORY_SEPARATOR . $fileName;
         }
+        if ($publicPath !== '' && defined('FCPATH')) {
+            $candidates[] = rtrim(FCPATH, '/\\') . DIRECTORY_SEPARATOR . ltrim($publicPath, '/\\');
+            $candidates[] = rtrim(FCPATH, '/\\') . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . ltrim(preg_replace('#^/?uploads/#i', '', $publicPath), '/\\');
+        }
 
         $baseDirs = [
             defined('FCPATH') ? FCPATH : '',
             defined('FCPATH') ? FCPATH . 'uploads' : '',
+            defined('FCPATH') ? FCPATH . 'uploads' . DIRECTORY_SEPARATOR . 'health_documents' : '',
+            defined('FCPATH') ? FCPATH . 'uploads' . DIRECTORY_SEPARATOR . 'nabh_ipd' : '',
+            defined('FCPATH') ? FCPATH . 'uploads' . DIRECTORY_SEPARATOR . 'patient_documents' : '',
             defined('ROOTPATH') ? ROOTPATH . 'public' . DIRECTORY_SEPARATOR . 'uploads' : '',
+            defined('ROOTPATH') ? ROOTPATH . 'public' . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . 'health_documents' : '',
         ];
 
         $insertDate = ! empty($fileRow['insert_date']) ? (string) $fileRow['insert_date'] : '';
@@ -2712,6 +2759,10 @@ class DoctorDocument extends BaseController
             $matches = glob(rtrim(FCPATH, '/\\') . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . '*' . DIRECTORY_SEPARATOR . $fileName);
             if (! empty($matches) && is_file($matches[0]) && is_readable($matches[0])) {
                 return $matches[0];
+            }
+            $matchesDeep = glob(rtrim(FCPATH, '/\\') . DIRECTORY_SEPARATOR . 'uploads' . DIRECTORY_SEPARATOR . '*' . DIRECTORY_SEPARATOR . '*' . DIRECTORY_SEPARATOR . $fileName);
+            if (! empty($matchesDeep) && is_file($matchesDeep[0]) && is_readable($matchesDeep[0])) {
+                return $matchesDeep[0];
             }
         }
 

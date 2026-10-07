@@ -633,6 +633,8 @@ class NursingApi extends BaseController
             'ai_status' => 'pending',
             'ai_alert_flag' => 0,
         ]);
+
+        return (int) $db->insertID();
     }
 
     /**
@@ -1300,15 +1302,27 @@ class NursingApi extends BaseController
             $hiType = 'ImmunizationRecord';
         }
 
+        // Register in file_upload_data for HMS Scan Doc List popup first
+        $fileUploadId = $this->registerFileUploadData([
+            'filename' => $filename,
+            'public_path' => $imageUrl,
+            'p_id' => $patientId,
+            'upload_by' => $nurseName,
+            'doc_type' => $docCategory,
+            'file_size_kb' => round(strlen($binary) / 1024, 2),
+        ]);
+
+        $cleanDate = date('Ymd', strtotime($docDate));
+        $careContextRef = 'DOC-file-' . ($fileUploadId > 0 ? $fileUploadId : time()) . '-' . $cleanDate;
+
         $healthRecordId = null;
         if ($db->tableExists('health_records')) {
-            $careContextRef = 'DOC-' . $patientId . '-' . time();
             $db->table('health_records')->insert([
                 'patient_id' => $patientId,
                 'abha_id' => $patient['abha_id'] ?? null,
                 'hi_type' => $hiType,
-                'entity_type' => 'document',
-                'entity_id' => (string) time(),
+                'entity_type' => 'patient_document',
+                'entity_id' => (string) ($fileUploadId > 0 ? $fileUploadId : time()),
                 'attachment_path' => $imageUrl,
                 'push_status' => 'pending',
                 'care_context_reference' => $careContextRef,
@@ -1318,6 +1332,7 @@ class NursingApi extends BaseController
                     'remarks' => $remarks,
                     'uploaded_by' => $nurseName,
                     'image_url' => $imageUrl,
+                    'file_upload_id' => $fileUploadId,
                 ]),
                 'created_by_name' => $nurseName,
                 'created_at' => date('Y-m-d H:i:s'),
@@ -1326,22 +1341,13 @@ class NursingApi extends BaseController
             $healthRecordId = $db->insertID();
         }
 
-        // Register in file_upload_data for HMS Scan Doc List popup
-        $this->registerFileUploadData([
-            'filename' => $filename,
-            'public_path' => $imageUrl,
-            'p_id' => $patientId,
-            'upload_by' => $nurseName,
-            'doc_type' => $docCategory,
-            'file_size_kb' => round(strlen($binary) / 1024, 2),
-        ]);
-
         return $this->response->setJSON([
             'status' => 1,
             'message' => 'ABDM M2 Health Document uploaded successfully',
             'image_url' => $imageUrl,
             'health_record_id' => $healthRecordId,
             'hi_type' => $hiType,
+            'care_context_reference' => $careContextRef,
         ]);
     }
 }

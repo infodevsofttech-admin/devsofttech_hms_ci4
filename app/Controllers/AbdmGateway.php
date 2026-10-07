@@ -5156,6 +5156,51 @@ class AbdmGateway extends BaseController
                 }
             }
 
+            // Strategy 0d: Live On-Demand Fresh Generation for Health Document Record (DOC-file-{id}, DOC-{id})
+            if (preg_match('/^DOC-(?:file-)?(\d+)/i', $ref, $docM)) {
+                $docTargetId = (int) $docM[1];
+                try {
+                    $docPayload = $this->buildHealthDocumentRecordPayload(0, '', $docTargetId);
+                    if ($docPayload !== null && !empty($docPayload['bundle'])) {
+                        $records[] = [
+                            'careContextReference' => $ref,
+                            'hiType'               => 'HealthDocumentRecord',
+                            'display'              => $docPayload['care_context_display'] ?? 'Health Document Record',
+                            'bundle'               => $docPayload['bundle'],
+                        ];
+                        // Persist or cache to health_records for rapid subsequent fetches
+                        if ($db->tableExists('health_records')) {
+                            $exHr = $db->table('health_records')->where('care_context_reference', $ref)->get(1)->getRowArray();
+                            if ($exHr) {
+                                if (empty($exHr['record_data'])) {
+                                    $db->table('health_records')->where('id', (int) $exHr['id'])->update([
+                                        'record_data' => json_encode($docPayload['bundle'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                                        'push_status' => 'linked',
+                                        'updated_at'  => date('Y-m-d H:i:s'),
+                                    ]);
+                                }
+                            } else {
+                                $db->table('health_records')->insert([
+                                    'patient_id'             => (int) ($docPayload['patient_id'] ?? 0),
+                                    'abha_id'                => (string) ($docPayload['abha_id'] ?? ''),
+                                    'hi_type'                => 'HealthDocumentRecord',
+                                    'entity_type'            => $docPayload['entity_type'] ?? 'patient_document',
+                                    'entity_id'              => (string) $docTargetId,
+                                    'care_context_reference' => $ref,
+                                    'record_data'            => json_encode($docPayload['bundle'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                                    'push_status'            => 'linked',
+                                    'created_at'             => date('Y-m-d H:i:s'),
+                                    'updated_at'             => date('Y-m-d H:i:s'),
+                                ]);
+                            }
+                        }
+                        continue;
+                    }
+                } catch (\Throwable $ex) {
+                    log_message('warning', 'Live HealthDocument FHIR generation in recordsFetch failed: ' . $ex->getMessage());
+                }
+            }
+
             // Strategy A: Check if health_records already has stored FHIR record_data
             $hrRow = null;
             if ($db->tableExists('health_records')) {
@@ -5848,6 +5893,12 @@ class AbdmGateway extends BaseController
         foreach ($careContextRefs as $ref) {
             $ref = trim((string) $ref);
             if ($ref === '') {
+                continue;
+            }
+
+            // ONLY process OPD Consult and Prescription care contexts!
+            // Never overwrite HealthDocument, Wellness, Lab, Radiology, or Invoice records!
+            if (! preg_match('/^(?:OPD|PRESCRIPTION|PRESC)-/i', $ref)) {
                 continue;
             }
 
@@ -7108,15 +7159,21 @@ class AbdmGateway extends BaseController
                 $aliasRef = 'DOC-' . $fd['id'] . '-' . $cleanDate;
 
                 if ($this->db->tableExists('health_records')) {
-                    $existingHr = $this->db->table('health_records')
+                    $hrQuery = $this->db->table('health_records')
                         ->where('patient_id', $patientId)
                         ->groupStart()
                             ->where('entity_id', (string) $fd['id'])
-                            ->orWhere('care_context_reference LIKE', 'DOC-%' . $fd['id'] . '%')
-                        ->groupEnd()
-                        ->orderBy('id', 'DESC')
-                        ->get(1)
-                        ->getRowArray();
+                            ->orWhere('care_context_reference LIKE', 'DOC-%' . $fd['id'] . '%');
+                    if (! empty($fd['file_name'])) {
+                        $hrQuery->orWhere('attachment_path LIKE', '%' . $fd['file_name']);
+                        $hrQuery->orWhere('record_data LIKE', '%' . $fd['file_name'] . '%');
+                        if (preg_match('/_(\d{10})_/', (string) $fd['file_name'], $tsM)) {
+                            $hrQuery->orWhere('care_context_reference LIKE', 'DOC-%' . $tsM[1] . '%');
+                            $hrQuery->orWhere('entity_id', $tsM[1]);
+                        }
+                    }
+                    $hrQuery->groupEnd();
+                    $existingHr = $hrQuery->orderBy('id', 'DESC')->get(1)->getRowArray();
                     if (! empty($existingHr['care_context_reference'])) {
                         $ccRef = trim((string) $existingHr['care_context_reference']);
                     }
@@ -9643,16 +9700,38 @@ class AbdmGateway extends BaseController
 
     private function buildHealthDocumentRecordPayload(int $patientId, string $abhaId = '', int $recordId = 0, array $patientRow = []): ?array
     {
-        if (empty($patientRow)) {
-            $patientRow = $this->loadPatientRow($patientId);
-            if (empty($patientRow)) {
-                return null;
-            }
-        }
-
         $targetRecordId = $recordId > 0
             ? $recordId
             : (int) ($this->request->getPost('record_id') ?? $this->request->getPost('patient_doc_id') ?? $this->request->getPost('document_id') ?? $this->request->getPost('entity_id') ?? 0);
+
+        if ($patientId <= 0 && $targetRecordId > 0) {
+            if ($this->db->tableExists('file_upload_data')) {
+                $fRow = $this->db->table('file_upload_data')->select('pid')->where('id', $targetRecordId)->get(1)->getRowArray();
+                if (! empty($fRow['pid'])) {
+                    $patientId = (int) $fRow['pid'];
+                }
+            }
+            if ($patientId <= 0 && $this->db->tableExists('patient_doc')) {
+                $pRow = $this->db->table('patient_doc')->select('p_id')->where('id', $targetRecordId)->get(1)->getRowArray();
+                if (! empty($pRow['p_id'])) {
+                    $patientId = (int) $pRow['p_id'];
+                }
+            }
+            if ($patientId <= 0 && $this->db->tableExists('health_records')) {
+                $hrRow = $this->db->table('health_records')->select('patient_id')->groupStart()->where('entity_id', (string) $targetRecordId)->orWhere('care_context_reference LIKE', 'DOC-%' . $targetRecordId . '%')->groupEnd()->get(1)->getRowArray();
+                if (! empty($hrRow['patient_id'])) {
+                    $patientId = (int) $hrRow['patient_id'];
+                }
+            }
+        }
+
+        if (empty($patientRow) && $patientId > 0) {
+            $patientRow = $this->loadPatientRow($patientId);
+        }
+
+        if (empty($patientRow)) {
+            return null;
+        }
 
         if ($targetRecordId > 0 && class_exists('\App\Controllers\DoctorDocument')) {
             try {

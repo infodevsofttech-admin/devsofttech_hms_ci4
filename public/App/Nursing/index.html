@@ -506,6 +506,7 @@
                 document_date: new Date().toISOString().slice(0, 10),
                 remarks: ''
             });
+            const [isSavingDoc, setIsSavingDoc] = useState(false);
 
             // Vitals History Modal State
             const [wellnessHistoryPatient, setWellnessHistoryPatient] = useState(null);
@@ -1142,11 +1143,12 @@
             };
 
             const handleSavePatientDocument = async () => {
-                if (!activeDocPatient) return;
+                if (!activeDocPatient || isSavingDoc) return;
                 if (!scanImageBase64) {
                     alert('Please capture or upload a document photo first.');
                     return;
                 }
+                setIsSavingDoc(true);
                 try {
                     const payload = {
                         patient_id: activeDocPatient.id,
@@ -1171,6 +1173,8 @@
                     }
                 } catch (err) {
                     alert('Error uploading health document');
+                } finally {
+                    setIsSavingDoc(false);
                 }
             };
 
@@ -3017,9 +3021,13 @@
                                         </div>
 
                                         <div className="modal-footer p-2 bg-light">
-                                            <button className="btn btn-secondary btn-sm" onClick={() => setActiveDocPatient(null)}>Cancel</button>
-                                            <button className="btn btn-primary btn-sm fw-bold px-3" onClick={handleSavePatientDocument} disabled={!scanImageBase64}>
-                                                <i className="bi bi-cloud-upload-fill me-1"></i> Upload ABDM Health Document
+                                            <button className="btn btn-secondary btn-sm" onClick={() => setActiveDocPatient(null)} disabled={isSavingDoc}>Cancel</button>
+                                            <button className="btn btn-primary btn-sm fw-bold px-3" onClick={handleSavePatientDocument} disabled={!scanImageBase64 || isSavingDoc}>
+                                                {isSavingDoc ? (
+                                                    <span><span className="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Uploading...</span>
+                                                ) : (
+                                                    <span><i className="bi bi-cloud-upload-fill me-1"></i> Upload ABDM Health Document</span>
+                                                )}
                                             </button>
                                         </div>
                                     </div>

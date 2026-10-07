@@ -148,7 +148,7 @@ class AbdmFhirInspector extends BaseController
                 ->getRowArray();
 
             if (! empty($hr)) {
-                $rawBundle = $hr['fhir_bundle'] ?? $hr['bundle'] ?? null;
+                $rawBundle = $hr['record_data'] ?? $hr['fhir_bundle'] ?? $hr['bundle'] ?? null;
                 $decoded = null;
                 if (is_string($rawBundle) && $rawBundle !== '') {
                     $decoded = json_decode($rawBundle, true);
@@ -186,12 +186,31 @@ class AbdmFhirInspector extends BaseController
                 return $opdController->fhir_bundle_preview($opdId, $sessionId);
             }
 
-            // Health Document: DOC-file-{id} or DOC-{id}
-            if (preg_match('/^DOC-(?:file-)?(\d+)/i', $ref, $m)) {
-                $docId = (int) $m[1];
-                $docController = new \App\Controllers\DoctorDocument();
-                $docController->initController($this->request, $this->response, service('logger'));
-                return $docController->health_document_fhir_preview($docId);
+            // Health Document: DOC-file-{id}, DOC-{pid}-{ts}, DOC-{id}
+            if (preg_match('/^DOC-/i', $ref)) {
+                $docId = 0;
+                if (preg_match('/^DOC-file-(\d+)/i', $ref, $m)) {
+                    $docId = (int) $m[1];
+                } elseif (preg_match('/^DOC-(\d+)-(\d+)/i', $ref, $m)) {
+                    $c1 = (int) $m[1];
+                    $c2 = (int) $m[2];
+                    if ($c2 > 1000000000 && $this->db->tableExists('file_upload_data')) {
+                        $fRow = $this->db->table('file_upload_data')->where('file_name LIKE', '%' . $c2 . '%')->get(1)->getRowArray();
+                        if ($fRow) {
+                            $docId = (int) $fRow['id'];
+                        }
+                    }
+                    if ($docId <= 0) {
+                        $docId = $c1;
+                    }
+                } elseif (preg_match('/^DOC-(\d+)/i', $ref, $m)) {
+                    $docId = (int) $m[1];
+                }
+                if ($docId > 0) {
+                    $docController = new \App\Controllers\DoctorDocument();
+                    $docController->initController($this->request, $this->response, service('logger'));
+                    return $docController->health_document_fhir_preview($docId);
+                }
             }
 
             // Diagnostic Report: LAB-{id} or RAD-{id}
