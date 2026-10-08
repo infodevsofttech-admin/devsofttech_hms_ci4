@@ -1986,6 +1986,12 @@ class Patient extends BaseController
 		if (in_array('consent_request_id', $docFields, true)) {
 			$selectCols[] = 'd.consent_request_id';
 		}
+		if (in_array('consent_artifact_id', $docFields, true)) {
+			$selectCols[] = 'd.consent_artifact_id';
+		}
+		if (in_array('consent_ref', $docFields, true)) {
+			$selectCols[] = 'd.consent_ref';
+		}
 		if ($includeSummary) {
 			$selectCols[] = 'd.summary_json';
 		}
@@ -2003,33 +2009,38 @@ class Patient extends BaseController
 		}
 		$builder->groupEnd();
 
-		if ($filterConsentRequestId !== '' && in_array('consent_request_id', $docFields, true)) {
-			// A single M3 HIU consent request (umbrella consent_request_id) can
-			// produce ONE consent artifact PER linked HIP facility, and each
-			// fetched document is tagged with its OWN facility-specific artifact
-			// id in this column -- never the umbrella request id itself. So a
-			// naive exact-match filter here would only ever surface ONE facility
-			// (whichever artifact happened to be passed in) and silently hide
-			// every sibling facility's documents from the same consent session.
-			// Expand the filter to include every known artifact id recorded for
-			// this consent_request_id (see abdm_hiu_consent_artifacts), plus the
-			// filter value itself, so "Show Data" for a session returns ALL of
-			// its facilities' documents (verified 2026-07-30).
-			$sessionIds = [$filterConsentRequestId];
-			if ($this->db->tableExists('abdm_hiu_consent_artifacts')) {
-				$artifactRows = $this->db->table('abdm_hiu_consent_artifacts')
-					->select('artifact_id')
-					->where('consent_request_id', $filterConsentRequestId)
-					->get()
-					->getResultArray();
-				foreach ($artifactRows as $artifactRow) {
-					$artifactId = trim((string) ($artifactRow['artifact_id'] ?? ''));
-					if ($artifactId !== '') {
-						$sessionIds[] = $artifactId;
+		if ($filterConsentRequestId !== '') {
+			// A single M3 HIU consent request produces ONE consent artifact PER
+			// linked HIP facility (e.g. one for external entities like Trio Hospital,
+			// and another for the same entity like DevSoft Tech).
+			// Resolve all related umbrella and artifact IDs bidirectionally so
+			// documents from BOTH external and same-entity facilities are returned.
+			$sessionIds = $this->resolveAllRelatedConsentIds($filterConsentRequestId);
+			if ($sessionIds !== []) {
+				$builder->groupStart();
+				$hasClause = false;
+				if (in_array('consent_request_id', $docFields, true)) {
+					$builder->whereIn('d.consent_request_id', $sessionIds);
+					$hasClause = true;
+				}
+				if (in_array('consent_artifact_id', $docFields, true)) {
+					if ($hasClause) {
+						$builder->orWhereIn('d.consent_artifact_id', $sessionIds);
+					} else {
+						$builder->whereIn('d.consent_artifact_id', $sessionIds);
+						$hasClause = true;
 					}
 				}
+				if (in_array('consent_ref', $docFields, true)) {
+					if ($hasClause) {
+						$builder->orWhereIn('d.consent_ref', $sessionIds);
+					} else {
+						$builder->whereIn('d.consent_ref', $sessionIds);
+						$hasClause = true;
+					}
+				}
+				$builder->groupEnd();
 			}
-			$builder->whereIn('d.consent_request_id', array_values(array_unique($sessionIds)));
 		}
 
 		if ($q !== '') {
@@ -2333,6 +2344,8 @@ class Patient extends BaseController
 		$toUtc = $toIst->setTimezone($utcTz)->format('Y-m-d\TH:i:s.000\Z');
 		$eraseAtUtc = $eraseIst->setTimezone($utcTz)->format('Y-m-d\TH:i:s.000\Z');
 
+		$hipId = trim((string) ($this->request->getPost('hip_id') ?? ''));
+
 		$consent = [
 			'purpose' => [
 				'code' => $purposeCode,
@@ -2357,6 +2370,9 @@ class Patient extends BaseController
 				],
 			],
 		];
+		if ($hipId !== '') {
+			$consent['hip'] = ['id' => $hipId];
+		}
 
 		$service = new \App\Libraries\Abdm\M3HiuWorkflowService();
 		$payload = [
@@ -2364,6 +2380,9 @@ class Patient extends BaseController
 			'abha_address' => $abhaContext['abha_address'],
 			'consent' => $consent,
 		];
+		if ($hipId !== '') {
+			$payload['hip_id'] = $hipId;
+		}
 
 		if (session_status() === PHP_SESSION_ACTIVE) {
 			session_write_close();
@@ -2854,6 +2873,46 @@ class Patient extends BaseController
 		}
 
 		$service = new \App\Libraries\Abdm\M3HiuWorkflowService();
+
+		// Resolve the umbrella consent_request_id so all sibling facilities (both same
+		// entity and external entities) are fetched and decrypted.
+		$umbrellaRequestId = $consentRequestRef;
+		if ($umbrellaRequestId === '' && $consentArtifactRef !== '' && $this->db->tableExists('abdm_hiu_consent_artifacts')) {
+			$foundArt = $this->db->table('abdm_hiu_consent_artifacts')
+				->select('consent_request_id')
+				->where('artifact_id', $consentArtifactRef)
+				->get(1)->getRowArray();
+			if (! empty($foundArt['consent_request_id'])) {
+				$umbrellaRequestId = trim((string) $foundArt['consent_request_id']);
+			}
+		}
+
+		// First, execute multi-facility cascade fetch so all sibling facilities are queried and decrypted
+		$multiFetchCascade = null;
+		if ($umbrellaRequestId !== '') {
+			try {
+				$cascadePayload = [
+					'abha_address'            => $abhaContext['abha_address'],
+					'consent_request_id'     => $umbrellaRequestId,
+					'abdm_consent_request_id' => $umbrellaRequestId,
+					'consent_id'              => $consentArtifactRef !== '' ? $consentArtifactRef : $umbrellaRequestId,
+					'hfr_id'                  => trim((string) ($lastSync['hfr_id'] ?? '')),
+				];
+				$simulatedConsentResult = [
+					'workflow_state'          => 'GRANTED',
+					'status'                  => 'GRANTED',
+					'consent_status'          => 'GRANTED',
+					'abdm_consent_request_id' => $umbrellaRequestId,
+					'consent_request_id'      => $umbrellaRequestId,
+					'abdm_consent_artifact_id'=> $consentArtifactRef,
+					'consent_id'              => $consentArtifactRef !== '' ? $consentArtifactRef : $umbrellaRequestId,
+				];
+				$multiFetchCascade = $service->fetchAllArtifactsAfterGrant($cascadePayload, $simulatedConsentResult);
+			} catch (\Throwable $e) {
+				log_message('warning', '[abdm_content_fetch_only] fetchAllArtifactsAfterGrant error: ' . $e->getMessage());
+			}
+		}
+
 		$fetchPayload = [
 			'abha_address' => $abhaContext['abha_address'],
 		];
@@ -2866,6 +2925,8 @@ class Patient extends BaseController
 		// is driven only by consentId when both are present.
 		if ($consentRequestRef !== '') {
 			$fetchPayload['consentRequestId'] = $consentRequestRef;
+		} elseif ($umbrellaRequestId !== '') {
+			$fetchPayload['consentRequestId'] = $umbrellaRequestId;
 		}
 
 		try {
@@ -2985,6 +3046,22 @@ class Patient extends BaseController
 		}
 
 		if ($documentsPersisted + $documentsUpdated === 0) {
+			// Check if records already exist locally for this consent session (e.g. from prior polling or sibling fetch)
+			$existingDocCount = $this->countAbdmDocumentsForPatient($pno, $umbrellaRequestId !== '' ? $umbrellaRequestId : $consentArtifactRef);
+			if ($existingDocCount > 0) {
+				return $this->response->setJSON([
+					'ok' => 1,
+					'phase' => 'COMPLETED',
+					'message' => 'Records fetched successfully using existing granted consent.',
+					'documents_persisted' => $existingDocCount,
+					'documents_updated' => (int) ($multiFetchCascade['data_updates'] ?? 0),
+					'data' => [
+						'data_fetch' => $this->sanitizeFetchResultForResponse($fetchResult),
+						'cascade' => $multiFetchCascade,
+					],
+				]);
+			}
+
 			return $this->response->setJSON([
 				'ok' => 1,
 				'phase' => 'GRANTED',
@@ -3194,6 +3271,10 @@ class Patient extends BaseController
 		$reconcileError = '';
 		$granted = false;
 
+		$artifactsFetched = 0;
+		$dataFetchUpdates = 0;
+		$dataFetchFailed = 0;
+
 		// Limit check to the most recent active jobs (max 2) to keep live status instantaneous
 		$activeJobs = array_slice($reconcileJobs, 0, 2);
 		foreach ($activeJobs as $job) {
@@ -3220,6 +3301,14 @@ class Patient extends BaseController
 			)));
 			if ($status === 'GRANTED') {
 				$granted = true;
+				try {
+					$cascade = $service->fetchAllArtifactsAfterGrant($reconcilePayload, $reconcile);
+					$artifactsFetched += count($cascade['artifact_ids'] ?? []);
+					$dataFetchUpdates += (int) ($cascade['data_updates'] ?? 0);
+					$dataFetchFailed += (int) ($cascade['failed'] ?? 0);
+				} catch (\Throwable $ex) {
+					log_message('warning', '[abdm_check_live_status] fetchAllArtifactsAfterGrant error: ' . $ex->getMessage());
+				}
 			}
 		}
 
@@ -3233,9 +3322,9 @@ class Patient extends BaseController
 			'reconcile_ok' => $reconcileOk ? 1 : 0,
 			'reconcile_error' => $reconcileOk ? '' : $reconcileError,
 			'granted' => $granted ? 1 : 0,
-			'artifacts_fetched' => 0,
-			'data_fetch_updates' => 0,
-			'data_fetch_failed' => 0,
+			'artifacts_fetched' => $artifactsFetched,
+			'data_fetch_updates' => $dataFetchUpdates,
+			'data_fetch_failed' => $dataFetchFailed,
 		] + $this->getAbdmConsentRequestsList($abhaAddress));
 	}
 
@@ -5638,6 +5727,61 @@ class Patient extends BaseController
 			}
 		}
 
+		// Prefer the umbrella consent_request_id directly from the CONSENT_REQUEST row if available
+		if (is_array($consentRequestRow)) {
+			$anchorReqId = trim((string) ($consentRequestRow['abdm_consent_request_id'] ?? ''));
+			if ($anchorReqId === '') {
+				$anchorDecoded = json_decode((string) ($consentRequestRow['response_json'] ?? ''), true);
+				if (is_array($anchorDecoded)) {
+					$anchorReqId = trim((string) (
+						$anchorDecoded['consentRequestId']
+						?? $anchorDecoded['consentRequest']['id']
+						?? $anchorDecoded['abdm_consent_request_id']
+						?? $anchorDecoded['consent_request_id']
+						?? ''
+					));
+				}
+			}
+			if ($anchorReqId !== '' && ! preg_match('/^REQ-/i', $anchorReqId)) {
+				$consentRequestId = $anchorReqId;
+			}
+		}
+
+		// If $consentRequestId was set to an artifact_id, check abdm_hiu_consent_artifacts
+		// to resolve its true parent umbrella consent_request_id.
+		if ($this->db->tableExists('abdm_hiu_consent_artifacts') && $consentRequestId !== '') {
+			$parentArtifact = $this->db->table('abdm_hiu_consent_artifacts')
+				->select('consent_request_id')
+				->where('artifact_id', $consentRequestId)
+				->get(1)
+				->getRowArray();
+			if (! empty($parentArtifact['consent_request_id'])) {
+				if ($consentId === '') {
+					$consentId = $consentRequestId;
+				}
+				$consentRequestId = trim((string) $parentArtifact['consent_request_id']);
+			}
+		}
+
+		// Collect all linked facilities / sibling artifacts for this session
+		$sessionArtifacts = [];
+		$lookupReqId = $consentRequestId !== '' ? $consentRequestId : $consentId;
+		if ($lookupReqId !== '' && $this->db->tableExists('abdm_hiu_consent_artifacts')) {
+			$artRows = $this->db->table('abdm_hiu_consent_artifacts')
+				->select('artifact_id, hip_id, hip_name, last_status')
+				->where('consent_request_id', $lookupReqId)
+				->get()
+				->getResultArray();
+			foreach ($artRows as $ar) {
+				$sessionArtifacts[] = [
+					'artifact_id' => trim((string) ($ar['artifact_id'] ?? '')),
+					'hip_id'      => trim((string) ($ar['hip_id'] ?? '')),
+					'hip_name'    => trim((string) ($ar['hip_name'] ?? '')),
+					'status'      => trim((string) ($ar['last_status'] ?? '')),
+				];
+			}
+		}
+
 		// A status stamped directly onto this request row by a live status check
 		// is authoritative: it names this exact consent request, unlike separate
 		// reconcile rows that have to be correlated back to a session.
@@ -5860,6 +6004,7 @@ class Patient extends BaseController
 				'expired_on' => $expiredOn,
 				'hfr_id' => $hfrId,
 				'requested_by' => $requestedBy !== '' ? $requestedBy : 'HMS',
+				'artifacts' => $sessionArtifacts,
 				'items' => $items,
 			],
 		];
@@ -6387,13 +6532,133 @@ class Patient extends BaseController
 
 		$builder = $this->db->table('abdm_hiu_documents')->where('patient_id', $pno);
 		if ($consentRequestRef !== '') {
-			$builder->groupStart()
-				->where('consent_request_id', $consentRequestRef)
-				->orWhere('consent_ref', $consentRequestRef)
-				->groupEnd();
+			$relatedIds = $this->resolveAllRelatedConsentIds($consentRequestRef);
+			if ($relatedIds !== []) {
+				$fields = $this->db->getFieldNames('abdm_hiu_documents') ?? [];
+				$builder->groupStart();
+				$hasOr = false;
+				if (in_array('consent_request_id', $fields, true)) {
+					$builder->whereIn('consent_request_id', $relatedIds);
+					$hasOr = true;
+				}
+				if (in_array('consent_artifact_id', $fields, true)) {
+					if ($hasOr) {
+						$builder->orWhereIn('consent_artifact_id', $relatedIds);
+					} else {
+						$builder->whereIn('consent_artifact_id', $relatedIds);
+						$hasOr = true;
+					}
+				}
+				if (in_array('consent_ref', $fields, true)) {
+					if ($hasOr) {
+						$builder->orWhereIn('consent_ref', $relatedIds);
+					} else {
+						$builder->whereIn('consent_ref', $relatedIds);
+						$hasOr = true;
+					}
+				}
+				$builder->groupEnd();
+			}
 		}
 
 		return (int) $builder->countAllResults();
+	}
+
+	/**
+	 * Resolves the complete set of identifiers associated with a given consent
+	 * reference (umbrella consent_request_id, individual facility consent_artifact_ids,
+	 * and internal workflow IDs).
+	 *
+	 * A multi-facility ABDM M3 consent session produces ONE umbrella
+	 * consent_request_id, but ONE artifact_id PER linked HIP facility (e.g. one
+	 * for external entities like Trio Hospital, and another for the same entity
+	 * like DevSoft Tech). Documents in abdm_hiu_documents can be stored under either
+	 * the umbrella request id or a specific facility's artifact id.
+	 *
+	 * This helper expands any single identifier bidirectionally so queries
+	 * reliably match documents from BOTH external and same-entity facilities.
+	 *
+	 * @return string[]
+	 */
+	private function resolveAllRelatedConsentIds(string $ref): array
+	{
+		$ref = trim($ref);
+		if ($ref === '') {
+			return [];
+		}
+
+		$ids = [$ref];
+
+		if (strpos($ref, ':') !== false) {
+			$parts = explode(':', $ref);
+			foreach ($parts as $p) {
+				$p = trim($p);
+				if ($p !== '') {
+					$ids[] = $p;
+				}
+			}
+		}
+
+		if ($this->db->tableExists('abdm_hiu_consent_artifacts')) {
+			$parentRows = $this->db->table('abdm_hiu_consent_artifacts')
+				->select('consent_request_id')
+				->whereIn('artifact_id', $ids)
+				->get()
+				->getResultArray();
+			foreach ($parentRows as $pr) {
+				$pId = trim((string) ($pr['consent_request_id'] ?? ''));
+				if ($pId !== '') {
+					$ids[] = $pId;
+				}
+			}
+
+			$siblingRows = $this->db->table('abdm_hiu_consent_artifacts')
+				->select('artifact_id, consent_request_id')
+				->whereIn('consent_request_id', $ids)
+				->get()
+				->getResultArray();
+			foreach ($siblingRows as $sr) {
+				$aId = trim((string) ($sr['artifact_id'] ?? ''));
+				$cId = trim((string) ($sr['consent_request_id'] ?? ''));
+				if ($aId !== '') {
+					$ids[] = $aId;
+				}
+				if ($cId !== '') {
+					$ids[] = $cId;
+				}
+			}
+		}
+
+		if ($this->db->tableExists('abdm_hiu_workflows')) {
+			$fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
+			$matchCols = array_intersect(['abdm_consent_request_id', 'abdm_consent_artifact_id', 'consent_id', 'request_id', 'gateway_request_id'], $fields);
+			if (! empty($matchCols)) {
+				$wfBuilder = $this->db->table('abdm_hiu_workflows')
+					->select(implode(', ', $matchCols));
+				$wfBuilder->groupStart();
+				$first = true;
+				foreach ($matchCols as $col) {
+					if ($first) {
+						$wfBuilder->whereIn($col, $ids);
+						$first = false;
+					} else {
+						$wfBuilder->orWhereIn($col, $ids);
+					}
+				}
+				$wfBuilder->groupEnd();
+				$wfRows = $wfBuilder->limit(50)->get()->getResultArray();
+				foreach ($wfRows as $wfr) {
+					foreach ($matchCols as $col) {
+						$val = trim((string) ($wfr[$col] ?? ''));
+						if ($val !== '' && ! preg_match('/^REQ-/i', $val)) {
+							$ids[] = $val;
+						}
+					}
+				}
+			}
+		}
+
+		return array_values(array_unique(array_filter($ids)));
 	}
 
 	private function triggerBackgroundHiuPoll(): void
