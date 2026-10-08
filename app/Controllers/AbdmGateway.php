@@ -13299,9 +13299,15 @@ class AbdmGateway extends BaseController
 
         // Also merge local health_records with push_status IN ('linked', 'pushed')
         if ($this->db->tableExists('health_records') && $patientId > 0) {
-            $hrRows = $this->db->table('health_records')
+            $hrQuery = $this->db->table('health_records')
                 ->select('care_context_reference')
-                ->where('patient_id', $patientId)
+                ->groupStart()
+                    ->where('patient_id', $patientId)
+                    ->orWhere('care_context_reference LIKE', '%-' . $patientId . '-%');
+            if ($effAbhaAddress !== '') {
+                $hrQuery->orWhere('abha_id', $effAbhaAddress);
+            }
+            $hrRows = $hrQuery->groupEnd()
                 ->whereIn('push_status', ['linked', 'pushed'])
                 ->get()
                 ->getResultArray();
