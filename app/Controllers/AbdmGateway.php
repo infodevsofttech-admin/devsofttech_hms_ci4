@@ -7195,6 +7195,7 @@ class AbdmGateway extends BaseController
             $rows = $this->db->table('health_records')
                 ->select('id, patient_id, abha_id, hi_type, entity_type, care_context_reference, created_at, updated_at')
                 ->where('patient_id', $patientId)
+                ->where('push_status !=', 'local_only')
                 ->orderBy('id', 'DESC')
                 ->limit(100)
                 ->get()
