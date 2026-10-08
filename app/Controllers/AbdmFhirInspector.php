@@ -131,9 +131,9 @@ class AbdmFhirInspector extends BaseController
      */
     public function previewBundle()
     {
-        $ref = trim((string) ($this->request->getGet('ref') ?? ''));
-        $patientId = (int) ($this->request->getGet('patient_id') ?? 0);
-        $abha = trim((string) ($this->request->getGet('abha') ?? ''));
+        $ref = trim((string) ($this->request->getGet('ref') ?? $this->request->getPost('ref') ?? $_GET['ref'] ?? $_REQUEST['ref'] ?? ''));
+        $patientId = (int) ($this->request->getGet('patient_id') ?? $this->request->getPost('patient_id') ?? $_GET['patient_id'] ?? $_REQUEST['patient_id'] ?? 0);
+        $abha = trim((string) ($this->request->getGet('abha') ?? $this->request->getPost('abha') ?? $_GET['abha'] ?? $_REQUEST['abha'] ?? ''));
 
         if ($ref === '') {
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Care Context Reference is required']);
