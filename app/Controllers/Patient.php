@@ -1074,10 +1074,18 @@ class Patient extends BaseController
 			}
 
 			$abhaDisplay = '';
-			if (!empty($row->abha_address)) {
-				$abhaDisplay = (string) $row->abha_address;
-			} elseif (!empty($row->abha_id)) {
-				$abhaDisplay = (string) $row->abha_id;
+			$abhaAddr = trim((string) ($row->abha_address ?? ''));
+			$abhaNum = trim((string) ($row->abha_id ?? ($row->abha_no ?? ($row->abha ?? ''))));
+			$cleanNum = preg_replace('/\D/', '', $abhaNum) ?? '';
+			if (strlen($cleanNum) === 14) {
+				$abhaNum = substr($cleanNum, 0, 2) . '-' . substr($cleanNum, 2, 4) . '-' . substr($cleanNum, 6, 4) . '-' . substr($cleanNum, 10, 4);
+			}
+			if ($abhaAddr !== '' && $abhaNum !== '') {
+				$abhaDisplay = $abhaAddr . ' (' . $abhaNum . ')';
+			} elseif ($abhaAddr !== '') {
+				$abhaDisplay = $abhaAddr;
+			} elseif ($abhaNum !== '') {
+				$abhaDisplay = $abhaNum;
 			}
 			
 			$data[] = [
