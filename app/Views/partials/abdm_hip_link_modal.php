@@ -635,9 +635,9 @@
                 ctxTaskType = 'health_document_publish';
                 var dm = firstRef.match(/^DOC-(?:file-)?(\d+)/i);
                 if (dm && !ctxEntityId) ctxEntityId = dm[1];
-            } else if (/^(?:OPD|PRESCRIPTION)-/i.test(firstRef)) {
+            } else if (/^(?:OPD|PRESCRIPTION|PRESC)-/i.test(firstRef)) {
                 ctxTaskType = 'opd_prescription_publish';
-                var om = firstRef.match(/^(?:OPD|PRESCRIPTION)-(\d+)/i);
+                var om = firstRef.match(/^(?:OPD|PRESC)-(?:\d+)-S(\d+)/i) || firstRef.match(/^(?:OPD|PRESCRIPTION|PRESC)-(\d+)/i);
                 if (om && !ctxEntityId) ctxEntityId = om[1];
             } else if (/^WELLNESS-/i.test(firstRef)) {
                 ctxTaskType = 'wellness_record_publish';
@@ -686,7 +686,7 @@
             if (!targetOpdId || targetOpdId === '0') {
                 var refToParse = firstRef || (window.currentHipTaskContext ? window.currentHipTaskContext.careContext : '');
                 if (refToParse) {
-                    var mOpd = refToParse.match(/OPD-(?:\d+)-S(\d+)/i) || refToParse.match(/OPD-(\d+)/i);
+                    var mOpd = refToParse.match(/(?:OPD|PRESC)-(?:\d+)-S(\d+)/i) || refToParse.match(/(?:OPD|PRESC|PRESCRIPTION)-(\d+)/i);
                     if (mOpd && mOpd[1]) {
                         targetOpdId = mOpd[1];
                     }
@@ -874,7 +874,9 @@
                 itemHiType = 'ImmunizationRecord';
             } else if (/^(?:DISCHARGE|IPD)-/i.test(ref)) {
                 itemHiType = 'DischargeSummaryRecord';
-            } else if (/^(?:OPD|PRESC)-/i.test(ref)) {
+            } else if (/^(?:PRESC|PRESCRIPTION)-/i.test(ref)) {
+                itemHiType = 'PrescriptionRecord';
+            } else if (/^OPD-/i.test(ref)) {
                 itemHiType = 'OPConsultRecord';
             }
             if (!dominantHiType && itemHiType) {

@@ -981,52 +981,31 @@ class FhirR4Builder
             $observationEntries[] = ['fullUrl' => $obsRef, 'resource' => $obsResource];
         }
 
-        // ── Binary + DocumentReference for HTML report ─────────────────────────
+        // ── Single DocumentReference (prefer PDF attachment if available, otherwise HTML) ─────
         $docRefEntry = null;
         $docRefRef   = null;
-        $pdfDocRefRef = null;
-        $mediaRef = null;
-        $reportHtml  = trim((string) ($diagnosticReport['report_html'] ?? ''));
-        if ($reportHtml !== '') {
-            $binaryUuid  = $this->generateUuid();
-            $docRefUuid  = $this->generateUuid();
-            $docRefRef   = 'urn:uuid:' . $docRefUuid;
-            $contentType = trim((string) ($diagnosticReport['report_content_type'] ?? 'text/html; charset=utf-8'));
+        $pdfBinaryRef = null;
+        $pdfData     = '';
+        $mediaRef    = null;
 
-            $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $binaryUuid, 'resource' => [
-                'resourceType' => 'Binary',
-                'id'           => $binaryUuid,
-                'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Binary']],
-                'contentType'  => $contentType,
-                'data'         => base64_encode($reportHtml),
-            ]];
+        $hasAttachment = ($attachment !== null && ! empty($attachment['data_base64']));
+        $docRefSnomedCode = $isImaging ? '371531008' : '4241000179101';
+        $docRefSnomedDisplay = $isImaging ? 'Report of radiological study' : 'Laboratory report';
 
-            $docRefEntry = [
-                'resourceType'  => 'DocumentReference',
-                'id'            => $docRefUuid,
-                'meta'          => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference']],
-                'status'        => 'current',
-                'type'          => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '721981007', 'display' => 'Diagnostic studies report']]],
-                'subject'       => ['reference' => $patientRef],
-                'content'       => [['attachment' => ['contentType' => $contentType, 'url' => 'urn:uuid:' . $binaryUuid, 'data' => base64_encode($reportHtml), 'title' => $reportTitle]]],
-            ];
-            $resourceEntries[] = ['fullUrl' => $docRefRef, 'resource' => $docRefEntry];
-        }
-
-        // ── Optional PDF attachment as Binary + DocumentReference ───────────
-        if ($attachment !== null && ! empty($attachment['data_base64'])) {
+        if ($hasAttachment) {
             $pdfData = trim((string) ($attachment['data_base64'] ?? ''));
             if ($pdfData !== '') {
                 $pdfBinaryUuid = $this->generateUuid();
+                $pdfBinaryRef  = 'urn:uuid:' . $pdfBinaryUuid;
                 $pdfDocRefUuid = $this->generateUuid();
-                $pdfDocRefRef = 'urn:uuid:' . $pdfDocRefUuid;
+                $docRefRef     = 'urn:uuid:' . $pdfDocRefUuid;
                 $pdfContentType = trim((string) ($attachment['content_type'] ?? 'application/pdf')) ?: 'application/pdf';
-                $pdfTitle = trim((string) ($attachment['title'] ?? 'Lab Report PDF')) ?: 'Lab Report PDF';
+                $pdfTitle = trim((string) ($attachment['title'] ?? ($isImaging ? 'Radiology Report PDF' : 'Lab Report PDF'))) ?: ($isImaging ? 'Radiology Report PDF' : 'Lab Report PDF');
                 $pdfBytes = base64_decode($pdfData, true);
                 $pdfSize = (int) ($attachment['size'] ?? (is_string($pdfBytes) ? strlen($pdfBytes) : 0));
                 $pdfHash = trim((string) ($attachment['hash'] ?? (is_string($pdfBytes) ? base64_encode(sha1($pdfBytes, true)) : '')));
 
-                $resourceEntries[] = ['fullUrl' => 'urn:uuid:' . $pdfBinaryUuid, 'resource' => [
+                $resourceEntries[] = ['fullUrl' => $pdfBinaryRef, 'resource' => [
                     'resourceType' => 'Binary',
                     'id'           => $pdfBinaryUuid,
                     'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Binary']],
@@ -1034,17 +1013,17 @@ class FhirR4Builder
                     'data'         => $pdfData,
                 ]];
 
-                $resourceEntries[] = ['fullUrl' => $pdfDocRefRef, 'resource' => [
+                $resourceEntries[] = ['fullUrl' => $docRefRef, 'resource' => [
                     'resourceType' => 'DocumentReference',
                     'id'           => $pdfDocRefUuid,
                     'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference']],
                     'status'       => 'current',
-                    'type'         => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => '721981007', 'display' => 'Diagnostic studies report']]],
+                    'type'         => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => $docRefSnomedCode, 'display' => $docRefSnomedDisplay]]],
                     'subject'      => ['reference' => $patientRef],
                     'content'      => [[
                         'attachment' => array_filter([
                             'contentType' => $pdfContentType,
-                            'url' => 'urn:uuid:' . $pdfBinaryUuid,
+                            'url' => $pdfBinaryRef,
                             'data' => $pdfData,
                             'title' => $pdfTitle,
                             'size' => $pdfSize > 0 ? $pdfSize : null,
@@ -1066,17 +1045,42 @@ class FhirR4Builder
                         'createdDateTime' => $reportedAt,
                         'content'      => [
                             'contentType' => $pdfContentType,
-                            'url' => 'urn:uuid:' . $pdfBinaryUuid,
+                            'url' => $pdfBinaryRef,
                             'data' => $pdfData,
                             'title' => $pdfTitle,
                         ],
                     ]];
                 }
             }
+        } elseif ($reportHtml !== '') {
+            $binaryUuid  = $this->generateUuid();
+            $binaryRef   = 'urn:uuid:' . $binaryUuid;
+            $docRefUuid  = $this->generateUuid();
+            $docRefRef   = 'urn:uuid:' . $docRefUuid;
+            $contentType = trim((string) ($diagnosticReport['report_content_type'] ?? 'text/html; charset=utf-8'));
+
+            $resourceEntries[] = ['fullUrl' => $binaryRef, 'resource' => [
+                'resourceType' => 'Binary',
+                'id'           => $binaryUuid,
+                'meta'         => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Binary']],
+                'contentType'  => $contentType,
+                'data'         => base64_encode($reportHtml),
+            ]];
+
+            $docRefEntry = [
+                'resourceType'  => 'DocumentReference',
+                'id'            => $docRefUuid,
+                'meta'          => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/DocumentReference']],
+                'status'        => 'current',
+                'type'          => ['coding' => [['system' => 'http://snomed.info/sct', 'code' => $docRefSnomedCode, 'display' => $docRefSnomedDisplay]]],
+                'subject'       => ['reference' => $patientRef],
+                'content'       => [['attachment' => ['contentType' => $contentType, 'url' => $binaryRef, 'data' => base64_encode($reportHtml), 'title' => $reportTitle]]],
+            ];
+            $resourceEntries[] = ['fullUrl' => $docRefRef, 'resource' => $docRefEntry];
         }
 
         // Pick a single DocumentReference for Composition.section slicing (0..1).
-        $effectiveDocRefRef = $pdfDocRefRef !== null ? $pdfDocRefRef : $docRefRef;
+        $effectiveDocRefRef = $docRefRef;
 
         // ── DiagnosticReport ──────────────────────────────────────────────────
         $reportRes = [
