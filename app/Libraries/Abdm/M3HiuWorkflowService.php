@@ -202,7 +202,7 @@ class M3HiuWorkflowService
 
         $fields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
         $selectCols = ['id', 'request_id', 'transaction_id', 'consent_id', 'abha_address', 'hfr_id', 'workflow_state', 'status', 'created_at', 'updated_at'];
-        foreach (['abdm_consent_request_id', 'abdm_consent_artifact_id', 'completed_at', 'expired_at', 'revoked_at'] as $col) {
+        foreach (['gateway_request_id', 'abdm_consent_request_id', 'abdm_consent_artifact_id', 'completed_at', 'expired_at', 'revoked_at'] as $col) {
             if (in_array($col, $fields, true)) {
                 $selectCols[] = $col;
             }
@@ -212,11 +212,8 @@ class M3HiuWorkflowService
             ->select(implode(', ', $selectCols))
             ->where('operation', 'consent_request')
             ->where('status', 'success')
-            ->whereNotIn('workflow_state', ['COMPLETED', 'EXPIRED', 'REVOKED', 'DENIED']);
+            ->whereNotIn('workflow_state', ['EXPIRED', 'REVOKED', 'DENIED']);
 
-        if (in_array('completed_at', $fields, true)) {
-            $builder->where('completed_at IS NULL');
-        }
         if (in_array('expired_at', $fields, true)) {
             $builder->where('expired_at IS NULL');
         }
@@ -263,6 +260,7 @@ class M3HiuWorkflowService
 
             $payload = [
                 'request_id' => $requestId,
+                'gateway_request_id' => trim((string) ($row['gateway_request_id'] ?? '')),
                 'transaction_id' => trim((string) ($row['transaction_id'] ?? '')),
                 'consent_id' => trim((string) ($row['consent_id'] ?? '')),
                 'abdm_consent_request_id' => trim((string) ($row['abdm_consent_request_id'] ?? '')),
@@ -1083,8 +1081,20 @@ class M3HiuWorkflowService
             if ($requestIdGenerated) {
                 $requestIdRef = '';
             }
+            $gatewayRequestId = trim((string) ($clean['gateway_request_id'] ?? ''));
+            if ($gatewayRequestId !== '' && preg_match('/^REQ-/i', $gatewayRequestId) === 1 && stripos($gatewayRequestId, 'REQ-HIU-') !== 0) {
+                $requestIdRef = $gatewayRequestId;
+            } elseif (stripos($requestIdRef, 'REQ-HIU-') === 0 && $gatewayRequestId === '') {
+                $requestIdRef = '';
+            }
+
             $consentRequestId = trim((string) ($clean['abdm_consent_request_id'] ?? $clean['consentRequestId'] ?? ''));
-            $consentId = trim((string) ($clean['abdm_consent_artifact_id'] ?? $clean['consentId'] ?? $clean['consent_id'] ?? ''));
+            $rawConsentId = trim((string) ($clean['abdm_consent_artifact_id'] ?? $clean['consentId'] ?? $clean['consent_id'] ?? ''));
+            $consentId = $rawConsentId !== '' ? trim((string) explode(':', $rawConsentId)[0]) : '';
+
+            if ($requestIdRef === '' && $consentRequestId === '' && $consentId === '') {
+                $requestIdRef = trim((string) ($clean['request_id'] ?? $clean['requestId'] ?? ''));
+            }
 
             if ($requestIdRef === '' && $consentRequestId === '' && $consentId === '') {
                 return [

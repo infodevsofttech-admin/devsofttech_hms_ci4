@@ -83,6 +83,12 @@ class Filters extends BaseFilters
                 'except' => [
                     'Opd/*',
                     'Opd_prescription/*',
+                    'billing/patient/abdm_*',
+                    'billing/patient/abdm_*/*',
+                    'AbdmHiu',
+                    'AbdmHiu/*',
+                    'AbdmGateway/*',
+                    'api/*',
                 ],
             ],
             // 'honeypot',

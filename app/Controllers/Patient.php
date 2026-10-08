@@ -2853,7 +2853,10 @@ class Patient extends BaseController
 						'message' => 'Records fetched successfully using existing granted consent.',
 						'documents_persisted' => $reqDocumentsPersisted,
 						'documents_updated' => $reqDocumentsUpdated,
-						'data' => ['data_fetch' => $fetchResult, 'data_fetch_by_request_id' => $requestIdFetchResult],
+						'data' => [
+							'data_fetch' => $this->sanitizeFetchResultForResponse($fetchResult),
+							'data_fetch_by_request_id' => $this->sanitizeFetchResultForResponse($requestIdFetchResult),
+						],
 					]);
 				}
 			}
@@ -2887,7 +2890,10 @@ class Patient extends BaseController
 						'message' => 'Records fetched successfully from historical ABDM records for this ABHA address.',
 						'documents_persisted' => $abhaDocumentsPersisted,
 						'documents_updated' => $abhaDocumentsUpdated,
-						'data' => ['data_fetch' => $fetchResult, 'data_fetch_by_abha_address' => $abhaFetchResult],
+						'data' => [
+							'data_fetch' => $this->sanitizeFetchResultForResponse($fetchResult),
+							'data_fetch_by_abha_address' => $this->sanitizeFetchResultForResponse($abhaFetchResult),
+						],
 					]);
 				}
 			}
@@ -2900,7 +2906,7 @@ class Patient extends BaseController
 				'message' => 'Consent is granted, but the health information provider has not sent any records yet. Please try again in a few minutes.',
 				'documents_persisted' => 0,
 				'documents_updated' => 0,
-				'data' => ['data_fetch' => $fetchResult],
+				'data' => ['data_fetch' => $this->sanitizeFetchResultForResponse($fetchResult)],
 			]);
 		}
 
@@ -2910,8 +2916,21 @@ class Patient extends BaseController
 			'message' => 'Records fetched successfully using existing granted consent.',
 			'documents_persisted' => $documentsPersisted,
 			'documents_updated' => $documentsUpdated,
-			'data' => ['data_fetch' => $fetchResult],
+			'data' => ['data_fetch' => $this->sanitizeFetchResultForResponse($fetchResult)],
 		]);
+	}
+
+	private function sanitizeFetchResultForResponse(array $result): array
+	{
+		$clean = $result;
+		if (isset($clean['sessions']) && is_array($clean['sessions'])) {
+			$clean['sessions_count'] = count($clean['sessions']);
+			unset($clean['sessions']);
+		}
+		if (isset($clean['data']) && is_array($clean['data']) && isset($clean['data']['sessions'])) {
+			unset($clean['data']['sessions']);
+		}
+		return $clean;
 	}
 
 	/**
@@ -3037,9 +3056,11 @@ class Patient extends BaseController
 				continue;
 			}
 			$sessionRequestId = trim((string) ($consent['request_id'] ?? ''));
+			$sessionGatewayRequestId = trim((string) ($consent['gateway_request_id'] ?? ''));
 			$sessionConsentRequestId = trim((string) ($consent['consent_request_id'] ?? ''));
-			$sessionConsentId = trim((string) ($consent['consent_id'] ?? ''));
-			if ($sessionRequestId === '' && $sessionConsentRequestId === '' && $sessionConsentId === '') {
+			$rawConsentId = trim((string) ($consent['consent_id'] ?? ''));
+			$sessionConsentId = $rawConsentId !== '' ? trim((string) explode(':', $rawConsentId)[0]) : '';
+			if ($sessionRequestId === '' && $sessionGatewayRequestId === '' && $sessionConsentRequestId === '' && $sessionConsentId === '') {
 				continue;
 			}
 			$reconcileJobs[] = [
@@ -3047,6 +3068,7 @@ class Patient extends BaseController
 				'payload' => [
 					'abha_address' => $abhaAddress,
 					'request_id' => $sessionRequestId,
+					'gateway_request_id' => $sessionGatewayRequestId,
 					'abdm_consent_request_id' => $sessionConsentRequestId,
 					'abdm_consent_artifact_id' => $sessionConsentId,
 					'consent_id' => $sessionConsentId,
@@ -3058,7 +3080,8 @@ class Patient extends BaseController
 			$snapshot = $this->getLatestAbdmSyncSnapshot($abhaAddress);
 			$requestId = trim((string) ($snapshot['request_id'] ?? ''));
 			$consentRequestId = trim((string) ($snapshot['consent_request_id'] ?? ''));
-			$consentId = trim((string) ($snapshot['consent_id'] ?? ''));
+			$rawConsentId = trim((string) ($snapshot['consent_id'] ?? ''));
+			$consentId = $rawConsentId !== '' ? trim((string) explode(':', $rawConsentId)[0]) : '';
 			if ($requestId === '' && $consentRequestId === '' && $consentId === '') {
 				return $this->response->setStatusCode(422)->setJSON([
 					'ok' => 0,
@@ -5211,6 +5234,7 @@ class Patient extends BaseController
 			$rowRequestId = trim((string) ($row['request_id'] ?? ''));
 			$rowAbdmConsentRequestId = trim((string) ($row['abdm_consent_request_id'] ?? ''));
 			$rowConsentId = trim((string) ($row['consent_id'] ?? ''));
+			$rowGatewayRequestId = trim((string) ($row['gateway_request_id'] ?? ''));
 
 			if ($operation === 'CONSENT_REQUEST') {
 				$anchorKey = 'anchor_' . count($order);
@@ -5218,6 +5242,9 @@ class Patient extends BaseController
 				$sessions[$anchorKey] = [$row];
 				if ($rowRequestId !== '') {
 					$requestIdToAnchor[$rowRequestId] = $anchorKey;
+				}
+				if ($rowGatewayRequestId !== '') {
+					$requestIdToAnchor[$rowGatewayRequestId] = $anchorKey;
 				}
 				// Reconcile/status rows usually carry only the ABDM ids, so the
 				// anchor must publish its own ids too or those rows cannot match.
@@ -5229,6 +5256,9 @@ class Patient extends BaseController
 				if ($rowConsentId !== '') {
 					$abdmIdToAnchor[$rowConsentId] = $anchorKey;
 					$requestIdToAnchor[$rowConsentId] = $anchorKey;
+					$cleanConsentId = trim((string) explode(':', $rowConsentId)[0]);
+					$abdmIdToAnchor[$cleanConsentId] = $anchorKey;
+					$requestIdToAnchor[$cleanConsentId] = $anchorKey;
 				}
 				$openAnchor = $anchorKey;
 				continue;
@@ -5239,8 +5269,12 @@ class Patient extends BaseController
 				$anchorKey = $abdmIdToAnchor[$rowAbdmConsentRequestId];
 			} elseif ($rowRequestId !== '' && isset($requestIdToAnchor[$rowRequestId])) {
 				$anchorKey = $requestIdToAnchor[$rowRequestId];
+			} elseif ($rowGatewayRequestId !== '' && isset($requestIdToAnchor[$rowGatewayRequestId])) {
+				$anchorKey = $requestIdToAnchor[$rowGatewayRequestId];
 			} elseif ($rowConsentId !== '' && isset($requestIdToAnchor[$rowConsentId])) {
 				$anchorKey = $requestIdToAnchor[$rowConsentId];
+			} elseif ($rowConsentId !== '' && isset($requestIdToAnchor[trim((string) explode(':', $rowConsentId)[0])])) {
+				$anchorKey = $requestIdToAnchor[trim((string) explode(':', $rowConsentId)[0])];
 			} elseif ($openAnchor !== null && ($rowAbdmConsentRequestId === '' || empty($anchorHasAbdmId[$openAnchor]))) {
 				// Covers the first reconcile that discovers the ABDM id. A row
 				// naming a consent request that belongs elsewhere must not be
@@ -5268,8 +5302,14 @@ class Patient extends BaseController
 			if ($rowRequestId !== '') {
 				$requestIdToAnchor[$rowRequestId] = $anchorKey;
 			}
+			if ($rowGatewayRequestId !== '') {
+				$requestIdToAnchor[$rowGatewayRequestId] = $anchorKey;
+			}
 			if ($rowConsentId !== '') {
 				$requestIdToAnchor[$rowConsentId] = $anchorKey;
+				$cleanConsentId = trim((string) explode(':', $rowConsentId)[0]);
+				$abdmIdToAnchor[$cleanConsentId] = $anchorKey;
+				$requestIdToAnchor[$cleanConsentId] = $anchorKey;
 			}
 		}
 
@@ -5704,7 +5744,9 @@ class Patient extends BaseController
 			'consent' => [
 				'id' => $displayId,
 				'request_id' => trim((string) (is_array($consentRequestRow) ? ($consentRequestRow['request_id'] ?? '') : ($best['request_id'] ?? ''))),
-				'consent_id' => $consentId,
+				'gateway_request_id' => trim((string) (is_array($consentRequestRow) ? ($consentRequestRow['gateway_request_id'] ?? '') : ($best['gateway_request_id'] ?? ''))),
+				'consent_id' => $consentId !== '' ? trim((string) explode(':', $consentId)[0]) : '',
+				'consent_id_raw' => $consentId,
 				'consent_request_id' => $consentRequestId,
 				'abha_address' => $abhaAddress,
 				'status' => $phase,

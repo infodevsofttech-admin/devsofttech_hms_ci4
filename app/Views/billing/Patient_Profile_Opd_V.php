@@ -1769,7 +1769,16 @@ $(function() {
                 } else if (data.granted) {
                     setAbdmStatus('Live status: GRANTED. Fetched data for ' + (data.artifacts_fetched || 0) + ' facility artifact(s)' + (data.data_fetch_failed ? (', ' + data.data_fetch_failed + ' failed') : '') + '.');
                 } else {
-                    setAbdmStatus('Live status refreshed from ABDM bridge.');
+                    var latestStatus = ((currentAbdmRequests[0] && currentAbdmRequests[0].status) || '').toString().toUpperCase();
+                    if (latestStatus === 'REVOKED') {
+                        setAbdmStatus('Live status: REVOKED (consent was revoked in patient ABHA app).');
+                    } else if (latestStatus === 'DENIED') {
+                        setAbdmStatus('Live status: DENIED (consent was denied by patient).');
+                    } else if (latestStatus === 'EXPIRED') {
+                        setAbdmStatus('Live status: EXPIRED.');
+                    } else {
+                        setAbdmStatus('Live status refreshed from ABDM bridge.');
+                    }
                 }
             })
             .catch(function(err) {

@@ -70,6 +70,12 @@ class M3HiuGatewayClient
 
     public function reconcileConsentStatus(array $payload): array
     {
+        if (isset($payload['consent_id']) && is_string($payload['consent_id']) && str_contains($payload['consent_id'], ':')) {
+            $payload['consent_id'] = trim((string) explode(':', $payload['consent_id'])[0]);
+        }
+        if (isset($payload['consentId']) && is_string($payload['consentId']) && str_contains($payload['consentId'], ':')) {
+            $payload['consentId'] = trim((string) explode(':', $payload['consentId'])[0]);
+        }
         return $this->callGet('/v1/hiu/consent/status', $payload, 'consent.status.reconcile');
     }
 
