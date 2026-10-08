@@ -5451,10 +5451,22 @@ class AbdmGateway extends BaseController
             if ($hrRow && !empty($hrRow['record_data'])) {
                 $bundleData = json_decode((string) $hrRow['record_data'], true);
                 if (is_array($bundleData)) {
+                    $recHiType = $hrRow['hi_type'] ?? $hrRow['record_type'] ?? 'OPConsultRecord';
+                    $defaultDisp = match ($recHiType) {
+                        'ImmunizationRecord' => 'Immunization Record',
+                        'DiagnosticReportRecord' => 'Diagnostic Report',
+                        'DischargeSummaryRecord' => 'Discharge Summary',
+                        'PrescriptionRecord' => 'Prescription Record',
+                        'WellnessRecord' => 'Wellness Record',
+                        'InvoiceRecord' => 'Invoice Record',
+                        'HealthDocumentRecord' => 'Health Document',
+                        default => 'Consultation Record',
+                    };
+                    $disp = ! empty($hrRow['care_context_display']) ? $hrRow['care_context_display'] : $defaultDisp;
                     $records[] = [
                         'careContextReference' => $ref,
-                        'hiType'               => $hrRow['hi_type'] ?? $hrRow['record_type'] ?? 'OPConsultRecord',
-                        'display'              => $hrRow['care_context_display'] ?? 'Consultation Record',
+                        'hiType'               => $recHiType,
+                        'display'              => $disp,
                         'bundle'               => $bundleData,
                     ];
                     continue;
@@ -10133,6 +10145,7 @@ class AbdmGateway extends BaseController
             'entity_id' => $entityId,
             'fhir_bundle' => $bundleJson,
             'care_context_reference' => $ccRef,
+            'care_context_display' => $ccDisplay,
             'consent_handle' => $effectiveConsent,
         ]);
 
