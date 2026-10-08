@@ -119,7 +119,7 @@
                                         $personYob = (string)((int)date('Y') - $personAge);
                                     }
                                 ?>
-                                <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2 fw-semibold" onclick="openAbdmHipLinkModal(<?= (int)$data[0]->id ?>, '<?= esc($abhaAddress) ?>', { name: '<?= esc($data[0]->p_fname ?? '') ?>', gender: '<?= $data[0]->gender == 1 ? 'M' : ($data[0]->gender == 2 ? 'F' : 'O') ?>', yob: '<?= esc($personYob) ?>', phone: '<?= esc($data[0]->mphone1 ?? '') ?>', abha_number: '<?= esc($validAbhaNumForModal) ?>' })">
+                                <button type="button" class="btn btn-outline-primary btn-sm w-100 mt-2 fw-semibold" onclick="openAbdmHipLinkModal(<?= (int)$data[0]->id ?>, '<?= esc($abhaAddress) ?>', { name: '<?= esc($data[0]->p_fname ?? '') ?>', gender: '<?= $data[0]->gender == 1 ? 'M' : ($data[0]->gender == 2 ? 'F' : 'O') ?>', yob: '<?= esc($personYob) ?>', phone: '<?= esc($data[0]->mphone1 ?? '') ?>', abha_number: '<?= esc($validAbhaNumForModal) ?>', onLinked: function() { setTimeout(function() { location.reload(); }, 1200); } })">
                                     <i class="bi bi-link-45deg me-1"></i>Link Records to ABHA (HIP)
                                 </button>
                                 <?php if (empty($abhaAddress) && !empty($data[0]->mphone1)) : ?>
@@ -287,9 +287,9 @@
                                     <div class="col-lg-3 col-md-4 label">ABHA Verification</div>
                                     <div class="col-lg-9 col-md-8 d-flex align-items-center gap-2 flex-wrap">
                                         <?php if ($abhaVerifiedStatus !== '') : ?>
-                                            <span class="badge bg-success-subtle text-success border border-success-subtle"><?= esc($abhaVerifiedStatus) ?></span>
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle" id="abha_verified_status_badge"><?= esc($abhaVerifiedStatus) ?></span>
                                         <?php else : ?>
-                                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle">UNAVAILABLE</span>
+                                            <span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle" id="abha_verified_status_badge">UNAVAILABLE</span>
                                         <?php endif; ?>
 
                                         <?php if ($abhaVerificationType !== '') : ?>

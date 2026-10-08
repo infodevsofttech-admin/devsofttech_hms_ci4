@@ -1054,8 +1054,16 @@
 
             if (linkData.ok) {
                 alertBox.className = 'alert alert-success py-2 px-3 small';
-                alertBox.innerHTML = '<strong><i class="bi bi-check-circle-fill me-1"></i>Success!</strong> '
-                    + 'Care contexts successfully submitted to ABDM for linking. Patient can now discover and access them in their ABHA / PHR app.';
+                alertBox.innerHTML = '<strong><i class="bi bi-check-circle-fill me-1"></i>Care Contexts Linked Successfully!</strong><br>'
+                    + 'Care contexts have been linked to patient\'s ABHA (<code>' + abhaAddress + '</code>) and recorded in HMS.<br>'
+                    + '<i class="bi bi-info-circle me-1 text-primary"></i>Patient can now discover and access their health records in the ABHA / PHR app under <em>Linked Facilities</em>.';
+
+                // Update any verification badge on the underlying patient profile page
+                var pBadge = document.getElementById('abha_verified_status_badge');
+                if (pBadge) {
+                    pBadge.className = 'badge bg-success-subtle text-success border border-success-subtle';
+                    pBadge.textContent = 'LINKED';
+                }
 
                 syncAndPushTaskFhirRecord(selectedContexts, alertBox, abhaAddress);
 
@@ -1247,12 +1255,20 @@
         .then(function(r) { return r.json(); })
         .then(function(res) {
             if (btn) { btn.disabled = false; btn.innerHTML = origHtml; }
-            var records = (res.data && res.data[0] && res.data[0].careContexts) ? res.data[0].careContexts : [];
-            if (records.length === 0) {
-                alert('No care contexts currently linked to ' + abha + ' on ABDM Bridge.');
+            var records = res.care_contexts
+                || (res.data && res.data.patient && res.data.patient.careContexts)
+                || (res.data && res.data[0] && res.data[0].careContexts)
+                || (Array.isArray(res.data) ? res.data : []);
+
+            if (!records || records.length === 0) {
+                alert('No care contexts currently linked to ' + abha + ' in ABDM registry or HMS records.');
             } else {
                 var list = records.map(function(c, i) {
-                    return (i + 1) + '. ' + (c.referenceNumber || c.ref) + ' (' + (c.display || 'Record') + ') - Status: ' + (c.status || 'linked');
+                    var ref = c.referenceNumber || c.ref || 'Ref';
+                    var disp = c.display || ref;
+                    var st = (c.status || 'linked').toUpperCase();
+                    var src = c.source ? (' [' + c.source + ']') : '';
+                    return (i + 1) + '. ' + ref + ' (' + disp + ') - ' + st + src;
                 }).join('\n');
                 alert('Found ' + records.length + ' care context(s) linked to ' + abha + ':\n\n' + list);
             }

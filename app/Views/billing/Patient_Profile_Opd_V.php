@@ -82,7 +82,7 @@ if ($patientPhotoPath === '') {
                         $patientYob = (string)((int)date('Y') - $patientAgeVal);
                     }
                 ?>
-                <button type="button" class="btn btn-outline-primary btn-sm fw-semibold" onclick="openAbdmHipLinkModal(<?= (int)$patient->id ?>, '<?= esc($patientAbhaAddress ?? '') ?>', { name: '<?= esc($patient->p_fname ?? '') ?>', gender: '<?= $patient->gender == 1 ? 'M' : ($patient->gender == 2 ? 'F' : 'O') ?>', yob: '<?= esc($patientYob) ?>', phone: '<?= esc($patient->mphone1 ?? '') ?>', abha_number: '<?= esc($validModalAbhaNum) ?>' })">
+                <button type="button" class="btn btn-outline-primary btn-sm fw-semibold" onclick="openAbdmHipLinkModal(<?= (int)$patient->id ?>, '<?= esc($patientAbhaAddress ?? '') ?>', { name: '<?= esc($patient->p_fname ?? '') ?>', gender: '<?= $patient->gender == 1 ? 'M' : ($patient->gender == 2 ? 'F' : 'O') ?>', yob: '<?= esc($patientYob) ?>', phone: '<?= esc($patient->mphone1 ?? '') ?>', abha_number: '<?= esc($validModalAbhaNum) ?>', onLinked: function() { setTimeout(function() { location.reload(); }, 1200); } })">
                     <i class="bi bi-link-45deg me-1"></i>Link to ABHA (HIP)
                 </button>
                 <button type="button" class="btn btn-outline-secondary btn-sm"
