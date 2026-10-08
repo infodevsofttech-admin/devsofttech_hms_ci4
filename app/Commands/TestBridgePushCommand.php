@@ -45,45 +45,51 @@ class TestBridgePushCommand extends BaseCommand
             }
         }
 
-        CLI::write("\nTesting DOC-43156 push...", 'yellow');
-        $docRes = $gw->executeAutoPushRecord('health_document', 43156, 15350);
-        CLI::write("executeAutoPushRecord: " . json_encode($docRes));
+        CLI::write("\nTesting DOC-43156 step-by-step...", 'yellow');
+        try {
+            $docCtrl = new \App\Controllers\DoctorDocument();
+            $src = $docCtrl->buildHealthDocumentSource(43156);
+            CLI::write("Source result: " . json_encode($src));
+            if (! empty($src)) {
+                $factory = new \App\Libraries\Abdm\Fhir\FhirGeneratorFactory();
+                $gen = $factory->healthDocument()->generate($src);
+                CLI::write("Generated bundle: " . ($gen['bundle']['resourceType'] ?? 'none'));
+                $adapter = new \App\Libraries\Abdm\Fhir\Support\GatewayPayloadAdapter();
+                $hfrId = (string) ($src['hfr_id'] ?? 'HFR-IN-HMS');
+                $payload = $adapter->toGatewayPayload($gen, $src, $hfrId);
+                CLI::write("Adapter payload care context: " . ($payload['care_context_reference'] ?? 'none'));
 
-        $docHr = $db->table('health_records')
-            ->where('entity_id', '43156')
-            ->where('hi_type', 'HealthDocumentRecord')
-            ->orderBy('id', 'DESC')
-            ->get(1)
-            ->getRowArray();
-
-        if (! empty($docHr['record_data'])) {
-            $bundle = json_decode((string)$docHr['record_data'], true);
-            CLI::write("Loaded bundle for DOC-43156, type: " . ($bundle['resourceType'] ?? 'none'));
-            $res = $connector->pushRecord([
-                'patient_id' => '15350',
-                'patient_name' => 'DEVENDER SINGH',
-                'abha_address' => 'singhdevender0328@sbx',
-                'care_context_reference' => $docHr['care_context_reference'] ?: 'DOC-43156-20261008',
-                'care_context_display' => 'Health Document - 08 Oct 2026',
-                'hi_type' => 'HealthDocumentRecord',
-                'record_type' => 'HealthDocumentRecord',
-                'visit_date' => '2026-10-08',
-                'record_data' => $bundle,
-            ]);
-            CLI::write("DOC push result: " . json_encode($res), ($res['ok'] ?? 0) === 1 ? 'green' : 'red');
-            if (($res['ok'] ?? 0) === 1 && ! empty($res['queue_id'])) {
-                $db->table('record_links')->where('care_context_reference', 'DOC-43156-20261008')->update([
-                    'abdm_txn_id' => $res['queue_id'],
-                    'link_status' => 'linked',
-                    'updated_at' => date('Y-m-d H:i:s'),
-                ]);
-                $db->table('health_records')->where('id', (int)$docHr['id'])->update([
-                    'push_status' => 'linked',
-                    'push_at' => date('Y-m-d H:i:s'),
-                ]);
+                if (! empty($payload['fhir_bundle'])) {
+                    $bundle = $payload['fhir_bundle'];
+                    CLI::write("Loaded bundle for DOC-43156, type: " . ($bundle['resourceType'] ?? 'none'));
+                    $res = $connector->pushRecord([
+                        'patient_id' => '15350',
+                        'patient_name' => 'DEVENDER SINGH',
+                        'abha_address' => 'singhdevender0328@sbx',
+                        'care_context_reference' => $payload['care_context_reference'] ?: 'DOC-43156-20261008',
+                        'care_context_display' => 'Health Document - 08 Oct 2026',
+                        'hi_type' => 'HealthDocumentRecord',
+                        'record_type' => 'HealthDocumentRecord',
+                        'visit_date' => '2026-10-08',
+                        'record_data' => $bundle,
+                    ]);
+                    CLI::write("DOC push result: " . json_encode($res), ($res['ok'] ?? 0) === 1 ? 'green' : 'red');
+                    if (($res['ok'] ?? 0) === 1 && ! empty($res['queue_id'])) {
+                        $db->table('record_links')->where('care_context_reference', 'DOC-43156-20261008')->update([
+                            'abdm_txn_id' => $res['queue_id'],
+                            'link_status' => 'linked',
+                            'updated_at' => date('Y-m-d H:i:s'),
+                        ]);
+                        $db->table('health_records')->where('id', 373)->update([
+                            'push_status' => 'linked',
+                            'record_data' => json_encode($bundle),
+                            'push_at' => date('Y-m-d H:i:s'),
+                        ]);
+                    }
+                }
             }
-        } else {
-            CLI::write("DOC record_data is empty in HR #" . ($docHr['id'] ?? 0), 'red');
+        } catch (\Throwable $e) {
+            CLI::write("DoctorDocument error: " . $e->getMessage() . " at " . $e->getFile() . ":" . $e->getLine(), 'red');
         }
     }
 }
