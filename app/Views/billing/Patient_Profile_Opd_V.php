@@ -353,9 +353,6 @@ if ($patientPhotoPath === '') {
                                         <button type="button" class="btn btn-primary" id="btnNewAbdmRequest" data-bs-toggle="modal" data-bs-target="#abdmCustomConsentModal" <?= ($abhaIsVerified && $patientAbhaAddress !== '') ? '' : 'disabled' ?>>
                                             + New Request
                                         </button>
-                                        <div>
-                                            <button type="button" class="btn btn-link btn-sm p-0 mt-1" id="btnLoadAbdmDocs">Refresh list</button>
-                                        </div>
                                     </div>
                                 </div>
 
@@ -1684,16 +1681,7 @@ $(function() {
         return html;
     }
 
-    var abdmLoadingDocs = false;
     function loadAbdmDocs() {
-        if (abdmLoadingDocs) {
-            return;
-        }
-        abdmLoadingDocs = true;
-        var $btn = $('#btnLoadAbdmDocs');
-        var origText = $btn.text();
-        $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Refreshing...');
-
         var q = ($('#abdmDocSearch').val() || '').toString().trim();
         var url = abdmDocumentsUrl + '?limit=200';
         if (q !== '') {
@@ -1711,10 +1699,6 @@ $(function() {
             })
             .catch(function(err) {
                 setAbdmStatus('ABDM load failed: ' + (err.message || err), true);
-            })
-            .finally(function() {
-                abdmLoadingDocs = false;
-                $btn.prop('disabled', false).text(origText || 'Refresh list');
             });
     }
 
@@ -1802,6 +1786,7 @@ $(function() {
 
     $(document).off('click.abdmOpd', '#btnRefreshAbdmRequests').on('click.abdmOpd', '#btnRefreshAbdmRequests', function() {
         loadAbdmConsentRequests();
+        loadAbdmDocs();
     });
 
     $(document).off('click.abdmOpd', '#btnCheckLiveAbdmStatus').on('click.abdmOpd', '#btnCheckLiveAbdmStatus', function() {
