@@ -9845,10 +9845,17 @@ class Ipd_discharge extends BaseController
                     'updated_at'             => date('Y-m-d H:i:s'),
                 ];
 
+                $hrFields = $this->db->getFieldNames('health_records') ?? [];
+                if (! empty($hrFields)) {
+                    $hrData = array_intersect_key($hrData, array_flip($hrFields));
+                }
+
                 if (! empty($existingHr)) {
                     $this->db->table('health_records')->where('id', (int) $existingHr['id'])->update($hrData);
                 } else {
-                    $hrData['created_at'] = date('Y-m-d H:i:s');
+                    if (in_array('created_at', $hrFields, true)) {
+                        $hrData['created_at'] = date('Y-m-d H:i:s');
+                    }
                     $this->db->table('health_records')->insert($hrData);
                 }
             }

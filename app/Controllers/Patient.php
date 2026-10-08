@@ -2116,19 +2116,30 @@ class Patient extends BaseController
 		$nowIst = new \DateTimeImmutable('now', $istTz);
 
 		try {
-			$fromIst = $dateFromInput !== '' ? new \DateTimeImmutable($dateFromInput, $istTz) : $nowIst->modify('-365 days');
+			if ($dateFromInput !== '') {
+				$fromIst = new \DateTimeImmutable($dateFromInput, $istTz);
+				if (strpos($dateFromInput, 'T') === false && strpos($dateFromInput, ' ') === false) {
+					$fromIst = $fromIst->setTime(0, 0, 0);
+				}
+			} else {
+				$fromIst = $nowIst->modify('-365 days')->setTime(0, 0, 0);
+			}
 		} catch (\Throwable $e) {
 			return $this->response->setStatusCode(422)->setJSON([
 				'ok' => 0,
-				'error' => 'Invalid "Date From" date.',
+				'error' => 'Invalid "Date From" date/time.',
 			]);
 		}
 		try {
-			$toIst = $dateToInput !== '' ? new \DateTimeImmutable($dateToInput, $istTz) : $nowIst;
+			if ($dateToInput !== '') {
+				$toIst = new \DateTimeImmutable($dateToInput, $istTz);
+			} else {
+				$toIst = $nowIst;
+			}
 		} catch (\Throwable $e) {
 			return $this->response->setStatusCode(422)->setJSON([
 				'ok' => 0,
-				'error' => 'Invalid "Date To" date.',
+				'error' => 'Invalid "Date To" date/time.',
 			]);
 		}
 		if ($fromIst->getTimestamp() >= $toIst->getTimestamp()) {
@@ -2139,14 +2150,21 @@ class Patient extends BaseController
 		}
 
 		try {
-			$eraseIst = $eraseDateInput !== '' ? new \DateTimeImmutable($eraseDateInput, $istTz) : $nowIst->modify('+1 year');
+			if ($eraseDateInput !== '') {
+				$eraseIst = new \DateTimeImmutable($eraseDateInput, $istTz);
+				if (strpos($eraseDateInput, 'T') === false && strpos($eraseDateInput, ' ') === false) {
+					$eraseIst = $eraseIst->setTime(23, 59, 59);
+				}
+			} else {
+				$eraseIst = $nowIst->modify('+1 year')->setTime(23, 59, 59);
+			}
 		} catch (\Throwable $e) {
 			return $this->response->setStatusCode(422)->setJSON([
 				'ok' => 0,
-				'error' => 'Invalid "Expiry Date" date.',
+				'error' => 'Invalid "Expiry Date" date/time.',
 			]);
 		}
-		if ($eraseIst->setTime(23, 59, 59)->getTimestamp() < $toIst->getTimestamp()) {
+		if ($eraseIst->getTimestamp() < $toIst->getTimestamp()) {
 			return $this->response->setStatusCode(422)->setJSON([
 				'ok' => 0,
 				'error' => '"Expiry Date" must be on or after "Date To".',
@@ -2158,9 +2176,9 @@ class Patient extends BaseController
 			$toIst = $safeNowIst;
 		}
 
-		$fromUtc = $fromIst->setTime(0, 0, 0)->setTimezone($utcTz)->format('Y-m-d\TH:i:s.000\Z');
+		$fromUtc = $fromIst->setTimezone($utcTz)->format('Y-m-d\TH:i:s.000\Z');
 		$toUtc = $toIst->setTimezone($utcTz)->format('Y-m-d\TH:i:s.000\Z');
-		$eraseAtUtc = $eraseIst->setTime(23, 59, 59)->setTimezone($utcTz)->format('Y-m-d\TH:i:s.000\Z');
+		$eraseAtUtc = $eraseIst->setTimezone($utcTz)->format('Y-m-d\TH:i:s.000\Z');
 
 		$consent = [
 			'purpose' => [
@@ -2384,52 +2402,41 @@ class Patient extends BaseController
 		}
 
 		// If we already have a granted snapshot with a concrete consent reference,
-		// continue directly with fetch instead of re-reconciling a stale request_id.
+		// check if records exist or let background worker fetch them without blocking the browser.
 		if ($resumedFromLastSync && strtoupper(trim((string) ($lastSync['phase'] ?? ''))) === 'GRANTED') {
 			if ($consentArtifactRef === '' && $consentRequestRef === '') {
 				$consentRequestRef = trim((string) ($lastSync['consent_request_id'] ?? ''));
 				$consentArtifactRef = trim((string) ($lastSync['consent_id'] ?? ''));
 			}
 
-			$canDirectFetch = ($consentArtifactRef !== '' && preg_match('/^REQ-/i', $consentArtifactRef) !== 1)
-				|| ($consentRequestRef !== '' && preg_match('/^REQ-/i', $consentRequestRef) !== 1);
-
-			if ($canDirectFetch) {
-				$fetchPayload = [
-					'abha_address' => $abhaContext['abha_address'],
-				];
-				if ($consentArtifactRef !== '' && preg_match('/^REQ-/i', $consentArtifactRef) !== 1) {
-					$fetchPayload['consentId'] = $consentArtifactRef;
-				} elseif ($consentRequestRef !== '' && preg_match('/^REQ-/i', $consentRequestRef) !== 1) {
-					$fetchPayload['consentRequestId'] = $consentRequestRef;
-				}
-
-				try {
-					$fetchResult = $service->runOperation('data_fetch', $fetchPayload);
-				} catch (\Throwable $e) {
-					return $this->response->setStatusCode(500)->setJSON([
-						'ok' => 0,
-						'phase' => 'FETCH_FAILED',
-						'error' => 'Unable to fetch ABDM content: ' . $e->getMessage(),
-						'request_id' => $flowRefId,
-					]);
-				}
-
-				if ((int) ($fetchResult['ok'] ?? 0) === 1) {
-					return $this->response->setJSON([
-						'ok' => 1,
-						'phase' => 'COMPLETED',
-						'poll_again' => 0,
-						'request_id' => $flowRefId,
-						'message' => 'Resumed previous granted consent flow and fetched data successfully.',
-						'data' => [
-							'consent_request' => $consentResult,
-							'consent_reconcile' => $reconcileResult,
-							'data_fetch' => $fetchResult,
-						],
-					]);
-				}
+			$docCount = $this->countAbdmDocumentsForPatient($pno, $consentRequestRef);
+			if ($docCount > 0) {
+				return $this->response->setJSON([
+					'ok' => 1,
+					'phase' => 'COMPLETED',
+					'poll_again' => 0,
+					'request_id' => $flowRefId,
+					'message' => 'Resumed previous granted consent flow and ' . $docCount . ' record(s) are available.',
+					'data' => [
+						'consent_request' => $consentResult,
+						'consent_reconcile' => $reconcileResult,
+					],
+				]);
 			}
+
+			// Records not yet stored locally; trigger background HIU poll so browser doesn't block
+			$this->triggerBackgroundHiuPoll();
+			return $this->response->setJSON([
+				'ok' => 1,
+				'phase' => 'GRANTED',
+				'poll_again' => 1,
+				'request_id' => $flowRefId,
+				'message' => 'Consent is granted. Records are being fetched in the background...',
+				'data' => [
+					'consent_request' => $consentResult,
+					'consent_reconcile' => $reconcileResult,
+				],
+			]);
 		}
 
 		$reconcilePayload = [
@@ -2497,85 +2504,34 @@ class Patient extends BaseController
 						$reconcileResult = $fallbackReconcile;
 						$state = $this->deriveAutoFlowState($reconcileResult);
 						if ($state === 'GRANTED') {
-							$fetchPayload = [
-								'abha_address' => $abhaContext['abha_address'],
-								'consentId' => $consentArtifactRef,
-							];
-							if ($fetchPayload['consentId'] === '') {
-								unset($fetchPayload['consentId']);
-								if ($consentRequestRef !== '') {
-									$fetchPayload['consentRequestId'] = $consentRequestRef;
-								}
-							}
-
-							try {
-								$fetchResult = $service->runOperation('data_fetch', $fetchPayload);
-							} catch (\Throwable $e) {
-								return $this->response->setStatusCode(500)->setJSON([
-									'ok' => 0,
-									'phase' => 'FETCH_FAILED',
-									'error' => 'Unable to fetch ABDM content after fallback reconcile: ' . $e->getMessage(),
-									'request_id' => $flowRefId,
-								]);
-							}
-
-							if ((int) ($fetchResult['ok'] ?? 0) === 1) {
+							$docCount = $this->countAbdmDocumentsForPatient($pno, $consentRequestRef);
+							if ($docCount > 0) {
 								return $this->response->setJSON([
 									'ok' => 1,
 									'phase' => 'COMPLETED',
 									'poll_again' => 0,
 									'request_id' => $flowRefId,
-									'message' => 'Consent status was resolved using fallback bridge reference and data fetched successfully.',
+									'message' => 'Consent resolved and ' . $docCount . ' record(s) are available.',
 									'data' => [
 										'consent_request' => $consentResult,
 										'consent_reconcile' => $reconcileResult,
-										'data_fetch' => $fetchResult,
 									],
 								]);
 							}
+
+							$this->triggerBackgroundHiuPoll();
+							return $this->response->setJSON([
+								'ok' => 1,
+								'phase' => 'GRANTED',
+								'poll_again' => 1,
+								'request_id' => $flowRefId,
+								'message' => 'Consent granted. Records are being fetched in the background...',
+								'data' => [
+									'consent_request' => $consentResult,
+									'consent_reconcile' => $reconcileResult,
+								],
+							]);
 						}
-					}
-				}
-
-				$altConsentRequestRef = trim((string) ($consentRequestRef !== '' ? $consentRequestRef : ($lastSync['consent_request_id'] ?? '')));
-				$altConsentArtifactRef = trim((string) ($consentArtifactRef !== '' ? $consentArtifactRef : ($lastSync['consent_id'] ?? '')));
-				$canDirectFetch = ($altConsentArtifactRef !== '' && preg_match('/^REQ-/i', $altConsentArtifactRef) !== 1)
-					|| ($altConsentRequestRef !== '' && preg_match('/^REQ-/i', $altConsentRequestRef) !== 1);
-
-				if ($canDirectFetch) {
-					$fetchPayload = [
-						'abha_address' => $abhaContext['abha_address'],
-					];
-					if ($altConsentArtifactRef !== '' && preg_match('/^REQ-/i', $altConsentArtifactRef) !== 1) {
-						$fetchPayload['consentId'] = $altConsentArtifactRef;
-					} elseif ($altConsentRequestRef !== '' && preg_match('/^REQ-/i', $altConsentRequestRef) !== 1) {
-						$fetchPayload['consentRequestId'] = $altConsentRequestRef;
-					}
-
-					try {
-						$fetchResult = $service->runOperation('data_fetch', $fetchPayload);
-					} catch (\Throwable $e) {
-						return $this->response->setStatusCode(500)->setJSON([
-							'ok' => 0,
-							'phase' => 'FETCH_FAILED',
-							'error' => 'Unable to fetch ABDM content: ' . $e->getMessage(),
-							'request_id' => $flowRefId,
-						]);
-					}
-
-					if ((int) ($fetchResult['ok'] ?? 0) === 1) {
-						return $this->response->setJSON([
-							'ok' => 1,
-							'phase' => 'COMPLETED',
-							'poll_again' => 0,
-							'request_id' => $flowRefId,
-							'message' => 'Consent status lookup returned not found for old request id, but data fetch succeeded using saved consent reference.',
-							'data' => [
-								'consent_request' => $consentResult,
-								'consent_reconcile' => $reconcileResult,
-								'data_fetch' => $fetchResult,
-							],
-						]);
 					}
 				}
 
@@ -2613,64 +2569,28 @@ class Patient extends BaseController
 		$pollAgain = in_array($state, ['REQUESTED', 'PENDING'], true);
 
 		if ($state === 'GRANTED') {
-			$fetchPayload = [
-				'abha_address' => $abhaContext['abha_address'],
-			];
-			if ($consentArtifactRef !== '') {
-				$fetchPayload['consentId'] = $consentArtifactRef;
-			} elseif ($consentRequestRef !== '') {
-				$fetchPayload['consentRequestId'] = $consentRequestRef;
+			$docCount = $this->countAbdmDocumentsForPatient($pno, $consentRequestRef);
+			if ($docCount > 0) {
+				$state = 'COMPLETED';
+				$pollAgain = false;
+				$message = 'Data fetch completed and ' . $docCount . ' document(s) are now available.';
 			} else {
-				$fetchPayload['request_id'] = $flowRefId;
-			}
-			try {
-				$fetchResult = $service->runOperation('data_fetch', $fetchPayload);
-			} catch (\Throwable $e) {
-				return $this->response->setStatusCode(500)->setJSON([
-					'ok' => 0,
-					'phase' => 'FETCH_FAILED',
-					'error' => 'Unable to fetch ABDM content: ' . $e->getMessage(),
+				// Consent is granted in PHR, but documents are not yet downloaded/decrypted.
+				// Trigger background HIU poll worker so the browser does NOT hang on synchronous data_fetch.
+				$this->triggerBackgroundHiuPoll();
+
+				return $this->response->setJSON([
+					'ok' => 1,
+					'phase' => 'GRANTED',
+					'poll_again' => 1,
 					'request_id' => $flowRefId,
-				]);
-			}
-
-			if ((int) ($fetchResult['ok'] ?? 0) !== 1) {
-				$httpCode = (int) ($fetchResult['http_code'] ?? 422);
-				if ($httpCode < 100 || $httpCode > 599) {
-					$httpCode = 422;
-				}
-
-				$fetchError = (string) ($fetchResult['error_text'] ?? 'Data fetch failed.');
-				if ($this->isPendingBridgeSessionError($fetchError, $httpCode)) {
-					return $this->response->setJSON([
-						'ok' => 1,
-						'phase' => 'GRANTED',
-						'poll_again' => 1,
-						'request_id' => $flowRefId,
-						'message' => 'Consent granted. Waiting for the health records to arrive from the facilities.',
-						'data' => [
-							'consent_request' => $consentResult,
-							'consent_reconcile' => $reconcileResult,
-							'data_fetch' => $fetchResult,
-						],
-					]);
-				}
-
-				return $this->response->setStatusCode($httpCode)->setJSON([
-					'ok' => 0,
-					'phase' => 'FETCH_FAILED',
-					'error' => $fetchError,
-					'request_id' => $flowRefId,
+					'message' => 'Consent granted. Health records are being fetched in the background...',
 					'data' => [
 						'consent_request' => $consentResult,
 						'consent_reconcile' => $reconcileResult,
-						'data_fetch' => $fetchResult,
 					],
 				]);
 			}
-
-			$state = 'COMPLETED';
-			$pollAgain = false;
 		}
 
 		$message = match ($state) {
@@ -5608,9 +5528,15 @@ class Patient extends BaseController
 			$containers = [
 				is_array($rowReq) ? ($rowReq['consent'] ?? null) : null,
 				is_array($rowReq) ? ($rowReq['consentDetail'] ?? null) : null,
+				is_array($rowReq) ? ($rowReq['data']['consent'] ?? null) : null,
+				is_array($rowReq) ? ($rowReq['data']['consentDetail'] ?? null) : null,
+				is_array($rowReq) ? ($rowReq['data'] ?? null) : null,
 				is_array($rowReq) ? $rowReq : null,
 				is_array($rowResp) ? ($rowResp['consent'] ?? null) : null,
 				is_array($rowResp) ? ($rowResp['consentDetail'] ?? null) : null,
+				is_array($rowResp) ? ($rowResp['data']['consent'] ?? null) : null,
+				is_array($rowResp) ? ($rowResp['data']['consentDetail'] ?? null) : null,
+				is_array($rowResp) ? ($rowResp['data'] ?? null) : null,
 				is_array($rowResp) ? $rowResp : null,
 			];
 
@@ -5624,6 +5550,10 @@ class Patient extends BaseController
 						?? $c['permission']['date_range']['from']
 						?? $c['date_range']['from']
 						?? $c['dateRange']['from']
+						?? $c['valid_from']
+						?? $c['validFrom']
+						?? $c['date_from']
+						?? $c['dateFrom']
 						?? ''
 					));
 				}
@@ -5633,6 +5563,10 @@ class Patient extends BaseController
 						?? $c['permission']['date_range']['to']
 						?? $c['date_range']['to']
 						?? $c['dateRange']['to']
+						?? $c['valid_to']
+						?? $c['validTo']
+						?? $c['date_to']
+						?? $c['dateTo']
 						?? ''
 					));
 				}
@@ -5641,6 +5575,8 @@ class Patient extends BaseController
 						$c['permission']['dataEraseAt']
 						?? $c['permission']['data_erase_at']
 						?? $c['expiry']
+						?? $c['erase_at']
+						?? $c['eraseAt']
 						?? $c['dataEraseAt']
 						?? $c['data_erase_at']
 						?? ''
@@ -6279,6 +6215,40 @@ class Patient extends BaseController
 			'csrfName' => csrf_token(),
 			'csrfHash' => csrf_hash(),
 		]);
+	}
+
+	private function countAbdmDocumentsForPatient(int $pno, string $consentRequestRef = ''): int
+	{
+		if (! $this->db->tableExists('abdm_hiu_documents')) {
+			return 0;
+		}
+
+		$builder = $this->db->table('abdm_hiu_documents')->where('patient_id', $pno);
+		if ($consentRequestRef !== '') {
+			$builder->groupStart()
+				->where('consent_request_id', $consentRequestRef)
+				->orWhere('consent_ref', $consentRequestRef)
+				->groupEnd();
+		}
+
+		return (int) $builder->countAllResults();
+	}
+
+	private function triggerBackgroundHiuPoll(): void
+	{
+		try {
+			$sparkPath = ROOTPATH . 'spark';
+			if (DIRECTORY_SEPARATOR === '\\') {
+				$cmd = 'start /B php "' . $sparkPath . '" abdm:hiu-poll --limit=10 > NUL 2>&1';
+				@pclose(@popen($cmd, 'r'));
+			} else {
+				$phpBin = is_executable('/usr/bin/php8.3') ? '/usr/bin/php8.3' : (is_executable('/usr/bin/php') ? '/usr/bin/php' : 'php');
+				$cmd = $phpBin . ' "' . $sparkPath . '" abdm:hiu-poll --limit=10 > /dev/null 2>&1 &';
+				@exec($cmd);
+			}
+		} catch (\Throwable $e) {
+			log_message('warning', '[triggerBackgroundHiuPoll] ' . $e->getMessage());
+		}
 	}
 }
 

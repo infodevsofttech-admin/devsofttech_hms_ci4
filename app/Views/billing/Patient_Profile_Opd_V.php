@@ -1061,15 +1061,15 @@ if ($patientPhotoPath === '') {
                     <div class="row g-3 mb-3">
                         <div class="col-md-4">
                             <label class="form-label fw-semibold" for="abdmCustomDateFrom">Date From</label>
-                            <input type="date" class="form-control" id="abdmCustomDateFrom">
+                            <input type="datetime-local" class="form-control" id="abdmCustomDateFrom" step="1">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold" for="abdmCustomDateTo">Date To</label>
-                            <input type="date" class="form-control" id="abdmCustomDateTo">
+                            <input type="datetime-local" class="form-control" id="abdmCustomDateTo" step="1">
                         </div>
                         <div class="col-md-4">
                             <label class="form-label fw-semibold" for="abdmCustomEraseDate">Expiry Date</label>
-                            <input type="date" class="form-control" id="abdmCustomEraseDate">
+                            <input type="datetime-local" class="form-control" id="abdmCustomEraseDate" step="1">
                         </div>
                     </div>
                     <div class="small text-danger d-none" id="abdmCustomConsentError"></div>
@@ -1383,35 +1383,20 @@ $(function() {
                 html += '<div class="small text-muted">No structured sections available for this record.</div>';
             }
 
-            // Attachments (scanned images/PDFs) are stripped from the list payload
-            // to keep it light -- lazily fetch the full per-document detail (which
-            // includes them) after the modal is rendered, see below.
+            // Attachments (scanned images/PDFs) are loaded on-demand per document
+            // to keep the initial render fast and avoid flooding the server/browser.
             if (docId) {
-                html += '<div class="mt-3"><div class="fw-semibold small mb-2">Attached Files</div>'
-                    + '<div class="abdm-fetch-attachments small text-muted" data-doc-id="' + escHtml(docId) + '">Loading attached files...</div></div>';
+                html += '<div class="mt-2 pt-2 border-top">'
+                    + '<button type="button" class="btn btn-outline-secondary btn-sm abdm-load-attachments-btn" data-doc-id="' + escHtml(docId) + '">'
+                    + '<i class="fa fa-paperclip me-1"></i> View Attached Files / Scans'
+                    + '</button>'
+                    + '<div class="abdm-fetch-attachments mt-2 d-none" data-doc-id="' + escHtml(docId) + '"></div>'
+                    + '</div>';
             }
 
             html += '</div></div>';
         });
         $('#abdmFetchResultModalBody').html(html);
-
-        docIds.forEach(function(docId) {
-            fetch(abdmDocDetailBaseUrl + '/' + encodeURIComponent(docId), { credentials: 'same-origin' })
-                .then(function(resp) { return resp.json(); })
-                .then(function(data) {
-                    var item = (data && data.ok === 1) ? (data.item || {}) : null;
-                    var summary = (item && item.summary) || {};
-                    var $target = $('.abdm-fetch-attachments[data-doc-id="' + docId + '"]');
-                    if (!item) {
-                        $target.removeClass('text-muted').addClass('text-danger').text('Unable to load attached files.');
-                        return;
-                    }
-                    $target.removeClass('small text-muted').html(renderAttachmentsHtml(summary.attachments));
-                })
-                .catch(function() {
-                    $('.abdm-fetch-attachments[data-doc-id="' + docId + '"]').removeClass('text-muted').addClass('text-danger').text('Unable to load attached files.');
-                });
-        });
     }
 
     var zoom = 1;
@@ -1836,21 +1821,59 @@ $(function() {
         loadAbdmConsentRequests();
     });
 
+    function formatDateTimeLocal(d) {
+        var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+        return d.getFullYear() + '-'
+            + pad(d.getMonth() + 1) + '-'
+            + pad(d.getDate()) + 'T'
+            + pad(d.getHours()) + ':'
+            + pad(d.getMinutes()) + ':'
+            + pad(d.getSeconds());
+    }
+
     $('#abdmCustomConsentModal').on('show.bs.modal', function() {
         $('#abdmCustomConsentError').addClass('d-none').text('');
         if (!$('#abdmCustomDateFrom').val()) {
             var from = new Date();
             from.setDate(from.getDate() - 365);
-            $('#abdmCustomDateFrom').val(from.toISOString().slice(0, 10));
+            from.setHours(0, 0, 0, 0);
+            $('#abdmCustomDateFrom').val(formatDateTimeLocal(from));
         }
         if (!$('#abdmCustomDateTo').val()) {
-            $('#abdmCustomDateTo').val(new Date().toISOString().slice(0, 10));
+            var to = new Date();
+            $('#abdmCustomDateTo').val(formatDateTimeLocal(to));
         }
         if (!$('#abdmCustomEraseDate').val()) {
             var erase = new Date();
             erase.setFullYear(erase.getFullYear() + 1);
-            $('#abdmCustomEraseDate').val(erase.toISOString().slice(0, 10));
+            erase.setHours(23, 59, 59, 0);
+            $('#abdmCustomEraseDate').val(formatDateTimeLocal(erase));
         }
+    });
+
+    $(document).off('click.abdmOpd', '.abdm-load-attachments-btn').on('click.abdmOpd', '.abdm-load-attachments-btn', function() {
+        var $btn = $(this);
+        var docId = $btn.data('doc-id');
+        var $target = $('.abdm-fetch-attachments[data-doc-id="' + docId + '"]');
+        if ($target.hasClass('abdm-loaded')) {
+            $target.toggleClass('d-none');
+            var isHidden = $target.hasClass('d-none');
+            $btn.html('<i class="fa fa-paperclip me-1"></i> ' + (isHidden ? 'View Attached Files / Scans' : 'Hide Attached Files'));
+            return;
+        }
+        $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span> Loading attached files...');
+        fetch(abdmDocDetailBaseUrl + '/' + encodeURIComponent(docId), { credentials: 'same-origin' })
+            .then(function(resp) { return resp.json(); })
+            .then(function(data) {
+                var item = (data && data.ok === 1) ? (data.item || {}) : null;
+                var summary = (item && item.summary) || {};
+                $target.removeClass('d-none').addClass('abdm-loaded').html(renderAttachmentsHtml(summary.attachments));
+                $btn.prop('disabled', false).html('<i class="fa fa-paperclip me-1"></i> Hide Attached Files');
+            })
+            .catch(function() {
+                $btn.prop('disabled', false).html('<i class="fa fa-paperclip me-1"></i> View Attached Files / Scans');
+                $target.removeClass('d-none').html('<div class="small text-danger">Unable to load attached files.</div>');
+            });
     });
 
     $(document).off('click.abdmOpd', '#btnSendCustomConsent').on('click.abdmOpd', '#btnSendCustomConsent', function() {

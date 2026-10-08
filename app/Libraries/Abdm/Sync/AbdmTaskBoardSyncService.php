@@ -1360,10 +1360,35 @@ class AbdmTaskBoardSyncService
                 // 6. IPD Discharge: ipd_discharge
                 if ($entityType === 'ipd_discharge' || $taskType === 'ipd_discharge_publish') {
                     if ($dbConn->tableExists('ipd_discharge')) {
-                        $dRow = $dbConn->table('ipd_discharge')->select('discharge_date, created_at')->where('id', $entityId)->get(1)->getRowArray();
-                        $date = ! empty($dRow['discharge_date']) ? $dRow['discharge_date'] : ($dRow['created_at'] ?? null);
-                        if (! empty($date) && strtotime((string) $date) > 0) {
-                            return (string) $date;
+                        $dFields = $dbConn->getFieldNames('ipd_discharge') ?? [];
+                        $sel = in_array('ipd_id', $dFields, true) ? 'id, ipd_id' : 'id';
+                        if (in_array('created_datetime', $dFields, true)) {
+                            $sel .= ', created_datetime';
+                        }
+                        $dRow = $dbConn->table('ipd_discharge')->select($sel)->where('id', $entityId)->get(1)->getRowArray();
+                        $targetIpdId = ! empty($dRow['ipd_id']) ? (int) $dRow['ipd_id'] : (int) $entityId;
+                        if ($dbConn->tableExists('ipd_master')) {
+                            $mFields = $dbConn->getFieldNames('ipd_master') ?? [];
+                            $mSel = [];
+                            if (in_array('discharge_date', $mFields, true)) {
+                                $mSel[] = 'discharge_date';
+                            }
+                            if (in_array('discharge_time', $mFields, true)) {
+                                $mSel[] = 'discharge_time';
+                            }
+                            if (! empty($mSel)) {
+                                $mRow = $dbConn->table('ipd_master')->select(implode(', ', $mSel))->where('id', $targetIpdId)->get(1)->getRowArray();
+                                if (! empty($mRow['discharge_date']) && strtotime((string) $mRow['discharge_date']) > 0) {
+                                    $dt = (string) $mRow['discharge_date'];
+                                    if (! empty($mRow['discharge_time'])) {
+                                        $dt .= ' ' . $mRow['discharge_time'];
+                                    }
+                                    return $dt;
+                                }
+                            }
+                        }
+                        if (! empty($dRow['created_datetime']) && strtotime((string) $dRow['created_datetime']) > 0) {
+                            return (string) $dRow['created_datetime'];
                         }
                     }
                 }
