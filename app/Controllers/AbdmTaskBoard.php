@@ -780,9 +780,9 @@ class AbdmTaskBoard extends BaseController
             $linked = $this->db->tableExists('health_records') && ! empty($this->db->table('health_records')
                 ->select('id')
                 ->where('hi_type', 'ImmunizationRecord')
-                ->where('entity_type', 'immunization')
+                ->whereIn('entity_type', ['immunization', 'immunization_record_publish'])
                 ->where('entity_id', (string) $recordId)
-                ->where('push_status', 'linked')
+                ->whereIn('push_status', ['linked', 'queued', 'pushed', 'done'])
                 ->get(1)
                 ->getRowArray());
             if ($linked) {
@@ -792,9 +792,9 @@ class AbdmTaskBoard extends BaseController
             $exists = $this->db->table('abdm_work_tasks')
                 ->select('id')
                 ->where('task_type', 'immunization_record_publish')
-                ->where('entity_type', 'immunization')
+                ->whereIn('entity_type', ['immunization', 'immunization_records', 'immunization_record_publish'])
                 ->where('entity_id', (string) $recordId)
-                ->whereIn('status', ['pending', 'in_progress'])
+                ->whereIn('status', ['pending', 'in_progress', 'completed'])
                 ->get(1)
                 ->getRowArray();
             if (! empty($exists)) {

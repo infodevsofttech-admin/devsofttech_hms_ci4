@@ -494,7 +494,7 @@ class AbdmTaskBoardSyncService
         // 3. Update health_records with final push status
         if ($healthRecordId > 0 && $this->db->tableExists('health_records')) {
             $hrUpdate = [
-                'push_status' => $isSuccess ? 'queued' : 'failed',
+                'push_status' => $isSuccess ? 'linked' : 'failed',
                 'updated_at'  => $now,
             ];
             if ($queueId !== null && $queueId !== '') {
@@ -982,7 +982,7 @@ class AbdmTaskBoardSyncService
                     'entity_type'            => $entityType,
                     'entity_id'              => $entityId,
                     'care_context_reference' => $careContextRef,
-                    'push_status'            => 'queued',
+                    'push_status'            => 'linked',
                     'abdm_txn_id'            => $queueId,
                     'updated_at'             => $now,
                 ];
@@ -1008,7 +1008,7 @@ class AbdmTaskBoardSyncService
                         'care_context_reference' => $careContextRef,
                         'abdm_txn_id'            => $queueId,
                         'abha_id'                => $abhaId,
-                        'link_status'            => 'pending',
+                        'link_status'            => 'linked',
                         'created_at'             => $now,
                         'updated_at'             => $now,
                     ]);

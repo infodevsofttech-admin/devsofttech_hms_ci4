@@ -1441,18 +1441,75 @@ class AbdmGateway extends BaseController
 
     public function sharePrescriptionBundle()
     {
-        if (! $this->request->isAJAX()) {
+        if (method_exists($this->request, 'isAJAX') && ! $this->request->isAJAX()) {
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
         }
 
-        $opdId = (int) $this->request->getPost('opd_id');
-        $sessionId = (int) $this->request->getPost('opd_session_id');
-        $patientId = (int) $this->request->getPost('patient_id');
-        $abhaId = trim((string) $this->request->getPost('abha_id'));
-        $abhaAddressPost = trim((string) $this->request->getPost('abha_address'));
-        $consentHandle = trim((string) $this->request->getPost('consent_handle'));
+        $jsonBody = [];
+        try {
+            $parsed = $this->request->getJSON(true);
+            if (is_array($parsed)) {
+                $jsonBody = $parsed;
+            }
+        } catch (\Throwable) {}
+
+        $opdId = (int) ($this->request->getPost('opd_id') ?? $jsonBody['opd_id'] ?? $_POST['opd_id'] ?? 0);
+        $sessionId = (int) ($this->request->getPost('opd_session_id') ?? $jsonBody['opd_session_id'] ?? $_POST['opd_session_id'] ?? 0);
+        $patientId = (int) ($this->request->getPost('patient_id') ?? $jsonBody['patient_id'] ?? $_POST['patient_id'] ?? 0);
+        $abhaId = trim((string) ($this->request->getPost('abha_id') ?? $jsonBody['abha_id'] ?? $_POST['abha_id'] ?? ''));
+        $abhaAddressPost = trim((string) ($this->request->getPost('abha_address') ?? $jsonBody['abha_address'] ?? $_POST['abha_address'] ?? ''));
+        $consentHandle = trim((string) ($this->request->getPost('consent_handle') ?? $jsonBody['consent_handle'] ?? $_POST['consent_handle'] ?? ''));
         $pushToGateway = $this->resolveGatewayPushMode();
         $now = Time::now('Asia/Kolkata')->toDateTimeString();
+
+        $ccRef = trim((string) ($this->request->getPost('care_context_reference') ?? $this->request->getPost('careContextId') ?? $jsonBody['care_context_reference'] ?? $jsonBody['careContextId'] ?? $_POST['care_context_reference'] ?? $_POST['careContextId'] ?? ''));
+
+        // If opdId passed is actually a prescription ID / session ID
+        if ($opdId > 0 && $this->db->tableExists('opd_master')) {
+            $exists = $this->db->table('opd_master')->where('opd_id', $opdId)->countAllResults();
+            if ($exists === 0 && $this->db->tableExists('opd_prescription')) {
+                $prRow = $this->db->table('opd_prescription')->select('opd_id, session_id')->where('id', $opdId)->get(1)->getRowArray();
+                if (! empty($prRow['opd_id'])) {
+                    if ($sessionId <= 0) {
+                        $sessionId = (int) ($prRow['session_id'] ?: $opdId);
+                    }
+                    $opdId = (int) $prRow['opd_id'];
+                }
+            }
+        }
+
+        // Fallback: Resolve opd_id from care_context_reference or patient_id if not supplied
+        if ($opdId <= 0 && $ccRef !== '') {
+            if (preg_match('/^OPD-\d+-S(\d+)/i', $ccRef, $m)) {
+                $sId = (int) $m[1];
+                if ($this->db->tableExists('opd_prescription')) {
+                    $prRow = $this->db->table('opd_prescription')->select('opd_id')->where('id', $sId)->orWhere('session_id', $sId)->get(1)->getRowArray();
+                    if (! empty($prRow['opd_id'])) {
+                        $opdId = (int) $prRow['opd_id'];
+                        $sessionId = $sId;
+                    }
+                }
+            } elseif (preg_match('/^OPD-(\d+)/i', $ccRef, $m)) {
+                $candId = (int) $m[1];
+                if ($this->db->tableExists('opd_master') && $this->db->table('opd_master')->where('opd_id', $candId)->countAllResults() > 0) {
+                    $opdId = $candId;
+                }
+            }
+        }
+        if ($opdId <= 0 && $patientId > 0 && $this->db->tableExists('opd_master')) {
+            $latestOpd = $this->db->table('opd_master')->select('opd_id')->where('p_id', $patientId)->orderBy('opd_id', 'DESC')->get(1)->getRowArray();
+            if (! empty($latestOpd['opd_id'])) {
+                $opdId = (int) $latestOpd['opd_id'];
+            }
+        }
+
+        // Resolve patientId if not supplied but opdId is known
+        if ($patientId <= 0 && $opdId > 0 && $this->db->tableExists('opd_master')) {
+            $opdRow = $this->db->table('opd_master')->select('p_id')->where('opd_id', $opdId)->get(1)->getRowArray();
+            if (! empty($opdRow['p_id'])) {
+                $patientId = (int) $opdRow['p_id'];
+            }
+        }
 
         $logBridge = function (string $status, array $responsePayload, string $errorMessage = '', string $eventType = 'abdm.opd.prescription.share') use ($opdId, $patientId, $now, $pushToGateway): void {
             if (! $this->db->tableExists('abdm_api_logs')) {
@@ -1522,13 +1579,32 @@ class AbdmGateway extends BaseController
             }
         }
 
+        $requestedHiType = trim((string) ($this->request->getPost('hi_type') ?? ''));
+        $targetBundleType = 'OPConsultRecord';
+        if ($ccRef !== '' && preg_match('/^(?:PRESC|RX|PRESCRIPTION)-/i', $ccRef)) {
+            $targetBundleType = 'PrescriptionRecord';
+        } elseif (in_array($requestedHiType, ['MedicationRequestBundle', 'Prescription', 'PrescriptionRecord'], true)) {
+            $targetBundleType = 'PrescriptionRecord';
+        }
+
         $builder = $this->db->table('opd_fhir_documents')
             ->where('opd_id', $opdId)
-            ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle', 'PrescriptionRecord']);
+            ->where('bundle_type', $targetBundleType);
         if ($sessionId > 0) {
             $builder->where('opd_session_id', $sessionId);
         }
         $bundleRow = $builder->orderBy('id', 'DESC')->get(1)->getRowArray();
+
+        if (empty($bundleRow) && $opdId > 0) {
+            // Attempt on-demand FHIR bundle regeneration
+            try {
+                $opdCtrl = new \App\Controllers\Opd_prescription();
+                $opdCtrl->initController($this->request, $this->response, service('logger'));
+                $opdCtrl->regenerateFhirBundleInternal($opdId, $sessionId > 0 ? $sessionId : $opdId, $targetBundleType);
+                $bundleRow = $builder->orderBy('id', 'DESC')->get(1)->getRowArray();
+            } catch (\Throwable) {
+            }
+        }
 
         if (empty($bundleRow)) {
             $logBridge('error', ['ok' => 0, 'error_text' => 'No FHIR bundle found for selected OPD/session'], 'No FHIR bundle found for selected OPD/session', 'abdm.opd.prescription.share.validation');
@@ -1554,20 +1630,7 @@ class AbdmGateway extends BaseController
             ]);
         }
 
-        $requestedHiType = trim((string) ($this->request->getPost('hi_type') ?? ''));
-        $bundleType = trim((string) ($bundleRow['bundle_type'] ?? 'OPConsultRecord'));
-        if ($requestedHiType !== '') {
-            $hiType = match ($requestedHiType) {
-                'OPConsultation', 'OPConsultRecord' => 'OPConsultRecord',
-                'MedicationRequestBundle', 'Prescription', 'PrescriptionRecord' => 'PrescriptionRecord',
-                default => $requestedHiType,
-            };
-        } else {
-            $hiType = match ($bundleType) {
-                'OPConsultRecord', 'OPConsultation' => 'OPConsultRecord',
-                default => 'PrescriptionRecord',
-            };
-        }
+        $hiType = $targetBundleType;
         $consentHandleResolved = is_array($consent) ? trim((string) ($consent['consent_handle'] ?? '')) : '';
         $consentExternalId = is_array($consent) ? $this->resolveConsentExternalId($consent) : '';
         $sessionForRef = $sessionId > 0 ? $sessionId : (int) ($bundleRow['opd_session_id'] ?? 0);
@@ -1581,6 +1644,7 @@ class AbdmGateway extends BaseController
                     ->select('care_context_reference')
                     ->where('entity_type', 'opd')
                     ->where('entity_id', (string) $opdId)
+                    ->where('hi_type', $hiType)
                     ->where('care_context_reference !=', '')
                     ->orderBy('id', 'DESC')
                     ->get(1)
@@ -1593,7 +1657,8 @@ class AbdmGateway extends BaseController
                 $careContextRef = $existingCcRef;
             } else {
                 $dateClean = str_replace('-', '', $visitDate);
-                $careContextRef = 'OPD-' . $patientId . '-S' . ($sessionForRef > 0 ? $sessionForRef : 0) . '-' . $dateClean;
+                $prefix = $hiType === 'PrescriptionRecord' ? 'PRESC-' : 'OPD-';
+                $careContextRef = $prefix . $patientId . '-S' . ($sessionForRef > 0 ? $sessionForRef : 0) . '-' . $dateClean;
             }
         }
         $careContextDisplay = $hiType === 'PrescriptionRecord'
@@ -1846,7 +1911,7 @@ class AbdmGateway extends BaseController
         $logBridge(
             $connectorError === null ? 'success' : 'error',
             $responsePayload,
-            $connectorError !== null ? (string) $connectorError : ($consentWarning !== '' ? $consentWarning : ''),
+            $connectorError !== null ? (string) $connectorError : '',
             'abdm.opd.prescription.share.result'
         );
 
@@ -2151,7 +2216,7 @@ class AbdmGateway extends BaseController
         $diagnosticReport = [
             'id'           => (string) $labReqId,
             'title'        => $testTitle ?: ($isImaging ? 'Radiology Report' : 'Laboratory Report'),
-            'status'       => $labReq->status == 1 ? 'final' : 'preliminary',
+            'status'       => in_array((int)$labReq->status, [1, 2], true) ? 'final' : 'preliminary',
             'conclusion'   => $cleanImpression,
             'reported_at'  => $reportedAt,
             'report_html'  => trim((string) ($labReq->Report_Data ?? '')),
@@ -5022,51 +5087,60 @@ class AbdmGateway extends BaseController
                 continue;
             }
 
-            // Strategy 0: Live On-Demand Fresh Generation for OPD Consult & Prescription Records
-            if (preg_match('/^(OPD|PRESCRIPTION|PRESC)-(\d+)(?:-S(\d+))?/i', $ref, $m)) {
-                $refPrefix = strtoupper($m[1]);
-                $targetPatientId = (int) $m[2];
-                $targetSessionId = (int) ($m[3] ?? 0);
-                $targetOpdId = 0;
-
-                if ($targetSessionId > 0 && $db->tableExists('opd_prescription')) {
-                    $pRow = $db->table('opd_prescription')->select('opd_id')->where('id', $targetSessionId)->get(1)->getRowArray();
-                    $targetOpdId = (int) ($pRow['opd_id'] ?? 0);
-                }
-                if ($targetOpdId <= 0 && $targetPatientId > 0 && $db->tableExists('opd_master')) {
-                    $opdRow = $db->table('opd_master')->select('opd_id')->where('opd_id', $targetPatientId)->get(1)->getRowArray();
-                    if ($opdRow) {
-                        $targetOpdId = (int) $opdRow['opd_id'];
-                    } else {
-                        $opdRow = $db->table('opd_master')->select('opd_id')->where('p_id', $targetPatientId)->orderBy('opd_id', 'DESC')->get(1)->getRowArray();
-                        $targetOpdId = (int) ($opdRow['opd_id'] ?? 0);
+            // Strategy 0a: Live On-Demand Fresh Generation for LAB / Diagnostic Report (LAB-xxxx or RAD-xxxx)
+            if (preg_match('/^(?:LAB|RAD)-/i', $ref)) {
+                try {
+                    $diag = $this->buildDiagnosticReportBundle($ref);
+                    if ($diag !== null && !empty($diag['bundle'])) {
+                        $records[] = [
+                            'careContextReference' => $ref,
+                            'hiType'               => $diag['hiType'] ?? 'DiagnosticReportRecord',
+                            'display'              => $diag['display'] ?? 'Diagnostic Report',
+                            'bundle'               => $diag['bundle'],
+                        ];
+                        $this->cacheRecordBundle($ref, $diag['hiType'] ?? 'DiagnosticReportRecord', $diag['bundle'], $diag['display'] ?? 'Diagnostic Report');
+                        continue;
                     }
+                } catch (\Throwable $ex) {
+                    log_message('warning', 'Live DiagnosticReport FHIR generation in recordsFetch failed: ' . $ex->getMessage());
                 }
+            }
 
-                if ($targetOpdId > 0) {
-                    try {
-                        $isPrescriptionReq = in_array($refPrefix, ['PRESC', 'PRESCRIPTION'], true);
-                        $targetBundleType = $isPrescriptionReq ? 'PrescriptionRecord' : 'OPConsultRecord';
-                        $targetHiType = $isPrescriptionReq ? 'PrescriptionRecord' : 'OPConsultRecord';
-                        $targetDisplay = $isPrescriptionReq
-                            ? ('Prescription - ' . date('d M Y'))
-                            : ('Consultation Record - ' . date('d M Y'));
-
-                        $opdCtrl = new \App\Controllers\Opd_prescription();
-                        $opdCtrl->initController($this->request, $this->response, service('logger'));
-                        $regen = $opdCtrl->regenerateFhirBundleInternal($targetOpdId, $targetSessionId, $targetBundleType);
-                        if (!empty($regen['ok']) && !empty($regen['bundle'])) {
-                            $records[] = [
-                                'careContextReference' => $ref,
-                                'hiType'               => $targetHiType,
-                                'display'              => $targetDisplay,
-                                'bundle'               => $regen['bundle'],
-                            ];
-                            continue;
-                        }
-                    } catch (\Throwable $ex) {
-                        log_message('warning', 'Live FHIR bundle generation in recordsFetch failed: ' . $ex->getMessage());
+            // Strategy 0b: Live On-Demand Fresh Generation for Discharge Summary (DISCHARGE-xxxx or IPD-xxxx)
+            if (preg_match('/^(?:DISCHARGE|IPD)-/i', $ref)) {
+                try {
+                    $discharge = $this->buildDischargeSummaryBundle($ref);
+                    if ($discharge !== null && !empty($discharge['bundle'])) {
+                        $records[] = [
+                            'careContextReference' => $ref,
+                            'hiType'               => $discharge['hiType'] ?? 'DischargeSummaryRecord',
+                            'display'              => $discharge['display'] ?? 'Discharge Summary',
+                            'bundle'               => $discharge['bundle'],
+                        ];
+                        $this->cacheRecordBundle($ref, $discharge['hiType'] ?? 'DischargeSummaryRecord', $discharge['bundle'], $discharge['display'] ?? 'Discharge Summary');
+                        continue;
                     }
+                } catch (\Throwable $ex) {
+                    log_message('warning', 'Live DischargeSummary FHIR generation in recordsFetch failed: ' . $ex->getMessage());
+                }
+            }
+
+            // Strategy 0c: Live On-Demand Fresh Generation for OPD Consult & Prescription Records
+            if (preg_match('/^(OPD|PRESCRIPTION|PRESC|RX)-(\d+)(?:-S(\d+))?/i', $ref, $m)) {
+                try {
+                    $opd = $this->buildOpConsultationBundle($ref);
+                    if ($opd !== null && !empty($opd['bundle'])) {
+                        $records[] = [
+                            'careContextReference' => $ref,
+                            'hiType'               => $opd['hiType'] ?? 'OPConsultRecord',
+                            'display'              => $opd['display'] ?? 'Consultation Record',
+                            'bundle'               => $opd['bundle'],
+                        ];
+                        $this->cacheRecordBundle($ref, $opd['hiType'] ?? 'OPConsultRecord', $opd['bundle'], $opd['display'] ?? 'Consultation Record');
+                        continue;
+                    }
+                } catch (\Throwable $ex) {
+                    log_message('warning', 'Live FHIR bundle generation in recordsFetch failed: ' . $ex->getMessage());
                 }
             }
 
@@ -5325,6 +5399,320 @@ class AbdmGateway extends BaseController
             'ok'      => 1,
             'records' => $records,
         ]);
+    }
+
+    /**
+     * Build an ABDM M3 compliant DiagnosticReportRecord FHIR Document Bundle on the fly
+     * Supports both numeric lab_req_id and care context references like 'LAB-51459-20261008' or 'RAD-51459-20261008'
+     *
+     * @param string|int $labReqIdOrRef
+     * @return array{careContextReference: string, hiType: string, display: string, bundle: array<string,mixed>}|null
+     */
+    public function buildDiagnosticReportBundle(string|int $labReqIdOrRef): ?array
+    {
+        $labReqId = 0;
+        $refStr = trim((string) $labReqIdOrRef);
+        if (is_numeric($labReqIdOrRef)) {
+            $labReqId = (int) $labReqIdOrRef;
+        } elseif (preg_match('/^(?:LAB|RAD)-(\d+)/i', $refStr, $m)) {
+            $labReqId = (int) $m[1];
+        }
+
+        if ($labReqId <= 0) {
+            return null;
+        }
+
+        $db = $this->db ?? \Config\Database::connect();
+        if (! $db->tableExists('lab_request')) {
+            return null;
+        }
+
+        $selectCols = ['id', 'patient_id', 'patient_name', 'lab_type', 'charge_id', 'report_name', 'Report_Data', 'report_data_Impression', 'status', 'reported_time'];
+        if ($db->fieldExists('charge_item_id', 'lab_request')) {
+            $selectCols[] = 'charge_item_id';
+        }
+        if ($db->fieldExists('lab_repo_id', 'lab_request')) {
+            $selectCols[] = 'lab_repo_id';
+        }
+        $labReq = $db->table('lab_request')
+            ->select(implode(', ', $selectCols))
+            ->where('id', $labReqId)
+            ->get(1)
+            ->getRow();
+
+        if (! $labReq) {
+            return null;
+        }
+
+        $patientId = (int) ($labReq->patient_id ?? 0);
+        $patientRow = [];
+        if ($patientId > 0 && $db->tableExists('patient_master')) {
+            $patientRow = $db->table('patient_master')->where('id', $patientId)->get(1)->getRowArray() ?? [];
+        }
+        $patName = $this->patientDisplayName($patientRow);
+        if ($patName === '') {
+            $patName = trim((string) ($labReq->patient_name ?? ''));
+        }
+
+        $abhaIdentity = $this->resolvePatientAbhaIdentity($patientId);
+        $abhaNumber = $abhaIdentity['abha_id'] ?? '';
+        $abhaAddress = $abhaIdentity['abha_address'] ?? '';
+        $abhaId = $abhaAddress !== '' ? $abhaAddress : $abhaNumber;
+
+        $testTitle = trim((string) ($labReq->report_name ?? ''));
+        $labType   = (int) ($labReq->lab_type ?? 0);
+        $isImaging = in_array($labType, [1, 2, 3, 4, 6], true);
+
+        if ($testTitle === '') {
+            $labRepoId = (int) ($labReq->lab_repo_id ?? 0);
+            if ($labRepoId > 0 && $db->tableExists('lab_repo')) {
+                $repoRow = $db->table('lab_repo')->select('Repo, RepoName')->where('mstRepoKey', $labRepoId)->get(1)->getRowArray() ?? [];
+                $testTitle = trim((string) ($repoRow['RepoName'] ?? $repoRow['Repo'] ?? ''));
+            }
+        }
+        if ($testTitle === '') {
+            $chargeItemId = (int) ($labReq->charge_item_id ?? 0);
+            if ($chargeItemId > 0 && $db->tableExists('invoice_item')) {
+                $invItem = $db->table('invoice_item')->select('item_name')->where('id', $chargeItemId)->get(1)->getRowArray() ?? [];
+                $testTitle = trim((string) ($invItem['item_name'] ?? ''));
+            }
+        }
+        if ($testTitle === '') {
+            $chargeId  = (int) ($labReq->charge_id ?? 0);
+            if ($chargeId > 0 && $db->tableExists('charge_master')) {
+                $chargeRow = $db->table('charge_master')->select('charge_name')->where('id', $chargeId)->get(1)->getRowArray() ?? [];
+                $testTitle = trim((string) ($chargeRow['charge_name'] ?? ''));
+            }
+        }
+        if ($testTitle === '') {
+            $testTitle = $this->mapLabTypeToTitle($labType) ?: ($isImaging ? 'Radiology Report' : 'Laboratory Report');
+        }
+
+        $hospitalProfile = $this->getHospitalProfileForFhir();
+
+        $reportedRaw = trim((string) ($labReq->reported_time ?? ''));
+        $reportedAt = $reportedRaw !== '' ? (new \DateTime($reportedRaw, new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP') : date('Y-m-d\TH:i:sP');
+        $visitDate = $reportedRaw !== '' ? date('Y-m-d', strtotime($reportedRaw)) : date('Y-m-d');
+
+        $rawImpression = trim((string) ($labReq->report_data_Impression ?? ''));
+        $cleanImpression = trim(html_entity_decode(strip_tags($rawImpression), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'));
+
+        $diagnosticReport = [
+            'id'           => (string) $labReqId,
+            'title'        => $testTitle ?: ($isImaging ? 'Radiology Report' : 'Laboratory Report'),
+            'status'       => in_array((int)$labReq->status, [1, 2], true) ? 'final' : 'preliminary',
+            'conclusion'   => $cleanImpression,
+            'reported_at'  => $reportedAt,
+            'report_html'  => trim((string) ($labReq->Report_Data ?? '')),
+            'lab_type'     => $labType,
+        ];
+        if ($isImaging) {
+            $diagnosticReport['is_imaging'] = true;
+            $diagnosticReport['report_domain'] = 'imaging';
+            $modalityName = $this->mapLabTypeToTitle($labType) ?: 'Diagnostic imaging';
+            $diagnosticReport['section_title'] = $modalityName . ' report';
+            $diagnosticReport['section_snomed_code'] = '371531008';
+            $diagnosticReport['section_snomed_display'] = 'Diagnostic imaging report';
+        }
+
+        $repoLoincCode = '';
+        if ($db->tableExists('lab_repo')) {
+            $labRepoRow = $db->table('lab_request lr')
+                ->select('lr.lab_repo_id, repo.loinc_code AS repo_loinc_code, repo.Title')
+                ->join('lab_repo repo', 'repo.mstRepoKey = lr.lab_repo_id', 'left')
+                ->where('lr.id', $labReqId)
+                ->get(1)
+                ->getRowArray() ?? [];
+            $repoLoincCode = trim((string) ($labRepoRow['repo_loinc_code'] ?? ''));
+        }
+        if ($repoLoincCode !== '') {
+            $diagnosticReport['loinc_code'] = $repoLoincCode;
+        }
+
+        $observations = $this->buildLabObservations($labReqId, (string) ($labReq->status ?? '0'));
+        $organization = ! empty($hospitalProfile['name'])
+            ? ['name' => $hospitalProfile['name'], 'hfr_id' => $hospitalProfile['hfr_id'] ?? '']
+            : null;
+        $practitioner = $this->resolveLabPractitionerForFhir($labReqId, $labReq);
+        $encounter = [
+            'id'           => 'LAB-' . $labReqId,
+            'status'       => 'finished',
+            'class_code'   => 'AMB',
+            'period_start' => $reportedAt,
+        ];
+
+        $patient = [
+            'id'          => (string) $patientId,
+            'name'        => $patName,
+            'gender'      => trim((string) ($patientRow['gender'] ?? '')),
+            'birthDate'   => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
+            'abhaAddress' => $abhaId,
+        ];
+
+        $pdfAttachment = null;
+        try {
+            $pdfAttachment = $this->buildDiagnosticDigitalSharePdf(
+                $patientRow,
+                $abhaIdentity,
+                $diagnosticReport,
+                $observations,
+                $practitioner,
+                $hospitalProfile,
+                $labReqId
+            );
+        } catch (\Throwable $e) {
+            log_message('warning', 'PDF attachment generation failed in buildDiagnosticReportBundle: ' . $e->getMessage());
+        }
+
+        $fhir = new FhirR4Builder();
+        $bundle = $fhir->buildLabReportBundle($patient, $diagnosticReport, $observations, $practitioner, $organization, $encounter, $pdfAttachment);
+
+        $cleanTestTitle = self::sanitizeCareContextDisplay($testTitle !== '' ? $testTitle : ($isImaging ? 'Radiology Report' : 'Lab Report'));
+        $display = self::sanitizeCareContextDisplay(($isImaging ? 'Radiology Report - ' : 'Diagnostic Report - ') . $cleanTestTitle . ' ' . date('d M Y', strtotime($visitDate)));
+
+        $ccRef = $refStr !== '' ? $refStr : (($isImaging ? 'RAD-' : 'LAB-') . $labReqId . '-' . str_replace('-', '', $visitDate));
+
+        return [
+            'careContextReference' => $ccRef,
+            'hiType'               => 'DiagnosticReportRecord',
+            'display'              => $display,
+            'bundle'               => $bundle,
+        ];
+    }
+
+    /**
+     * Build an ABDM M3 compliant DischargeSummaryRecord FHIR Document Bundle on the fly
+     * Supports both numeric ipd_id and care context references like 'DISCHARGE-3211-20260906' or 'IPD-3211'
+     *
+     * @param string|int $ipdIdOrRef
+     * @return array{careContextReference: string, hiType: string, display: string, bundle: array<string,mixed>}|null
+     */
+    public function buildDischargeSummaryBundle(string|int $ipdIdOrRef): ?array
+    {
+        $ipdId = 0;
+        $refStr = trim((string) $ipdIdOrRef);
+        if (is_numeric($ipdIdOrRef)) {
+            $ipdId = (int) $ipdIdOrRef;
+        } elseif (preg_match('/^(?:DISCHARGE|IPD)-(\d+)/i', $refStr, $m)) {
+            $ipdId = (int) $m[1];
+        }
+
+        if ($ipdId <= 0) {
+            return null;
+        }
+
+        $payload = $this->buildIpdDischargeGatewayPayload($ipdId, 0, '', false);
+        if ($payload === null || empty($payload['bundle'])) {
+            return null;
+        }
+
+        $display = (string) ($payload['care_context_display'] ?? ('Discharge Summary - ' . date('d M Y')));
+        $ccRef = $refStr !== '' ? $refStr : (string) ($payload['care_context_reference'] ?? ('DISCHARGE-' . $ipdId . '-' . date('Ymd')));
+
+        return [
+            'careContextReference' => $ccRef,
+            'hiType'               => 'DischargeSummaryRecord',
+            'display'              => $display,
+            'bundle'               => $payload['bundle'],
+        ];
+    }
+
+    /**
+     * Build an ABDM M3 compliant OPConsultRecord or PrescriptionRecord FHIR Document Bundle on the fly
+     * Supports care context references like 'OPD-15355-S33729-20261008' or 'PRESC-15355-S33729-20261008'
+     *
+     * @param string $ref
+     * @return array{careContextReference: string, hiType: string, display: string, bundle: array<string,mixed>}|null
+     */
+    public function buildOpConsultationBundle(string $ref): ?array
+    {
+        $db = $this->db ?? \Config\Database::connect();
+        if (! preg_match('/^(OPD|PRESCRIPTION|PRESC|RX)-(\d+)(?:-S(\d+))?/i', $ref, $m)) {
+            return null;
+        }
+
+        $refPrefix = strtoupper($m[1]);
+        $targetPatientId = (int) $m[2];
+        $targetSessionId = (int) ($m[3] ?? 0);
+        $targetOpdId = 0;
+
+        if ($targetSessionId > 0 && $db->tableExists('opd_prescription')) {
+            $pRow = $db->table('opd_prescription')->select('opd_id')->where('id', $targetSessionId)->get(1)->getRowArray();
+            $targetOpdId = (int) ($pRow['opd_id'] ?? 0);
+        }
+        if ($targetOpdId <= 0 && $targetPatientId > 0 && $db->tableExists('opd_master')) {
+            $opdRow = $db->table('opd_master')->select('opd_id')->where('opd_id', $targetPatientId)->get(1)->getRowArray();
+            if ($opdRow) {
+                $targetOpdId = (int) $opdRow['opd_id'];
+            } else {
+                $opdRow = $db->table('opd_master')->select('opd_id')->where('p_id', $targetPatientId)->orderBy('opd_id', 'DESC')->get(1)->getRowArray();
+                $targetOpdId = (int) ($opdRow['opd_id'] ?? 0);
+            }
+        }
+
+        if ($targetOpdId <= 0) {
+            return null;
+        }
+
+        try {
+            $isPrescriptionReq = in_array($refPrefix, ['PRESC', 'PRESCRIPTION', 'RX'], true);
+            $targetBundleType = $isPrescriptionReq ? 'PrescriptionRecord' : 'OPConsultRecord';
+            $targetHiType = $isPrescriptionReq ? 'PrescriptionRecord' : 'OPConsultRecord';
+            $targetDisplay = $isPrescriptionReq
+                ? ('Prescription - ' . date('d M Y'))
+                : ('Consultation Record - ' . date('d M Y'));
+
+            $opdCtrl = new \App\Controllers\Opd_prescription();
+            $opdCtrl->initController($this->request, $this->response, service('logger'));
+            $regen = $opdCtrl->regenerateFhirBundleInternal($targetOpdId, $targetSessionId, $targetBundleType);
+            if (!empty($regen['ok']) && !empty($regen['bundle'])) {
+                return [
+                    'careContextReference' => $ref,
+                    'hiType'               => $targetHiType,
+                    'display'              => $targetDisplay,
+                    'bundle'               => $regen['bundle'],
+                ];
+            }
+        } catch (\Throwable $ex) {
+            log_message('warning', 'Live FHIR bundle generation in buildOpConsultationBundle failed: ' . $ex->getMessage());
+        }
+
+        return null;
+    }
+
+    /**
+     * Cache freshly generated bundle in health_records table for quick retrieval
+     */
+    private function cacheRecordBundle(string $ref, string $hiType, array $bundle, string $display = ''): void
+    {
+        try {
+            $db = $this->db ?? \Config\Database::connect();
+            if (! $db->tableExists('health_records')) {
+                return;
+            }
+            $bundleJson = json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $exHr = $db->table('health_records')->where('care_context_reference', $ref)->get(1)->getRowArray();
+            if ($exHr) {
+                if (empty($exHr['record_data'])) {
+                    $db->table('health_records')->where('id', (int) $exHr['id'])->update([
+                        'record_data' => $bundleJson,
+                        'push_status' => 'linked',
+                        'updated_at'  => date('Y-m-d H:i:s'),
+                    ]);
+                }
+            } else {
+                $db->table('health_records')->insert([
+                    'care_context_reference' => $ref,
+                    'hi_type'                => $hiType,
+                    'record_data'            => $bundleJson,
+                    'push_status'            => 'linked',
+                    'created_at'             => date('Y-m-d H:i:s'),
+                    'updated_at'             => date('Y-m-d H:i:s'),
+                ]);
+            }
+        } catch (\Throwable $e) {
+            log_message('warning', 'cacheRecordBundle error: ' . $e->getMessage());
+        }
     }
 
     /**
@@ -6872,7 +7260,7 @@ class AbdmGateway extends BaseController
 
                 $isReady = $hasStoredDoc || $hasHr || $isVisitDone || $hasFindings || $hasMeds || $hasVitals;
 
-                // Single unified care context covering consult note, wellness, prescription, and documents
+                // 1. Doctor Visit / OPD Consultation record
                 $addContext([
                     'careContextId'   => $ccRef,
                     'referenceNumber' => $ccRef,
@@ -6882,11 +7270,41 @@ class AbdmGateway extends BaseController
                     'patient_id'      => $patientId,
                     'is_fhir_ready'   => $isReady,
                     'is_primary'      => false,
+                    'entity_id'       => (string) $opdId,
+                    'opd_id'          => $opdId,
+                    'session_id'      => $sessionId,
                 ]);
                 $seenRefs[$aliasRef] = true;
                 $seenRefs['OPD-' . $opdId . '-S' . $sessionId . '-' . $visitDate] = true;
                 $seenRefs['OPD-' . $opdId . '-S' . $sessionId . '-' . $cleanDate] = true;
                 $seenRefs['OPD-' . $patientId . '-S' . $sessionId . '-' . $visitDate] = true;
+
+                // 2. If medicines are prescribed, also discover distinct PrescriptionRecord
+                if ($hasMeds) {
+                    $prescCcRef = 'PRESC-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
+                    $prescAliasRef = 'PRESC-' . $opdId . '-S' . $sessionId . '-' . $cleanDate;
+                    $prescDisplay = 'Prescription - ' . ($docName !== '' ? 'Dr. ' . $docName . ' - ' : '') . $dateStr;
+                    if (strlen($prescDisplay) > 85) {
+                        $prescDisplay = 'Prescription - ' . $dateStr;
+                    }
+                    $addContext([
+                        'careContextId'   => $prescCcRef,
+                        'referenceNumber' => $prescCcRef,
+                        'alias_reference' => $prescAliasRef,
+                        'display'         => $prescDisplay,
+                        'record_type'     => 'PrescriptionRecord',
+                        'patient_id'      => $patientId,
+                        'is_fhir_ready'   => $isReady,
+                        'is_primary'      => false,
+                        'entity_id'       => (string) $opdId,
+                        'opd_id'          => $opdId,
+                        'session_id'      => $sessionId,
+                    ]);
+                    $seenRefs[$prescAliasRef] = true;
+                    $seenRefs['PRESC-' . $opdId . '-S' . $sessionId . '-' . $visitDate] = true;
+                    $seenRefs['PRESC-' . $opdId . '-S' . $sessionId . '-' . $cleanDate] = true;
+                    $seenRefs['PRESC-' . $patientId . '-S' . $sessionId . '-' . $visitDate] = true;
+                }
                 if ($sessionId > 0) {
                     $seenOpdSessions[$sessionId] = true;
                 }
@@ -7281,6 +7699,73 @@ class AbdmGateway extends BaseController
                 'is_fhir_ready'   => true,
                 'is_primary'      => false,
             ]);
+        }
+
+        $extractDate = static function (array $cc): int {
+            foreach (['visit_date', 'date', 'created_at', 'insert_date', 'date_issue'] as $field) {
+                if (! empty($cc[$field])) {
+                    $ts = strtotime((string) $cc[$field]);
+                    if ($ts !== false && $ts > 0) {
+                        return $ts;
+                    }
+                }
+            }
+            $ref = (string) ($cc['referenceNumber'] ?? $cc['careContextId'] ?? '');
+            if (preg_match('/(\d{4})(\d{2})(\d{2})/', $ref, $m)) {
+                $check = $m[1] . '-' . $m[2] . '-' . $m[3];
+                $ts = strtotime($check);
+                if ($ts !== false && $ts > 0) {
+                    return $ts;
+                }
+            }
+            if (preg_match('/(\d{4}-\d{2}-\d{2})/', $ref, $m)) {
+                $ts = strtotime($m[1]);
+                if ($ts !== false && $ts > 0) {
+                    return $ts;
+                }
+            }
+            $disp = (string) ($cc['display'] ?? '');
+            if (preg_match('/(\d{1,2}\s+[A-Za-z]{3}\s+\d{4})/', $disp, $m)) {
+                $ts = strtotime($m[1]);
+                if ($ts !== false && $ts > 0) {
+                    return $ts;
+                }
+            }
+            if (preg_match('/(\d{4}-\d{2}-\d{2})/', $disp, $m)) {
+                $ts = strtotime($m[1]);
+                if ($ts !== false && $ts > 0) {
+                    return $ts;
+                }
+            }
+            return 0;
+        };
+
+        usort($careContextsFull, function ($a, $b) use ($extractDate) {
+            $pA = ! empty($a['is_primary']) ? 1 : 0;
+            $pB = ! empty($b['is_primary']) ? 1 : 0;
+            if ($pA !== $pB) {
+                return $pB - $pA;
+            }
+            $tA = $extractDate($a);
+            $tB = $extractDate($b);
+            if ($tA !== $tB) {
+                return $tB - $tA;
+            }
+            return strcmp((string) ($b['referenceNumber'] ?? ''), (string) ($a['referenceNumber'] ?? ''));
+        });
+
+        $careContextsV3 = [];
+        foreach ($careContextsFull as $item) {
+            $ref = trim((string) ($item['referenceNumber'] ?? $item['careContextId'] ?? ''));
+            $recType = trim((string) ($item['record_type'] ?? ''));
+            $hiType = $item['hiType'] ?? $this->mapRecordTypeToAbdmHiType($recType);
+            $careContextsV3[] = [
+                'referenceNumber' => $ref,
+                'display'         => $item['display'] ?? $ref,
+                'hiType'          => $hiType,
+                'record_type'     => $recType,
+                'is_fhir_ready'   => ! empty($item['is_fhir_ready']),
+            ];
         }
 
         return [$careContextsV3, $careContextsFull];
@@ -12315,6 +12800,7 @@ class AbdmGateway extends BaseController
                 'is_linked'     => $isLinked,
                 'is_fhir_ready' => (bool) ($cc['is_fhir_ready'] ?? false),
                 'is_primary'    => (bool) ($cc['is_primary'] ?? false),
+                'entity_id'     => (string) ($cc['entity_id'] ?? $cc['opd_id'] ?? ''),
             ];
         }
 

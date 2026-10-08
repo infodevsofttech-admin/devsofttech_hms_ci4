@@ -4934,7 +4934,11 @@ class Opd_prescription extends BaseController
             }
             $normalizedBundleType = in_array($bundleType, ['Prescription', 'PrescriptionRecord'], true) ? 'PrescriptionRecord' : 'OPConsultRecord';
             $clinicalContext['bundle_type'] = $normalizedBundleType;
-            $bundle          = $this->fhirR4Builder->buildOpConsultBundle($patient, $encounter, $medications, $conditions, $clinicalContext);
+            if ($normalizedBundleType === 'PrescriptionRecord') {
+                $bundle = $this->fhirR4Builder->buildPrescriptionBundle($patient, $encounter, $medications, [], $clinicalContext);
+            } else {
+                $bundle = $this->fhirR4Builder->buildOpConsultBundle($patient, $encounter, $medications, $conditions, $clinicalContext);
+            }
             $bundleJson      = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
             $generatedBy = 'system';
@@ -11922,12 +11926,50 @@ class Opd_prescription extends BaseController
             ]);
         }
 
-        // Clean up redundant standalone bundles in opd_fhir_documents so only unified OPConsultRecord is kept
+        // If medicines are prescribed, also store a distinct, compliant PrescriptionRecord bundle
+        $prescJson = null;
+        if (! empty($medications)) {
+            $prescContext = $clinicalContext;
+            $prescContext['bundle_type'] = 'PrescriptionRecord';
+            $prescBundle = $builder->buildPrescriptionBundle($patient, $encounter, $medications, [], $prescContext);
+            $prescJson = (string) json_encode($prescBundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            $existingPresc = $this->db->table('opd_fhir_documents')
+                ->where('opd_id', $opdId)
+                ->where('opd_session_id', $sessionId)
+                ->where('bundle_type', 'PrescriptionRecord')
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+            if (! empty($existingPresc['id'])) {
+                $this->db->table('opd_fhir_documents')
+                    ->where('id', (int) $existingPresc['id'])
+                    ->update([
+                        'bundle_json'  => $prescJson,
+                        'generated_by' => $generatedBy,
+                        'generated_at' => $now,
+                        'updated_at'   => $now,
+                    ]);
+            } else {
+                $this->db->table('opd_fhir_documents')->insert([
+                    'opd_id'         => $opdId,
+                    'opd_session_id' => $sessionId,
+                    'patient_id'     => (int) ($patient['id'] ?? 0),
+                    'bundle_type'    => 'PrescriptionRecord',
+                    'bundle_json'    => $prescJson,
+                    'generated_by'   => $generatedBy,
+                    'generated_at'   => $now,
+                    'created_at'     => $now,
+                    'updated_at'     => $now,
+                ]);
+            }
+        }
+
+        // Clean up legacy/obsolete bundle types
         try {
             $this->db->table('opd_fhir_documents')
                 ->where('opd_id', $opdId)
                 ->where('opd_session_id', $sessionId)
-                ->whereIn('bundle_type', ['PrescriptionRecord', 'MedicationRequestBundle', 'WellnessRecord'])
+                ->whereIn('bundle_type', ['MedicationRequestBundle', 'WellnessRecord'])
                 ->delete();
         } catch (\Throwable) {
         }
@@ -11944,7 +11986,7 @@ class Opd_prescription extends BaseController
                 $cleanDate = str_replace('-', '', $visitDate);
                 $careContextRef = 'OPD-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
 
-                // 1. Upsert single unified OPConsultRecord (covers Consult, Rx, Vitals, and Attachments)
+                // 1. Upsert OPConsultRecord (covers Doctor Visit Note)
                 $existingHr = $this->db->table('health_records')
                     ->select('id')
                     ->where('care_context_reference', $careContextRef)
@@ -11970,9 +12012,35 @@ class Opd_prescription extends BaseController
                     $this->db->table('health_records')->insert($hrPayload);
                 }
 
-                // Delete redundant standalone PRESC / WELLNESS / alias OPD records so only the single unified bundle is kept
+                // 2. If medications exist, also upsert distinct PrescriptionRecord
+                if (! empty($medications) && $prescJson !== null) {
+                    $prescCcRef = 'PRESC-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
+                    $existingPrescHr = $this->db->table('health_records')
+                        ->select('id')
+                        ->where('care_context_reference', $prescCcRef)
+                        ->get(1)
+                        ->getRowArray();
+                    $prescHrPayload = [
+                        'patient_id' => $patientId > 0 ? $patientId : null,
+                        'abha_id' => $abhaAddress !== '' ? $abhaAddress : null,
+                        'hi_type' => 'PrescriptionRecord',
+                        'entity_type' => 'opd',
+                        'entity_id' => (string) $opdId,
+                        'record_data' => $prescJson,
+                        'care_context_reference' => $prescCcRef,
+                        'push_status' => 'local_discovery_ready',
+                        'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                    ];
+                    if (! empty($existingPrescHr)) {
+                        $this->db->table('health_records')->where('id', (int) $existingPrescHr['id'])->update($prescHrPayload);
+                    } else {
+                        $prescHrPayload['created_at'] = Time::now('Asia/Kolkata')->toDateTimeString();
+                        $this->db->table('health_records')->insert($prescHrPayload);
+                    }
+                }
+
+                // Delete obsolete legacy alias records
                 $redundantRefs = [
-                    'PRESC-' . $patientId . '-S' . $sessionId . '-' . $cleanDate,
                     'WELLNESS-' . $sessionId . '-' . $cleanDate,
                     'OPD-' . $opdId . '-S' . $sessionId . '-' . $visitDate,
                     'OPD-' . $opdId . '-S' . $sessionId . '-' . $cleanDate,

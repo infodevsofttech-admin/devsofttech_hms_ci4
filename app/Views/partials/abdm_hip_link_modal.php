@@ -682,7 +682,17 @@
             }).catch(function() {});
         } else if (ctxTaskType === 'opd_prescription_publish') {
             var pushData = new URLSearchParams();
-            pushData.append('opd_id', ctxEntityId);
+            var targetOpdId = ctxEntityId;
+            if (!targetOpdId || targetOpdId === '0') {
+                var refToParse = firstRef || (window.currentHipTaskContext ? window.currentHipTaskContext.careContext : '');
+                if (refToParse) {
+                    var mOpd = refToParse.match(/OPD-(?:\d+)-S(\d+)/i) || refToParse.match(/OPD-(\d+)/i);
+                    if (mOpd && mOpd[1]) {
+                        targetOpdId = mOpd[1];
+                    }
+                }
+            }
+            pushData.append('opd_id', targetOpdId || '0');
             pushData.append('patient_id', ctxPatientId);
             pushData.append('abha_id', abhaAddress);
             pushData.append('push_to_gateway', '1');
