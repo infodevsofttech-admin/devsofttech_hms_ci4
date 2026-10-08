@@ -16,7 +16,7 @@ class TestBridgePushCommand extends BaseCommand
     public function run(array $params)
     {
         $db = \Config\Database::connect();
-        $connector = AbdmConnectorFactory::create();
+        $connector = AbdmConnectorFactory::make();
         $gw = new AbdmGateway();
 
         CLI::write("Testing LAB-51467 push...", 'yellow');
