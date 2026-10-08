@@ -241,9 +241,13 @@ class AbdmFhirInspector extends BaseController
                 return $gw->invoiceFhirPreview();
             }
 
-            // Immunization: IMM-{id}
-            if (preg_match('/^IMM-(\d+)/i', $ref, $m)) {
-                $immId = (int) $m[1];
+            // Immunization: IMM-{id} or IMM-{patientId}-V{id}-{date}
+            if (preg_match('/^IMM-(?:PAT-(\d+)|(?:(\d+)-V)?(\d+))/i', $ref, $m)) {
+                $immId = (int) (! empty($m[3]) ? $m[3] : (! empty($m[2]) ? $m[2] : ($m[1] ?? 0)));
+                if ($patientId <= 0 && $this->db->tableExists('immunization_records')) {
+                    $immRec = $this->db->table('immunization_records')->select('patient_id')->where('id', $immId)->get(1)->getRowArray();
+                    $patientId = (int) ($immRec['patient_id'] ?? 0);
+                }
                 $gw = new \App\Controllers\AbdmGateway();
                 $gw->initController($this->request, $this->response, service('logger'));
                 $_GET['record_id'] = $immId;

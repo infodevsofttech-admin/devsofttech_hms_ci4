@@ -2581,14 +2581,15 @@ class AbdmGateway extends BaseController
 
     public function immunizationFhirPreview()
     {
-        if (! $this->request->isAJAX()) {
-            return $this->response->setStatusCode(403)->setJSON(['status' => 'error', 'message' => 'AJAX only']);
-        }
-
         $patientId = (int) ($this->request->getGet('patient_id') ?? $this->request->getPost('patient_id') ?? 0);
         $recordId = (int) ($this->request->getGet('record_id') ?? $this->request->getPost('record_id') ?? 0);
         $abhaId = trim((string) ($this->request->getGet('abha_id') ?? $this->request->getPost('abha_id') ?? ''));
         $forceNewRecord = (int) ($this->request->getGet('force_new_record') ?? $this->request->getGet('force_rebuild') ?? $this->request->getPost('force_new_record') ?? 0) === 1;
+
+        if ($patientId <= 0 && $recordId > 0 && $this->db->tableExists('immunization_records')) {
+            $immRec = $this->db->table('immunization_records')->select('patient_id')->where('id', $recordId)->get(1)->getRowArray();
+            $patientId = (int) ($immRec['patient_id'] ?? 0);
+        }
 
         if ($patientId <= 0) {
             return $this->response->setStatusCode(400)->setJSON([
@@ -3974,10 +3975,14 @@ class AbdmGateway extends BaseController
             'care_context_reference' => $ccRef,
         ]);
 
+        $vaccineDisplay = ! empty($records[0]['vaccine_name']) ? trim((string) $records[0]['vaccine_name']) : 'Vaccine';
+        $dateStr = date('d M Y', strtotime($visitDate));
+        $ccDisplay = 'ImmunizationRecord - ' . $vaccineDisplay . ' (' . $dateStr . ')';
+
         return [
             'bundle' => $bundle,
             'care_context_reference' => $ccRef,
-            'care_context_display' => 'Immunization Record - ' . $visitDate,
+            'care_context_display' => $ccDisplay,
             'patient_name' => $patient['name'],
             'doctor_name' => (string) ($practitioner['name'] ?? ''),
             'year_of_birth' => $this->resolvePatientBirthYear($patientRow, str_contains($rawAbha, '@') ? $rawAbha : '', str_contains($rawAbha, '@') ? '' : $rawAbha),
@@ -5368,6 +5373,60 @@ class AbdmGateway extends BaseController
                     }
                 } catch (\Throwable $ex) {
                     log_message('warning', 'Live HealthDocument FHIR generation in recordsFetch failed: ' . $ex->getMessage());
+                }
+            }
+
+            // Strategy 0e: Live On-Demand Fresh Generation for Immunization Record (IMM-{id})
+            if (preg_match('/^IMM-(?:PAT-(\d+)|(?:(\d+)-V)?(\d+))/i', $ref, $immM)) {
+                $immTargetId = (int) (! empty($immM[3]) ? $immM[3] : (! empty($immM[2]) ? $immM[2] : ($immM[1] ?? 0)));
+                $immPatientId = (int) (! empty($immM[1]) ? $immM[1] : (! empty($immM[2]) ? $immM[2] : 0));
+                try {
+                    $immPayload = $this->buildImmunizationGatewayPayload($immPatientId, $immTargetId, '', false);
+                    if ($immPayload !== null && ! empty($immPayload['bundle'])) {
+                        $vaccineName = 'Vaccine';
+                        if (! empty($immPayload['records'][0]['vaccine_name'])) {
+                            $vaccineName = trim((string) $immPayload['records'][0]['vaccine_name']);
+                        }
+                        $dateStr = date('d M Y', strtotime((string) ($immPayload['visit_date'] ?? date('Y-m-d'))));
+                        $immDisplay = 'ImmunizationRecord - ' . $vaccineName . ' (' . $dateStr . ')';
+
+                        $records[] = [
+                            'careContextReference' => $ref,
+                            'hiType'               => 'ImmunizationRecord',
+                            'display'              => $immDisplay,
+                            'bundle'               => $immPayload['bundle'],
+                        ];
+                        // Persist or cache to health_records for rapid subsequent fetches
+                        if ($db->tableExists('health_records')) {
+                            $exHr = $db->table('health_records')->where('care_context_reference', $ref)->get(1)->getRowArray();
+                            if ($exHr) {
+                                if (empty($exHr['record_data'])) {
+                                    $db->table('health_records')->where('id', (int) $exHr['id'])->update([
+                                        'record_data' => json_encode($immPayload['bundle'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                                        'push_status' => 'linked',
+                                        'updated_at'  => date('Y-m-d H:i:s'),
+                                    ]);
+                                }
+                            } else {
+                                $resolvedPatId = $immPatientId > 0 ? $immPatientId : (int) ($immPayload['records'][0]['patient_id'] ?? 0);
+                                $db->table('health_records')->insert([
+                                    'patient_id'             => $resolvedPatId,
+                                    'abha_id'                => (string) ($immPayload['records'][0]['abha_id'] ?? $this->resolvePatientAbhaIdentifier($resolvedPatId)),
+                                    'hi_type'                => 'ImmunizationRecord',
+                                    'entity_type'            => 'immunization',
+                                    'entity_id'              => (string) $immTargetId,
+                                    'care_context_reference' => $ref,
+                                    'record_data'            => json_encode($immPayload['bundle'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                                    'push_status'            => 'linked',
+                                    'created_at'             => date('Y-m-d H:i:s'),
+                                    'updated_at'             => date('Y-m-d H:i:s'),
+                                ]);
+                            }
+                        }
+                        continue;
+                    }
+                } catch (\Throwable $ex) {
+                    log_message('warning', 'Live Immunization FHIR generation in recordsFetch failed: ' . $ex->getMessage());
                 }
             }
 
@@ -7494,6 +7553,15 @@ class AbdmGateway extends BaseController
                 $ccRef = ! empty($imm['abdm_care_context_reference'])
                     ? trim((string) $imm['abdm_care_context_reference'])
                     : ('IMM-' . $imm['id']);
+                if (empty($imm['abdm_care_context_reference'])) {
+                    $this->db->table('immunization_records')
+                        ->where('id', (int) $imm['id'])
+                        ->groupStart()
+                            ->where('abdm_care_context_reference', null)
+                            ->orWhere('abdm_care_context_reference', '')
+                        ->groupEnd()
+                        ->update(['abdm_care_context_reference' => $ccRef]);
+                }
                 $display = 'ImmunizationRecord - ' . ($imm['vaccine_name'] ?? 'Vaccine') . ' (' . $dateStr . ')';
 
                 $addContext([
@@ -10326,95 +10394,48 @@ class AbdmGateway extends BaseController
             return null;
         }
 
-        $immRows = [];
-        if ($this->db->tableExists('immunization_records')) {
-            $builder = $this->db->table('immunization_records');
-            if ($recordId > 0) {
-                $builder->where('id', $recordId);
-            } elseif ($patientId > 0) {
-                $builder->where('patient_id', $patientId)->orderBy('id', 'DESC')->limit(10);
-            }
-            $immRows = $builder->get()->getResultArray();
+        if ($patientId <= 0 && $recordId > 0 && $this->db->tableExists('immunization_records')) {
+            $rec = $this->db->table('immunization_records')->select('patient_id')->where('id', $recordId)->get(1)->getRowArray();
+            $patientId = (int) ($rec['patient_id'] ?? 0);
         }
 
-        if (empty($immRows)) {
-            return null;
-        }
-
-        $firstRow = $immRows[0];
         if ($patientId <= 0) {
-            $patientId = (int) ($firstRow['patient_id'] ?? 0);
-        }
-
-        $patientRow = $this->loadPatientRow($patientId);
-        if (empty($patientRow)) {
             return null;
         }
 
-        if ($abhaId === '') {
-            $abhaId = $this->resolvePatientAbhaIdentifier($patientId);
+        $gatewayPayload = $this->buildImmunizationGatewayPayload($patientId, $recordId, $abhaId, false);
+        if ($gatewayPayload === null) {
+            return null;
         }
 
-        $vaccines = [];
-        $visitDate = date('Y-m-d');
-        foreach ($immRows as $row) {
-            $vaccineName = trim((string) ($row['vaccine_name'] ?? $row['vaccine_display'] ?? ''));
-            if ($vaccineName === '' && ! empty($row['vaccine_master_id']) && $this->db->tableExists('immunization_vaccine_master')) {
-                $vm = $this->db->table('immunization_vaccine_master')->where('id', (int) $row['vaccine_master_id'])->get(1)->getRowArray();
-                $vaccineName = trim((string) ($vm['vaccine_name'] ?? ''));
-            }
-            if ($vaccineName === '') {
-                $vaccineName = 'Vaccine Dose';
-            }
-            $occDate = ! empty($row['given_date']) ? (string) $row['given_date'] : (! empty($row['scheduled_date']) ? (string) $row['scheduled_date'] : date('Y-m-d H:i:s'));
-            $visitDate = date('Y-m-d', strtotime($occDate));
-            $vaccines[] = [
-                'vaccine_name' => $vaccineName,
-                'name' => $vaccineName,
-                'snomed_code' => trim((string) ($row['vaccine_code'] ?? '')),
-                'occurrence_date' => date(DATE_ATOM, strtotime($occDate)),
-                'status' => trim((string) ($row['status'] ?? 'completed')),
-                'lot_number' => trim((string) ($row['lot_number'] ?? '')),
-            ];
+        $vaccineName = 'Vaccine';
+        if (! empty($gatewayPayload['records'][0]['vaccine_name'])) {
+            $vaccineName = trim((string) $gatewayPayload['records'][0]['vaccine_name']);
         }
+        $dateStr = date('d M Y', strtotime((string) ($gatewayPayload['visit_date'] ?? date('Y-m-d'))));
+        $ccDisplay = 'ImmunizationRecord - ' . $vaccineName . ' (' . $dateStr . ')';
+        $ccRef = (string) ($gatewayPayload['care_context_reference'] ?? ('IMM-' . $recordId));
 
-        $primaryRecordId = (int) ($firstRow['id'] ?? $recordId);
-        $cleanDate = date('Ymd', strtotime($visitDate));
-        $ccRef = 'IMM-' . $patientId . '-V' . $primaryRecordId . '-' . $cleanDate;
-        $ccDisplay = 'Immunization - ' . date('d/m/Y', strtotime($visitDate));
-
-        $source = [
-            'record_id' => (string) $primaryRecordId,
-            'visit_date' => $visitDate,
-            'completed_at' => date(DATE_ATOM, strtotime($visitDate)),
-            'patient' => [
-                'id' => (string) $patientId,
-                'name' => $this->patientDisplayName($patientRow),
-                'gender' => strtolower(trim((string) ($patientRow['gender'] ?? 'unknown'))),
-                'birth_date' => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
-                'abha_id' => preg_replace('/\D/', '', $abhaId),
-                'abha_address' => str_contains($abhaId, '@') ? $abhaId : '',
-            ],
-            'immunizations' => $vaccines,
-            'vaccines' => $vaccines,
-            'hfr_id' => $this->connector->getHfrId() ?: 'HFR-IN-HMS',
-        ];
-
-        $factory = new FhirGeneratorFactory();
-        $generatorOutput = $factory->immunization()->generate($source);
-        $adapter = new \App\Libraries\Abdm\Fhir\Support\GatewayPayloadAdapter();
-        $gatewayPayload = $adapter->toGatewayPayload($generatorOutput, $source, (string) ($source['hfr_id']));
+        if ($recordId > 0 && $this->db->tableExists('immunization_records')) {
+            $this->db->table('immunization_records')
+                ->where('id', $recordId)
+                ->groupStart()
+                    ->where('abdm_care_context_reference', null)
+                    ->orWhere('abdm_care_context_reference', '')
+                ->groupEnd()
+                ->update(['abdm_care_context_reference' => $ccRef]);
+        }
 
         return [
             'hi_type' => 'ImmunizationRecord',
             'entity_type' => 'immunization',
-            'entity_id' => (string) $primaryRecordId,
+            'entity_id' => (string) ($recordId > 0 ? $recordId : $patientId),
             'patient_id' => $patientId,
-            'patient_name' => $this->patientDisplayName($patientRow),
-            'visit_date' => $visitDate,
+            'patient_name' => (string) ($gatewayPayload['patient_name'] ?? ('PATIENT-' . $patientId)),
+            'visit_date' => (string) ($gatewayPayload['visit_date'] ?? date('Y-m-d')),
             'care_context_reference' => $ccRef,
             'care_context_display' => $ccDisplay,
-            'bundle' => (array) ($gatewayPayload['fhir_bundle'] ?? []),
+            'bundle' => (array) ($gatewayPayload['bundle'] ?? []),
         ];
     }
 

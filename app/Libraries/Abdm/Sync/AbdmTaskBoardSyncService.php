@@ -831,9 +831,11 @@ class AbdmTaskBoardSyncService
         $cleanVisitDate = str_replace('-', '', $visitDate);
         $careContextRef = $prefix . $entityId . '-' . $cleanVisitDate;
         if ($taskType === 'immunization_record_publish' && $this->db->tableExists('immunization_records')) {
-            $immRec = $this->db->table('immunization_records')->select('abdm_care_context_reference')->where('id', (int) $entityId)->get(1)->getRowArray();
+            $immRec = $this->db->table('immunization_records')->select('abdm_care_context_reference, vaccine_name')->where('id', (int) $entityId)->get(1)->getRowArray();
             if (! empty($immRec['abdm_care_context_reference'])) {
                 $careContextRef = trim((string) $immRec['abdm_care_context_reference']);
+            } else {
+                $careContextRef = 'IMM-' . $entityId;
             }
         }
         if ($taskType === 'wellness_record_publish' && $this->db->tableExists('patient_wellness_records')) {
@@ -846,7 +848,12 @@ class AbdmTaskBoardSyncService
                 }
             }
         }
-        $careContextDisplay = $hiType . ' ' . $visitDate;
+
+        if ($taskType === 'immunization_record_publish' && ! empty($immRec['vaccine_name'])) {
+            $careContextDisplay = 'ImmunizationRecord - ' . trim((string) $immRec['vaccine_name']) . ' (' . date('d M Y', strtotime($visitDate)) . ')';
+        } else {
+            $careContextDisplay = $hiType . ' ' . $visitDate;
+        }
 
         $pushData = [
             'patient_id'             => (string) $patientId,
@@ -911,6 +918,21 @@ class AbdmTaskBoardSyncService
                         $pushData['record_data'] = $decodedBundle;
                         $bundleJson = (string) $syncRec['fhir_bundle_json'];
                     }
+                }
+            }
+        } elseif ($taskType === 'immunization_record_publish') {
+            if (empty($pushData['bundle']) && class_exists('\App\Controllers\AbdmGateway')) {
+                try {
+                    $gw = new \App\Controllers\AbdmGateway();
+                    $immPayload = $gw->buildImmunizationRecordPayload((int) $entityId, $patientId, $abhaAddress !== '' ? $abhaAddress : $abhaNumber);
+                    if (! empty($immPayload['bundle'])) {
+                        $pushData['bundle'] = $immPayload['bundle'];
+                        $pushData['fhir_bundle'] = $immPayload['bundle'];
+                        $pushData['record_data'] = $immPayload['bundle'];
+                        $bundleJson = (string) json_encode($immPayload['bundle'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    }
+                } catch (\Throwable $ie) {
+                    log_message('warning', '[processIndividualWorkTask] Immunization bundle generation error: ' . $ie->getMessage());
                 }
             }
         }
