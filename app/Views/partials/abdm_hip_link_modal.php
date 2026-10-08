@@ -867,17 +867,17 @@
             } else if (/^DOC-/i.test(ref)) {
                 itemHiType = 'HealthDocumentRecord';
             } else if (/^INVOICE-/i.test(ref)) {
-                itemHiType = 'InvoiceRecord';
+                itemHiType = 'Invoice';
             } else if (/^(?:LAB|RAD)-/i.test(ref)) {
-                itemHiType = 'DiagnosticReportRecord';
+                itemHiType = 'DiagnosticReport';
             } else if (/^IMM-/i.test(ref)) {
                 itemHiType = 'ImmunizationRecord';
             } else if (/^(?:DISCHARGE|IPD)-/i.test(ref)) {
-                itemHiType = 'DischargeSummaryRecord';
+                itemHiType = 'DischargeSummary';
             } else if (/^(?:PRESC|PRESCRIPTION)-/i.test(ref)) {
-                itemHiType = 'PrescriptionRecord';
+                itemHiType = 'Prescription';
             } else if (/^OPD-/i.test(ref)) {
-                itemHiType = 'OPConsultRecord';
+                itemHiType = 'OPConsultation';
             }
             if (!dominantHiType && itemHiType) {
                 dominantHiType = itemHiType;
@@ -1021,9 +1021,6 @@
                 }
             });
             var hiTypeToSend = distinctTypes.length === 1 ? distinctTypes[0] : '';
-            if (hiTypeToSend === 'OPConsultation') {
-                hiTypeToSend = 'OPConsultRecord';
-            }
 
             // Step 2: Link Care Contexts
             csrf = getCsrfData();
