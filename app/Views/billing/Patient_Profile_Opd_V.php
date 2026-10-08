@@ -1055,18 +1055,6 @@ if ($patientPhotoPath === '') {
                             <option value="PATRQT" data-text="Self Requested">Self Requested</option>
                         </select>
                     </div>
-                    <div class="mb-3">
-                        <label class="form-label fw-semibold" for="abdmCustomTargetHip">Target Health Facility (HIP)</label>
-                        <select class="form-select" id="abdmCustomTargetHip">
-                            <option value="" selected>All Linked Facilities (Search &amp; Fetch across all HIPs)</option>
-                            <option value="IN0510000871">This Hospital Only (DevSoft Tech / Same Entity - IN0510000871)</option>
-                            <option value="CUSTOM">Specific Facility (Enter HIP ID)...</option>
-                        </select>
-                        <div class="mt-2 d-none" id="abdmCustomHipInputGroup">
-                            <input type="text" class="form-control form-control-sm" id="abdmCustomHipId" placeholder="Enter HIP Facility ID (e.g. IN0510000871)">
-                        </div>
-                        <div class="form-text small">Select whether to query records across all linked hospitals or specifically from this facility (same entity).</div>
-                    </div>
                     <div class="row g-3 mb-3">
                         <div class="col-md-4">
                             <label class="form-label fw-semibold mb-1" for="abdmCustomDateFrom_date">Date From</label>
@@ -1950,9 +1938,6 @@ $(function() {
 
     $('#abdmCustomConsentModal').on('show.bs.modal', function() {
         $('#abdmCustomConsentError').addClass('d-none').text('');
-        $('#abdmCustomTargetHip').val('');
-        $('#abdmCustomHipInputGroup').addClass('d-none');
-        $('#abdmCustomHipId').val('');
 
         // Date From: 1 year ago, 12:00:00 AM
         if (!$('#abdmCustomDateFrom_date').val()) {
@@ -2047,14 +2032,6 @@ $(function() {
             return;
         }
 
-        var targetHipVal = $('#abdmCustomTargetHip').val();
-        var hipId = '';
-        if (targetHipVal === 'CUSTOM') {
-            hipId = ($('#abdmCustomHipId').val() || '').toString().trim();
-        } else if (targetHipVal) {
-            hipId = targetHipVal;
-        }
-
         var $btn = $('#btnSendCustomConsent');
         $btn.prop('disabled', true);
         $('#abdmCustomConsentSpinner').removeClass('d-none');
@@ -2068,8 +2045,7 @@ $(function() {
                 date_from: dateFrom,
                 date_to: dateTo,
                 erase_date: eraseDate,
-                purpose_code: $('#abdmCustomPurpose').val(),
-                hip_id: hipId
+                purpose_code: $('#abdmCustomPurpose').val()
             }
         }).done(function(data) {
             if (!data || data.ok !== 1) {
@@ -2094,15 +2070,6 @@ $(function() {
             $btn.prop('disabled', false);
             $('#abdmCustomConsentSpinner').addClass('d-none');
         });
-    });
-
-    $('#abdmCustomTargetHip').on('change', function() {
-        if ($(this).val() === 'CUSTOM') {
-            $('#abdmCustomHipInputGroup').removeClass('d-none');
-            $('#abdmCustomHipId').focus();
-        } else {
-            $('#abdmCustomHipInputGroup').addClass('d-none');
-        }
     });
 
     $('[data-bs-toggle="tooltip"]').tooltip();

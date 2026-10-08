@@ -5359,44 +5359,6 @@ class AbdmGateway extends BaseController
                 }
             }
 
-            // Strategy 0b-reg: Live On-Demand Fresh Generation for Patient Registration / File (REG-xxxx)
-            if (preg_match('/^REG-(.+)$/i', $ref, $regM)) {
-                $pRef = trim($regM[1]);
-                $patientRow = null;
-                if ($db->tableExists('patient_master')) {
-                    $numOnly = (int) preg_replace('/\D/', '', $pRef);
-                    $pBuilder = $db->table('patient_master')->groupStart()->where('p_code', $pRef);
-                    if ($numOnly > 0) {
-                        $pBuilder->orWhere('id', $numOnly);
-                    }
-                    $pBuilder->groupEnd();
-                    $patientRow = $pBuilder->get(1)->getRowArray();
-                }
-
-                if ($patientRow) {
-                    $patId = (int) $patientRow['id'];
-                    $abhaId = $this->resolvePatientAbhaIdentifier($patId);
-                    $patientResource = $this->buildAbdmPatientResource($patientRow, $patId, $abhaId);
-                    $docTitle = 'Patient File - ' . $this->patientDisplayName($patientRow);
-                    $html = '<div xmlns="http://www.w3.org/1999/xhtml"><h3>' . esc($docTitle) . '</h3>'
-                        . '<p><strong>Patient Name:</strong> ' . esc($this->patientDisplayName($patientRow)) . '</p>'
-                        . '<p><strong>Patient Code:</strong> ' . esc($patientRow['p_code'] ?? '') . '</p>'
-                        . '<p><strong>Gender:</strong> ' . esc($patientRow['gender'] ?? '') . '</p>'
-                        . '<p><strong>Age:</strong> ' . esc($patientRow['age'] ?? '') . '</p>'
-                        . '<p><strong>Registration Date:</strong> ' . esc($patientRow['created_at'] ?? $patientRow['insert_date'] ?? date('Y-m-d')) . '</p>'
-                        . '</div>';
-                    $bundle = $this->buildSimpleHealthDocumentBundle($patientResource, $docTitle, 'text/html', base64_encode($html));
-                    $records[] = [
-                        'careContextReference' => $ref,
-                        'hiType'               => 'HealthDocumentRecord',
-                        'display'              => $docTitle,
-                        'bundle'               => $bundle,
-                    ];
-                    $this->cacheRecordBundle($ref, 'HealthDocumentRecord', $bundle, $docTitle);
-                    continue;
-                }
-            }
-
             // Strategy 0b: Live On-Demand Fresh Generation for Invoice Record
             if (preg_match('/^INVOICE-(CHG|OPD|IPD)-(\d+)/i', $ref, $invM)) {
                 $invSource = match(strtoupper($invM[1])) {
