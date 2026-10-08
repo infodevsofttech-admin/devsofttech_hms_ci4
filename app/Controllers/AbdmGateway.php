@@ -5053,18 +5053,36 @@ class AbdmGateway extends BaseController
             ]);
         }
 
+        $body = [];
         try {
             $body = $this->request->getJSON(true) ?: [];
         } catch (\Throwable) {
-            $rawBody = (string) $this->request->getBody();
-            $body = json_decode($rawBody, true) ?: [];
         }
-        $careContextRefs = $body['careContextReferences'] ?? [];
-        if (empty($careContextRefs) && !empty($body['careContextReference'])) {
+        if (empty($body)) {
+            $rawBody = (string) $this->request->getBody();
+            if ($rawBody !== '') {
+                $body = json_decode($rawBody, true) ?: [];
+            }
+        }
+        if (empty($body) && method_exists($this->request, 'getPost')) {
+            $body = $this->request->getPost() ?: [];
+        }
+
+        $careContextRefs = $body['careContextReferences'] ?? $body['care_context_references'] ?? $body['care_contexts'] ?? [];
+        if (! is_array($careContextRefs) && is_string($careContextRefs)) {
+            $careContextRefs = [$careContextRefs];
+        }
+        if (empty($careContextRefs) && ! empty($body['careContextReference'])) {
             $careContextRefs = [$body['careContextReference']];
         }
-        if (empty($careContextRefs) && !empty($body['careContextId'])) {
+        if (empty($careContextRefs) && ! empty($body['care_context_reference'])) {
+            $careContextRefs = [$body['care_context_reference']];
+        }
+        if (empty($careContextRefs) && ! empty($body['careContextId'])) {
             $careContextRefs = [$body['careContextId']];
+        }
+        if (empty($careContextRefs) && ! empty($body['care_context_id'])) {
+            $careContextRefs = [$body['care_context_id']];
         }
         if (empty($careContextRefs) && $careContextId !== null && trim($careContextId) !== '') {
             $careContextRefs = [trim($careContextId)];
