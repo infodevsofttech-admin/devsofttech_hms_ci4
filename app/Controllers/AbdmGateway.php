@@ -10557,8 +10557,14 @@ class AbdmGateway extends BaseController
                 return ['ok' => 1, 'status' => 'queued_for_cron'];
 
             case 'invoice':
+            case 'opd_invoice':
+            case 'charges_invoice':
+            case 'ipd_invoice':
                 $abhaId = $patientId > 0 ? $this->resolvePatientAbhaIdentifier($patientId) : '';
-                $payload = $this->buildInvoiceRecordPayload($entityId, $patientId, $abhaId);
+                $source = in_array($docType, ['opd_invoice', 'charges_invoice', 'ipd_invoice'], true) ? $docType : (string) ($extra['source'] ?? '');
+                $payload = $source !== ''
+                    ? $this->buildInvoiceSourceRecordPayload($source, $entityId, $patientId, $abhaId)
+                    : $this->buildInvoiceRecordPayload($entityId, $patientId, $abhaId);
                 if ($payload === null) {
                     return ['ok' => 0, 'status' => 'payload_null'];
                 }
@@ -10759,7 +10765,7 @@ class AbdmGateway extends BaseController
         ];
     }
 
-    private function buildInvoiceRecordPayload(int $invoiceId, int $patientId, string $abhaId): ?array
+    public function buildInvoiceRecordPayload(int $invoiceId, int $patientId, string $abhaId): ?array
     {
         if ($this->db->tableExists('invoice_master')) {
             $invoice = $this->db->table('invoice_master')->where('id', $invoiceId)->get(1)->getRowArray() ?? [];
@@ -10836,10 +10842,18 @@ class AbdmGateway extends BaseController
             }
         }
 
+        // Support OPD registration / consultation fee invoice (opd_master)
+        if ($this->db->tableExists('opd_master')) {
+            $opdPayload = $this->buildInvoiceSourceRecordPayload('opd_invoice', $invoiceId, $patientId, $abhaId);
+            if ($opdPayload !== null) {
+                return $opdPayload;
+            }
+        }
+
         return null;
     }
 
-    private function buildInvoiceSourceRecordPayload(string $source, int $billId, int $patientId, string $abhaId): ?array
+    public function buildInvoiceSourceRecordPayload(string $source, int $billId, int $patientId, string $abhaId): ?array
     {
         $invoice = [];
         $items = [];

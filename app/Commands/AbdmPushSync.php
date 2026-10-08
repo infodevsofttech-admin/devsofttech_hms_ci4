@@ -56,6 +56,7 @@ class AbdmPushSync extends BaseCommand
 
         CLI::write('OPD Consults -> Eligible: ' . ($tbSummary['opd']['eligible'] ?? 0) . ' | Linked: ' . ($tbSummary['opd']['linked'] ?? 0) . ' | Cooling: ' . ($tbSummary['opd']['cooling'] ?? 0) . ' | Failed: ' . ($tbSummary['opd']['failed'] ?? 0), 'green');
         CLI::write('Work Tasks   -> Eligible: ' . ($tbSummary['tasks']['eligible'] ?? 0) . ' | Linked: ' . ($tbSummary['tasks']['linked'] ?? 0) . ' | Cooling: ' . ($tbSummary['tasks']['cooling'] ?? 0) . ' | Failed: ' . ($tbSummary['tasks']['failed'] ?? 0), 'green');
+        CLI::write('Invoices     -> Eligible: ' . ($tbSummary['invoices']['eligible'] ?? 0) . ' | Linked: ' . ($tbSummary['invoices']['linked'] ?? 0) . ' | Failed: ' . ($tbSummary['invoices']['failed'] ?? 0), 'green');
 
         // 3. Process pending health_records directly (instant background sync for newly saved records)
         $this->pushPendingHealthRecords($limit);

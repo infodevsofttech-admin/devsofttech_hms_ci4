@@ -35,10 +35,12 @@ class AbdmTaskBoardSyncService
     {
         $opdSummary = $this->syncOpdConsultRecords($limit, $dryRun);
         $tasksSummary = $this->syncOpenWorkTasks($limit, $dryRun);
+        $invoicesSummary = $this->syncOpenInvoices($limit, $dryRun);
 
         return [
-            'opd'   => $opdSummary,
-            'tasks' => $tasksSummary,
+            'opd'      => $opdSummary,
+            'tasks'    => $tasksSummary,
+            'invoices' => $invoicesSummary,
         ];
     }
 
@@ -1502,6 +1504,239 @@ class AbdmTaskBoardSyncService
                 );
             }
         }
+    }
+
+    /**
+     * Scan and link paid invoices (OPD registration fees, IPD bills, Charge invoices)
+     * for patients who have an ABHA identity.
+     *
+     * @return array{
+     *     eligible: int,
+     *     linked: int,
+     *     failed: int,
+     *     skipped: int,
+     *     details: array<int, array<string, mixed>>
+     * }
+     */
+    public function syncOpenInvoices(int $limit = 20, bool $dryRun = false): array
+    {
+        $summary = [
+            'eligible' => 0,
+            'linked'   => 0,
+            'failed'   => 0,
+            'skipped'  => 0,
+            'details'  => [],
+        ];
+
+        if (! $this->db->tableExists('patient_master')) {
+            return $summary;
+        }
+
+        $patientFields = $this->db->getFieldNames('patient_master') ?? [];
+        $abhaCol = $this->resolveFirstExistingColumn($patientFields, ['abha_id', 'abha_no', 'abha_address', 'abha']);
+        if ($abhaCol === null) {
+            return $summary;
+        }
+
+        $candidates = [];
+
+        // 1. OPD Invoices (from opd_master where opd_fee_amount > 0)
+        if ($this->db->tableExists('opd_master')) {
+            $rows = $this->db->table('opd_master o')
+                ->select('o.opd_id as bill_id, o.opd_code as bill_code, o.p_id as patient_id, o.P_name as patient_name, o.apointment_date as bill_date, o.opd_fee_amount as amount, p.' . $abhaCol . ' as abha_id', false)
+                ->join('patient_master p', 'p.id = o.p_id', 'left')
+                ->where('o.opd_fee_amount >', 0)
+                ->where('DATE(o.apointment_date) >=', date('Y-m-d', strtotime('-30 days')), false)
+                ->where('p.' . $abhaCol . ' !=', '')
+                ->orderBy('o.opd_id', 'DESC')
+                ->limit(max(50, $limit * 2))
+                ->get()
+                ->getResultArray();
+
+            foreach ($rows as $r) {
+                $candidates[] = array_merge($r, ['source' => 'opd_invoice']);
+            }
+        }
+
+        // 2. Charges Invoices (from invoice_master where net_amount > 0)
+        if ($this->db->tableExists('invoice_master')) {
+            $rows = $this->db->table('invoice_master i')
+                ->select('i.id as bill_id, i.invoice_code as bill_code, i.attach_id as patient_id, i.inv_name as patient_name, i.inv_date as bill_date, i.net_amount as amount, p.' . $abhaCol . ' as abha_id', false)
+                ->join('patient_master p', 'p.id = i.attach_id AND i.attach_type = 0', 'left')
+                ->where('i.net_amount >', 0)
+                ->where('DATE(i.inv_date) >=', date('Y-m-d', strtotime('-30 days')), false)
+                ->where('p.' . $abhaCol . ' !=', '')
+                ->orderBy('i.id', 'DESC')
+                ->limit(max(50, $limit * 2))
+                ->get()
+                ->getResultArray();
+
+            foreach ($rows as $r) {
+                $candidates[] = array_merge($r, ['source' => 'charges_invoice']);
+            }
+        }
+
+        if (empty($candidates)) {
+            return $summary;
+        }
+
+        // Filter valid ABHA
+        $validCandidates = [];
+        foreach ($candidates as $c) {
+            $rawAbha = trim((string) ($c['abha_id'] ?? ''));
+            if (preg_match('/^\d{14}$/', $rawAbha) === 1 || str_contains($rawAbha, '@')) {
+                $validCandidates[] = $c;
+            }
+        }
+
+        if (empty($validCandidates)) {
+            return $summary;
+        }
+
+        // Check health_records to see which are already linked
+        $linkedKeys = [];
+        if ($this->db->tableExists('health_records')) {
+            $existing = $this->db->table('health_records')
+                ->select('entity_type, entity_id, care_context_reference, push_status')
+                ->where('hi_type', 'InvoiceRecord')
+                ->whereIn('push_status', ['linked', 'pushed', 'queued'])
+                ->get()
+                ->getResultArray();
+            foreach ($existing as $ex) {
+                $linkedKeys[$ex['entity_type'] . ':' . $ex['entity_id']] = true;
+                if (! empty($ex['care_context_reference'])) {
+                    $linkedKeys[$ex['care_context_reference']] = true;
+                }
+            }
+        }
+
+        $gw = class_exists('\App\Controllers\AbdmGateway') ? new \App\Controllers\AbdmGateway() : null;
+        $processedCount = 0;
+
+        foreach ($validCandidates as $cand) {
+            if ($processedCount >= $limit) {
+                break;
+            }
+
+            $source = (string) $cand['source'];
+            $billId = (int) $cand['bill_id'];
+            $patientId = (int) $cand['patient_id'];
+            $billDate = ! empty($cand['bill_date']) ? date('Y-m-d', strtotime((string) $cand['bill_date'])) : date('Y-m-d');
+            $sourcePrefix = $source === 'opd_invoice' ? 'OPD' : ($source === 'ipd_invoice' ? 'IPD' : 'CHG');
+            $careContextRef = 'INVOICE-' . $sourcePrefix . '-' . $billId . '-' . $billDate;
+
+            if (isset($linkedKeys[$source . ':' . $billId]) || isset($linkedKeys[$careContextRef])) {
+                $summary['skipped']++;
+                continue;
+            }
+
+            $summary['eligible']++;
+
+            if ($dryRun) {
+                $summary['details'][] = [
+                    'source' => $source,
+                    'bill_id' => $billId,
+                    'care_context' => $careContextRef,
+                    'status' => 'dry_run_eligible',
+                ];
+                $processedCount++;
+                continue;
+            }
+
+            if ($gw === null) {
+                $summary['failed']++;
+                continue;
+            }
+
+            // Build payload and push
+            try {
+                $payload = $gw->buildInvoiceSourceRecordPayload($source, $billId, $patientId, (string) ($cand['abha_id'] ?? ''));
+                if ($payload === null) {
+                    $summary['failed']++;
+                    $summary['details'][] = [
+                        'source' => $source,
+                        'bill_id' => $billId,
+                        'care_context' => $careContextRef,
+                        'error' => 'Could not build invoice payload',
+                        'status' => 'failed',
+                    ];
+                    continue;
+                }
+
+                $demo = $this->resolvePatientMasterDemographics($patientId, (string) ($cand['patient_name'] ?? ''), (string) ($cand['abha_id'] ?? ''));
+                $pushData = [
+                    'patient_id'             => (string) $patientId,
+                    'patient_name'           => $demo['patient_name'],
+                    'abha_id'                => $demo['abha_number'],
+                    'abha_address'           => $demo['abha_address'],
+                    'year_of_birth'          => $demo['year_of_birth'],
+                    'gender'                 => $demo['gender'],
+                    'hi_type'                => 'InvoiceRecord',
+                    'record_type'            => 'InvoiceRecord',
+                    'visit_date'             => $billDate,
+                    'care_context_reference' => $careContextRef,
+                    'care_context_display'   => (string) ($payload['care_context_display'] ?? ('Invoice ' . $billId)),
+                    'notes'                  => (string) ($payload['care_context_display'] ?? ('Invoice ' . $billId)),
+                    'queue_id'               => $careContextRef,
+                    'record_data'            => $payload['bundle'],
+                ];
+
+                $bundleJson = json_encode($payload['bundle'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+                $result = $this->connector->pushRecord($pushData);
+                $ok = (int) ($result['ok'] ?? 0);
+                $httpCode = (int) ($result['http_code'] ?? 0);
+                $statusVal = strtolower((string) ($result['status'] ?? ''));
+
+                if ($ok === 1 || in_array($httpCode, [200, 201, 202, 409], true) || in_array($statusVal, ['queued', 'pushed', 'linked', 'duplicate'], true)) {
+                    $queueId = (string) ($result['queue_id'] ?? $careContextRef);
+
+                    $this->recordLinkedState(
+                        $patientId,
+                        $demo['effective_abha'],
+                        'InvoiceRecord',
+                        $source,
+                        (string) $billId,
+                        $careContextRef,
+                        $queueId,
+                        (int) ($result['record_id'] ?? 0),
+                        $bundleJson
+                    );
+
+                    $summary['linked']++;
+                    $summary['details'][] = [
+                        'source' => $source,
+                        'bill_id' => $billId,
+                        'care_context' => $careContextRef,
+                        'queue_id' => $queueId,
+                        'status' => 'linked',
+                    ];
+                    $linkedKeys[$source . ':' . $billId] = true;
+                    $linkedKeys[$careContextRef] = true;
+                } else {
+                    $summary['failed']++;
+                    $summary['details'][] = [
+                        'source' => $source,
+                        'bill_id' => $billId,
+                        'care_context' => $careContextRef,
+                        'error' => (string) ($result['message'] ?? $result['error'] ?? 'Push failed'),
+                        'status' => 'failed',
+                    ];
+                }
+            } catch (\Throwable $e) {
+                $summary['failed']++;
+                $summary['details'][] = [
+                    'source' => $source,
+                    'bill_id' => $billId,
+                    'care_context' => $careContextRef,
+                    'error' => $e->getMessage(),
+                    'status' => 'error',
+                ];
+            }
+            $processedCount++;
+        }
+
+        return $summary;
     }
 }
 

@@ -1756,6 +1756,15 @@ class Opd extends BaseController
                     $this->auditClinicalUpdate('patient_master', $abhaField, $pid, $oldAbha, $abhaAddress);
                 }
             }
+
+            // Queue OPD consultation fee invoice for ABDM linking
+            if ((float) ($docFee[0]->amount ?? 0) > 0 && class_exists('\App\Controllers\AbdmGateway')) {
+                try {
+                    \App\Controllers\AbdmGateway::autoPushRecord('opd_invoice', $insertId, $pid);
+                } catch (\Throwable $ie) {
+                    log_message('warning', '[insert_opd_patient] autoPushRecord opd_invoice error: ' . $ie->getMessage());
+                }
+            }
         }
 
         return $this->response->setJSON([
