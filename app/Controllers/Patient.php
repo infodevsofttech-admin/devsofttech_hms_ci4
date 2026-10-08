@@ -5767,16 +5767,31 @@ class Patient extends BaseController
 		$sessionArtifacts = [];
 		$lookupReqId = $consentRequestId !== '' ? $consentRequestId : $consentId;
 		if ($lookupReqId !== '' && $this->db->tableExists('abdm_hiu_consent_artifacts')) {
+			$artFields = $this->db->getFieldNames('abdm_hiu_consent_artifacts') ?? [];
+			$selectCols = ['artifact_id'];
+			if (in_array('hfr_id', $artFields, true)) {
+				$selectCols[] = 'hfr_id';
+			}
+			if (in_array('hip_id', $artFields, true)) {
+				$selectCols[] = 'hip_id';
+			}
+			if (in_array('hip_name', $artFields, true)) {
+				$selectCols[] = 'hip_name';
+			}
+			if (in_array('last_status', $artFields, true)) {
+				$selectCols[] = 'last_status';
+			}
 			$artRows = $this->db->table('abdm_hiu_consent_artifacts')
-				->select('artifact_id, hip_id, hip_name, last_status')
+				->select(implode(', ', $selectCols))
 				->where('consent_request_id', $lookupReqId)
 				->get()
 				->getResultArray();
 			foreach ($artRows as $ar) {
+				$hipIdentifier = trim((string) ($ar['hip_id'] ?? $ar['hfr_id'] ?? ''));
 				$sessionArtifacts[] = [
 					'artifact_id' => trim((string) ($ar['artifact_id'] ?? '')),
-					'hip_id'      => trim((string) ($ar['hip_id'] ?? '')),
-					'hip_name'    => trim((string) ($ar['hip_name'] ?? '')),
+					'hip_id'      => $hipIdentifier,
+					'hip_name'    => trim((string) ($ar['hip_name'] ?? $hipIdentifier)),
 					'status'      => trim((string) ($ar['last_status'] ?? '')),
 				];
 			}
