@@ -1014,13 +1014,33 @@
             var waitMs = isReused ? 300 : 2000;
             await new Promise(function(r) { setTimeout(r, waitMs); });
 
-            var hiTypeToSend = dominantHiType || 'OPConsultRecord';
+            var distinctTypes = [];
+            selectedContexts.forEach(function(sc) {
+                if (sc.hi_type && distinctTypes.indexOf(sc.hi_type) === -1) {
+                    distinctTypes.push(sc.hi_type);
+                }
+            });
+            var hiTypeToSend = distinctTypes.length === 1 ? distinctTypes[0] : '';
             if (hiTypeToSend === 'OPConsultation') {
                 hiTypeToSend = 'OPConsultRecord';
             }
 
             // Step 2: Link Care Contexts
             csrf = getCsrfData();
+            var linkPayload = {
+                patient_id: currentPatientId,
+                abha_address: abhaAddress,
+                abha_number: abhaNumber,
+                link_token_id: linkTokenId,
+                patient_ref: abhaAddress,
+                display: name,
+                care_contexts: selectedContexts,
+                csrf_hms: csrf.hash
+            };
+            if (hiTypeToSend) {
+                linkPayload.hi_type = hiTypeToSend;
+            }
+
             var linkRes = await fetch('<?= base_url('AbdmGateway/hip_link_carecontext') ?>', {
                 method: 'POST',
                 headers: {
@@ -1028,17 +1048,7 @@
                     'X-Requested-With': 'XMLHttpRequest',
                     'Accept': 'application/json'
                 },
-                body: JSON.stringify({
-                    patient_id: currentPatientId,
-                    abha_address: abhaAddress,
-                    abha_number: abhaNumber,
-                    link_token_id: linkTokenId,
-                    patient_ref: abhaAddress,
-                    display: name,
-                    hi_type: hiTypeToSend,
-                    care_contexts: selectedContexts,
-                    csrf_hms: csrf.hash
-                })
+                body: JSON.stringify(linkPayload)
             });
 
             var linkData = await linkRes.json();

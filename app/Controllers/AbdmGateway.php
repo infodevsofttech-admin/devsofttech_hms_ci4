@@ -12515,7 +12515,23 @@ class AbdmGateway extends BaseController
                 $body['display'] = $body['patient_ref'];
             }
         }
-        if (empty($body['hi_type'])) {
+
+        // Do not force a single global hi_type when batch contains mixed care context types
+        if (! empty($body['care_contexts']) && is_array($body['care_contexts'])) {
+            $typesInBatch = [];
+            foreach ($body['care_contexts'] as $cItem) {
+                $t = trim((string) ($cItem['hi_type'] ?? $cItem['hiType'] ?? ''));
+                if ($t !== '' && ! in_array($t, $typesInBatch, true)) {
+                    $typesInBatch[] = $t;
+                }
+            }
+            if (count($typesInBatch) === 1) {
+                $body['hi_type'] = $typesInBatch[0];
+            } elseif (count($typesInBatch) > 1) {
+                unset($body['hi_type']);
+            }
+        }
+        if (empty($body['hi_type']) && empty($body['care_contexts'])) {
             $body['hi_type'] = 'OPConsultRecord';
         }
 
