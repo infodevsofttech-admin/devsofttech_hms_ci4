@@ -11960,7 +11960,6 @@ class Opd_prescription extends BaseController
                 $this->db->table('opd_fhir_documents')->insert([
                     'opd_id'         => $opdId,
                     'opd_session_id' => $sessionId,
-                    'patient_id'     => (int) ($patient['id'] ?? 0),
                     'bundle_type'    => 'PrescriptionRecord',
                     'bundle_json'    => $prescJson,
                     'generated_by'   => $generatedBy,
