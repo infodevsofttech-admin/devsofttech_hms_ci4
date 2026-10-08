@@ -103,7 +103,18 @@
         if (isNaN(d.getTime())) {
             return escHtml(value);
         }
-        return escHtml(d.toLocaleString());
+        var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+        var day = pad(d.getDate());
+        var month = pad(d.getMonth() + 1);
+        var year = d.getFullYear();
+        var h = d.getHours();
+        var ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        h = h ? h : 12;
+        var hStr = pad(h);
+        var mStr = pad(d.getMinutes());
+        var sStr = pad(d.getSeconds());
+        return escHtml(day + '/' + month + '/' + year + ' ' + hStr + ':' + mStr + ':' + sStr + ' ' + ampm);
     }
 
     function statusBadgeClass(status) {

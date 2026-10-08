@@ -1060,16 +1060,46 @@ if ($patientPhotoPath === '') {
                     </div>
                     <div class="row g-3 mb-3">
                         <div class="col-md-4">
-                            <label class="form-label fw-semibold" for="abdmCustomDateFrom">Date From</label>
-                            <input type="datetime-local" class="form-control" id="abdmCustomDateFrom" step="1">
+                            <label class="form-label fw-semibold mb-1" for="abdmCustomDateFrom_date">Date From</label>
+                            <input type="date" class="form-control mb-1" id="abdmCustomDateFrom_date">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light text-muted px-2" title="Time"><i class="fa fa-clock-o"></i></span>
+                                <input type="number" min="1" max="12" class="form-control text-center px-1" id="abdmCustomDateFrom_hour" placeholder="12" title="Hour (1-12)">
+                                <span class="input-group-text px-1">:</span>
+                                <input type="number" min="0" max="59" class="form-control text-center px-1" id="abdmCustomDateFrom_minute" placeholder="00" title="Minute (0-59)">
+                                <select class="form-select fw-bold text-primary px-1" id="abdmCustomDateFrom_ampm" style="max-width: 72px;" title="AM/PM">
+                                    <option value="AM" selected>AM</option>
+                                    <option value="PM">PM</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label fw-semibold" for="abdmCustomDateTo">Date To</label>
-                            <input type="datetime-local" class="form-control" id="abdmCustomDateTo" step="1">
+                            <label class="form-label fw-semibold mb-1" for="abdmCustomDateTo_date">Date To</label>
+                            <input type="date" class="form-control mb-1" id="abdmCustomDateTo_date">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light text-muted px-2" title="Time"><i class="fa fa-clock-o"></i></span>
+                                <input type="number" min="1" max="12" class="form-control text-center px-1" id="abdmCustomDateTo_hour" placeholder="12" title="Hour (1-12)">
+                                <span class="input-group-text px-1">:</span>
+                                <input type="number" min="0" max="59" class="form-control text-center px-1" id="abdmCustomDateTo_minute" placeholder="00" title="Minute (0-59)">
+                                <select class="form-select fw-bold text-primary px-1" id="abdmCustomDateTo_ampm" style="max-width: 72px;" title="AM/PM">
+                                    <option value="AM">AM</option>
+                                    <option value="PM" selected>PM</option>
+                                </select>
+                            </div>
                         </div>
                         <div class="col-md-4">
-                            <label class="form-label fw-semibold" for="abdmCustomEraseDate">Expiry Date</label>
-                            <input type="datetime-local" class="form-control" id="abdmCustomEraseDate" step="1">
+                            <label class="form-label fw-semibold mb-1" for="abdmCustomEraseDate_date">Expiry Date</label>
+                            <input type="date" class="form-control mb-1" id="abdmCustomEraseDate_date">
+                            <div class="input-group input-group-sm">
+                                <span class="input-group-text bg-light text-muted px-2" title="Time"><i class="fa fa-clock-o"></i></span>
+                                <input type="number" min="1" max="12" class="form-control text-center px-1" id="abdmCustomEraseDate_hour" placeholder="11" title="Hour (1-12)">
+                                <span class="input-group-text px-1">:</span>
+                                <input type="number" min="0" max="59" class="form-control text-center px-1" id="abdmCustomEraseDate_minute" placeholder="59" title="Minute (0-59)">
+                                <select class="form-select fw-bold text-primary px-1" id="abdmCustomEraseDate_ampm" style="max-width: 72px;" title="AM/PM">
+                                    <option value="AM">AM</option>
+                                    <option value="PM" selected>PM</option>
+                                </select>
+                            </div>
                         </div>
                     </div>
                     <div class="small text-danger d-none" id="abdmCustomConsentError"></div>
@@ -1135,12 +1165,22 @@ $(function() {
         if (value === '') {
             return '-';
         }
-        // Accept both plain 'YYYY-MM-DD HH:MM:SS' and ISO forms.
         var d = new Date(value.indexOf('T') === -1 ? value.replace(' ', 'T') : value);
         if (isNaN(d.getTime())) {
             return escHtml(value);
         }
-        return escHtml(d.toLocaleString());
+        var pad = function(n) { return (n < 10 ? '0' : '') + n; };
+        var day = pad(d.getDate());
+        var month = pad(d.getMonth() + 1);
+        var year = d.getFullYear();
+        var h = d.getHours();
+        var ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        h = h ? h : 12;
+        var hStr = pad(h);
+        var mStr = pad(d.getMinutes());
+        var sStr = pad(d.getSeconds());
+        return escHtml(day + '/' + month + '/' + year + ' ' + hStr + ':' + mStr + ':' + sStr + ' ' + ampm);
     }
 
     function renderAbdmConsentDetail(consent) {
@@ -1821,33 +1861,81 @@ $(function() {
         loadAbdmConsentRequests();
     });
 
-    function formatDateTimeLocal(d) {
-        var pad = function(n) { return (n < 10 ? '0' : '') + n; };
-        return d.getFullYear() + '-'
-            + pad(d.getMonth() + 1) + '-'
-            + pad(d.getDate()) + 'T'
-            + pad(d.getHours()) + ':'
-            + pad(d.getMinutes()) + ':'
-            + pad(d.getSeconds());
+    function pad2(n) {
+        return (n < 10 ? '0' : '') + n;
+    }
+
+    function formatDateInput(d) {
+        return d.getFullYear() + '-' + pad2(d.getMonth() + 1) + '-' + pad2(d.getDate());
+    }
+
+    function get12HourParts(d) {
+        var h = d.getHours();
+        var ampm = h >= 12 ? 'PM' : 'AM';
+        h = h % 12;
+        h = h ? h : 12;
+        return {
+            hour: pad2(h),
+            minute: pad2(d.getMinutes()),
+            ampm: ampm
+        };
+    }
+
+    function buildDateTimeFromPickers(prefix, defaultEndOfDay) {
+        var dateVal = ($('#' + prefix + '_date').val() || '').trim();
+        if (!dateVal) {
+            return '';
+        }
+        var h = parseInt($('#' + prefix + '_hour').val(), 10);
+        var m = parseInt($('#' + prefix + '_minute').val(), 10);
+        if (isNaN(h) || h < 1 || h > 12) {
+            h = defaultEndOfDay ? 11 : 12;
+        }
+        if (isNaN(m) || m < 0 || m > 59) {
+            m = defaultEndOfDay ? 59 : 0;
+        }
+        var ampm = ($('#' + prefix + '_ampm').val() || (defaultEndOfDay ? 'PM' : 'AM')).toUpperCase();
+        var h24 = h;
+        if (ampm === 'PM' && h < 12) {
+            h24 += 12;
+        } else if (ampm === 'AM' && h === 12) {
+            h24 = 0;
+        }
+        var s = defaultEndOfDay ? 59 : 0;
+        return dateVal + ' ' + pad2(h24) + ':' + pad2(m) + ':' + pad2(s);
     }
 
     $('#abdmCustomConsentModal').on('show.bs.modal', function() {
         $('#abdmCustomConsentError').addClass('d-none').text('');
-        if (!$('#abdmCustomDateFrom').val()) {
+
+        // Date From: 1 year ago, 12:00:00 AM
+        if (!$('#abdmCustomDateFrom_date').val()) {
             var from = new Date();
             from.setDate(from.getDate() - 365);
-            from.setHours(0, 0, 0, 0);
-            $('#abdmCustomDateFrom').val(formatDateTimeLocal(from));
+            $('#abdmCustomDateFrom_date').val(formatDateInput(from));
+            $('#abdmCustomDateFrom_hour').val('12');
+            $('#abdmCustomDateFrom_minute').val('00');
+            $('#abdmCustomDateFrom_ampm').val('AM');
         }
-        if (!$('#abdmCustomDateTo').val()) {
+
+        // Date To: Today, current local time
+        if (!$('#abdmCustomDateTo_date').val()) {
             var to = new Date();
-            $('#abdmCustomDateTo').val(formatDateTimeLocal(to));
+            var parts = get12HourParts(to);
+            $('#abdmCustomDateTo_date').val(formatDateInput(to));
+            $('#abdmCustomDateTo_hour').val(parts.hour);
+            $('#abdmCustomDateTo_minute').val(parts.minute);
+            $('#abdmCustomDateTo_ampm').val(parts.ampm);
         }
-        if (!$('#abdmCustomEraseDate').val()) {
+
+        // Expiry Date: 1 year from now, 11:59:59 PM
+        if (!$('#abdmCustomEraseDate_date').val()) {
             var erase = new Date();
             erase.setFullYear(erase.getFullYear() + 1);
-            erase.setHours(23, 59, 59, 0);
-            $('#abdmCustomEraseDate').val(formatDateTimeLocal(erase));
+            $('#abdmCustomEraseDate_date').val(formatDateInput(erase));
+            $('#abdmCustomEraseDate_hour').val('11');
+            $('#abdmCustomEraseDate_minute').val('59');
+            $('#abdmCustomEraseDate_ampm').val('PM');
         }
     });
 
@@ -1890,14 +1978,24 @@ $(function() {
             return;
         }
 
-        var dateFrom = $('#abdmCustomDateFrom').val();
-        var dateTo = $('#abdmCustomDateTo').val();
-        var eraseDate = $('#abdmCustomEraseDate').val();
-        if (dateFrom && dateTo && dateFrom >= dateTo) {
+        var dateFrom = buildDateTimeFromPickers('abdmCustomDateFrom', false);
+        var dateTo = buildDateTimeFromPickers('abdmCustomDateTo', false);
+        var eraseDate = buildDateTimeFromPickers('abdmCustomEraseDate', true);
+
+        if (!dateFrom || !dateTo) {
+            $('#abdmCustomConsentError').removeClass('d-none').text('"Date From" and "Date To" are required.');
+            return;
+        }
+
+        var tsFrom = new Date(dateFrom.replace(' ', 'T')).getTime();
+        var tsTo = new Date(dateTo.replace(' ', 'T')).getTime();
+        var tsErase = eraseDate ? new Date(eraseDate.replace(' ', 'T')).getTime() : 0;
+
+        if (tsFrom && tsTo && tsFrom >= tsTo) {
             $('#abdmCustomConsentError').removeClass('d-none').text('"Date From" must be earlier than "Date To".');
             return;
         }
-        if (eraseDate && dateTo && eraseDate < dateTo) {
+        if (tsErase && tsTo && tsErase < tsTo) {
             $('#abdmCustomConsentError').removeClass('d-none').text('"Expiry Date" must be on or after "Date To".');
             return;
         }
