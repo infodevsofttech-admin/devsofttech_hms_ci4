@@ -18,6 +18,19 @@ class AbdmGateway extends BaseController
 {
     private AbdmConnectorInterface $connector;
 
+    public function __construct()
+    {
+        if ($this->db === null) {
+            $this->db = db_connect();
+        }
+        if (! isset($this->connector)) {
+            $this->connector = AbdmConnectorFactory::make();
+        }
+        if (! isset($this->fhirR4Builder)) {
+            $this->fhirR4Builder = new FhirR4Builder();
+        }
+    }
+
     public function initController(
         \CodeIgniter\HTTP\RequestInterface  $request,
         \CodeIgniter\HTTP\ResponseInterface $response,
