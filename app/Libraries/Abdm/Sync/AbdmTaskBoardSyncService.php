@@ -956,23 +956,101 @@ class AbdmTaskBoardSyncService
                     log_message('warning', '[processIndividualWorkTask] Invoice bundle generation error: ' . $inve->getMessage());
                 }
             }
+        } elseif (in_array($taskType, ['lab_report_publish', 'radiology_report_publish'], true)) {
+            if (empty($pushData['bundle']) && $this->db->tableExists('health_records')) {
+                $hr = $this->db->table('health_records')
+                    ->where('entity_id', (string) $entityId)
+                    ->where('hi_type', 'DiagnosticReportRecord')
+                    ->orderBy('id', 'DESC')
+                    ->get(1)
+                    ->getRowArray();
+                $raw = $hr['record_data'] ?? $hr['fhir_bundle'] ?? null;
+                if (! empty($raw)) {
+                    $dec = json_decode((string) $raw, true);
+                    if (is_array($dec) && ! empty($dec) && isset($dec['resourceType'])) {
+                        $pushData['bundle'] = $dec;
+                        $pushData['fhir_bundle'] = $dec;
+                        $pushData['record_data'] = $dec;
+                        $bundleJson = (string) $raw;
+                        if (! empty($hr['care_context_reference'])) {
+                            $careContextRef = (string) $hr['care_context_reference'];
+                            $pushData['care_context_reference'] = $careContextRef;
+                            $pushData['queue_id'] = $careContextRef;
+                        }
+                    }
+                }
+            }
+            if (empty($pushData['bundle']) && class_exists('\App\Controllers\AbdmGateway')) {
+                try {
+                    $gw = new \App\Controllers\AbdmGateway();
+                    $diagRes = $gw->pushDiagnosisReportBundleInternal((int) $entityId, $patientId, $abhaAddress !== '' ? $abhaAddress : $abhaNumber, '', '', $careContextRef, true);
+                    if (! empty($diagRes['health_record_id']) && $this->db->tableExists('health_records')) {
+                        $genHr = $this->db->table('health_records')->where('id', (int) $diagRes['health_record_id'])->get(1)->getRowArray();
+                        $rawGen = $genHr['record_data'] ?? $genHr['fhir_bundle'] ?? null;
+                        if (! empty($rawGen)) {
+                            $decGen = json_decode((string) $rawGen, true);
+                            if (is_array($decGen) && ! empty($decGen)) {
+                                $pushData['bundle'] = $decGen;
+                                $pushData['fhir_bundle'] = $decGen;
+                                $pushData['record_data'] = $decGen;
+                                $bundleJson = (string) $rawGen;
+                            }
+                        }
+                    }
+                } catch (\Throwable $de) {
+                    log_message('warning', '[processIndividualWorkTask] Diagnostic report bundle generation error: ' . $de->getMessage());
+                }
+            }
+        } elseif ($taskType === 'health_document_publish') {
+            if (empty($pushData['bundle']) && class_exists('\App\Controllers\DoctorDocument')) {
+                try {
+                    $docCtrl = new \App\Controllers\DoctorDocument();
+                    $src = $docCtrl->buildHealthDocumentSource((int) $entityId);
+                    if (! empty($src)) {
+                        $factory = new \App\Libraries\Abdm\Fhir\FhirGeneratorFactory();
+                        $gen = $factory->healthDocument()->generate($src);
+                        $adapter = new \App\Libraries\Abdm\Fhir\Support\GatewayPayloadAdapter();
+                        $hfrId = (string) ($src['hfr_id'] ?? 'HFR-IN-HMS');
+                        $docPayload = $adapter->toGatewayPayload($gen, $src, $hfrId);
+                        if (! empty($docPayload['fhir_bundle'])) {
+                            $pushData['bundle'] = $docPayload['fhir_bundle'];
+                            $pushData['fhir_bundle'] = $docPayload['fhir_bundle'];
+                            $pushData['record_data'] = $docPayload['fhir_bundle'];
+                            $bundleJson = (string) json_encode($docPayload['fhir_bundle'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                            if (! empty($docPayload['care_context_reference'])) {
+                                $careContextRef = (string) $docPayload['care_context_reference'];
+                                $pushData['care_context_reference'] = $careContextRef;
+                                $pushData['queue_id'] = $careContextRef;
+                            }
+                        }
+                    }
+                } catch (\Throwable $he) {
+                    log_message('warning', '[processIndividualWorkTask] Health document bundle generation error: ' . $he->getMessage());
+                }
+            }
         }
 
         // Generic fallback: check if bundle already exists in health_records
         if (empty($pushData['bundle']) && $this->db->tableExists('health_records')) {
             $hr = $this->db->table('health_records')
-                ->where('entity_id', (string) $entityId)
-                ->where('patient_id', $patientId)
+                ->groupStart()
+                    ->where('care_context_reference', $careContextRef)
+                    ->orGroupStart()
+                        ->where('entity_id', (string) $entityId)
+                        ->where('patient_id', $patientId)
+                    ->groupEnd()
+                ->groupEnd()
                 ->orderBy('id', 'DESC')
                 ->get(1)
                 ->getRowArray();
-            if (! empty($hr['fhir_bundle'])) {
-                $decoded = json_decode((string) $hr['fhir_bundle'], true);
-                if (is_array($decoded) && ! empty($decoded)) {
+            $rawBundle = $hr['record_data'] ?? $hr['fhir_bundle'] ?? null;
+            if (! empty($rawBundle)) {
+                $decoded = json_decode((string) $rawBundle, true);
+                if (is_array($decoded) && ! empty($decoded) && isset($decoded['resourceType'])) {
                     $pushData['bundle'] = $decoded;
                     $pushData['fhir_bundle'] = $decoded;
                     $pushData['record_data'] = $decoded;
-                    $bundleJson = (string) $hr['fhir_bundle'];
+                    $bundleJson = (string) $rawBundle;
                     if (! empty($hr['care_context_reference'])) {
                         $careContextRef = (string) $hr['care_context_reference'];
                         $pushData['care_context_reference'] = $careContextRef;

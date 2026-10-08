@@ -1501,6 +1501,27 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         $visitDate = (string) ($data['visit_date'] ?? date('Y-m-d'));
 
         $bundle = $data['record_data'] ?? $data['fhir_bundle'] ?? null;
+        if (empty($bundle) && $careContextReference !== '') {
+            try {
+                $db = \Config\Database::connect();
+                if ($db->tableExists('health_records')) {
+                    $hrRow = $db->table('health_records')
+                        ->where('care_context_reference', $careContextReference)
+                        ->orderBy('id', 'DESC')
+                        ->get(1)
+                        ->getRowArray();
+                    $raw = $hrRow['record_data'] ?? $hrRow['fhir_bundle'] ?? null;
+                    if (! empty($raw)) {
+                        $dec = json_decode((string) $raw, true);
+                        if (is_array($dec) && ! empty($dec) && isset($dec['resourceType'])) {
+                            $bundle = $dec;
+                        }
+                    }
+                }
+            } catch (\Throwable) {
+            }
+        }
+
         if (! empty($bundle) && is_array($bundle)) {
             // When a FHIR bundle is attached, push to /api/v3/records/push so the bridge
             // validates the FHIR resources and holds the bundle for on-demand patient fetch.

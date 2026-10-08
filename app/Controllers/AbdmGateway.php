@@ -10674,9 +10674,10 @@ class AbdmGateway extends BaseController
 
     private function buildHealthDocumentRecordPayload(int $patientId, string $abhaId = '', int $recordId = 0, array $patientRow = []): ?array
     {
+        $hasPost = $this->request && method_exists($this->request, 'getPost');
         $targetRecordId = $recordId > 0
             ? $recordId
-            : (int) ($this->request->getPost('record_id') ?? $this->request->getPost('patient_doc_id') ?? $this->request->getPost('document_id') ?? $this->request->getPost('entity_id') ?? 0);
+            : (int) ($hasPost ? ($this->request->getPost('record_id') ?? $this->request->getPost('patient_doc_id') ?? $this->request->getPost('document_id') ?? $this->request->getPost('entity_id') ?? 0) : 0);
 
         if ($patientId <= 0 && $targetRecordId > 0) {
             if ($this->db->tableExists('file_upload_data')) {
@@ -10719,7 +10720,7 @@ class AbdmGateway extends BaseController
                     $gatewayPayload = $adapter->toGatewayPayload($output, $source, $hfrId);
 
                     $isFromFile = isset($source['record_id']) && str_starts_with((string)$source['record_id'], 'file-');
-                    $reqCcRef = trim((string) ($this->request->getPost('care_context_reference') ?? ''));
+                    $reqCcRef = trim((string) ($hasPost ? ($this->request->getPost('care_context_reference') ?? '') : ''));
                     $resolvedCcRef = $reqCcRef !== '' ? $reqCcRef : (string) ($gatewayPayload['care_context_reference'] ?? ('DOC-' . ($source['record_id'] ?? $targetRecordId) . '-' . date('Ymd', strtotime((string)($source['visit_date'] ?? date('Y-m-d'))))));
 
                     return [
@@ -10735,15 +10736,15 @@ class AbdmGateway extends BaseController
                     ];
                 }
             } catch (\Throwable $e) {
-                // Fall through
+                log_message('warning', '[buildHealthDocumentRecordPayload] doctor doc bundle error: ' . $e->getMessage());
             }
         }
 
-        $title = trim((string) ($this->request->getPost('document_title') ?? $this->request->getPost('title') ?? ''));
-        $documentText = trim((string) ($this->request->getPost('document_text') ?? $this->request->getPost('notes') ?? ''));
-        $contentType = trim((string) ($this->request->getPost('content_type') ?? ''));
-        $base64 = trim((string) ($this->request->getPost('document_base64') ?? ''));
-        $filePath = trim((string) ($this->request->getPost('file_path') ?? $this->request->getPost('attachment_path') ?? ''));
+        $title = trim((string) ($hasPost ? ($this->request->getPost('document_title') ?? $this->request->getPost('title') ?? '') : ''));
+        $documentText = trim((string) ($hasPost ? ($this->request->getPost('document_text') ?? $this->request->getPost('notes') ?? '') : ''));
+        $contentType = trim((string) ($hasPost ? ($this->request->getPost('content_type') ?? '') : ''));
+        $base64 = trim((string) ($hasPost ? ($this->request->getPost('document_base64') ?? '') : ''));
+        $filePath = trim((string) ($hasPost ? ($this->request->getPost('file_path') ?? $this->request->getPost('attachment_path') ?? '') : ''));
         if ($title === '') {
             $title = 'Health Document';
         }
