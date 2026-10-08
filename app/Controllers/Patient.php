@@ -2212,6 +2212,10 @@ class Patient extends BaseController
 			'consent' => $consent,
 		];
 
+		if (session_status() === PHP_SESSION_ACTIVE) {
+			session_write_close();
+		}
+
 		try {
 			$result = $service->runOperation('consent_request', $payload);
 		} catch (\Throwable $e) {
@@ -2276,6 +2280,10 @@ class Patient extends BaseController
 				'error' => 'ABHA is not marked as verified in HMS. Please verify ABHA first, then request content.',
 				'abha' => $abhaContext,
 			]);
+		}
+
+		if (session_status() === PHP_SESSION_ACTIVE) {
+			session_write_close();
 		}
 
 		$service = new \App\Libraries\Abdm\M3HiuWorkflowService();
@@ -2688,6 +2696,10 @@ class Patient extends BaseController
 			]);
 		}
 
+		if (session_status() === PHP_SESSION_ACTIVE) {
+			session_write_close();
+		}
+
 		$service = new \App\Libraries\Abdm\M3HiuWorkflowService();
 		$fetchPayload = [
 			'abha_address' => $abhaContext['abha_address'],
@@ -3020,15 +3032,18 @@ class Patient extends BaseController
 			];
 		}
 
+		if (session_status() === PHP_SESSION_ACTIVE) {
+			session_write_close();
+		}
+
 		$service = new \App\Libraries\Abdm\M3HiuWorkflowService();
 		$reconcileOk = false;
 		$reconcileError = '';
 		$granted = false;
-		$artifactsFetched = 0;
-		$dataUpdates = 0;
-		$dataFailed = 0;
 
-		foreach ($reconcileJobs as $job) {
+		// Limit check to the most recent active jobs (max 2) to keep live status instantaneous
+		$activeJobs = array_slice($reconcileJobs, 0, 2);
+		foreach ($activeJobs as $job) {
 			$reconcilePayload = $job['payload'];
 			try {
 				$reconcile = $service->runOperation('consent_reconcile', $reconcilePayload);
@@ -3044,21 +3059,15 @@ class Patient extends BaseController
 			$reconcileOk = true;
 			$this->persistConsentPhaseOnRequestRow((int) $job['anchor_row_id'], $reconcile);
 
-			$fetchSummary = ['granted' => false, 'data_updates' => 0, 'failed' => 0, 'artifact_ids' => []];
-			try {
-				$fetchSummary = $service->fetchAllArtifactsAfterGrant($reconcilePayload, $reconcile);
-			} catch (\Throwable $e) {
-				// Status was successfully reconciled even if the data-fetch
-				// cascade below fails transiently; don't hide that from the UI.
-				$dataFailed++;
-			}
-
-			if (! empty($fetchSummary['granted'])) {
+			$status = strtoupper(trim((string) (
+				$reconcile['workflow_state']
+				?? $reconcile['status']
+				?? $reconcile['consent_status']
+				?? ''
+			)));
+			if ($status === 'GRANTED') {
 				$granted = true;
-				$artifactsFetched += count($fetchSummary['artifact_ids'] ?? []) + 1;
 			}
-			$dataUpdates += (int) ($fetchSummary['data_updates'] ?? 0);
-			$dataFailed += (int) ($fetchSummary['failed'] ?? 0);
 		}
 
 		if (! $reconcileOk && $reconcileError === '') {
@@ -3067,13 +3076,13 @@ class Patient extends BaseController
 
 		return $this->response->setJSON([
 			'ok' => 1,
-			'sessions_checked' => count($reconcileJobs),
+			'sessions_checked' => count($activeJobs),
 			'reconcile_ok' => $reconcileOk ? 1 : 0,
 			'reconcile_error' => $reconcileOk ? '' : $reconcileError,
 			'granted' => $granted ? 1 : 0,
-			'artifacts_fetched' => $artifactsFetched,
-			'data_fetch_updates' => $dataUpdates,
-			'data_fetch_failed' => $dataFailed,
+			'artifacts_fetched' => 0,
+			'data_fetch_updates' => 0,
+			'data_fetch_failed' => 0,
 		] + $this->getAbdmConsentRequestsList($abhaAddress));
 	}
 

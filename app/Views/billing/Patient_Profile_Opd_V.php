@@ -1064,7 +1064,7 @@ if ($patientPhotoPath === '') {
                             <input type="date" class="form-control mb-1" id="abdmCustomDateFrom_date">
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text bg-light text-muted px-2" title="Time"><i class="fa fa-clock-o"></i></span>
-                                <input type="number" min="1" max="12" class="form-control text-center px-1" id="abdmCustomDateFrom_hour" placeholder="12" title="Hour (1-12)">
+                                <input type="number" min="1" max="12" class="form-control text-center px-1 abdm-hour-input" data-prefix="abdmCustomDateFrom" id="abdmCustomDateFrom_hour" placeholder="12" title="Hour (1-12)">
                                 <span class="input-group-text px-1">:</span>
                                 <input type="number" min="0" max="59" class="form-control text-center px-1" id="abdmCustomDateFrom_minute" placeholder="00" title="Minute (0-59)">
                                 <select class="form-select fw-bold text-primary px-1" id="abdmCustomDateFrom_ampm" style="max-width: 72px;" title="AM/PM">
@@ -1078,7 +1078,7 @@ if ($patientPhotoPath === '') {
                             <input type="date" class="form-control mb-1" id="abdmCustomDateTo_date">
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text bg-light text-muted px-2" title="Time"><i class="fa fa-clock-o"></i></span>
-                                <input type="number" min="1" max="12" class="form-control text-center px-1" id="abdmCustomDateTo_hour" placeholder="12" title="Hour (1-12)">
+                                <input type="number" min="1" max="12" class="form-control text-center px-1 abdm-hour-input" data-prefix="abdmCustomDateTo" id="abdmCustomDateTo_hour" placeholder="12" title="Hour (1-12)">
                                 <span class="input-group-text px-1">:</span>
                                 <input type="number" min="0" max="59" class="form-control text-center px-1" id="abdmCustomDateTo_minute" placeholder="00" title="Minute (0-59)">
                                 <select class="form-select fw-bold text-primary px-1" id="abdmCustomDateTo_ampm" style="max-width: 72px;" title="AM/PM">
@@ -1092,9 +1092,9 @@ if ($patientPhotoPath === '') {
                             <input type="date" class="form-control mb-1" id="abdmCustomEraseDate_date">
                             <div class="input-group input-group-sm">
                                 <span class="input-group-text bg-light text-muted px-2" title="Time"><i class="fa fa-clock-o"></i></span>
-                                <input type="number" min="1" max="12" class="form-control text-center px-1" id="abdmCustomEraseDate_hour" placeholder="11" title="Hour (1-12)">
+                                <input type="number" min="1" max="12" class="form-control text-center px-1 abdm-hour-input" data-prefix="abdmCustomEraseDate" id="abdmCustomEraseDate_hour" placeholder="12" title="Hour (1-12)">
                                 <span class="input-group-text px-1">:</span>
-                                <input type="number" min="0" max="59" class="form-control text-center px-1" id="abdmCustomEraseDate_minute" placeholder="59" title="Minute (0-59)">
+                                <input type="number" min="0" max="59" class="form-control text-center px-1" id="abdmCustomEraseDate_minute" placeholder="00" title="Minute (0-59)">
                                 <select class="form-select fw-bold text-primary px-1" id="abdmCustomEraseDate_ampm" style="max-width: 72px;" title="AM/PM">
                                     <option value="AM">AM</option>
                                     <option value="PM" selected>PM</option>
@@ -1287,7 +1287,16 @@ $(function() {
         $('#abdmRequestsTable tbody').html(html);
     }
 
+    var abdmLoadingRequests = false;
     function loadAbdmConsentRequests() {
+        if (abdmLoadingRequests) {
+            return;
+        }
+        abdmLoadingRequests = true;
+        var $btn = $('#btnRefreshAbdmRequests');
+        var origText = $btn.text();
+        $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Refreshing...');
+
         fetch(abdmConsentRequestsUrl, { credentials: 'same-origin' })
             .then(function(resp) { return resp.json(); })
             .then(function(data) {
@@ -1299,6 +1308,10 @@ $(function() {
             })
             .catch(function(err) {
                 $('#abdmRequestsTable tbody').html('<tr><td colspan="7" class="text-danger text-center">' + escHtml('Failed to load consent request history: ' + (err.message || err)) + '</td></tr>');
+            })
+            .finally(function() {
+                abdmLoadingRequests = false;
+                $btn.prop('disabled', false).text(origText || 'Refresh');
             });
     }
 
@@ -1671,7 +1684,16 @@ $(function() {
         return html;
     }
 
+    var abdmLoadingDocs = false;
     function loadAbdmDocs() {
+        if (abdmLoadingDocs) {
+            return;
+        }
+        abdmLoadingDocs = true;
+        var $btn = $('#btnLoadAbdmDocs');
+        var origText = $btn.text();
+        $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Refreshing...');
+
         var q = ($('#abdmDocSearch').val() || '').toString().trim();
         var url = abdmDocumentsUrl + '?limit=200';
         if (q !== '') {
@@ -1689,6 +1711,10 @@ $(function() {
             })
             .catch(function(err) {
                 setAbdmStatus('ABDM load failed: ' + (err.message || err), true);
+            })
+            .finally(function() {
+                abdmLoadingDocs = false;
+                $btn.prop('disabled', false).text(origText || 'Refresh list');
             });
     }
 
@@ -1798,7 +1824,8 @@ $(function() {
                 if (!data.reconcile_ok) {
                     setAbdmStatus('Refreshed from last saved status (bridge check failed: ' + (data.reconcile_error || 'unknown error') + ').', true);
                 } else if (data.granted) {
-                    setAbdmStatus('Live status: GRANTED. Fetched data for ' + (data.artifacts_fetched || 0) + ' facility artifact(s)' + (data.data_fetch_failed ? (', ' + data.data_fetch_failed + ' failed') : '') + '.');
+                    setAbdmStatus('Live status: GRANTED. Health records are being synced in the background.');
+                    loadAbdmDocs();
                 } else {
                     var latestStatus = ((currentAbdmRequests[0] && currentAbdmRequests[0].status) || '').toString().toUpperCase();
                     if (latestStatus === 'REVOKED') {
@@ -1886,24 +1913,43 @@ $(function() {
         if (!dateVal) {
             return '';
         }
-        var h = parseInt($('#' + prefix + '_hour').val(), 10);
-        var m = parseInt($('#' + prefix + '_minute').val(), 10);
-        if (isNaN(h) || h < 1 || h > 12) {
-            h = defaultEndOfDay ? 11 : 12;
-        }
-        if (isNaN(m) || m < 0 || m > 59) {
-            m = defaultEndOfDay ? 59 : 0;
-        }
+        var rawH = parseInt($('#' + prefix + '_hour').val(), 10);
+        var rawM = parseInt($('#' + prefix + '_minute').val(), 10);
         var ampm = ($('#' + prefix + '_ampm').val() || (defaultEndOfDay ? 'PM' : 'AM')).toUpperCase();
-        var h24 = h;
-        if (ampm === 'PM' && h < 12) {
-            h24 += 12;
-        } else if (ampm === 'AM' && h === 12) {
+
+        var h24 = 0;
+        if (isNaN(rawH)) {
+            h24 = defaultEndOfDay ? 23 : 0;
+        } else if (rawH >= 13 && rawH <= 23) {
+            // User entered 24-hour format like 15 -> 15:00
+            h24 = rawH;
+        } else if (rawH === 12) {
+            h24 = (ampm === 'AM') ? 0 : 12;
+        } else if (rawH >= 1 && rawH <= 11) {
+            h24 = (ampm === 'PM') ? (rawH + 12) : rawH;
+        } else if (rawH === 0) {
             h24 = 0;
+        } else {
+            h24 = defaultEndOfDay ? 23 : 0;
         }
+
+        var m = isNaN(rawM) || rawM < 0 || rawM > 59 ? (defaultEndOfDay ? 59 : 0) : rawM;
         var s = defaultEndOfDay ? 59 : 0;
         return dateVal + ' ' + pad2(h24) + ':' + pad2(m) + ':' + pad2(s);
     }
+
+    $(document).off('input change blur', '.abdm-hour-input').on('input change blur', '.abdm-hour-input', function() {
+        var prefix = $(this).data('prefix');
+        var val = parseInt($(this).val(), 10);
+        if (isNaN(val)) return;
+        if (val >= 13 && val <= 23) {
+            $(this).val(val - 12);
+            $('#' + prefix + '_ampm').val('PM');
+        } else if (val === 0) {
+            $(this).val(12);
+            $('#' + prefix + '_ampm').val('AM');
+        }
+    });
 
     $('#abdmCustomConsentModal').on('show.bs.modal', function() {
         $('#abdmCustomConsentError').addClass('d-none').text('');
@@ -1928,14 +1974,15 @@ $(function() {
             $('#abdmCustomDateTo_ampm').val(parts.ampm);
         }
 
-        // Expiry Date: 1 year from now, 11:59:59 PM
+        // Expiry Date: 1 year from now, matching current time
         if (!$('#abdmCustomEraseDate_date').val()) {
             var erase = new Date();
             erase.setFullYear(erase.getFullYear() + 1);
+            var eraseParts = get12HourParts(erase);
             $('#abdmCustomEraseDate_date').val(formatDateInput(erase));
-            $('#abdmCustomEraseDate_hour').val('11');
-            $('#abdmCustomEraseDate_minute').val('59');
-            $('#abdmCustomEraseDate_ampm').val('PM');
+            $('#abdmCustomEraseDate_hour').val(eraseParts.hour);
+            $('#abdmCustomEraseDate_minute').val(eraseParts.minute);
+            $('#abdmCustomEraseDate_ampm').val(eraseParts.ampm);
         }
     });
 
