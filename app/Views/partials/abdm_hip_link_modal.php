@@ -1027,12 +1027,13 @@
 
             // Step 2: Link Care Contexts
             csrf = getCsrfData();
+            var primaryRef = (selectedContexts && selectedContexts.length > 0 && selectedContexts[0].ref) ? selectedContexts[0].ref : '';
             var linkPayload = {
                 patient_id: currentPatientId,
                 abha_address: abhaAddress,
                 abha_number: abhaNumber,
                 link_token_id: linkTokenId,
-                patient_ref: abhaAddress,
+                patient_ref: primaryRef || abhaAddress,
                 display: name,
                 care_contexts: selectedContexts,
                 csrf_hms: csrf.hash

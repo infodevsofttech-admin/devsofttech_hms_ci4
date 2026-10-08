@@ -12499,12 +12499,21 @@ class AbdmGateway extends BaseController
         }
 
         if (empty($body['patient_ref']) || $body['patient_ref'] === $body['abha_address']) {
-            if (! empty($patientRow['p_code'])) {
-                $body['patient_ref'] = (string) $patientRow['p_code'];
-            } elseif ($patientId > 0) {
-                $body['patient_ref'] = 'P-' . $patientId;
-            } else {
-                $body['patient_ref'] = $body['abha_address'];
+            if (! empty($body['care_contexts']) && is_array($body['care_contexts'])) {
+                $firstCc = $body['care_contexts'][0];
+                $cRef = trim((string) ($firstCc['ref'] ?? $firstCc['referenceNumber'] ?? $firstCc['reference_number'] ?? ''));
+                if ($cRef !== '') {
+                    $body['patient_ref'] = $cRef;
+                }
+            }
+            if (empty($body['patient_ref']) || $body['patient_ref'] === $body['abha_address']) {
+                if (! empty($patientRow['p_code'])) {
+                    $body['patient_ref'] = (string) $patientRow['p_code'];
+                } elseif ($patientId > 0) {
+                    $body['patient_ref'] = 'P-' . $patientId;
+                } else {
+                    $body['patient_ref'] = $body['abha_address'];
+                }
             }
         }
         if (empty($body['display']) || $body['display'] === $body['patient_ref']) {
