@@ -676,36 +676,57 @@ class M3HiuGatewayClient
         string $hospitalId,
         string $httpMethod = 'POST'
     ): void {
-        if (! $this->db->tableExists('abdm_api_logs')) {
-            return;
+        try {
+            if (! $this->db->tableExists('abdm_api_logs')) {
+                return;
+            }
+
+            $status = $ok === 1 ? 'success' : 'error';
+            $entityId = trim((string) (
+                $request['consent_id']
+                ?? $request['consentId']
+                ?? $request['consentRequestId']
+                ?? $request['request_id']
+                ?? $request['requestId']
+                ?? $request['transaction_id']
+                ?? $request['transactionId']
+                ?? ''
+            ));
+
+            // Redact bulky decrypted clinical data in API audit log to preserve memory and privacy
+            $logResponse = $response;
+            if (isset($logResponse['sessions']) && is_array($logResponse['sessions'])) {
+                foreach ($logResponse['sessions'] as &$sess) {
+                    if (isset($sess['decrypted_data']) && is_array($sess['decrypted_data'])) {
+                        $sess['decrypted_data_count'] = count($sess['decrypted_data']);
+                        $sess['decrypted_data'] = '[REDACTED_CLINICAL_DATA: ' . count($sess['decrypted_data']) . ' items]';
+                    }
+                }
+                unset($sess);
+            }
+
+            $respJson = json_encode($logResponse, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+            if ($respJson !== false && strlen($respJson) > 65536) {
+                $respJson = substr($respJson, 0, 65536) . '...[TRUNCATED]';
+            }
+
+            $this->db->table('abdm_api_logs')->insert([
+                'channel' => 'eatria_bridge',
+                'event_type' => 'abdm.m3.hiu.' . $eventKey,
+                'endpoint' => $this->baseUrl . $path,
+                'http_method' => strtoupper(trim($httpMethod)) !== '' ? strtoupper(trim($httpMethod)) : 'POST',
+                'entity_type' => 'abdm_hiu',
+                'entity_id' => $entityId,
+                'request_json' => (string) json_encode($request, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'response_code' => $httpCode,
+                'response_json' => (string) ($respJson ?: '{}'),
+                'status' => $status,
+                'error_message' => $errorText !== '' ? mb_substr($errorText, 0, 1000) : null,
+                'created_at' => date('Y-m-d H:i:s'),
+            ]);
+        } catch (\Throwable $e) {
+            log_message('warning', '[M3HiuGatewayClient] logApi failed: ' . $e->getMessage());
         }
-
-        $status = $ok === 1 ? 'success' : 'error';
-        $entityId = trim((string) (
-            $request['consent_id']
-            ?? $request['consentId']
-            ?? $request['consentRequestId']
-            ?? $request['request_id']
-            ?? $request['requestId']
-            ?? $request['transaction_id']
-            ?? $request['transactionId']
-            ?? ''
-        ));
-
-        $this->db->table('abdm_api_logs')->insert([
-            'channel' => 'eatria_bridge',
-            'event_type' => 'abdm.m3.hiu.' . $eventKey,
-            'endpoint' => $this->baseUrl . $path,
-            'http_method' => strtoupper(trim($httpMethod)) !== '' ? strtoupper(trim($httpMethod)) : 'POST',
-            'entity_type' => 'abdm_hiu',
-            'entity_id' => $entityId,
-            'request_json' => (string) json_encode($request, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'response_code' => $httpCode,
-            'response_json' => (string) json_encode($response, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
-            'status' => $status,
-            'error_message' => $errorText !== '' ? mb_substr($errorText, 0, 1000) : null,
-            'created_at' => date('Y-m-d H:i:s'),
-        ]);
     }
 
     private function extractErrorText($decoded, int $httpCode, bool $isJson): string

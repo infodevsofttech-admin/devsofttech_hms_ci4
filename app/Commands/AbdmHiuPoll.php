@@ -19,6 +19,8 @@ class AbdmHiuPoll extends BaseCommand
 
     public function run(array $params)
     {
+        @ini_set('memory_limit', '512M');
+
         $lockDir = WRITEPATH . 'locks';
         if (! is_dir($lockDir)) {
             @mkdir($lockDir, 0755, true);
