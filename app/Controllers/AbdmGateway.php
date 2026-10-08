@@ -2127,7 +2127,8 @@ class AbdmGateway extends BaseController
         string $abhaId = '',
         string $abhaAddressPost = '',
         string $consentHandle = '',
-        string $careContextId = ''
+        string $careContextId = '',
+        bool $skipRemotePush = false
     ): array {
         if ($labReqId <= 0) {
             return ['ok' => 0, 'error' => 'lab_req_id is required'];
@@ -2329,6 +2330,24 @@ class AbdmGateway extends BaseController
             'care_context_reference' => $ccRef,
             'consent_handle' => $effectiveConsent,
         ]);
+
+        if ($skipRemotePush) {
+            if ($healthRecordId > 0 && $this->db->tableExists('health_records')) {
+                $this->db->table('health_records')
+                    ->where('id', $healthRecordId)
+                    ->update([
+                        'push_status' => 'pending',
+                        'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                    ]);
+            }
+            return [
+                'ok' => 1,
+                'status' => 'queued_for_cron',
+                'care_context_reference' => $ccRef,
+                'health_record_id' => $healthRecordId,
+                'message' => 'Diagnostic report stored locally and queued for 1-minute cron job link.',
+            ];
+        }
 
         if (! $hasAbha) {
             if ($healthRecordId > 0 && $this->db->tableExists('health_records')) {
@@ -10121,7 +10140,7 @@ class AbdmGateway extends BaseController
         };
     }
 
-    public function pushAdditionalHiRecord(array $payload, int $patientId, string $abhaId, string $consentHandle = '')
+    public function pushAdditionalHiRecord(array $payload, int $patientId, string $abhaId, string $consentHandle = '', bool $skipRemotePush = false)
     {
         $abhaIdentity = $this->resolvePatientAbhaIdentity($patientId, $abhaId);
         $abhaNumber = $abhaIdentity['abha_id'];
@@ -10156,6 +10175,24 @@ class AbdmGateway extends BaseController
             'care_context_display' => $ccDisplay,
             'consent_handle' => $effectiveConsent,
         ]);
+
+        if ($skipRemotePush) {
+            if ($healthRecordId > 0 && $this->db->tableExists('health_records')) {
+                $this->db->table('health_records')->where('id', $healthRecordId)->update([
+                    'push_status' => 'pending',
+                    'updated_at' => Time::now('Asia/Kolkata')->toDateTimeString(),
+                ]);
+            }
+
+            $resp = [
+                'ok' => 1,
+                'status' => 'queued_for_cron',
+                'health_record_id' => $healthRecordId,
+                'care_context_reference' => $ccRef,
+                'message' => 'Record saved locally and queued for 1-minute cron job link.',
+            ];
+            return $this->response !== null ? $this->response->setJSON($resp) : $resp;
+        }
 
         if ($abhaId === '') {
             if ($healthRecordId > 0 && $this->db->tableExists('health_records')) {
@@ -10499,7 +10536,7 @@ class AbdmGateway extends BaseController
             case 'diagnostic_report':
             case 'lab':
             case 'radiology':
-                return $this->pushDiagnosisReportBundleInternal($entityId, $patientId);
+                return $this->pushDiagnosisReportBundleInternal($entityId, $patientId, '', '', '', '', true);
 
             case 'discharge':
             case 'discharge_summary':
@@ -10516,8 +10553,8 @@ class AbdmGateway extends BaseController
                 if ($payload === null) {
                     return ['ok' => 0, 'status' => 'payload_null'];
                 }
-                $res = $this->pushAdditionalHiRecord($payload, (int) ($payload['patient_id'] ?? $patientId), $abhaId);
-                return ['ok' => 1, 'status' => 'pushed'];
+                $res = $this->pushAdditionalHiRecord($payload, (int) ($payload['patient_id'] ?? $patientId), $abhaId, '', true);
+                return ['ok' => 1, 'status' => 'queued_for_cron'];
 
             case 'invoice':
                 $abhaId = $patientId > 0 ? $this->resolvePatientAbhaIdentifier($patientId) : '';
@@ -10525,8 +10562,8 @@ class AbdmGateway extends BaseController
                 if ($payload === null) {
                     return ['ok' => 0, 'status' => 'payload_null'];
                 }
-                $res = $this->pushAdditionalHiRecord($payload, (int) ($payload['patient_id'] ?? $patientId), $abhaId);
-                return ['ok' => 1, 'status' => 'pushed'];
+                $res = $this->pushAdditionalHiRecord($payload, (int) ($payload['patient_id'] ?? $patientId), $abhaId, '', true);
+                return ['ok' => 1, 'status' => 'queued_for_cron'];
 
             case 'wellness':
                 $abhaId = $patientId > 0 ? $this->resolvePatientAbhaIdentifier($patientId) : '';
@@ -10534,8 +10571,8 @@ class AbdmGateway extends BaseController
                 if ($payload === null) {
                     return ['ok' => 0, 'status' => 'payload_null'];
                 }
-                $res = $this->pushAdditionalHiRecord($payload, (int) ($payload['patient_id'] ?? $patientId), $abhaId);
-                return ['ok' => 1, 'status' => 'pushed'];
+                $res = $this->pushAdditionalHiRecord($payload, (int) ($payload['patient_id'] ?? $patientId), $abhaId, '', true);
+                return ['ok' => 1, 'status' => 'queued_for_cron'];
 
             case 'immunization':
                 $abhaId = $patientId > 0 ? $this->resolvePatientAbhaIdentifier($patientId) : '';
@@ -10543,16 +10580,13 @@ class AbdmGateway extends BaseController
                 if ($payload === null) {
                     return ['ok' => 0, 'status' => 'payload_null'];
                 }
-                $res = $this->pushAdditionalHiRecord($payload, (int) ($payload['patient_id'] ?? $patientId), $abhaId);
+                $res = $this->pushAdditionalHiRecord($payload, (int) ($payload['patient_id'] ?? $patientId), $abhaId, '', true);
                 $hrId = 0;
-                $isOk = false;
                 if ($res instanceof \CodeIgniter\HTTP\ResponseInterface) {
                     $resData = json_decode($res->getBody(), true);
                     $hrId = (int) ($resData['health_record_id'] ?? 0);
-                    $isOk = ! empty($resData['ok']);
                 } elseif (is_array($res)) {
                     $hrId = (int) ($res['health_record_id'] ?? 0);
-                    $isOk = ! empty($res['ok']);
                 }
                 if ($entityId > 0 && $this->db->tableExists('immunization_records')) {
                     $this->db->table('immunization_records')
@@ -10560,10 +10594,10 @@ class AbdmGateway extends BaseController
                         ->update([
                             'abdm_care_context_reference' => (string) ($payload['care_context_reference'] ?? ('IMM-' . $entityId)),
                             'abdm_health_record_id' => $hrId > 0 ? $hrId : null,
-                            'abdm_push_status' => $isOk ? 'linked' : 'queued',
+                            'abdm_push_status' => 'queued',
                         ]);
                 }
-                return ['ok' => 1, 'status' => 'pushed', 'health_record_id' => $hrId, 'care_context_reference' => $payload['care_context_reference']];
+                return ['ok' => 1, 'status' => 'queued_for_cron', 'health_record_id' => $hrId, 'care_context_reference' => $payload['care_context_reference']];
 
             default:
                 return ['ok' => 0, 'status' => 'unknown_doc_type', 'message' => 'Unknown document type: ' . $docType];
@@ -10596,105 +10630,22 @@ class AbdmGateway extends BaseController
             return ['ok' => 0, 'status' => 'no_abha', 'message' => 'Patient has no ABHA'];
         }
 
-        // Ensure FHIR bundle is built and stored
+        // Ensure FHIR bundle is built and stored locally
         if (class_exists('\App\Controllers\Opd_prescription')) {
             try {
                 $rxCtrl = new \App\Controllers\Opd_prescription();
                 $rxCtrl->storePrescriptionFhirBundle($opdId, $sessionId, $patientRow, $opdRow);
+                $rxCtrl->createOpdPrescriptionWorkTask($opdId, $sessionId);
             } catch (\Throwable $e) {
                 log_message('warning', '[autoPushPrescriptionRecord] storePrescriptionFhirBundle error: ' . $e->getMessage());
             }
         }
 
-        if ($sessionId <= 0 && $this->db->tableExists('opd_prescription')) {
-            $presRow = $this->db->table('opd_prescription')->select('id')->where('opd_id', $opdId)->orderBy('id', 'DESC')->get(1)->getRowArray();
-            if (! empty($presRow['id'])) {
-                $sessionId = (int) $presRow['id'];
-            }
-        }
-
-        $abhaIdentity = $this->resolvePatientAbhaIdentity($patientId, $abhaId);
-        $abhaNumber = $abhaIdentity['abha_id'];
-        $abhaAddress = $abhaIdentity['abha_address'];
-        $patientBirthYear = $this->resolvePatientBirthYear($patientRow, $abhaAddress, $abhaNumber);
-        $patientName = $this->patientDisplayName($patientRow);
-        $visitDateRaw = trim((string) ($opdRow['date_opd_visit'] ?? $opdRow['apointment_date'] ?? ''));
-        $visitDate = $visitDateRaw !== '' ? date('Y-m-d', strtotime($visitDateRaw)) : date('Y-m-d');
-        $cleanDate = str_replace('-', '', $visitDate);
-
-        $results = [];
-
-        // 1. Push OPConsultRecord
-        $opcDoc = $this->db->table('opd_fhir_documents')
-            ->where('opd_id', $opdId)
-            ->where('bundle_type', 'OPConsultRecord')
-            ->orderBy('id', 'DESC')
-            ->get(1)
-            ->getRowArray();
-        if (! empty($opcDoc['bundle_json'])) {
-            $opcBundle = json_decode((string) $opcDoc['bundle_json'], true);
-            if (is_array($opcBundle)) {
-                $ccRef = 'OPD-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
-                $ccDisplay = 'OPD Consultation - ' . date('d M Y', strtotime($visitDate));
-                try {
-                    $res = $this->connector->pushRecord([
-                        'patient_id'             => (string) $patientId,
-                        'patient_name'           => $patientName,
-                        'abha_id'                => $abhaNumber,
-                        'abha_address'           => $abhaAddress,
-                        'year_of_birth'          => $patientBirthYear,
-                        'hi_type'                => 'OPConsultRecord',
-                        'record_type'            => 'OPConsultRecord',
-                        'visit_date'             => $visitDate,
-                        'care_context_reference' => $ccRef,
-                        'care_context_display'   => $ccDisplay,
-                        'notes'                  => $ccDisplay,
-                        'queue_id'               => $ccRef,
-                        'record_data'            => $opcBundle,
-                    ]);
-                    $results['opd'] = $res;
-                } catch (\Throwable $e) {
-                    $results['opd_error'] = $e->getMessage();
-                }
-            }
-        }
-
-        // 2. Push PrescriptionRecord
-        $prescDoc = $this->db->table('opd_fhir_documents')
-            ->where('opd_id', $opdId)
-            ->where('bundle_type', 'PrescriptionRecord')
-            ->orderBy('id', 'DESC')
-            ->get(1)
-            ->getRowArray();
-        if (! empty($prescDoc['bundle_json'])) {
-            $prescBundle = json_decode((string) $prescDoc['bundle_json'], true);
-            if (is_array($prescBundle)) {
-                $prescCcRef = 'PRESC-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
-                $prescCcDisplay = 'Prescription - ' . date('d M Y', strtotime($visitDate));
-                try {
-                    $res = $this->connector->pushRecord([
-                        'patient_id'             => (string) $patientId,
-                        'patient_name'           => $patientName,
-                        'abha_id'                => $abhaNumber,
-                        'abha_address'           => $abhaAddress,
-                        'year_of_birth'          => $patientBirthYear,
-                        'hi_type'                => 'PrescriptionRecord',
-                        'record_type'            => 'PrescriptionRecord',
-                        'visit_date'             => $visitDate,
-                        'care_context_reference' => $prescCcRef,
-                        'care_context_display'   => $prescCcDisplay,
-                        'notes'                  => $prescCcDisplay,
-                        'queue_id'               => $prescCcRef,
-                        'record_data'            => $prescBundle,
-                    ]);
-                    $results['prescription'] = $res;
-                } catch (\Throwable $e) {
-                    $results['prescription_error'] = $e->getMessage();
-                }
-            }
-        }
-
-        return ['ok' => 1, 'status' => 'processed', 'results' => $results];
+        return [
+            'ok' => 1,
+            'status' => 'queued_for_cron',
+            'message' => 'Prescription FHIR bundle saved and queued for 1-minute cron linking',
+        ];
     }
 
     private function buildHealthDocumentRecordPayload(int $patientId, string $abhaId = '', int $recordId = 0, array $patientRow = []): ?array

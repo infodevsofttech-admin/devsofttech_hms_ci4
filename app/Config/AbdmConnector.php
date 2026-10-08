@@ -153,10 +153,10 @@ class AbdmConnector extends BaseConfig
     // ------------------------------------------------------------------
     public bool $autoLinkEnabled = true;
 
-    /** Default cooling period for OPD, Lab, Radiology, and all other HI types (in minutes). */
-    public int $autoLinkDelayMinutes = 60;
+    /** Default cooling period for OPD, Lab, Radiology, and all other HI types (in minutes). 0 = immediate 1-minute cron linking. */
+    public int $autoLinkDelayMinutes = 0;
 
-    /** Cooling period for IPD Discharge Summary (in hours). */
-    public int $autoLinkDelayDischargeHours = 24;
+    /** Cooling period for IPD Discharge Summary (in hours). 0 = immediate 1-minute cron linking. */
+    public int $autoLinkDelayDischargeHours = 0;
 }
 

@@ -635,6 +635,8 @@ class AbdmTaskBoardSyncService
             'immunization_record_publish',
             'wellness_record_publish',
             'health_document_publish',
+            'invoice_record_publish',
+            'invoice_publish',
             'ipd_discharge_publish',
         ];
 
@@ -806,6 +808,7 @@ class AbdmTaskBoardSyncService
             'immunization_record_publish' => 'ImmunizationRecord',
             'wellness_record_publish' => 'WellnessRecord',
             'health_document_publish' => 'HealthDocumentRecord',
+            'invoice_record_publish', 'invoice_publish' => 'InvoiceRecord',
             'ipd_discharge_publish' => 'DischargeSummaryRecord',
             default => 'HealthDocumentRecord',
         };
@@ -825,6 +828,7 @@ class AbdmTaskBoardSyncService
             'immunization_record_publish' => 'IMM-',
             'wellness_record_publish'     => 'WELLNESS-',
             'health_document_publish'     => 'DOC-',
+            'invoice_record_publish', 'invoice_publish' => 'INV-',
             'ipd_discharge_publish'       => 'DISCHARGE-',
             default => 'REC-',
         };
@@ -933,6 +937,45 @@ class AbdmTaskBoardSyncService
                     }
                 } catch (\Throwable $ie) {
                     log_message('warning', '[processIndividualWorkTask] Immunization bundle generation error: ' . $ie->getMessage());
+                }
+            }
+        } elseif (in_array($taskType, ['invoice_record_publish', 'invoice_publish'], true)) {
+            if (empty($pushData['bundle']) && class_exists('\App\Controllers\AbdmGateway')) {
+                try {
+                    $gw = new \App\Controllers\AbdmGateway();
+                    $invPayload = $gw->buildInvoiceRecordPayload((int) $entityId, $patientId, $abhaAddress !== '' ? $abhaAddress : $abhaNumber);
+                    if (! empty($invPayload['bundle'])) {
+                        $pushData['bundle'] = $invPayload['bundle'];
+                        $pushData['fhir_bundle'] = $invPayload['bundle'];
+                        $pushData['record_data'] = $invPayload['bundle'];
+                        $bundleJson = (string) json_encode($invPayload['bundle'], JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+                    }
+                } catch (\Throwable $inve) {
+                    log_message('warning', '[processIndividualWorkTask] Invoice bundle generation error: ' . $inve->getMessage());
+                }
+            }
+        }
+
+        // Generic fallback: check if bundle already exists in health_records
+        if (empty($pushData['bundle']) && $this->db->tableExists('health_records')) {
+            $hr = $this->db->table('health_records')
+                ->where('entity_id', (string) $entityId)
+                ->where('patient_id', $patientId)
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+            if (! empty($hr['fhir_bundle'])) {
+                $decoded = json_decode((string) $hr['fhir_bundle'], true);
+                if (is_array($decoded) && ! empty($decoded)) {
+                    $pushData['bundle'] = $decoded;
+                    $pushData['fhir_bundle'] = $decoded;
+                    $pushData['record_data'] = $decoded;
+                    $bundleJson = (string) $hr['fhir_bundle'];
+                    if (! empty($hr['care_context_reference'])) {
+                        $careContextRef = (string) $hr['care_context_reference'];
+                        $pushData['care_context_reference'] = $careContextRef;
+                        $pushData['queue_id'] = $careContextRef;
+                    }
                 }
             }
         }
@@ -1093,11 +1136,23 @@ class AbdmTaskBoardSyncService
 
         $typeLower = strtolower(trim($taskType));
         if (in_array($typeLower, ['ipd_discharge_publish', 'ipd_discharge', 'dischargesummaryrecord', 'ipd'], true)) {
-            $hours = max(1, (int) ($cfg->autoLinkDelayDischargeHours ?? 24));
+            $hours = max(0, (int) ($cfg->autoLinkDelayDischargeHours ?? 0));
             $requiredSeconds = $hours * 3600;
         } else {
-            $minutes = max(1, (int) ($cfg->autoLinkDelayMinutes ?? 60));
+            $minutes = max(0, (int) ($cfg->autoLinkDelayMinutes ?? 0));
             $requiredSeconds = $minutes * 60;
+        }
+
+        if ($requiredSeconds <= 0) {
+            return [
+                'is_cooling_active' => false,
+                'cooling_active'    => false,
+                'remaining_seconds' => 0,
+                'remaining_minutes' => 0,
+                'required_seconds'  => 0,
+                'last_modified'     => (string) $lastModified,
+                'auto_link_at'      => date('Y-m-d H:i:s'),
+            ];
         }
 
         $lastTimestamp = ! empty($lastModified) ? strtotime($lastModified) : 0;

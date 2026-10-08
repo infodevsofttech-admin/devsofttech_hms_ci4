@@ -2130,17 +2130,6 @@ class Opd extends BaseController
             return $this->response->setStatusCode(404)->setBody('OPD not found');
         }
 
-        // Auto create/update FHIR bundle when printing consult form
-        try {
-            $resolvedSessionId = $sessionId > 0 ? $sessionId : (int) ($data['opd_prescription']->id ?? 0);
-            $prescCtrl = new \App\Controllers\Opd_prescription();
-            $patientRowArr = ! empty($data['patient_master'][0]) ? (array) $data['patient_master'][0] : null;
-            $opdRowArr = ! empty($data['opd_master'][0]) ? (array) $data['opd_master'][0] : null;
-            $prescCtrl->storePrescriptionFhirBundle($opdId, $resolvedSessionId, $patientRowArr, $opdRowArr);
-        } catch (\Throwable $fhirEx) {
-            log_message('warning', '[opd_lettre_print] FHIR bundle sync on print warning: ' . $fhirEx->getMessage());
-        }
-
         $data['print_layout_mode'] = $layoutMode;
 
         return view('billing/opd_letter_head', $data);
@@ -2174,17 +2163,6 @@ class Opd extends BaseController
         $data = $this->buildOpdLetterPrintData($opdId, $sessionId, $includeContent);
         if ($data === null) {
             return $this->response->setStatusCode(404)->setBody('OPD not found');
-        }
-
-        // Auto create/update FHIR bundle when generating consult form PDF
-        try {
-            $resolvedSessionId = $sessionId > 0 ? $sessionId : (int) ($data['opd_prescription']->id ?? 0);
-            $prescCtrl = new \App\Controllers\Opd_prescription();
-            $patientRowArr = ! empty($data['patient_master'][0]) ? (array) $data['patient_master'][0] : null;
-            $opdRowArr = ! empty($data['opd_master'][0]) ? (array) $data['opd_master'][0] : null;
-            $prescCtrl->storePrescriptionFhirBundle($opdId, $resolvedSessionId, $patientRowArr, $opdRowArr);
-        } catch (\Throwable $fhirEx) {
-            log_message('warning', '[opd_lettre_pdf] FHIR bundle sync on PDF print warning: ' . $fhirEx->getMessage());
         }
 
         $data['print_layout_mode'] = $layoutMode;
