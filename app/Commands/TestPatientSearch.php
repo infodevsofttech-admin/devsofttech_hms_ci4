@@ -28,13 +28,17 @@ class TestPatientSearch extends BaseCommand
         foreach ($testCases as $tc) {
             CLI::write("Testing: " . $tc['label'], 'yellow');
             $_SERVER['REQUEST_METHOD'] = 'GET';
-            $_GET = array_merge([
+            $params = array_merge([
                 'start' => 0,
                 'length' => 10,
             ], $tc['get']);
+            $_GET = $params;
+
+            $request = \Config\Services::request(null, false);
+            $request->setGlobal('get', $params);
+            \Config\Services::injectMock('request', $request);
 
             $controller = new \App\Controllers\Patient();
-            $request = \Config\Services::request();
             $response = \Config\Services::response();
             $logger = service('logger');
             $controller->initController($request, $response, $logger);
