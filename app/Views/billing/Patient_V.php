@@ -319,7 +319,7 @@
                             <form action="<?= base_url('billing/patient/search') ?>" method="post" role="form" class="form2 needs-validation" novalidate>
                                 <?= csrf_field() ?>
                                 <div class="input-group">
-                                    <input class="form-control" type="text" id="txtsearch" name="txtsearch" placeholder="Search">
+                                    <input class="form-control" type="text" id="txtsearch" name="txtsearch" placeholder="Search by UHID, Name, Mobile, ABHA ID or ABHA Address...">
                                     <span class="input-group-btn">
                                         <button type="submit" class="btn btn-info btn-flat">Go!</button>
                                     </span>
@@ -344,6 +344,7 @@
                                                     <option value="age">Age</option>
                                                     <option value="refer_by">Refer By</option>
                                                     <option value="old_uhid">OLD UHID</option>
+                                                    <option value="abha">ABHA ID / ABHA Address</option>
                                                 </select>
                                             </div>
                                             <div class="col-md-4" id="adv_value_col">

@@ -280,9 +280,11 @@ class Patient extends BaseController
 		$inputMphone1 = trim((string) $this->request->getPost('input_mphone1'));
 		$inputAadhar = trim((string) $this->request->getPost('input_udai'));
 		$inputAbhaId = trim((string) $this->request->getPost('input_abha_id'));
+		$inputAbhaAddress = trim((string) $this->request->getPost('input_abha_address'));
 		$inputRelativeName = trim((string) $this->request->getPost('input_relative_name'));
 		$inputName = trim((string) $this->request->getPost('input_name'));
 		$abhaField = $this->resolvePatientAbhaIdField();
+		$hasAbhaAddress = $this->db->fieldExists('abha_address', 'patient_master');
 
 		$builder = $this->db->table('patient_master');
 		$builder->select("id,p_fname,p_relative,p_rname,gender,add1,city,district,state,zip,mphone1,udai,udai_last4,last_visit,dob,age,age_in_month,estimate_dob");
@@ -292,9 +294,14 @@ class Patient extends BaseController
 		if ($abhaField !== null) {
 			$builder->select($abhaField . ' AS abha_id');
 		}
+		if ($hasAbhaAddress) {
+			$builder->select('abha_address');
+		}
+
+		$inputAbhaTerm = $inputAbhaId !== '' ? $inputAbhaId : $inputAbhaAddress;
 
 		$hasCondition = false;
-		if ($inputMphone1 !== '' || $inputAadhar !== '' || $inputAbhaId !== '' || ($inputRelativeName !== '' && $inputName !== '')) {
+		if ($inputMphone1 !== '' || $inputAadhar !== '' || $inputAbhaTerm !== '' || ($inputRelativeName !== '' && $inputName !== '')) {
 			$builder->groupStart();
 
 			if ($inputMphone1 !== '') {
@@ -328,14 +335,29 @@ class Patient extends BaseController
 				}
 			}
 
-			if ($inputAbhaId !== '' && $abhaField !== null) {
-				$cleanAbha = preg_replace('/\D/', '', $inputAbhaId) ?? '';
+			if ($inputAbhaTerm !== '') {
+				$cleanAbha = preg_replace('/\D/', '', $inputAbhaTerm) ?? '';
+				$builder->orGroupStart();
 				if (strlen($cleanAbha) === 14) {
 					$formattedAbha = substr($cleanAbha, 0, 2) . '-' . substr($cleanAbha, 2, 4) . '-' . substr($cleanAbha, 6, 4) . '-' . substr($cleanAbha, 10, 4);
-					$builder->orWhereIn($abhaField, [$cleanAbha, $formattedAbha]);
+					if ($abhaField !== null) {
+						$builder->orWhereIn($abhaField, [$cleanAbha, $formattedAbha]);
+					}
+					if ($hasAbhaAddress) {
+						$builder->orWhereIn('abha_address', [$cleanAbha, $formattedAbha])
+							->orLike('abha_address', $cleanAbha . '@');
+					}
 				} else {
-					$builder->orWhere($abhaField, $inputAbhaId);
+					if ($abhaField !== null) {
+						$builder->orWhere($abhaField, $inputAbhaTerm)
+							->orLike($abhaField, $inputAbhaTerm);
+					}
+					if ($hasAbhaAddress) {
+						$builder->orWhere('abha_address', $inputAbhaTerm)
+							->orLike('abha_address', $inputAbhaTerm);
+					}
 				}
+				$builder->groupEnd();
 				$hasCondition = true;
 			}
 
@@ -360,7 +382,7 @@ class Patient extends BaseController
 			'filters' => [
 				'input_mphone1' => $inputMphone1,
 				'input_udai' => strtoupper($inputAadhar),
-				'input_abha_id' => $inputAbhaId,
+				'input_abha_id' => $inputAbhaTerm,
 				'input_relative_name' => strtoupper($inputRelativeName),
 				'input_name' => strtoupper($inputName),
 			],
@@ -669,20 +691,29 @@ class Patient extends BaseController
 		return "TRIM(COALESCE(p.{$oldUhidField}, '')) != '' AND (" . implode(' OR ', $clauses) . ')';
 	}
 
-	protected function formatPatientCodeCell(int $patientId, string $patientCode, string $oldUhid = ''): string
+	protected function formatPatientCodeCell(int $patientId, string $patientCode, string $oldUhid = '', string $abha = ''): string
 	{
 		$link = '<a href="javascript:load_form(\'' . base_url('billing/patient/person_record/' . $patientId) . '\');">' . esc($patientCode) . '</a>';
 		$oldUhid = trim($oldUhid);
+		$abha = trim($abha);
 
-		if ($oldUhid === '') {
-			return $link;
+		if ($oldUhid !== '') {
+			$link .= '<br><small><i>' . esc($oldUhid) . '</i></small>';
+		}
+		if ($abha !== '') {
+			$link .= '<br><small class="text-primary"><i class="fa fa-id-card-o me-1"></i>' . esc($abha) . '</small>';
 		}
 
-		return $link . '<br><small><i>' . esc($oldUhid) . '</i></small>';
+		return $link;
 	}
 
-	protected function buildPatientSearchCondition(string $rowData, ?string $abhaField = null, ?string $oldUhidField = null): string
-	{
+	protected function buildPatientSearchCondition(
+		string $rowData,
+		?string $abhaField = null,
+		?string $oldUhidField = null,
+		array $additionalAbhaFields = [],
+		?string $abhaAddressField = null
+	): string {
 		$escapedValue = $this->db->escape($rowData);
 		$clauses = [
 			'p.p_code like ' . $this->db->escape('%' . $rowData),
@@ -695,8 +726,29 @@ class Patient extends BaseController
 			$clauses[] = 'p.udai_hash = ' . $this->db->escape($aadhaarHash);
 		}
 
-		if ($abhaField !== null && $abhaField !== '') {
-			$clauses[] = 'p.' . $abhaField . ' = ' . $escapedValue;
+		$cleanDigits = preg_replace('/\D/', '', $rowData) ?? '';
+		$targetCols = array_values(array_filter(array_unique(array_merge(
+			$abhaField ? [$abhaField] : [],
+			$additionalAbhaFields
+		))));
+
+		if (strlen($cleanDigits) === 14) {
+			$formatted14 = substr($cleanDigits, 0, 2) . '-' . substr($cleanDigits, 2, 4) . '-' . substr($cleanDigits, 6, 4) . '-' . substr($cleanDigits, 10, 4);
+			foreach ($targetCols as $col) {
+				$clauses[] = 'p.' . $col . ' = ' . $escapedValue;
+				$clauses[] = 'p.' . $col . ' = ' . $this->db->escape($formatted14);
+			}
+			if ($abhaAddressField !== null && $abhaAddressField !== '') {
+				$clauses[] = 'p.' . $abhaAddressField . ' = ' . $escapedValue;
+				$clauses[] = 'p.' . $abhaAddressField . ' LIKE ' . $this->db->escape($cleanDigits . '@%');
+			}
+		} else {
+			foreach ($targetCols as $col) {
+				$clauses[] = 'p.' . $col . ' = ' . $escapedValue;
+			}
+			if ($abhaAddressField !== null && $abhaAddressField !== '') {
+				$clauses[] = 'p.' . $abhaAddressField . ' = ' . $escapedValue;
+			}
 		}
 
 		$oldUhidClause = $this->buildOldUhidSearchClause($rowData, $oldUhidField);
@@ -704,7 +756,7 @@ class Patient extends BaseController
 			$clauses[] = $oldUhidClause;
 		}
 
-		return ' and (' . implode(' or ', $clauses) . ')';
+		return ' and (' . implode(' or ', array_unique($clauses)) . ')';
 	}
 
 	public function search_ajax()
@@ -737,13 +789,12 @@ class Patient extends BaseController
 			$advAgeToleranceInt = 20;
 		}
 
-// Detect ABHA and legacy UHID columns in patient_master
-		$abhaField = null;
-		$oldUhidField = null;
+		// Detect ABHA and legacy UHID columns in patient_master
 		$pmFields  = $this->db->getFieldNames('patient_master') ?? [];
-		foreach (['abha_id', 'abha_no', 'abha', 'abha_address'] as $f) {
-			if (in_array($f, $pmFields, true)) { $abhaField = $f; break; }
-		}
+		$abhaIdCols = array_values(array_intersect(['abha_id', 'abha_no', 'abha'], $pmFields));
+		$hasAbhaAddress = in_array('abha_address', $pmFields, true);
+		$abhaField = $abhaIdCols[0] ?? ($hasAbhaAddress ? 'abha_address' : null);
+		$oldUhidField = null;
 		foreach (['old_uhid', 'legacy_uhid', 'old_patient_code'] as $f) {
 			if (in_array($f, $pmFields, true)) { $oldUhidField = $f; break; }
 		}
@@ -811,10 +862,41 @@ class Patient extends BaseController
 						$hasAdvancedFilters = true;
 					}
 					break;
+				case 'abha':
+					$abhaConds = [];
+					$rawDigits = preg_replace('/\D/', '', $advSearchValue);
+					$is14Digit = (strlen($rawDigits) === 14);
+					$formatted14 = $is14Digit
+						? substr($rawDigits, 0, 2) . '-' . substr($rawDigits, 2, 4) . '-' . substr($rawDigits, 6, 4) . '-' . substr($rawDigits, 10, 4)
+						: '';
+
+					foreach ($abhaIdCols as $col) {
+						if ($is14Digit) {
+							$abhaConds[] = "p.{$col} = " . $this->db->escape($rawDigits);
+							$abhaConds[] = "p.{$col} = " . $this->db->escape($formatted14);
+						}
+						$abhaConds[] = "p.{$col} = {$escapedExact}";
+						$abhaConds[] = "p.{$col} LIKE {$escapedLike}";
+					}
+
+					if ($hasAbhaAddress) {
+						if ($is14Digit) {
+							$abhaConds[] = "p.abha_address = " . $this->db->escape($rawDigits);
+							$abhaConds[] = "p.abha_address LIKE " . $this->db->escape($rawDigits . '@%');
+						}
+						$abhaConds[] = "p.abha_address = {$escapedExact}";
+						$abhaConds[] = "p.abha_address LIKE {$escapedLike}";
+					}
+
+					if (!empty($abhaConds)) {
+						$advancedClause = ' and (' . implode(' or ', array_unique($abhaConds)) . ')';
+						$hasAdvancedFilters = true;
+					}
+					break;
 			}
 		}
 
-		$buildTokenClause = function (string $searchValue) use ($abhaField, $oldUhidField): string {
+		$buildTokenClause = function (string $searchValue) use ($abhaField, $oldUhidField, $abhaIdCols, $hasAbhaAddress): string {
 			$searchClause = '';
 			$sdateArray = explode(' ', $searchValue);
 
@@ -823,31 +905,87 @@ class Patient extends BaseController
 					continue;
 				}
 
+				$escapedValue = $this->db->escape($rowData);
+				$escapedLike = $this->db->escape('%' . $rowData . '%');
+
 				if (is_numeric($rowData)) {
-					$searchClause .= $this->buildPatientSearchCondition($rowData, $abhaField, $oldUhidField);
+					$searchClause .= $this->buildPatientSearchCondition(
+						$rowData,
+						$abhaField,
+						$oldUhidField,
+						$abhaIdCols,
+						$hasAbhaAddress ? 'abha_address' : null
+					);
+				} elseif (str_contains($rowData, '@')) {
+					// Definite ABHA address or Email address search (e.g. kajolallu2001@sbx)
+					$atClauses = [
+						'p.email1 = ' . $escapedValue,
+					];
+					if ($hasAbhaAddress) {
+						$atClauses[] = 'p.abha_address = ' . $escapedValue;
+						$atClauses[] = 'p.abha_address LIKE ' . $escapedLike;
+					}
+					foreach ($abhaIdCols as $col) {
+						$atClauses[] = "p.{$col} = " . $escapedValue;
+						$atClauses[] = "p.{$col} LIKE " . $escapedLike;
+					}
+					$searchClause .= ' and (' . implode(' or ', array_unique($atClauses)) . ')';
 				} elseif (ctype_alpha($rowData)) {
-					$escapedValue = $this->db->escape($rowData);
 					$legacyUhidClause = '';
 					$oldUhidClause = $this->buildOldUhidSearchClause($rowData, $oldUhidField);
 					if ($oldUhidClause !== '') {
 						$legacyUhidClause = ' or (' . $oldUhidClause . ')';
 					}
-					$searchClause .= " and (p.p_fname like " . $this->db->escape('%' . $rowData . '%') . " 
-						or p.email1 = " . $this->db->escape($rowData) . " 
-						or SUBSTRING_INDEX(p.p_fname,' ',1) sounds like " . $this->db->escape($rowData) . $legacyUhidClause . ")";
+					$alphaClauses = [
+						"p.p_fname LIKE " . $escapedLike,
+						"p.email1 = " . $escapedValue,
+						"SUBSTRING_INDEX(p.p_fname, ' ', 1) SOUNDS LIKE " . $escapedValue,
+					];
+					if ($hasAbhaAddress) {
+						$alphaClauses[] = "p.abha_address LIKE " . $escapedLike;
+					}
+					foreach ($abhaIdCols as $col) {
+						$alphaClauses[] = "p.{$col} LIKE " . $escapedLike;
+					}
+					$searchClause .= " and (" . implode(' or ', $alphaClauses) . $legacyUhidClause . ")";
 				} else {
-					// Handle dashed ABHA format: XX-XXXX-XXXX-XXXX
 					$rawDigits = preg_replace('/\D/', '', $rowData);
-					$abhaElse  = ($abhaField && strlen($rawDigits) === 14)
-						? " or p.{$abhaField} = " . $this->db->escape($rawDigits) . " or p.{$abhaField} = " . $this->db->escape($rowData)
+					$is14Digit = (strlen($rawDigits) === 14);
+					$formatted14 = $is14Digit
+						? substr($rawDigits, 0, 2) . '-' . substr($rawDigits, 2, 4) . '-' . substr($rawDigits, 6, 4) . '-' . substr($rawDigits, 10, 4)
 						: '';
-					$legacyUhidClause = '';
+
+					$mixedClauses = [
+						"p.p_code LIKE " . $escapedValue,
+						"p.p_code LIKE " . $escapedLike,
+						"p.p_fname LIKE " . $escapedLike,
+						"p.email1 = " . $escapedValue,
+					];
+
+					foreach ($abhaIdCols as $col) {
+						if ($is14Digit) {
+							$mixedClauses[] = "p.{$col} = " . $this->db->escape($rawDigits);
+							$mixedClauses[] = "p.{$col} = " . $this->db->escape($formatted14);
+						}
+						$mixedClauses[] = "p.{$col} = " . $escapedValue;
+						$mixedClauses[] = "p.{$col} LIKE " . $escapedLike;
+					}
+
+					if ($hasAbhaAddress) {
+						if ($is14Digit) {
+							$mixedClauses[] = "p.abha_address = " . $this->db->escape($rawDigits);
+							$mixedClauses[] = "p.abha_address LIKE " . $this->db->escape($rawDigits . '@%');
+						}
+						$mixedClauses[] = "p.abha_address = " . $escapedValue;
+						$mixedClauses[] = "p.abha_address LIKE " . $escapedLike;
+					}
+
 					$oldUhidClause = $this->buildOldUhidSearchClause($rowData, $oldUhidField);
 					if ($oldUhidClause !== '') {
-						$legacyUhidClause = ' or (' . $oldUhidClause . ')';
+						$mixedClauses[] = '(' . $oldUhidClause . ')';
 					}
-					$searchClause .= " and (p.p_code like " . $this->db->escape($rowData) . " 
-						or p.email1 = " . $this->db->escape($rowData) . $abhaElse . $legacyUhidClause . ")";
+
+					$searchClause .= ' and (' . implode(' or ', array_unique($mixedClauses)) . ')';
 				}
 			}
 
@@ -934,10 +1072,17 @@ class Patient extends BaseController
 			if ($oldUhidField !== null && $oldUhidField !== '' && isset($row->{$oldUhidField})) {
 				$oldUhid = (string) $row->{$oldUhidField};
 			}
+
+			$abhaDisplay = '';
+			if (!empty($row->abha_address)) {
+				$abhaDisplay = (string) $row->abha_address;
+			} elseif (!empty($row->abha_id)) {
+				$abhaDisplay = (string) $row->abha_id;
+			}
 			
 			$data[] = [
 				$start + $index + 1,
-				$this->formatPatientCodeCell($patientId, (string) ($row->p_code ?? ''), $oldUhid),
+				$this->formatPatientCodeCell($patientId, (string) ($row->p_code ?? ''), $oldUhid, $abhaDisplay),
 				$patientNameCell,
 				$age,
 				esc($row->Last_Visit ?? ''),
