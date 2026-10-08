@@ -2242,9 +2242,15 @@ class Patient extends BaseController
 			}
 		}
 
-		$patientName = trim((string) (($patientRow['title'] ?? '') . ' ' . ($patientRow['p_fname'] ?? '') . ' ' . ($patientRow['p_lname'] ?? '')));
-		if ($patientName === '' || $patientName === '0') {
-			$patientName = trim((string) ($patientRow['p_fname'] ?? ''));
+		$title = trim((string) ($patientRow['title'] ?? ''));
+		$fname = trim((string) ($patientRow['p_fname'] ?? ''));
+		$lname = trim((string) ($patientRow['p_lname'] ?? ''));
+		if ($lname === '0' || strtolower($lname) === 'null') {
+			$lname = '';
+		}
+		$patientName = trim($title . ' ' . $fname . ($lname !== '' ? ' ' . $lname : ''));
+		if ($patientName === '') {
+			$patientName = 'Patient #' . $pno;
 		}
 		$genderVal = (int) ($patientRow['gender'] ?? 0);
 		$genderStr = $genderVal === 1 ? 'Male' : ($genderVal === 2 ? 'Female' : ($genderVal === 3 ? 'Other' : '-'));

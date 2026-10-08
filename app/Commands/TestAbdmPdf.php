@@ -26,7 +26,11 @@ class TestAbdmPdf extends BaseCommand
         $_SERVER['REQUEST_METHOD'] = 'GET';
         $get = [];
         if ($consentReqId !== '') {
-            $get['consent_request_id'] = $consentReqId;
+            if (is_numeric($consentReqId) && strlen($consentReqId) < 10) {
+                $get['doc_id'] = (int) $consentReqId;
+            } else {
+                $get['consent_request_id'] = $consentReqId;
+            }
         }
         $_GET = $get;
 
