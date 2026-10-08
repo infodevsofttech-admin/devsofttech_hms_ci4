@@ -5464,10 +5464,10 @@ class AbdmGateway extends BaseController
                     };
                     $disp = ! empty($hrRow['care_context_display']) ? $hrRow['care_context_display'] : $defaultDisp;
                     if ($recHiType === 'ImmunizationRecord' && ! empty($hrRow['entity_id']) && $db->tableExists('immunization_records')) {
-                        $immRow = $db->table('immunization_records')->select('vaccine_name, given_date, scheduled_date')->where('id', (int) $hrRow['entity_id'])->get(1)->getRowArray();
+                        $immRow = $db->table('immunization_records')->select('vaccine_name, given_date, due_date')->where('id', (int) $hrRow['entity_id'])->get(1)->getRowArray();
                         if ($immRow) {
                             $vName = trim((string) ($immRow['vaccine_name'] ?? 'BCG'));
-                            $vDate = ! empty($immRow['given_date']) ? $immRow['given_date'] : (! empty($immRow['scheduled_date']) ? $immRow['scheduled_date'] : date('Y-m-d'));
+                            $vDate = ! empty($immRow['given_date']) ? $immRow['given_date'] : (! empty($immRow['due_date']) ? $immRow['due_date'] : date('Y-m-d'));
                             $disp = 'ImmunizationRecord - ' . $vName . ' (' . date('d M Y', strtotime((string) $vDate)) . ')';
                         }
                     }
