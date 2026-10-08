@@ -5572,10 +5572,10 @@ class Patient extends BaseController
 			} elseif ($rawConsentStatus === 'DENIED') {
 				$phase = 'DENIED';
 				$priority = 300;
-			} elseif ($state === 'DATA_RECEIVED') {
-				$phase = 'COMPLETED';
+			} elseif (in_array($state, ['DATA_RECEIVED', 'COMPLETED'], true)) {
+				$phase = 'GRANTED';
 				$priority = 480;
-			} elseif ($state === 'GRANTED') {
+			} elseif (in_array($state, ['GRANTED', 'APPROVED', 'ACTIVE'], true)) {
 				$phase = 'GRANTED';
 				$priority = 420;
 			} elseif ($state === 'REVOKED') {
@@ -5797,12 +5797,22 @@ class Patient extends BaseController
 			}
 		}
 
-		// A status stamped directly onto this request row by a live status check
-		// is authoritative: it names this exact consent request, unlike separate
-		// reconcile rows that have to be correlated back to a session.
+		// A status stamped directly onto this request row by a live status check or workflow completion
+		// is authoritative: it names this exact consent request.
 		$anchorState = strtoupper(trim((string) (is_array($consentRequestRow) ? ($consentRequestRow['workflow_state'] ?? '') : '')));
-		if (in_array($anchorState, ['EXPIRED', 'DENIED', 'REVOKED'], true)) {
+		if (in_array($anchorState, ['GRANTED', 'APPROVED', 'ACTIVE', 'COMPLETED'], true)) {
+			$phase = 'GRANTED';
+		} elseif (in_array($anchorState, ['EXPIRED', 'DENIED', 'REVOKED'], true)) {
 			$phase = $anchorState;
+		}
+
+		// If documents have already been fetched and saved in abdm_hiu_documents for this session,
+		// the consent is definitively granted and active.
+		if (! in_array($phase, ['GRANTED', 'COMPLETED', 'EXPIRED', 'DENIED', 'REVOKED'], true)) {
+			$lookupRef = $consentRequestId !== '' ? $consentRequestId : $consentId;
+			if ($lookupRef !== '' && $this->countAbdmDocumentsForPatient((int) ($patientRow['id'] ?? 0), $lookupRef) > 0) {
+				$phase = 'GRANTED';
+			}
 		}
 
 		// A short, human-friendly identifier for this session (the "Request ID"

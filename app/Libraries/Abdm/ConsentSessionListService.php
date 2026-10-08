@@ -421,10 +421,10 @@ class ConsentSessionListService
             } elseif ($rawConsentStatus === 'DENIED') {
                 $phase = 'DENIED';
                 $priority = 300;
-            } elseif ($state === 'DATA_RECEIVED') {
-                $phase = 'COMPLETED';
+            } elseif (in_array($state, ['DATA_RECEIVED', 'COMPLETED'], true)) {
+                $phase = 'GRANTED';
                 $priority = 480;
-            } elseif ($state === 'GRANTED') {
+            } elseif (in_array($state, ['GRANTED', 'APPROVED', 'ACTIVE'], true)) {
                 $phase = 'GRANTED';
                 $priority = 420;
             } elseif ($state === 'REVOKED') {
@@ -564,7 +564,9 @@ class ConsentSessionListService
         }
 
         $anchorState = strtoupper(trim((string) (is_array($consentRequestRow) ? ($consentRequestRow['workflow_state'] ?? '') : '')));
-        if (in_array($anchorState, ['EXPIRED', 'DENIED', 'REVOKED'], true)) {
+        if (in_array($anchorState, ['GRANTED', 'APPROVED', 'ACTIVE', 'COMPLETED'], true)) {
+            $phase = 'GRANTED';
+        } elseif (in_array($anchorState, ['EXPIRED', 'DENIED', 'REVOKED'], true)) {
             $phase = $anchorState;
         }
 
