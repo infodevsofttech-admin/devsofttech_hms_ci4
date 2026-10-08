@@ -76,6 +76,9 @@ class M3HiuGatewayClient
         if (isset($payload['consentId']) && is_string($payload['consentId']) && str_contains($payload['consentId'], ':')) {
             $payload['consentId'] = trim((string) explode(':', $payload['consentId'])[0]);
         }
+        if (empty($payload['consent_request_id']) && !empty($payload['abdm_consent_request_id'])) {
+            $payload['consent_request_id'] = trim((string) $payload['abdm_consent_request_id']);
+        }
         return $this->callGet('/v1/hiu/consent/status', $payload, 'consent.status.reconcile');
     }
 

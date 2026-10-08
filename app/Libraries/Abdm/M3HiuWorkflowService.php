@@ -433,7 +433,7 @@ class M3HiuWorkflowService
             $this->rememberArtifact($resolvedConsentId, $singleArtifactId, $payload['abha_address'] ?? '', $payload['hfr_id'] ?? '');
         }
 
-        foreach ($this->getKnownArtifactIds($resolvedConsentId) as $artifactId) {
+        foreach ($this->getKnownArtifactIds($resolvedConsentId, true) as $artifactId) {
             if ($artifactId === '' || $artifactId === $resolvedConsentId) {
                 continue;
             }
@@ -534,16 +534,20 @@ class M3HiuWorkflowService
             ->update($update);
     }
 
-    private function getKnownArtifactIds(string $consentRequestId): array
+    private function getKnownArtifactIds(string $consentRequestId, bool $pendingOnly = false): array
     {
         if (! $this->db->tableExists('abdm_hiu_consent_artifacts') || $consentRequestId === '') {
             return [];
         }
-        $rows = $this->db->table('abdm_hiu_consent_artifacts')
+        $builder = $this->db->table('abdm_hiu_consent_artifacts')
             ->select('artifact_id')
-            ->where('consent_request_id', $consentRequestId)
-            ->get()
-            ->getResultArray();
+            ->where('consent_request_id', $consentRequestId);
+
+        if ($pendingOnly) {
+            $builder->whereNotIn('last_status', ['RECEIVED', 'DATA_RECEIVED', 'COMPLETED', 'EXPIRED', 'REVOKED', 'DENIED']);
+        }
+
+        $rows = $builder->get()->getResultArray();
 
         return array_values(array_unique(array_map(
             static fn (array $row): string => trim((string) ($row['artifact_id'] ?? '')),

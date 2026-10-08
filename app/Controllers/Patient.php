@@ -2128,6 +2128,173 @@ class Patient extends BaseController
 		]);
 	}
 
+	public function abdm_records_pdf(int $pno)
+	{
+		if (! $this->db->tableExists('patient_master')) {
+			return $this->response->setStatusCode(500)->setBody('patient_master table not found');
+		}
+
+		$patientRow = $this->db->table('patient_master')->where('id', $pno)->get()->getRowArray();
+		if (! is_array($patientRow)) {
+			return $this->response->setStatusCode(404)->setBody('Patient not found');
+		}
+
+		$abhaContext = $this->buildAbhaProfileContext($patientRow);
+		$patientAbha = trim((string) ($abhaContext['abha_address'] ?? ''));
+
+		if (! $this->db->tableExists('abdm_hiu_documents')) {
+			return $this->response->setStatusCode(404)->setBody('No ABDM documents table found');
+		}
+
+		$docId = (int) ($this->request->getGet('doc_id') ?? 0);
+		$consentRequestId = trim((string) ($this->request->getGet('consent_request_id') ?? ''));
+
+		$builder = $this->db->table('abdm_hiu_documents d')
+			->select('*')
+			->orderBy('d.document_date', 'DESC')
+			->orderBy('d.id', 'DESC');
+
+		$builder->groupStart()
+			->where('d.patient_id', $pno);
+		if ($patientAbha !== '') {
+			$builder->orWhere('d.abha_address', $patientAbha);
+		}
+		$builder->groupEnd();
+
+		if ($docId > 0) {
+			$builder->where('d.id', $docId);
+		} elseif ($consentRequestId !== '') {
+			$docFields = $this->db->getFieldNames('abdm_hiu_documents') ?? [];
+			$sessionIds = $this->resolveAllRelatedConsentIds($consentRequestId);
+			if ($sessionIds !== []) {
+				$builder->groupStart();
+				$hasClause = false;
+				if (in_array('consent_request_id', $docFields, true)) {
+					$builder->whereIn('d.consent_request_id', $sessionIds);
+					$hasClause = true;
+				}
+				if (in_array('consent_artifact_id', $docFields, true)) {
+					if ($hasClause) {
+						$builder->orWhereIn('d.consent_artifact_id', $sessionIds);
+					} else {
+						$builder->whereIn('d.consent_artifact_id', $sessionIds);
+						$hasClause = true;
+					}
+				}
+				if (in_array('consent_ref', $docFields, true)) {
+					if ($hasClause) {
+						$builder->orWhereIn('d.consent_ref', $sessionIds);
+					} else {
+						$builder->whereIn('d.consent_ref', $sessionIds);
+						$hasClause = true;
+					}
+				}
+				$builder->groupEnd();
+			}
+		}
+
+		$rows = $builder->get()->getResultArray();
+
+		foreach ($rows as &$r) {
+			$summary = json_decode((string) ($r['summary_json'] ?? ''), true);
+			$r['summary'] = is_array($summary) ? $summary : [];
+		}
+		unset($r);
+
+		$hospitalName = defined('H_Name') ? (string) constant('H_Name') : 'Hospital';
+		$hospitalAddress1 = defined('H_address_1') ? (string) constant('H_address_1') : '';
+		$hospitalAddress2 = defined('H_address_2') ? (string) constant('H_address_2') : '';
+		$hospitalPhone = defined('H_phone_No') ? (string) constant('H_phone_No') : '';
+		$hospitalEmail = defined('H_Email') ? (string) constant('H_Email') : '';
+		$hospitalLogoName = defined('H_logo') ? trim((string) constant('H_logo')) : '';
+
+		$logoPathCandidates = [];
+		if ($hospitalLogoName !== '') {
+			$logoPathCandidates[] = FCPATH . 'assets/images/' . $hospitalLogoName;
+			$logoPathCandidates[] = FCPATH . 'assets/img/' . $hospitalLogoName;
+		}
+		$logoPathCandidates[] = FCPATH . 'assets/img/logo.png';
+		$logoPathCandidates[] = FCPATH . 'assets/images/logo.png';
+
+		$logoSrc = '';
+		foreach ($logoPathCandidates as $candidate) {
+			if (is_file($candidate)) {
+				$logoSrc = str_replace('\\', '/', $candidate);
+				break;
+			}
+		}
+
+		$patientName = trim((string) (($patientRow['title'] ?? '') . ' ' . ($patientRow['p_fname'] ?? '') . ' ' . ($patientRow['p_lname'] ?? '')));
+		if ($patientName === '' || $patientName === '0') {
+			$patientName = trim((string) ($patientRow['p_fname'] ?? ''));
+		}
+		$genderVal = (int) ($patientRow['gender'] ?? 0);
+		$genderStr = $genderVal === 1 ? 'Male' : ($genderVal === 2 ? 'Female' : ($genderVal === 3 ? 'Other' : '-'));
+		$ageStr = ! empty($patientRow['age']) ? ($patientRow['age'] . ' Year') : '';
+		$ageGender = trim($ageStr . ($ageStr !== '' && $genderStr !== '-' ? ' / ' : '') . ($genderStr !== '-' ? $genderStr : ''));
+
+		$data = [
+			'title' => 'ABDM Health Records - ' . $patientName,
+			'patient' => $patientRow,
+			'patientId' => (int) ($patientRow['id'] ?? $pno),
+			'patientCode' => (string) ($patientRow['p_code'] ?? ('#' . $pno)),
+			'patientName' => $patientName,
+			'ageGender' => $ageGender,
+			'mobile' => (string) ($patientRow['mphone1'] ?? ''),
+			'abhaAddress' => $patientAbha,
+			'abhaNumber' => (string) ($patientRow['abha_id'] ?? ''),
+			'consentRequestId' => $consentRequestId,
+			'documents' => $rows,
+			'hospitalName' => $hospitalName,
+			'hospitalAddress' => trim($hospitalAddress1 . ($hospitalAddress2 !== '' ? ', ' . $hospitalAddress2 : '')),
+			'hospitalPhone' => $hospitalPhone,
+			'hospitalEmail' => $hospitalEmail,
+			'logoSrc' => $logoSrc,
+			'printedOn' => date('d-m-Y h:i A'),
+		];
+
+		$html = view('billing/abdm_records_pdf_v', $data);
+
+		$mpdfTempDir = WRITEPATH . 'cache' . DIRECTORY_SEPARATOR . 'mpdf';
+		if (! is_dir($mpdfTempDir)) {
+			mkdir($mpdfTempDir, 0755, true);
+		}
+
+		$mpdf = new \Mpdf\Mpdf([
+			'mode' => 'utf-8',
+			'format' => 'A4',
+			'orientation' => 'P',
+			'margin_left' => 10,
+			'margin_right' => 10,
+			'margin_top' => 10,
+			'margin_bottom' => 12,
+			'default_font' => 'freeserif',
+			'tempDir' => $mpdfTempDir,
+		]);
+		$mpdf->autoScriptToLang = true;
+		$mpdf->autoLangToFont = true;
+
+		$footerHtml = '<table style="width: 100%; border-top: 1px solid #cbd5e1; font-size: 7.5pt; color: #64748b; padding-top: 3px;">'
+			. '<tr>'
+			. '<td style="text-align: left; width: 75%;">Ayushman Bharat Digital Mission (ABDM) HIU &bull; Confidential &bull; For Clinical Evaluation Only</td>'
+			. '<td style="text-align: right; width: 25%;">Page {PAGENO} of {nbpg}</td>'
+			. '</tr>'
+			. '</table>';
+		$mpdf->SetHTMLFooter($footerHtml, 'O');
+		$mpdf->SetHTMLFooter($footerHtml, 'E');
+
+		$mpdf->SetTitle('ABDM Health Records - ' . $patientName);
+		$mpdf->WriteHTML($html);
+
+		$safeName = preg_replace('/[^A-Za-z0-9_-]/', '_', $patientName);
+		$fileName = 'ABDM_Records_' . $safeName . '_' . date('Ymd_His') . '.pdf';
+
+		return $this->response
+			->setHeader('Content-Type', 'application/pdf')
+			->setHeader('Content-Disposition', 'inline; filename="' . $fileName . '"')
+			->setBody($mpdf->Output($fileName, 'S'));
+	}
+
 	public function abdm_content_request(int $pno)
 	{
 		if (! $this->db->tableExists('patient_master')) {

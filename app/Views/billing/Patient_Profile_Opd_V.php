@@ -376,7 +376,10 @@ if ($patientPhotoPath === '') {
                             <div class="card-body">
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <div class="fw-semibold">Consent Request History</div>
-                                    <div>
+                                    <div class="d-flex align-items-center">
+                                        <a href="<?= base_url('billing/patient/abdm_records_pdf/' . (int) ($patient->id ?? 0)) ?>" target="_blank" class="btn btn-outline-primary btn-sm py-0 px-2 me-3" title="Print all fetched health records for this patient as PDF">
+                                            <i class="fa fa-print me-1"></i> Print All Records
+                                        </a>
                                         <button type="button" class="btn btn-link btn-sm p-0 me-3" id="btnCheckLiveAbdmStatus">
                                             <span class="spinner-border spinner-border-sm d-none" id="abdmLiveStatusSpinner"></span>
                                             Check Live Status
@@ -606,9 +609,14 @@ if ($patientPhotoPath === '') {
     <div class="modal fade" id="abdmFetchResultModal" tabindex="-1" aria-hidden="true">
         <div class="modal-dialog modal-dialog-centered modal-lg modal-dialog-scrollable">
             <div class="modal-content">
-                <div class="modal-header">
-                    <h5 class="modal-title">Fetched Health Records</h5>
-                    <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                <div class="modal-header d-flex justify-content-between align-items-center">
+                    <h5 class="modal-title"><i class="fa fa-folder-open text-primary me-2"></i>Fetched Health Records</h5>
+                    <div class="d-flex align-items-center gap-2">
+                        <button type="button" class="btn btn-sm btn-primary" id="abdmPrintFetchedRecordsBtn" style="display:none;" title="Print or Download PDF of all fetched records">
+                            <i class="fa fa-print me-1"></i> Print / PDF
+                        </button>
+                        <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+                    </div>
                 </div>
                 <div class="modal-body" id="abdmFetchResultModalBody">
                     <div class="text-muted small text-center">Loading...</div>
@@ -1129,6 +1137,7 @@ if ($patientPhotoPath === '') {
 $(function() {
     var patientId = <?= (int) ($patient->id ?? 0) ?>;
     var abdmDocumentsUrl = '<?= base_url('billing/patient/abdm_documents/' . (int) ($patient->id ?? 0)) ?>';
+    var abdmPrintPdfUrl = '<?= base_url('billing/patient/abdm_records_pdf/' . (int) ($patient->id ?? 0)) ?>';
     var abdmAutoFlowUrl = '<?= base_url('billing/patient/abdm_content_auto_flow/' . (int) ($patient->id ?? 0)) ?>';
     var abdmFetchOnlyUrl = '<?= base_url('billing/patient/abdm_content_fetch_only/' . (int) ($patient->id ?? 0)) ?>';
     var abdmConsentDetailUrl = '<?= base_url('billing/patient/abdm_consent_detail/' . (int) ($patient->id ?? 0)) ?>';
@@ -1138,6 +1147,7 @@ $(function() {
     var abdmDocDetailBaseUrl = '<?= base_url('billing/patient/abdm_document_detail/' . (int) ($patient->id ?? 0)) ?>';
     var currentAbdmRows = [];
     var currentAbdmRequests = [];
+    var currentAbdmFetchConsentRequestId = '';
     var autoFlowTimer = null;
     var autoFlowRequestId = '';
     var autoFlowAttempts = 0;
@@ -1371,8 +1381,9 @@ $(function() {
     }
 
     function loadAbdmFetchResultModalData(consent) {
-        var url = abdmDocumentsUrl + '?limit=200&include_summary=1';
         var reqId = (consent && consent.consent_request_id) ? consent.consent_request_id : '';
+        currentAbdmFetchConsentRequestId = reqId;
+        var url = abdmDocumentsUrl + '?limit=200&include_summary=1';
         if (reqId !== '') {
             url += '&consent_request_id=' + encodeURIComponent(reqId);
         }
@@ -1386,18 +1397,22 @@ $(function() {
                 renderAbdmFetchResultModal(Array.isArray(data.items) ? data.items : []);
             })
             .catch(function(err) {
+                $('#abdmPrintFetchedRecordsBtn').hide();
                 $('#abdmFetchResultModalBody').html('<div class="text-danger small text-center">' + escHtml('Failed to load records: ' + (err.message || err)) + '</div>');
             });
     }
 
     function renderAbdmFetchResultModal(docs) {
         if (!docs || !docs.length) {
+            $('#abdmPrintFetchedRecordsBtn').hide();
             var fetchBtnHtml = currentAbdmFetchModalIdx >= 0
                 ? '<div class="text-center mt-2"><button type="button" class="btn btn-sm btn-primary abdm-fetch-again-btn" data-idx="' + currentAbdmFetchModalIdx + '">Fetch Data</button></div>'
                 : '';
             $('#abdmFetchResultModalBody').html('<div class="text-muted small text-center">No fetched records found for this consent request yet.</div>' + fetchBtnHtml);
             return;
         }
+
+        $('#abdmPrintFetchedRecordsBtn').show();
 
         var html = '';
         var docIds = [];
@@ -1409,13 +1424,24 @@ $(function() {
                 docIds.push(docId);
             }
 
-            html += '<div class="card mb-3">'
+            var singlePrintUrl = abdmPrintPdfUrl + '?doc_id=' + encodeURIComponent(docId);
+
+            html += '<div class="card mb-3 shadow-sm border">'
                 + '<div class="card-body">'
-                + '<div class="fw-semibold">' + escHtml(doc.document_title || 'ABDM Document') + '</div>'
-                + '<div class="small text-muted mb-2">'
-                + escHtml(doc.organization_name || '-') + ' &nbsp;|&nbsp; '
-                + escHtml(doc.practitioner_name || '-') + ' &nbsp;|&nbsp; '
-                + 'Date: ' + escHtml(fmtDateTime(doc.document_date || doc.created_at))
+                + '<div class="d-flex justify-content-between align-items-start mb-2">'
+                + '  <div>'
+                + '    <div class="fw-bold text-primary fs-6">' + escHtml(doc.document_title || 'ABDM Document') + '</div>'
+                + '    <div class="small text-muted">'
+                +        escHtml(doc.organization_name || '-') + ' &nbsp;|&nbsp; '
+                +        escHtml(doc.practitioner_name || '-') + ' &nbsp;|&nbsp; '
+                +        'Date: ' + escHtml(fmtDateTime(doc.document_date || doc.created_at))
+                + '    </div>'
+                + '  </div>'
+                + '  <div>'
+                + '    <a href="' + escHtml(singlePrintUrl) + '" target="_blank" class="btn btn-outline-primary btn-sm py-1 px-2" title="Print this health record as PDF">'
+                + '      <i class="fa fa-print me-1"></i> Print'
+                + '    </a>'
+                + '  </div>'
                 + '</div>';
 
             if (sections.length) {
@@ -1876,6 +1902,14 @@ $(function() {
     $(document).off('click.abdmOpd', '.abdm-fetch-again-btn').on('click.abdmOpd', '.abdm-fetch-again-btn', function() {
         var idx = Number($(this).data('idx'));
         runFetchRecordsForRow(idx);
+    });
+
+    $(document).off('click.abdmOpd', '#abdmPrintFetchedRecordsBtn').on('click.abdmOpd', '#abdmPrintFetchedRecordsBtn', function() {
+        var printUrl = abdmPrintPdfUrl;
+        if (currentAbdmFetchConsentRequestId) {
+            printUrl += '?consent_request_id=' + encodeURIComponent(currentAbdmFetchConsentRequestId);
+        }
+        window.open(printUrl, '_blank');
     });
 
     $(document).off('shown.bs.tab.abdmOpd', '[data-bs-target="#opd-abdm-tab"]').on('shown.bs.tab.abdmOpd', '[data-bs-target="#opd-abdm-tab"]', function() {

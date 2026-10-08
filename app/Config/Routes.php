@@ -569,6 +569,7 @@ $routes->group('billing', function($routes) {
     $routes->get('patient/show_profile_opd/(:num)', 'Patient::show_profile_opd/$1');
     $routes->get('patient/show_profile_opd/(:num)/(:num)', 'Patient::show_profile_opd/$1/$2');
     $routes->get('patient/abdm_documents/(:num)', 'Patient::abdm_documents/$1');
+    $routes->get('patient/abdm_records_pdf/(:num)', 'Patient::abdm_records_pdf/$1');
     $routes->get('patient/abdm_document_detail/(:num)/(:num)', 'Patient::abdm_document_detail/$1/$2');
     $routes->get('patient/abdm_content_request/(:num)', 'Patient::abdm_content_request/$1');
     $routes->get('patient/abdm_content_auto_flow/(:num)', 'Patient::abdm_content_auto_flow/$1');
