@@ -3748,6 +3748,16 @@ class Medical extends BaseController
         if (! empty($update)) {
             $this->db->table('invoice_med_master')->where('id', $invoiceId)->update($update);
         }
+
+        // Auto-push pharmacy invoice to ABDM if patient has ABHA (fail-safe)
+        try {
+            $resolvedPatientId = (int) ($update['patient_id'] ?? 0);
+            if (class_exists('\App\Controllers\AbdmGateway')) {
+                \App\Controllers\AbdmGateway::autoPushRecord('invoice', $invoiceId, $resolvedPatientId);
+            }
+        } catch (\Throwable $e) {
+            log_message('warning', '[Medical::finalizeInvoiceRecord] ABDM invoice auto-push failed: ' . $e->getMessage());
+        }
     }
 
     private function reopenInvoiceForEdit(int $invoiceId): void

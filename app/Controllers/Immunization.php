@@ -234,6 +234,16 @@ class Immunization extends BaseController
 
         $this->db->table('immunization_records')->where('id', $recordId)->update($update);
 
+        // Auto-push immunization record to ABDM if patient has ABHA (fail-safe)
+        try {
+            $patientId = (int) ($record['patient_id'] ?? 0);
+            if ($patientId > 0 && class_exists('\App\Controllers\AbdmGateway')) {
+                \App\Controllers\AbdmGateway::autoPushRecord('immunization', $recordId, $patientId);
+            }
+        } catch (\Throwable $e) {
+            log_message('warning', '[Immunization::complete] ABDM auto-push failed: ' . $e->getMessage());
+        }
+
         return $this->response->setJSON([
             'ok' => 1,
             'record_id' => $recordId,

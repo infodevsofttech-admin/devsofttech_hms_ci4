@@ -2765,6 +2765,16 @@ class DoctorDocument extends BaseController
 
         $outbox = new \App\Libraries\Abdm\Sync\AbdmSyncOutboxService();
         $outbox->enqueueRecordSync($syncPayload);
+
+        // Auto-push to Bridge Gateway so care context is linked immediately
+        try {
+            $hasValidAbha = (str_contains($abhaAddress, '@') || (strlen(preg_replace('/\D/', '', $abhaDigits)) === 14));
+            if ($hasValidAbha && class_exists('\App\Controllers\AbdmGateway')) {
+                \App\Controllers\AbdmGateway::autoPushRecord('health_document', (int) $patientDocId, (int) $patientId);
+            }
+        } catch (\Throwable $e) {
+            log_message('warning', '[DoctorDocument] ABDM health document auto-push failed: ' . $e->getMessage());
+        }
     }
 
     private function resolveFileUploadPath(array $fileRow): string

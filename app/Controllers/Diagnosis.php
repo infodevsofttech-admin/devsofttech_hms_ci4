@@ -1457,6 +1457,13 @@ class Diagnosis extends BaseController
             return '<h3>Invalid request id</h3>';
         }
 
+        // Auto-link/push diagnostic report to ABDM if patient has ABHA (fail-safe)
+        try {
+            \App\Controllers\AbdmGateway::autoPushRecord('diagnostic_report', $labReqId);
+        } catch (\Throwable $e) {
+            log_message('warning', 'ABDM Diagnostic report print auto-link failed: ' . $e->getMessage());
+        }
+
         $pdfBytes = $this->generateSingleReportPdfBytes($labReqId, $templateId);
         if ($pdfBytes === null) {
             return '<h3>Report not found</h3>';
@@ -2920,6 +2927,23 @@ class Diagnosis extends BaseController
 
         if ($invoiceId <= 0 || $labType <= 0) {
             return '<h3>Invalid parameters</h3>';
+        }
+
+        // Auto-link/push lab requests for this invoice to ABDM if patient has ABHA (fail-safe)
+        try {
+            $relatedLabRequests = $this->db->table('lab_request')
+                ->select('id')
+                ->where('charge_id', $invoiceId)
+                ->where('lab_type', $labType)
+                ->get()
+                ->getResult();
+            foreach ($relatedLabRequests as $lr) {
+                if (! empty($lr->id)) {
+                    \App\Controllers\AbdmGateway::autoPushRecord('diagnostic_report', (int) $lr->id);
+                }
+            }
+        } catch (\Throwable $e) {
+            log_message('warning', 'ABDM Diagnostic report compiled print auto-link failed: ' . $e->getMessage());
         }
 
         $invoiceRequest = $this->db->table('lab_invoice_request')
@@ -4888,6 +4912,13 @@ class Diagnosis extends BaseController
                         'trigger' => $eventType,
                     ]
                 );
+
+                // Auto-push diagnostic report to ABDM if patient has ABHA (fail-safe)
+                try {
+                    \App\Controllers\AbdmGateway::autoPushRecord('diagnostic_report', (int) $labReqId, (int) $patientId);
+                } catch (\Throwable $pushEx) {
+                    log_message('warning', '[ABDM] enqueueLabReportSync auto-push failed for lab_req ' . $labReqId . ': ' . $pushEx->getMessage());
+                }
             }
         } catch (\Throwable $e) {
             log_message('error', '[ABDM] enqueueLabReportSync failed for lab_req ' . $labReqId . ': ' . $e->getMessage());

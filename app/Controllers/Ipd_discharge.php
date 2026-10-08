@@ -8325,6 +8325,13 @@ class Ipd_discharge extends BaseController
             return $this->response->setStatusCode(404)->setBody('IPD not found');
         }
 
+        // Auto-link/push discharge summary to ABDM if patient has ABHA (fail-safe)
+        try {
+            $this->autoPushDischargeFhir($ipdId);
+        } catch (\Throwable $e) {
+            // Fail-safe
+        }
+
         // Check if user wants to force regenerate content (ignoring cache)
         $forceRegenerate = (int) ($this->request->getGet('refresh') ?? 0) === 1;
 
@@ -9256,6 +9263,17 @@ class Ipd_discharge extends BaseController
     public function show_file3(int $ipdId)
     {
         return $this->show_discharge($ipdId, 3);
+    }
+
+    public function autoPushDischargeFhir(int $ipdId): array
+    {
+        try {
+            $this->enqueueIpdDischargeSync($ipdId, 0, 'auto_push');
+            return ['ok' => 1, 'status' => 'success', 'message' => 'Discharge summary synced'];
+        } catch (\Throwable $e) {
+            log_message('warning', '[autoPushDischargeFhir] Error for IPD ' . $ipdId . ': ' . $e->getMessage());
+            return ['ok' => 0, 'status' => 'error', 'message' => $e->getMessage()];
+        }
     }
 
     private function enqueueIpdDischargeSync(int $ipdId, int $patientId, string $action): void

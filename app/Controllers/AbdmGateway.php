@@ -2097,17 +2097,30 @@ class AbdmGateway extends BaseController
             return $this->response->setStatusCode(403)->setJSON(['error' => 'AJAX only']);
         }
 
-        $labReqId      = (int) ($this->request->getPost('lab_req_id') ?? $_POST['lab_req_id'] ?? 0);
-        $patientId     = (int) ($this->request->getPost('patient_id') ?? $_POST['patient_id'] ?? 0);
-        $abhaId        = trim((string) ($this->request->getPost('abha_id') ?? $_POST['abha_id'] ?? ''));
+        $labReqId        = (int) ($this->request->getPost('lab_req_id') ?? $_POST['lab_req_id'] ?? 0);
+        $patientId       = (int) ($this->request->getPost('patient_id') ?? $_POST['patient_id'] ?? 0);
+        $abhaId          = trim((string) ($this->request->getPost('abha_id') ?? $_POST['abha_id'] ?? ''));
         $abhaAddressPost = trim((string) ($this->request->getPost('abha_address') ?? $_POST['abha_address'] ?? ''));
-        $consentHandle = trim((string) ($this->request->getPost('consent_handle') ?? $_POST['consent_handle'] ?? ''));
+        $consentHandle   = trim((string) ($this->request->getPost('consent_handle') ?? $_POST['consent_handle'] ?? ''));
+        $careContextId   = trim((string) ($this->request->getPost('careContextId') ?? $this->request->getPost('care_context_reference') ?? ''));
 
-        if ($labReqId <= 0 || $patientId <= 0) {
-            return $this->response->setJSON(['ok' => 0, 'error' => 'lab_req_id and patient_id are required']);
+        $res = $this->pushDiagnosisReportBundleInternal($labReqId, $patientId, $abhaId, $abhaAddressPost, $consentHandle, $careContextId);
+        return $this->response->setJSON($res);
+    }
+
+    public function pushDiagnosisReportBundleInternal(
+        int $labReqId,
+        int $patientId = 0,
+        string $abhaId = '',
+        string $abhaAddressPost = '',
+        string $consentHandle = '',
+        string $careContextId = ''
+    ): array {
+        if ($labReqId <= 0) {
+            return ['ok' => 0, 'error' => 'lab_req_id is required'];
         }
 
-        $selectCols = ['id', 'patient_name', 'lab_type', 'charge_id', 'report_name', 'Report_Data', 'report_data_Impression', 'status', 'reported_time'];
+        $selectCols = ['id', 'patient_id', 'patient_name', 'lab_type', 'charge_id', 'report_name', 'Report_Data', 'report_data_Impression', 'status', 'reported_time'];
         if ($this->db->fieldExists('charge_item_id', 'lab_request')) {
             $selectCols[] = 'charge_item_id';
         }
@@ -2121,7 +2134,14 @@ class AbdmGateway extends BaseController
             ->getRow();
 
         if (! $labReq) {
-            return $this->response->setJSON(['ok' => 0, 'error' => 'Lab request not found']);
+            return ['ok' => 0, 'error' => 'Lab request not found'];
+        }
+
+        if ($patientId <= 0 && isset($labReq->patient_id)) {
+            $patientId = (int) $labReq->patient_id;
+        }
+        if ($patientId <= 0) {
+            return ['ok' => 0, 'error' => 'patient_id could not be resolved for lab_request #' . $labReqId];
         }
 
         $abhaIdentity = $this->resolvePatientAbhaIdentity($patientId, $abhaId, $abhaAddressPost);
@@ -2275,7 +2295,7 @@ class AbdmGateway extends BaseController
         $bundleJson = (string) json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
 
         // -- Store health_record -----------------------------------------------
-        $requestedCcRef = trim((string) ($this->request->getPost('careContextId') ?? $this->request->getPost('care_context_reference') ?? ''));
+        $requestedCcRef = trim((string) ($careContextId !== '' ? $careContextId : ($this->request ? ($this->request->getPost('careContextId') ?? $this->request->getPost('care_context_reference') ?? '') : '')));
         if ($requestedCcRef !== '') {
             $ccRef = $requestedCcRef;
         } else {
@@ -2317,14 +2337,14 @@ class AbdmGateway extends BaseController
                 'outcome'     => 'success',
             ]);
 
-            return $this->response->setJSON([
+            return [
                 'ok' => 1,
                 'status' => 'local_stored',
                 'queue_id' => null,
                 'consent_handle' => null,
                 'care_context_reference' => $ccRef,
                 'message' => 'ABHA not available. Record stored locally for later discovery.',
-            ]);
+            ];
         }
 
         // -- Push via pushRecord() (POST /v3/records/push) ---------------------
@@ -2376,7 +2396,7 @@ class AbdmGateway extends BaseController
             'error_message' => (string) ($connectorError ?? ''),
         ]);
 
-        return $this->response->setJSON([
+        return [
             'ok'                     => $connectorError === null ? 1 : 0,
             'queue_id'               => $queueId,
             'consent_handle'         => $effectiveConsent,
@@ -2385,7 +2405,7 @@ class AbdmGateway extends BaseController
             'message'                => $connectorError === null && $consentWarning !== '' ? 'Record pushed to gateway without active consent. Recheck link status in M2 ABDM Gateway.' : null,
             'warning'                => $consentWarning !== '' ? $consentWarning : null,
             'error'                  => $connectorError,
-        ]);
+        ];
     }
 
     public function diagnosisReportFhirPreview()
@@ -10074,7 +10094,7 @@ class AbdmGateway extends BaseController
                 'notes' => $ccDisplay,
                 'queue_id' => $ccRef,
                 'record_data' => $bundle,
-                'skip_auto_link' => true,
+                'skip_auto_link' => false,
             ]);
             $this->logGatewayPushResolution('additional_hi_record', $result);
             $queueId = $this->extractGatewayPushQueueId($result);
@@ -10285,6 +10305,313 @@ class AbdmGateway extends BaseController
         ];
     }
 
+    public function buildImmunizationRecordPayload(int $recordId, int $patientId = 0, string $abhaId = ''): ?array
+    {
+        if ($recordId <= 0 && $patientId <= 0) {
+            return null;
+        }
+
+        $immRows = [];
+        if ($this->db->tableExists('immunization_records')) {
+            $builder = $this->db->table('immunization_records');
+            if ($recordId > 0) {
+                $builder->where('id', $recordId);
+            } elseif ($patientId > 0) {
+                $builder->where('patient_id', $patientId)->orderBy('id', 'DESC')->limit(10);
+            }
+            $immRows = $builder->get()->getResultArray();
+        }
+
+        if (empty($immRows)) {
+            return null;
+        }
+
+        $firstRow = $immRows[0];
+        if ($patientId <= 0) {
+            $patientId = (int) ($firstRow['patient_id'] ?? 0);
+        }
+
+        $patientRow = $this->loadPatientRow($patientId);
+        if (empty($patientRow)) {
+            return null;
+        }
+
+        if ($abhaId === '') {
+            $abhaId = $this->resolvePatientAbhaIdentifier($patientId);
+        }
+
+        $vaccines = [];
+        $visitDate = date('Y-m-d');
+        foreach ($immRows as $row) {
+            $vaccineName = trim((string) ($row['vaccine_name'] ?? $row['vaccine_display'] ?? ''));
+            if ($vaccineName === '' && ! empty($row['vaccine_master_id']) && $this->db->tableExists('immunization_vaccine_master')) {
+                $vm = $this->db->table('immunization_vaccine_master')->where('id', (int) $row['vaccine_master_id'])->get(1)->getRowArray();
+                $vaccineName = trim((string) ($vm['vaccine_name'] ?? ''));
+            }
+            if ($vaccineName === '') {
+                $vaccineName = 'Vaccine Dose';
+            }
+            $occDate = ! empty($row['given_date']) ? (string) $row['given_date'] : (! empty($row['scheduled_date']) ? (string) $row['scheduled_date'] : date('Y-m-d H:i:s'));
+            $visitDate = date('Y-m-d', strtotime($occDate));
+            $vaccines[] = [
+                'vaccine_name' => $vaccineName,
+                'name' => $vaccineName,
+                'snomed_code' => trim((string) ($row['vaccine_code'] ?? '')),
+                'occurrence_date' => date(DATE_ATOM, strtotime($occDate)),
+                'status' => trim((string) ($row['status'] ?? 'completed')),
+                'lot_number' => trim((string) ($row['lot_number'] ?? '')),
+            ];
+        }
+
+        $primaryRecordId = (int) ($firstRow['id'] ?? $recordId);
+        $cleanDate = date('Ymd', strtotime($visitDate));
+        $ccRef = 'IMM-' . $patientId . '-V' . $primaryRecordId . '-' . $cleanDate;
+        $ccDisplay = 'Immunization - ' . date('d/m/Y', strtotime($visitDate));
+
+        $source = [
+            'record_id' => (string) $primaryRecordId,
+            'visit_date' => $visitDate,
+            'completed_at' => date(DATE_ATOM, strtotime($visitDate)),
+            'patient' => [
+                'id' => (string) $patientId,
+                'name' => $this->patientDisplayName($patientRow),
+                'gender' => strtolower(trim((string) ($patientRow['gender'] ?? 'unknown'))),
+                'birth_date' => ! empty($patientRow['dob']) ? date('Y-m-d', strtotime((string) $patientRow['dob'])) : '',
+                'abha_id' => preg_replace('/\D/', '', $abhaId),
+                'abha_address' => str_contains($abhaId, '@') ? $abhaId : '',
+            ],
+            'immunizations' => $vaccines,
+            'vaccines' => $vaccines,
+            'hfr_id' => $this->connector->getHfrId() ?: 'HFR-IN-HMS',
+        ];
+
+        $factory = new FhirGeneratorFactory();
+        $generatorOutput = $factory->immunization()->generate($source);
+        $adapter = new \App\Libraries\Abdm\Fhir\Support\GatewayPayloadAdapter();
+        $gatewayPayload = $adapter->toGatewayPayload($generatorOutput, $source, (string) ($source['hfr_id']));
+
+        return [
+            'hi_type' => 'ImmunizationRecord',
+            'entity_type' => 'immunization',
+            'entity_id' => (string) $primaryRecordId,
+            'patient_id' => $patientId,
+            'patient_name' => $this->patientDisplayName($patientRow),
+            'visit_date' => $visitDate,
+            'care_context_reference' => $ccRef,
+            'care_context_display' => $ccDisplay,
+            'bundle' => (array) ($gatewayPayload['fhir_bundle'] ?? []),
+        ];
+    }
+
+    /**
+     * Central, non-blocking auto-link trigger for all medical documents and reports.
+     * Called whenever a document is saved or printed in HMIS.
+     */
+    public static function autoPushRecord(string $docType, int $entityId, int $patientId = 0, array $extra = []): array
+    {
+        try {
+            $gateway = new self();
+            return $gateway->executeAutoPushRecord($docType, $entityId, $patientId, $extra);
+        } catch (\Throwable $e) {
+            log_message('warning', '[autoPushRecord] Failed safely for ' . $docType . ' #' . $entityId . ': ' . $e->getMessage());
+            return ['ok' => 0, 'status' => 'error', 'message' => $e->getMessage()];
+        }
+    }
+
+    public function executeAutoPushRecord(string $docType, int $entityId, int $patientId = 0, array $extra = []): array
+    {
+        $docType = strtolower(trim($docType));
+        if ($entityId <= 0 && $patientId <= 0) {
+            return ['ok' => 0, 'status' => 'invalid_parameters', 'message' => 'entityId or patientId required'];
+        }
+
+        switch ($docType) {
+            case 'prescription':
+            case 'opd':
+                return $this->autoPushPrescriptionRecord($entityId, (int) ($extra['session_id'] ?? 0), $patientId);
+
+            case 'diagnostic_report':
+            case 'lab':
+            case 'radiology':
+                return $this->pushDiagnosisReportBundleInternal($entityId, $patientId);
+
+            case 'discharge':
+            case 'discharge_summary':
+                if (class_exists('\App\Controllers\Ipd_discharge')) {
+                    $ipdCtrl = new \App\Controllers\Ipd_discharge();
+                    return $ipdCtrl->autoPushDischargeFhir($entityId);
+                }
+                return ['ok' => 0, 'status' => 'unsupported'];
+
+            case 'health_document':
+            case 'patient_doc':
+                $abhaId = $patientId > 0 ? $this->resolvePatientAbhaIdentifier($patientId) : '';
+                $payload = $this->buildHealthDocumentRecordPayload($patientId, $abhaId, $entityId);
+                if ($payload === null) {
+                    return ['ok' => 0, 'status' => 'payload_null'];
+                }
+                $res = $this->pushAdditionalHiRecord($payload, (int) ($payload['patient_id'] ?? $patientId), $abhaId);
+                return ['ok' => 1, 'status' => 'pushed'];
+
+            case 'invoice':
+                $abhaId = $patientId > 0 ? $this->resolvePatientAbhaIdentifier($patientId) : '';
+                $payload = $this->buildInvoiceRecordPayload($entityId, $patientId, $abhaId);
+                if ($payload === null) {
+                    return ['ok' => 0, 'status' => 'payload_null'];
+                }
+                $res = $this->pushAdditionalHiRecord($payload, (int) ($payload['patient_id'] ?? $patientId), $abhaId);
+                return ['ok' => 1, 'status' => 'pushed'];
+
+            case 'wellness':
+                $abhaId = $patientId > 0 ? $this->resolvePatientAbhaIdentifier($patientId) : '';
+                $payload = $this->buildWellnessRecordPayload($patientId, $entityId, $abhaId);
+                if ($payload === null) {
+                    return ['ok' => 0, 'status' => 'payload_null'];
+                }
+                $res = $this->pushAdditionalHiRecord($payload, (int) ($payload['patient_id'] ?? $patientId), $abhaId);
+                return ['ok' => 1, 'status' => 'pushed'];
+
+            case 'immunization':
+                $abhaId = $patientId > 0 ? $this->resolvePatientAbhaIdentifier($patientId) : '';
+                $payload = $this->buildImmunizationRecordPayload($entityId, $patientId, $abhaId);
+                if ($payload === null) {
+                    return ['ok' => 0, 'status' => 'payload_null'];
+                }
+                $res = $this->pushAdditionalHiRecord($payload, (int) ($payload['patient_id'] ?? $patientId), $abhaId);
+                return ['ok' => 1, 'status' => 'pushed'];
+
+            default:
+                return ['ok' => 0, 'status' => 'unknown_doc_type', 'message' => 'Unknown document type: ' . $docType];
+        }
+    }
+
+    public function autoPushPrescriptionRecord(int $opdId, int $sessionId = 0, int $patientId = 0): array
+    {
+        if ($opdId <= 0) {
+            return ['ok' => 0, 'status' => 'invalid_opd_id'];
+        }
+
+        $opdRow = $this->db->table('opd_master')->where('opd_id', $opdId)->get(1)->getRowArray() ?? [];
+        if (empty($opdRow)) {
+            return ['ok' => 0, 'status' => 'opd_not_found'];
+        }
+
+        if ($patientId <= 0) {
+            $patientId = (int) ($opdRow['p_id'] ?? 0);
+        }
+        $patientRow = $this->loadPatientRow($patientId);
+        if (empty($patientRow)) {
+            return ['ok' => 0, 'status' => 'patient_not_found'];
+        }
+
+        $abhaId = $this->resolvePatientAbhaIdentifier($patientId);
+        $abhaDigits = preg_replace('/\D/', '', $abhaId);
+        $hasAbha = (strlen($abhaDigits) === 14) || str_contains($abhaId, '@');
+        if (! $hasAbha) {
+            return ['ok' => 0, 'status' => 'no_abha', 'message' => 'Patient has no ABHA'];
+        }
+
+        // Ensure FHIR bundle is built and stored
+        if (class_exists('\App\Controllers\Opd_prescription')) {
+            try {
+                $rxCtrl = new \App\Controllers\Opd_prescription();
+                $rxCtrl->storePrescriptionFhirBundle($opdId, $sessionId, $patientRow, $opdRow);
+            } catch (\Throwable $e) {
+                log_message('warning', '[autoPushPrescriptionRecord] storePrescriptionFhirBundle error: ' . $e->getMessage());
+            }
+        }
+
+        if ($sessionId <= 0 && $this->db->tableExists('opd_prescription')) {
+            $presRow = $this->db->table('opd_prescription')->select('id')->where('opd_id', $opdId)->orderBy('id', 'DESC')->get(1)->getRowArray();
+            if (! empty($presRow['id'])) {
+                $sessionId = (int) $presRow['id'];
+            }
+        }
+
+        $abhaIdentity = $this->resolvePatientAbhaIdentity($patientId, $abhaId);
+        $abhaNumber = $abhaIdentity['abha_id'];
+        $abhaAddress = $abhaIdentity['abha_address'];
+        $patientBirthYear = $this->resolvePatientBirthYear($patientRow, $abhaAddress, $abhaNumber);
+        $patientName = $this->patientDisplayName($patientRow);
+        $visitDateRaw = trim((string) ($opdRow['date_opd_visit'] ?? $opdRow['apointment_date'] ?? ''));
+        $visitDate = $visitDateRaw !== '' ? date('Y-m-d', strtotime($visitDateRaw)) : date('Y-m-d');
+        $cleanDate = str_replace('-', '', $visitDate);
+
+        $results = [];
+
+        // 1. Push OPConsultRecord
+        $opcDoc = $this->db->table('opd_fhir_documents')
+            ->where('opd_id', $opdId)
+            ->where('bundle_type', 'OPConsultRecord')
+            ->orderBy('id', 'DESC')
+            ->get(1)
+            ->getRowArray();
+        if (! empty($opcDoc['bundle_json'])) {
+            $opcBundle = json_decode((string) $opcDoc['bundle_json'], true);
+            if (is_array($opcBundle)) {
+                $ccRef = 'OPD-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
+                $ccDisplay = 'OPD Consultation - ' . date('d M Y', strtotime($visitDate));
+                try {
+                    $res = $this->connector->pushRecord([
+                        'patient_id'             => (string) $patientId,
+                        'patient_name'           => $patientName,
+                        'abha_id'                => $abhaNumber,
+                        'abha_address'           => $abhaAddress,
+                        'year_of_birth'          => $patientBirthYear,
+                        'hi_type'                => 'OPConsultRecord',
+                        'record_type'            => 'OPConsultRecord',
+                        'visit_date'             => $visitDate,
+                        'care_context_reference' => $ccRef,
+                        'care_context_display'   => $ccDisplay,
+                        'notes'                  => $ccDisplay,
+                        'queue_id'               => $ccRef,
+                        'record_data'            => $opcBundle,
+                    ]);
+                    $results['opd'] = $res;
+                } catch (\Throwable $e) {
+                    $results['opd_error'] = $e->getMessage();
+                }
+            }
+        }
+
+        // 2. Push PrescriptionRecord
+        $prescDoc = $this->db->table('opd_fhir_documents')
+            ->where('opd_id', $opdId)
+            ->where('bundle_type', 'PrescriptionRecord')
+            ->orderBy('id', 'DESC')
+            ->get(1)
+            ->getRowArray();
+        if (! empty($prescDoc['bundle_json'])) {
+            $prescBundle = json_decode((string) $prescDoc['bundle_json'], true);
+            if (is_array($prescBundle)) {
+                $prescCcRef = 'PRESC-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
+                $prescCcDisplay = 'Prescription - ' . date('d M Y', strtotime($visitDate));
+                try {
+                    $res = $this->connector->pushRecord([
+                        'patient_id'             => (string) $patientId,
+                        'patient_name'           => $patientName,
+                        'abha_id'                => $abhaNumber,
+                        'abha_address'           => $abhaAddress,
+                        'year_of_birth'          => $patientBirthYear,
+                        'hi_type'                => 'PrescriptionRecord',
+                        'record_type'            => 'PrescriptionRecord',
+                        'visit_date'             => $visitDate,
+                        'care_context_reference' => $prescCcRef,
+                        'care_context_display'   => $prescCcDisplay,
+                        'notes'                  => $prescCcDisplay,
+                        'queue_id'               => $prescCcRef,
+                        'record_data'            => $prescBundle,
+                    ]);
+                    $results['prescription'] = $res;
+                } catch (\Throwable $e) {
+                    $results['prescription_error'] = $e->getMessage();
+                }
+            }
+        }
+
+        return ['ok' => 1, 'status' => 'processed', 'results' => $results];
+    }
+
     private function buildHealthDocumentRecordPayload(int $patientId, string $abhaId = '', int $recordId = 0, array $patientRow = []): ?array
     {
         $targetRecordId = $recordId > 0
@@ -10398,39 +10725,82 @@ class AbdmGateway extends BaseController
 
     private function buildInvoiceRecordPayload(int $invoiceId, int $patientId, string $abhaId): ?array
     {
-        if (! $this->db->tableExists('invoice_master')) {
-            return null;
-        }
-        $invoice = $this->db->table('invoice_master')->where('id', $invoiceId)->get(1)->getRowArray() ?? [];
-        if (empty($invoice)) {
-            return null;
-        }
-        if ($patientId <= 0) {
-            $patientId = (int) ($invoice['attach_id'] ?? 0);
-        }
-        $patientRow = $this->loadPatientRow($patientId);
-        if ($patientId <= 0 || empty($patientRow)) {
-            return null;
-        }
-        $items = $this->db->tableExists('invoice_item')
-            ? $this->db->table('invoice_item')->where('inv_master_id', $invoiceId)->orderBy('id', 'ASC')->get()->getResultArray()
-            : [];
+        if ($this->db->tableExists('invoice_master')) {
+            $invoice = $this->db->table('invoice_master')->where('id', $invoiceId)->get(1)->getRowArray() ?? [];
+            if (! empty($invoice)) {
+                if ($patientId <= 0) {
+                    $patientId = (int) ($invoice['attach_id'] ?? 0);
+                }
+                $patientRow = $this->loadPatientRow($patientId);
+                if ($patientId > 0 && ! empty($patientRow)) {
+                    $items = $this->db->tableExists('invoice_item')
+                        ? $this->db->table('invoice_item')->where('inv_master_id', $invoiceId)->orderBy('id', 'ASC')->get()->getResultArray()
+                        : [];
 
-        $visitDate = (string) ($invoice['inv_date'] ?? date('Y-m-d'));
-        $patient = $this->buildAbdmPatientResource($patientRow, $patientId, $abhaId);
-        $bundle = $this->buildSimpleInvoiceBundle($patient, $invoice, $items);
+                    $visitDate = (string) ($invoice['inv_date'] ?? date('Y-m-d'));
+                    $patient = $this->buildAbdmPatientResource($patientRow, $patientId, $abhaId);
+                    $bundle = $this->buildSimpleInvoiceBundle($patient, $invoice, $items);
 
-        return [
-            'hi_type' => 'InvoiceRecord',
-            'entity_type' => 'invoice',
-            'entity_id' => (string) $invoiceId,
-            'patient_id' => $patientId,
-            'patient_name' => $this->patientDisplayName($patientRow),
-            'visit_date' => date('Y-m-d', strtotime($visitDate)),
-            'care_context_reference' => 'INV-' . $invoiceId . '-' . date('Y-m-d', strtotime($visitDate)),
-            'care_context_display' => 'Invoice ' . (string) ($invoice['invoice_code'] ?? $invoiceId),
-            'bundle' => $bundle,
-        ];
+                    return [
+                        'hi_type' => 'InvoiceRecord',
+                        'entity_type' => 'invoice',
+                        'entity_id' => (string) $invoiceId,
+                        'patient_id' => $patientId,
+                        'patient_name' => $this->patientDisplayName($patientRow),
+                        'visit_date' => date('Y-m-d', strtotime($visitDate)),
+                        'care_context_reference' => 'INV-' . $invoiceId . '-' . date('Y-m-d', strtotime($visitDate)),
+                        'care_context_display' => 'Invoice ' . (string) ($invoice['invoice_code'] ?? $invoiceId),
+                        'bundle' => $bundle,
+                    ];
+                }
+            }
+        }
+
+        // Support pharmacy invoice_med_master as well
+        if ($this->db->tableExists('invoice_med_master')) {
+            $medInvoice = $this->db->table('invoice_med_master')->where('id', $invoiceId)->get(1)->getRowArray() ?? [];
+            if (! empty($medInvoice)) {
+                if ($patientId <= 0) {
+                    $patientId = (int) ($medInvoice['patient_id'] ?? 0);
+                }
+                $patientRow = $this->loadPatientRow($patientId);
+                if ($patientId > 0 && ! empty($patientRow)) {
+                    $items = [];
+                    if ($this->db->tableExists('invoice_med_item')) {
+                        $items = $this->db->table('invoice_med_item')->where('inv_med_master_id', $invoiceId)->orderBy('id', 'ASC')->get()->getResultArray();
+                    }
+                    $visitDate = (string) ($medInvoice['inv_date'] ?? date('Y-m-d'));
+                    $patient = $this->buildAbdmPatientResource($patientRow, $patientId, $abhaId);
+                    $invoiceArr = [
+                        'id' => $invoiceId,
+                        'invoice_code' => (string) ($medInvoice['inv_med_code'] ?? $invoiceId),
+                        'invoice_type_code' => '04',
+                        'invoice_type_display' => 'Pharmacy',
+                        'encounter_class' => 'AMB',
+                        'practitioner_id' => (int) ($medInvoice['doc_id'] ?? 0),
+                        'practitioner_name' => trim((string) ($medInvoice['doc_name'] ?? '')),
+                        'inv_date' => $visitDate,
+                        'net_amount' => (float) ($medInvoice['net_amount'] ?? 0),
+                        'total_amount' => (float) ($medInvoice['total_amount'] ?? $medInvoice['net_amount'] ?? 0),
+                        'patient_id' => $patientId,
+                    ];
+                    $bundle = $this->buildSimpleInvoiceBundle($patient, $invoiceArr, $items);
+                    return [
+                        'hi_type' => 'InvoiceRecord',
+                        'entity_type' => 'invoice_med',
+                        'entity_id' => (string) $invoiceId,
+                        'patient_id' => $patientId,
+                        'patient_name' => $this->patientDisplayName($patientRow),
+                        'visit_date' => date('Y-m-d', strtotime($visitDate)),
+                        'care_context_reference' => 'PHARM-' . $invoiceId . '-' . date('Y-m-d', strtotime($visitDate)),
+                        'care_context_display' => 'Pharmacy Bill ' . (string) ($medInvoice['inv_med_code'] ?? $invoiceId),
+                        'bundle' => $bundle,
+                    ];
+                }
+            }
+        }
+
+        return null;
     }
 
     private function buildInvoiceSourceRecordPayload(string $source, int $billId, int $patientId, string $abhaId): ?array

@@ -1104,6 +1104,16 @@ class Charges extends BaseController
             $row->xgender = ($row->gender ?? 0) == 1 ? 'Male' : 'Female';
         }
 
+        // Auto-link/push invoice to ABDM if patient has ABHA (fail-safe)
+        try {
+            $patientId = (int) ($data['invoice_master'][0]->attach_id ?? 0);
+            if ($patientId > 0 && class_exists('\App\Controllers\AbdmGateway')) {
+                \App\Controllers\AbdmGateway::autoPushRecord('invoice', $invoiceId, $patientId);
+            }
+        } catch (\Throwable $e) {
+            log_message('warning', '[Charges::print_invoice] ABDM invoice auto-push failed: ' . $e->getMessage());
+        }
+
         $sql = "select * from ipd_master where ipd_status=0 and p_id=" . (int) ($data['invoice_master'][0]->attach_id ?? 0);
         if (($data['invoice_master'][0]->ipd_id ?? 0) > 0) {
             $sql = "select * from ipd_master where id=" . (int) $data['invoice_master'][0]->ipd_id;

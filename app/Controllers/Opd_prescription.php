@@ -346,6 +346,13 @@ class Opd_prescription extends BaseController
 
         $this->db->table('opd_prescription')->where('id', $sessionId)->update($update);
 
+        // Auto sync and link wellness record to ABDM on vitals save
+        try {
+            \App\Controllers\AbdmGateway::autoPushRecord('wellness', $opdId, 0, ['session_id' => $sessionId]);
+        } catch (\Throwable $e) {
+            // Fail-safe
+        }
+
         return $this->response->setJSON([
             'update' => 1,
             'opd_session_id' => $sessionId,
@@ -12051,6 +12058,16 @@ class Opd_prescription extends BaseController
                 $this->db->table('health_records')
                     ->whereIn('care_context_reference', $redundantRefs)
                     ->delete();
+
+                // If patient has ABHA, auto-push to Bridge Gateway so care context is linked immediately
+                try {
+                    $hasValidAbha = (str_contains($abhaAddress, '@') || (strlen(preg_replace('/\D/', '', $abhaAddress)) === 14));
+                    if ($hasValidAbha) {
+                        \App\Controllers\AbdmGateway::autoPushRecord('prescription', $opdId, $patientId, ['session_id' => $sessionId]);
+                    }
+                } catch (\Throwable $e) {
+                    // Fail-safe
+                }
             } catch (\Throwable $e) {
                 log_message('warning', '[storePrescriptionFhirBundle] auto health_records insert error: ' . $e->getMessage());
             }
@@ -13944,6 +13961,13 @@ OPD SNAPSHOT JSON: " . $payload;
     {
         $this->createOpdPrescriptionWorkTask($opdId, $opdSessionId);
         $this->markOpdVisitedOnConsultCompletion((int) $opdId);
+
+        // Auto-link/push prescription to ABDM if patient has ABHA (fail-safe)
+        try {
+            \App\Controllers\AbdmGateway::autoPushRecord('prescription', $opdId, 0, ['session_id' => $opdSessionId]);
+        } catch (\Throwable $e) {
+            log_message('warning', 'ABDM Prescription print auto-link failed: ' . $e->getMessage());
+        }
 
         $printConfig = $this->resolvePrescriptionLayoutByDoctorField($opdId, $printType);
         $layoutMode = (string) ($printConfig['layout'] ?? 'content_only');
