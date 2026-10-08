@@ -14,9 +14,12 @@ class TestPatientSearch extends BaseCommand
     public function run(array $params)
     {
         $testCases = [
-            ['label' => 'Direct ABHA Address', 'get' => ['search_query' => 'kajolallu2001@sbx']],
-            ['label' => 'Direct 14-digit ABHA Number', 'get' => ['search_query' => '91408143313273']],
-            ['label' => 'Direct Hyphenated ABHA Number', 'get' => ['search_query' => '91-4081-4331-3273']],
+            ['label' => 'Direct ABHA Address (Meera)', 'get' => ['search_query' => 'meerabisht1981@sbx']],
+            ['label' => 'Direct 14-digit ABHA Number (Meera)', 'get' => ['search_query' => '91178766183200']],
+            ['label' => 'Direct Hyphenated ABHA Number (Meera)', 'get' => ['search_query' => '91-1787-6618-3200']],
+            ['label' => 'Direct ABHA Address (Kajol)', 'get' => ['search_query' => 'kajolallu2001@sbx']],
+            ['label' => 'Direct 14-digit ABHA Number (Kajol)', 'get' => ['search_query' => '91408143313273']],
+            ['label' => 'Direct Hyphenated ABHA Number (Kajol)', 'get' => ['search_query' => '91-4081-4331-3273']],
             ['label' => 'Partial ABHA Address (kajol)', 'get' => ['search_query' => 'kajol']],
             ['label' => 'DataTables Search Box with ABHA Address', 'get' => ['dt_search' => 'kajolallu2001@sbx']],
             ['label' => 'DataTables Search Box with 14-digit ABHA Number', 'get' => ['dt_search' => '91408143313273']],
