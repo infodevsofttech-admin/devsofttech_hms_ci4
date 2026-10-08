@@ -285,10 +285,14 @@ class M3HiuDocumentRepository
             $resourceId = trim((string) ($resource['id'] ?? ''));
             if ($resourceId !== '') {
                 $resourcesByRef[$type . '/' . $resourceId] = $resource;
+                $resourcesByRef[$resourceId] = $resource;
             }
             $fullUrl = trim((string) ($entry['fullUrl'] ?? ''));
             if ($fullUrl !== '') {
                 $resourcesByRef[$fullUrl] = $resource;
+                if (str_starts_with($fullUrl, 'urn:uuid:')) {
+                    $resourcesByRef[substr($fullUrl, 9)] = $resource;
+                }
             }
 
             if ($type === 'Patient' && empty($patient)) {
@@ -388,10 +392,16 @@ class M3HiuDocumentRepository
                     continue;
                 }
                 $refStr = trim((string) ($ref['reference'] ?? ''));
-                if ($refStr === '' || ! isset($resourcesByRef[$refStr])) {
+                if ($refStr === '') {
                     continue;
                 }
-                foreach ($this->describeResourceForSection((array) $resourcesByRef[$refStr], $resourcesByRef) as $label) {
+                $matchedResource = $resourcesByRef[$refStr]
+                    ?? $resourcesByRef['urn:uuid:' . $refStr]
+                    ?? (str_starts_with($refStr, 'urn:uuid:') ? ($resourcesByRef[substr($refStr, 9)] ?? null) : null);
+                if (! is_array($matchedResource)) {
+                    continue;
+                }
+                foreach ($this->describeResourceForSection($matchedResource, $resourcesByRef) as $label) {
                     if ($label !== '') {
                         $items[] = $label;
                     }
@@ -484,9 +494,135 @@ class M3HiuDocumentRepository
                 $label = trim((string) (($resource['description'] ?? '') ?: ($resource['type']['text'] ?? '') ?: ($resource['type']['coding'][0]['display'] ?? '')));
                 return $label !== '' ? [$label] : [];
 
+            case 'Invoice':
+                return $this->describeInvoice($resource, $resourcesByRef);
+
+            case 'ChargeItem':
+                $itemName = trim((string) (
+                    ($resource['code']['text'] ?? '')
+                    ?: ($resource['productCodeableConcept']['text'] ?? '')
+                    ?: ($resource['code']['coding'][0]['display'] ?? '')
+                ));
+                $qtyVal = $resource['quantity']['value'] ?? null;
+                $qtyUnit = trim((string) ($resource['quantity']['unit'] ?? 'unit'));
+                $qtyStr = $qtyVal !== null ? ($qtyVal . ' ' . $qtyUnit) : '';
+                $label = 'Item: ' . $itemName . ($qtyStr !== '' ? (' — Qty: ' . $qtyStr) : '');
+                return $label !== '' ? [$label] : [];
+
+            case 'Binary':
+                return ['Attached PDF document (available under Attached Files below)'];
+
             default:
                 return [];
         }
+    }
+
+    /**
+     * Formats an ABDM FHIR Invoice resource and its line items / charge items
+     * into user-friendly bullet points matching the PHR app and hospital view.
+     *
+     * @return array<int, string>
+     */
+    private function describeInvoice(array $resource, array $resourcesByRef = []): array
+    {
+        $lines = [];
+        $currency = trim((string) (
+            $resource['totalNet']['currency']
+            ?? $resource['totalGross']['currency']
+            ?? 'INR'
+        ));
+
+        $lineItems = (array) ($resource['lineItem'] ?? []);
+        foreach ($lineItems as $idx => $line) {
+            if (! is_array($line)) {
+                continue;
+            }
+
+            // 1. Resolve item name
+            $itemName = '';
+            $chargeRefStr = trim((string) ($line['chargeItemReference']['reference'] ?? ''));
+            $linkedCharge = null;
+            if ($chargeRefStr !== '') {
+                $linkedCharge = $resourcesByRef[$chargeRefStr]
+                    ?? $resourcesByRef['urn:uuid:' . $chargeRefStr]
+                    ?? (str_starts_with($chargeRefStr, 'urn:uuid:') ? ($resourcesByRef[substr($chargeRefStr, 9)] ?? null) : null);
+            }
+
+            if (is_array($linkedCharge)) {
+                $itemName = trim((string) (
+                    ($linkedCharge['code']['text'] ?? '')
+                    ?: ($linkedCharge['productCodeableConcept']['text'] ?? '')
+                    ?: ($linkedCharge['code']['coding'][0]['display'] ?? '')
+                ));
+            }
+            if ($itemName === '') {
+                $itemName = trim((string) (
+                    ($line['chargeItemReference']['display'] ?? '')
+                    ?: ($line['chargeItemCodeableConcept']['text'] ?? '')
+                    ?: ($line['chargeItemCodeableConcept']['coding'][0]['display'] ?? '')
+                ));
+            }
+            if ($itemName === '') {
+                $itemName = 'Item #' . ($idx + 1);
+            }
+
+            // 2. Resolve quantity
+            $quantityVal = null;
+            $quantityUnit = '';
+            if (is_array($linkedCharge) && isset($linkedCharge['quantity']) && is_array($linkedCharge['quantity'])) {
+                $quantityVal = $linkedCharge['quantity']['value'] ?? null;
+                $quantityUnit = trim((string) ($linkedCharge['quantity']['unit'] ?? ''));
+            }
+            if ($quantityVal === null && isset($line['quantity']) && is_array($line['quantity'])) {
+                $quantityVal = $line['quantity']['value'] ?? null;
+                $quantityUnit = trim((string) ($line['quantity']['unit'] ?? ''));
+            }
+            if ($quantityUnit === '') {
+                $quantityUnit = 'unit';
+            }
+            $quantityStr = $quantityVal !== null ? ($quantityVal . ' ' . $quantityUnit) : '1 unit';
+
+            // 3. Resolve rate / amount
+            $rateStr = '';
+            $priceComponents = (array) ($line['priceComponent'] ?? []);
+            foreach ($priceComponents as $comp) {
+                if (is_array($comp) && isset($comp['amount']['value'])) {
+                    $amt = $comp['amount']['value'];
+                    $curr = trim((string) ($comp['amount']['currency'] ?? $currency));
+                    $rateStr = $amt . ($curr !== '' ? (' ' . $curr) : '');
+                    break;
+                }
+            }
+            if ($rateStr === '' && is_array($linkedCharge)) {
+                if (isset($linkedCharge['priceOverride']['value'])) {
+                    $amt = $linkedCharge['priceOverride']['value'];
+                    $curr = trim((string) ($linkedCharge['priceOverride']['currency'] ?? $currency));
+                    $rateStr = $amt . ($curr !== '' ? (' ' . $curr) : '');
+                } elseif (isset($linkedCharge['net']['value'])) {
+                    $amt = $linkedCharge['net']['value'];
+                    $curr = trim((string) ($linkedCharge['net']['currency'] ?? $currency));
+                    $rateStr = $amt . ($curr !== '' ? (' ' . $curr) : '');
+                }
+            }
+
+            $part = 'Item: ' . $itemName . ' — Qty: ' . $quantityStr;
+            if ($rateStr !== '') {
+                $part .= ' — Rate: ' . $rateStr;
+            }
+            $lines[] = $part;
+        }
+
+        // 4. Totals (Total Net / Total Gross)
+        $net = $resource['totalNet']['value'] ?? null;
+        $gross = $resource['totalGross']['value'] ?? null;
+        if ($net !== null) {
+            $lines[] = 'Total Net: ' . $net . ' ' . $currency;
+        }
+        if ($gross !== null) {
+            $lines[] = 'Total Gross: ' . $gross . ' ' . $currency;
+        }
+
+        return $lines;
     }
 
     /**

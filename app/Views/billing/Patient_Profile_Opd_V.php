@@ -1361,7 +1361,13 @@ $(function() {
                 sections.forEach(function(sec, si) {
                     var body = '';
                     if (sec.items && sec.items.length) {
-                        body = '<ul class="mb-0 small">' + sec.items.map(function(it) { return '<li>' + escHtml(it) + '</li>'; }).join('') + '</ul>';
+                        body = '<ul class="mb-0 small">' + sec.items.map(function(it) {
+                            var text = String(it || '').trim();
+                            if (text.indexOf('Total Net:') === 0 || text.indexOf('Total Gross:') === 0) {
+                                return '<li class="mt-1 fw-bold text-dark list-unstyled"><span class="badge bg-light text-dark border me-1">&bull;</span>' + escHtml(text) + '</li>';
+                            }
+                            return '<li>' + escHtml(text) + '</li>';
+                        }).join('') + '</ul>';
                     } else if (sec.narrative) {
                         body = '<div class="small" style="white-space:pre-line;">' + escHtml(sec.narrative) + '</div>';
                     } else {
