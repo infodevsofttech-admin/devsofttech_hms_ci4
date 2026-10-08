@@ -70,9 +70,17 @@ class AbdmPushSync extends BaseCommand
         }
 
         $rows = $db->table('health_records')
-            ->whereNotIn('push_status', ['pushed', 'linked', 'local_only'])
+            ->whereNotIn('push_status', ['pushed', 'linked', 'local_only', 'failed'])
             ->where('care_context_reference !=', '')
             ->where('abha_id !=', '')
+            ->groupStart()
+                ->where('record_data IS NOT NULL', null, false)
+                ->where('record_data !=', '')
+                ->orGroupStart()
+                    ->where('fhir_bundle_enc IS NOT NULL', null, false)
+                    ->where('fhir_bundle_enc !=', '')
+                ->groupEnd()
+            ->groupEnd()
             ->orderBy('id', 'ASC')
             ->get($limit)
             ->getResultArray();
