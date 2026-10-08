@@ -146,5 +146,35 @@ class TestAbdmInspect extends BaseCommand
                 CLI::table($docTable, ['ID', 'Pat', 'Ref', 'Title', 'Org', 'ArtID', 'Date']);
             }
         }
+
+        if (CLI::getOption('test-doc-filter')) {
+            $filterRef = CLI::getOption('filter-ref') ?? '7f3ca078-c426-42ca-96cb-9e02a05ca19b';
+            CLI::newLine();
+            CLI::write("=== TESTING abdm_documents FILTER FOR REF: {$filterRef} ===", 'cyan');
+
+            $_SERVER['REQUEST_METHOD'] = 'GET';
+            $_GET['consent_request_id'] = $filterRef;
+            $_GET['limit'] = '200';
+
+            $patientController = new \App\Controllers\Patient();
+            $patientController->initController($request, $response, $logger);
+            $res = $patientController->abdm_documents($patientId);
+            $data = json_decode((string) $res->getBody(), true);
+
+            CLI::write("Response ok: " . ($data['ok'] ?? 0) . ", items count: " . count($data['items'] ?? []), 'green');
+            $testTable = [];
+            foreach (($data['items'] ?? []) as $it) {
+                $testTable[] = [
+                    'ID' => $it['id'] ?? 0,
+                    'Org' => substr((string) ($it['organization_name'] ?? 'N/A'), 0, 25),
+                    'Title' => substr((string) ($it['document_title'] ?? 'N/A'), 0, 25),
+                    'CareContext' => substr((string) ($it['care_context_reference'] ?? 'N/A'), 0, 25),
+                    'ConsentReqId' => substr((string) ($it['consent_request_id'] ?? 'N/A'), 0, 16),
+                ];
+            }
+            if (! empty($testTable)) {
+                CLI::table($testTable, ['ID', 'Org', 'Title', 'CareContext', 'ConsentReqId']);
+            }
+        }
     }
 }
