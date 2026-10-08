@@ -8793,7 +8793,7 @@ class Ipd_discharge extends BaseController
             ?? ''
         ));
 
-        if (preg_match('/^\d{14}$/', $abhaId) !== 1) {
+        if (preg_match('/^\d{14}$/', $abhaId) !== 1 && ! str_contains($abhaId, '@')) {
             return;
         }
 
@@ -9807,28 +9807,47 @@ class Ipd_discharge extends BaseController
         $outbox = new AbdmSyncOutboxService();
         $outbox->enqueueRecordSync($syncPayload);
 
-        // Also push synchronously to E-Atria bridge so the bundle is immediately accessible to PHR apps
+        // Save locally to health_records for instant inspector viewing and background 1-minute cron linking
         try {
-            $connector = new \App\Libraries\Abdm\EAtriaBridgeConnector();
-            $pushData = [
-                'patient_id'             => (string) $patientId,
-                'patient_name'           => (string) ($gatewayPayload['patient_name'] ?? $patientName),
-                'abha_id'                => (string) ($gatewayPayload['abha_id'] ?? $abhaDigits),
-                'abha_address'           => (string) ($gatewayPayload['abha_address'] ?? $abhaAddress),
-                'hi_type'                => 'DischargeSummaryRecord',
-                'record_type'            => 'DischargeSummaryRecord',
-                'visit_date'             => (string) ($gatewayPayload['visit_date'] ?? $visitDate),
-                'care_context_reference' => $ccRef,
-                'care_context_display'   => $ccDisplay,
-                'notes'                  => $ccDisplay,
-                'queue_id'               => $ccRef,
-                'bundle'                 => (array) ($gatewayPayload['fhir_bundle'] ?? []),
-                'fhir_bundle'            => (array) ($gatewayPayload['fhir_bundle'] ?? []),
-                'record_data'            => (array) ($gatewayPayload['fhir_bundle'] ?? []),
-            ];
-            $connector->pushRecord($pushData);
+            $ccRef = (string) ($gatewayPayload['care_context_reference'] ?? ('DISCHARGE-' . $ipdId));
+            $ccDisplay = (string) ($gatewayPayload['care_context_display'] ?? ('Discharge Summary #' . $ipdNo));
+            $bundleArray = (array) ($gatewayPayload['fhir_bundle'] ?? []);
+            $bundleJson = json_encode($bundleArray, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
+
+            if ($this->db && $this->db->tableExists('health_records')) {
+                $existingHr = $this->db->table('health_records')
+                    ->where('entity_type', 'ipd')
+                    ->where('entity_id', (string) $ipdId)
+                    ->whereIn('hi_type', ['DischargeSummaryRecord', 'DischargeSummary'])
+                    ->orderBy('id', 'DESC')
+                    ->get(1)
+                    ->getRowArray();
+
+                $effectiveAbha = (string) ($gatewayPayload['abha_address'] ?: ($gatewayPayload['abha_id'] ?: $abhaDigits));
+                $hrData = [
+                    'patient_id'             => $patientId,
+                    'abha_id'                => $effectiveAbha,
+                    'entity_type'            => 'ipd',
+                    'entity_id'              => (string) $ipdId,
+                    'hi_type'                => 'DischargeSummaryRecord',
+                    'care_context_reference' => $ccRef,
+                    'care_context_display'   => $ccDisplay,
+                    'record_data'            => $bundleJson,
+                    'fhir_bundle'            => $bundleJson,
+                    'bundle'                 => $bundleJson,
+                    'push_status'            => 'pending',
+                    'updated_at'             => date('Y-m-d H:i:s'),
+                ];
+
+                if (! empty($existingHr)) {
+                    $this->db->table('health_records')->where('id', (int) $existingHr['id'])->update($hrData);
+                } else {
+                    $hrData['created_at'] = date('Y-m-d H:i:s');
+                    $this->db->table('health_records')->insert($hrData);
+                }
+            }
         } catch (\Throwable $pe) {
-            log_message('warning', '[enqueueIpdDischargeFhirSync] Direct bridge push error: ' . $pe->getMessage());
+            log_message('warning', '[enqueueIpdDischargeFhirSync] health_records store error: ' . $pe->getMessage());
         }
     }
 

@@ -2440,21 +2440,54 @@ class AbdmGateway extends BaseController
         ];
     }
 
-    public function diagnosisReportFhirPreview()
+    public function diagnosisReportFhirPreview(?int $labReqIdParam = null, ?int $patientIdParam = null, ?string $abhaIdParam = null)
     {
-        if (! $this->request->isAJAX()) {
-            return $this->response->setStatusCode(403)->setJSON(['status' => 'error', 'message' => 'AJAX only']);
+        $hasGet = $this->request && method_exists($this->request, 'getGet');
+        $hasPost = $this->request && method_exists($this->request, 'getPost');
+
+        $labReqId = $labReqIdParam
+            ?? ($hasGet ? (int) $this->request->getGet('lab_req_id') : 0)
+            ?: ($hasGet ? (int) $this->request->getGet('request_id') : 0)
+            ?: ($hasPost ? (int) $this->request->getPost('lab_req_id') : 0)
+            ?: (int) ($_GET['lab_req_id'] ?? $_GET['request_id'] ?? $_POST['lab_req_id'] ?? 0);
+
+        if ($labReqId <= 0) {
+            $ref = trim((string) (($hasGet ? $this->request->getGet('ref') : '')
+                ?: ($hasGet ? $this->request->getGet('care_context_reference') : '')
+                ?: ($_GET['ref'] ?? $_GET['care_context_reference'] ?? '')));
+            if ($ref !== '' && preg_match('/^(?:LAB|RAD)-(\d+)/i', $ref, $m)) {
+                $labReqId = (int) $m[1];
+            }
         }
 
-        $labReqId = (int) ($this->request->getGet('lab_req_id') ?? $this->request->getPost('lab_req_id') ?? 0);
-        $patientId = (int) ($this->request->getGet('patient_id') ?? $this->request->getPost('patient_id') ?? 0);
-        $abhaId = trim((string) ($this->request->getGet('abha_id') ?? $this->request->getPost('abha_id') ?? ''));
+        $patientId = $patientIdParam
+            ?? ($hasGet ? (int) $this->request->getGet('patient_id') : 0)
+            ?: ($hasPost ? (int) $this->request->getPost('patient_id') : 0)
+            ?: (int) ($_GET['patient_id'] ?? $_POST['patient_id'] ?? 0);
 
-        if ($labReqId <= 0 || $patientId <= 0 || $abhaId === '') {
+        $abhaId = trim((string) ($abhaIdParam
+            ?? ($hasGet ? $this->request->getGet('abha_id') : '')
+            ?: ($hasPost ? $this->request->getPost('abha_id') : '')
+            ?: ($_GET['abha_id'] ?? $_GET['abha'] ?? $_POST['abha_id'] ?? '')));
+
+        if ($labReqId <= 0) {
             return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
                 'status' => 'error',
-                'message' => 'lab_req_id, patient_id and abha_id are required.',
+                'message' => 'lab_req_id is required.',
             ]);
+        }
+
+        if ($patientId <= 0 && $this->db->tableExists('lab_request')) {
+            $lrRow = $this->db->table('lab_request')->select('patient_id')->where('id', $labReqId)->get(1)->getRowArray();
+            if (! empty($lrRow['patient_id'])) {
+                $patientId = (int) $lrRow['patient_id'];
+            }
+        }
+
+        if ($abhaId === '' && $patientId > 0) {
+            $ident = $this->resolvePatientAbhaIdentity($patientId);
+            $abhaId = $ident['abha_address'] ?: $ident['abha_id'];
         }
 
         $selectCols = ['id', 'patient_name', 'lab_type', 'charge_id', 'report_name', 'Report_Data', 'report_data_Impression', 'status', 'reported_time'];
@@ -2598,20 +2631,53 @@ class AbdmGateway extends BaseController
         ]);
     }
 
-    public function immunizationFhirPreview()
+    public function immunizationFhirPreview(?int $recordIdParam = null, ?int $patientIdParam = null, ?string $abhaIdParam = null)
     {
-        $patientId = (int) ($this->request->getGet('patient_id') ?? $this->request->getPost('patient_id') ?? 0);
-        $recordId = (int) ($this->request->getGet('record_id') ?? $this->request->getPost('record_id') ?? 0);
-        $abhaId = trim((string) ($this->request->getGet('abha_id') ?? $this->request->getPost('abha_id') ?? ''));
-        $forceNewRecord = (int) ($this->request->getGet('force_new_record') ?? $this->request->getGet('force_rebuild') ?? $this->request->getPost('force_new_record') ?? 0) === 1;
+        $hasGet = $this->request && method_exists($this->request, 'getGet');
+        $hasPost = $this->request && method_exists($this->request, 'getPost');
+
+        $recordId = $recordIdParam
+            ?? ($hasGet ? (int) $this->request->getGet('record_id') : 0)
+            ?: ($hasPost ? (int) $this->request->getPost('record_id') : 0)
+            ?: (int) ($_GET['record_id'] ?? $_POST['record_id'] ?? 0);
+
+        if ($recordId <= 0) {
+            $ref = trim((string) (($hasGet ? $this->request->getGet('ref') : '')
+                ?: ($hasGet ? $this->request->getGet('care_context_reference') : '')
+                ?: ($_GET['ref'] ?? $_GET['care_context_reference'] ?? '')));
+            if ($ref !== '' && preg_match('/^IMM-(?:PAT-(\d+)|(?:(\d+)-V)?(\d+))/i', $ref, $m)) {
+                $recordId = (int) (! empty($m[3]) ? $m[3] : (! empty($m[2]) ? $m[2] : ($m[1] ?? 0)));
+            }
+        }
+
+        $patientId = $patientIdParam
+            ?? ($hasGet ? (int) $this->request->getGet('patient_id') : 0)
+            ?: ($hasPost ? (int) $this->request->getPost('patient_id') : 0)
+            ?: (int) ($_GET['patient_id'] ?? $_POST['patient_id'] ?? 0);
+
+        $abhaId = trim((string) ($abhaIdParam
+            ?? ($hasGet ? $this->request->getGet('abha_id') : '')
+            ?: ($hasPost ? $this->request->getPost('abha_id') : '')
+            ?: ($_GET['abha_id'] ?? $_GET['abha'] ?? $_POST['abha_id'] ?? '')));
+
+        $forceNewRecord = (int) (($hasGet ? $this->request->getGet('force_new_record') : 0)
+            ?: ($hasGet ? $this->request->getGet('force_rebuild') : 0)
+            ?: ($hasPost ? $this->request->getPost('force_new_record') : 0)
+            ?: ($_GET['force_rebuild'] ?? 0)) === 1;
 
         if ($patientId <= 0 && $recordId > 0 && $this->db->tableExists('immunization_records')) {
             $immRec = $this->db->table('immunization_records')->select('patient_id')->where('id', $recordId)->get(1)->getRowArray();
             $patientId = (int) ($immRec['patient_id'] ?? 0);
         }
 
+        if ($abhaId === '' && $patientId > 0) {
+            $ident = $this->resolvePatientAbhaIdentity($patientId);
+            $abhaId = $ident['abha_address'] ?: $ident['abha_id'];
+        }
+
         if ($patientId <= 0) {
             return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
                 'status' => 'error',
                 'message' => 'patient_id is required.',
             ]);
@@ -2620,18 +2686,22 @@ class AbdmGateway extends BaseController
         $payload = $this->buildImmunizationGatewayPayload($patientId, $recordId, $abhaId, $forceNewRecord);
         if ($payload === null) {
             return $this->response->setStatusCode(404)->setJSON([
+                'ok' => 0,
                 'status' => 'error',
                 'message' => 'Unable to prepare ImmunizationRecord FHIR payload.',
             ]);
         }
 
+        $bundle = (array) ($payload['bundle'] ?? []);
         return $this->response->setJSON([
-            'status' => 'ok',
-            'patient_id' => $patientId,
-            'record_id' => $recordId > 0 ? $recordId : null,
-            'abha_id' => $abhaId,
+            'ok'                     => 1,
+            'status'                 => 'ok',
+            'patient_id'             => $patientId,
+            'record_id'              => $recordId > 0 ? $recordId : null,
+            'abha_id'                => $abhaId,
             'care_context_reference' => (string) ($payload['care_context_reference'] ?? ''),
-            'bundle' => (array) ($payload['bundle'] ?? []),
+            'bundle'                 => $bundle,
+            'fhir_bundle'            => $bundle,
         ]);
     }
 
@@ -2924,19 +2994,50 @@ class AbdmGateway extends BaseController
         return $this->pushAdditionalHiRecord($payload, (int) $payload['patient_id'], $abhaId, $consentHandle);
     }
 
-    public function invoiceFhirPreview()
+    public function invoiceFhirPreview(?string $sourceParam = null, ?int $billIdParam = null, ?int $patientIdParam = null, ?string $abhaIdParam = null)
     {
-        if (! $this->request->isAJAX()) {
-            return $this->response->setStatusCode(403)->setJSON(['status' => 'error', 'message' => 'AJAX only']);
+        $hasGet = $this->request && method_exists($this->request, 'getGet');
+        $hasPost = $this->request && method_exists($this->request, 'getPost');
+
+        $source = strtolower(trim((string) ($sourceParam
+            ?? ($hasGet ? $this->request->getGet('source') : '')
+            ?: ($hasPost ? $this->request->getPost('source') : '')
+            ?: ($_GET['source'] ?? $_POST['source'] ?? ''))));
+
+        $billId = $billIdParam
+            ?? ($hasGet ? (int) $this->request->getGet('bill_id') : 0)
+            ?: ($hasPost ? (int) $this->request->getPost('bill_id') : 0)
+            ?: (int) ($_GET['bill_id'] ?? $_POST['bill_id'] ?? 0);
+
+        if ($billId <= 0 || $source === '') {
+            $ref = trim((string) (($hasGet ? $this->request->getGet('ref') : '')
+                ?: ($hasGet ? $this->request->getGet('care_context_reference') : '')
+                ?: ($_GET['ref'] ?? $_GET['care_context_reference'] ?? '')));
+            if ($ref !== '' && preg_match('/^INVOICE-([A-Za-z]+)-(\d+)/i', $ref, $m)) {
+                $typeCode = strtoupper($m[1]);
+                $billId = (int) $m[2];
+                $source = match ($typeCode) {
+                    'OPD' => 'opd_invoice',
+                    'CHG' => 'charges_invoice',
+                    'IPD' => 'ipd_invoice',
+                    default => 'opd_invoice'
+                };
+            }
         }
 
-        $source = strtolower(trim((string) $this->request->getGet('source')));
-        $billId = (int) $this->request->getGet('bill_id');
-        $patientId = (int) $this->request->getGet('patient_id');
-        $abhaId = trim((string) $this->request->getGet('abha_id'));
+        $patientId = $patientIdParam
+            ?? ($hasGet ? (int) $this->request->getGet('patient_id') : 0)
+            ?: ($hasPost ? (int) $this->request->getPost('patient_id') : 0)
+            ?: (int) ($_GET['patient_id'] ?? $_POST['patient_id'] ?? 0);
+
+        $abhaId = trim((string) ($abhaIdParam
+            ?? ($hasGet ? $this->request->getGet('abha_id') : '')
+            ?: ($hasPost ? $this->request->getPost('abha_id') : '')
+            ?: ($_GET['abha_id'] ?? $_GET['abha'] ?? $_POST['abha_id'] ?? '')));
 
         if (! in_array($source, ['opd_invoice', 'charges_invoice', 'ipd_invoice'], true) || $billId <= 0) {
             return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
                 'status' => 'error',
                 'message' => 'A valid source and bill_id are required.',
             ]);
@@ -2946,25 +3047,30 @@ class AbdmGateway extends BaseController
             $payload = $this->buildInvoiceSourceRecordPayload($source, $billId, $patientId, $abhaId);
         } catch (\RuntimeException $e) {
             return $this->response->setStatusCode(422)->setJSON([
+                'ok' => 0,
                 'status' => 'error',
                 'message' => $e->getMessage(),
             ]);
         }
         if ($payload === null) {
             return $this->response->setStatusCode(404)->setJSON([
+                'ok' => 0,
                 'status' => 'error',
                 'message' => 'Invoice not found or patient could not be resolved.',
             ]);
         }
 
+        $bundle = (array) ($payload['bundle'] ?? []);
         return $this->response->setJSON([
-            'status' => 'ok',
-            'source' => $source,
-            'bill_id' => $billId,
-            'patient_id' => (int) $payload['patient_id'],
-            'hi_type' => 'InvoiceRecord',
+            'ok'                     => 1,
+            'status'                 => 'ok',
+            'source'                 => $source,
+            'bill_id'                => $billId,
+            'patient_id'             => (int) $payload['patient_id'],
+            'hi_type'                => 'InvoiceRecord',
             'care_context_reference' => (string) $payload['care_context_reference'],
-            'bundle' => (array) $payload['bundle'],
+            'bundle'                 => $bundle,
+            'fhir_bundle'            => $bundle,
         ]);
     }
 
@@ -3003,18 +3109,38 @@ class AbdmGateway extends BaseController
         return $this->pushAdditionalHiRecord($payload, (int) $payload['patient_id'], $abhaId, $consentHandle);
     }
 
-    public function ipdDischargeFhirPreview()
+    public function ipdDischargeFhirPreview(?int $ipdIdParam = null, ?int $patientIdParam = null, ?string $abhaIdParam = null)
     {
-        if (! $this->request->isAJAX()) {
-            return $this->response->setStatusCode(403)->setJSON(['status' => 'error', 'message' => 'AJAX only']);
+        $hasGet = $this->request && method_exists($this->request, 'getGet');
+        $hasPost = $this->request && method_exists($this->request, 'getPost');
+
+        $ipdId = $ipdIdParam
+            ?? ($hasGet ? (int) $this->request->getGet('ipd_id') : 0)
+            ?: ($hasPost ? (int) $this->request->getPost('ipd_id') : 0)
+            ?: (int) ($_GET['ipd_id'] ?? $_POST['ipd_id'] ?? $_REQUEST['ipd_id'] ?? 0);
+
+        if ($ipdId <= 0) {
+            $ref = trim((string) (($hasGet ? $this->request->getGet('ref') : '')
+                ?: ($hasGet ? $this->request->getGet('care_context_reference') : '')
+                ?: ($_GET['ref'] ?? $_GET['care_context_reference'] ?? $_REQUEST['ref'] ?? '')));
+            if ($ref !== '' && preg_match('/^DISCHARGE-(\d+)/i', $ref, $m)) {
+                $ipdId = (int) $m[1];
+            }
         }
 
-        $ipdId = (int) ($this->request->getGet('ipd_id') ?? $this->request->getPost('ipd_id') ?? 0);
-        $patientId = (int) ($this->request->getGet('patient_id') ?? $this->request->getPost('patient_id') ?? 0);
-        $abhaId = trim((string) ($this->request->getGet('abha_id') ?? $this->request->getPost('abha_id') ?? ''));
+        $patientId = $patientIdParam
+            ?? ($hasGet ? (int) $this->request->getGet('patient_id') : 0)
+            ?: ($hasPost ? (int) $this->request->getPost('patient_id') : 0)
+            ?: (int) ($_GET['patient_id'] ?? $_POST['patient_id'] ?? $_REQUEST['patient_id'] ?? 0);
+
+        $abhaId = trim((string) ($abhaIdParam
+            ?? ($hasGet ? $this->request->getGet('abha_id') : '')
+            ?: ($hasPost ? $this->request->getPost('abha_id') : '')
+            ?: ($_GET['abha_id'] ?? $_GET['abha'] ?? $_POST['abha_id'] ?? $_REQUEST['abha_id'] ?? '')));
 
         if ($ipdId <= 0) {
             return $this->response->setStatusCode(400)->setJSON([
+                'ok' => 0,
                 'status' => 'error',
                 'message' => 'ipd_id is required.',
             ]);
@@ -3030,12 +3156,17 @@ class AbdmGateway extends BaseController
             $abhaId = $ident['abha_address'] ?: $ident['abha_id'];
         }
 
-        $forceNewRecord = (int) ($this->request->getGet('force_rebuild') ?? 0);
+        $forceNewRecord = (int) (($hasGet ? $this->request->getGet('force_rebuild') : 0) ?: ($_GET['force_rebuild'] ?? 0));
         try {
             if ($forceNewRecord !== 1 && $this->db && $this->db->tableExists('health_records')) {
                 $existing = $this->db->table('health_records')
-                    ->where('entity_type', 'ipd')
-                    ->where('entity_id', (string) $ipdId)
+                    ->groupStart()
+                        ->groupStart()
+                            ->where('entity_type', 'ipd')
+                            ->where('entity_id', (string) $ipdId)
+                        ->groupEnd()
+                        ->orWhere('care_context_reference LIKE', 'DISCHARGE-' . $ipdId . '%')
+                    ->groupEnd()
                     ->whereIn('hi_type', ['DischargeSummaryRecord', 'DischargeSummary'])
                     ->orderBy('id', 'DESC')
                     ->get(1)
@@ -3050,12 +3181,15 @@ class AbdmGateway extends BaseController
                         $savedBundle = json_decode($raw, true);
                         if (is_array($savedBundle) && ($savedBundle['resourceType'] ?? '') === 'Bundle') {
                             return $this->response->setJSON([
-                                'status' => 'ok',
-                                'ipd_id' => $ipdId,
-                                'patient_id' => $patientId,
-                                'abha_id' => $abhaId,
-                                'bundle' => $savedBundle,
-                                'source' => 'saved_record',
+                                'ok'                     => 1,
+                                'status'                 => 'ok',
+                                'ipd_id'                 => $ipdId,
+                                'patient_id'             => $patientId,
+                                'abha_id'                => $abhaId,
+                                'care_context_reference' => $existing['care_context_reference'] ?? ('DISCHARGE-' . $ipdId),
+                                'bundle'                 => $savedBundle,
+                                'fhir_bundle'            => $savedBundle,
+                                'source'                 => 'saved_record',
                             ]);
                         }
                     }
@@ -3065,23 +3199,29 @@ class AbdmGateway extends BaseController
             $fhirPayload = $this->buildIpdDischargeGatewayPayload($ipdId, $patientId, $abhaId, $forceNewRecord === 1);
             if ($fhirPayload === null) {
                 return $this->response->setStatusCode(404)->setJSON([
+                    'ok' => 0,
                     'status' => 'error',
-                    'message' => 'Unable to prepare IPD discharge FHIR payload.',
+                    'message' => 'Unable to prepare IPD discharge FHIR payload for IPD #' . $ipdId,
                 ]);
             }
             $bundle = (array) ($fhirPayload['bundle'] ?? []);
 
             return $this->response->setJSON([
-                'status' => 'ok',
-                'ipd_id' => $ipdId,
-                'patient_id' => $patientId,
-                'abha_id' => $abhaId,
-                'bundle' => $bundle,
+                'ok'                     => 1,
+                'status'                 => 'ok',
+                'ipd_id'                 => $ipdId,
+                'patient_id'             => $patientId,
+                'abha_id'                => $abhaId,
+                'care_context_reference' => (string) ($fhirPayload['care_context_reference'] ?? ('DISCHARGE-' . $ipdId)),
+                'bundle'                 => $bundle,
+                'fhir_bundle'            => $bundle,
+                'source'                 => 'generated',
             ]);
         } catch (\Throwable $e) {
             log_message('error', 'ipdDischargeFhirPreview error for IPD #' . $ipdId . ': ' . $e->getMessage() . "\n" . $e->getTraceAsString());
 
             return $this->response->setStatusCode(500)->setJSON([
+                'ok' => 0,
                 'status' => 'error',
                 'message' => 'Error generating IPD discharge FHIR: ' . $e->getMessage(),
             ]);

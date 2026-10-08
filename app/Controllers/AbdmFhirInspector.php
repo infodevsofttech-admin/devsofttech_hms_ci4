@@ -218,9 +218,9 @@ class AbdmFhirInspector extends BaseController
                 $labId = (int) $m[1];
                 $gw = new \App\Controllers\AbdmGateway();
                 $gw->initController($this->request, $this->response, service('logger'));
-                // Simulate request param
                 $_GET['request_id'] = $labId;
-                return $gw->diagnosisReportFhirPreview();
+                $_GET['lab_req_id'] = $labId;
+                return $gw->diagnosisReportFhirPreview($labId, $patientId, $abha);
             }
 
             // Invoices: INVOICE-OPD-{id}, INVOICE-CHG-{id}, INVOICE-IPD-{id}
@@ -238,7 +238,7 @@ class AbdmFhirInspector extends BaseController
                 $_GET['source'] = $source;
                 $_GET['bill_id'] = $billId;
                 $_GET['patient_id'] = $patientId;
-                return $gw->invoiceFhirPreview();
+                return $gw->invoiceFhirPreview($source, $billId, $patientId, $abha);
             }
 
             // Immunization: IMM-{id} or IMM-{patientId}-V{id}-{date}
@@ -252,7 +252,7 @@ class AbdmFhirInspector extends BaseController
                 $gw->initController($this->request, $this->response, service('logger'));
                 $_GET['record_id'] = $immId;
                 $_GET['patient_id'] = $patientId;
-                return $gw->immunizationFhirPreview();
+                return $gw->immunizationFhirPreview($immId, $patientId, $abha);
             }
 
             // Discharge Summary: DISCHARGE-{id}
@@ -261,7 +261,7 @@ class AbdmFhirInspector extends BaseController
                 $gw = new \App\Controllers\AbdmGateway();
                 $gw->initController($this->request, $this->response, service('logger'));
                 $_GET['ipd_id'] = $ipdId;
-                return $gw->ipdDischargeFhirPreview();
+                return $gw->ipdDischargeFhirPreview($ipdId, $patientId, $abha);
             }
 
             // Wellness Record: WELLNESS-{id}
