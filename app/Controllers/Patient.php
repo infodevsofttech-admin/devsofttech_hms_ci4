@@ -2146,11 +2146,16 @@ class Patient extends BaseController
 			return $this->response->setStatusCode(404)->setBody('No ABDM documents table found');
 		}
 
+		ini_set('pcre.backtrack_limit', '10000000');
+		ini_set('memory_limit', '512M');
+
 		$docId = (int) ($this->request->getGet('doc_id') ?? 0);
 		$consentRequestId = trim((string) ($this->request->getGet('consent_request_id') ?? ''));
 
+		$selectCols = ['d.id', 'd.patient_id', 'd.abha_address', 'd.document_title', 'd.document_date', 'd.care_context_reference', 'd.practitioner_name', 'd.organization_name', 'd.bundle_type', 'd.created_at', 'd.summary_json'];
+
 		$builder = $this->db->table('abdm_hiu_documents d')
-			->select('*')
+			->select(implode(', ', $selectCols))
 			->orderBy('d.document_date', 'DESC')
 			->orderBy('d.id', 'DESC');
 
@@ -2162,7 +2167,7 @@ class Patient extends BaseController
 		$builder->groupEnd();
 
 		if ($docId > 0) {
-			$builder->where('d.id', $docId);
+			$builder->where('d.id', $docId)->limit(1);
 		} elseif ($consentRequestId !== '') {
 			$docFields = $this->db->getFieldNames('abdm_hiu_documents') ?? [];
 			$sessionIds = $this->resolveAllRelatedConsentIds($consentRequestId);
@@ -2191,13 +2196,26 @@ class Patient extends BaseController
 				}
 				$builder->groupEnd();
 			}
+			$builder->limit(30);
+		} else {
+			$builder->limit(15);
 		}
 
 		$rows = $builder->get()->getResultArray();
 
 		foreach ($rows as &$r) {
 			$summary = json_decode((string) ($r['summary_json'] ?? ''), true);
-			$r['summary'] = is_array($summary) ? $summary : [];
+			if (! is_array($summary)) {
+				$summary = [];
+			}
+			if (! empty($summary['attachments']) && is_array($summary['attachments'])) {
+				foreach ($summary['attachments'] as &$att) {
+					unset($att['data']);
+				}
+				unset($att);
+			}
+			$r['summary'] = $summary;
+			unset($r['summary_json']);
 		}
 		unset($r);
 
