@@ -7132,6 +7132,8 @@ class AbdmGateway extends BaseController
                     'InvoiceRecord'          => 'Invoice - ',
                     default                  => $hiType . ' - ',
                 };
+                $rawDate = (string) ($row['created_at'] ?? $row['updated_at'] ?? 'now');
+                $dateStr = date('d M Y', strtotime($rawDate));
                 $display = $friendlyType . $dateStr;
 
                 $addContext([
