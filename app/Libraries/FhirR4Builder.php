@@ -988,6 +988,7 @@ class FhirR4Builder
         $pdfData     = '';
         $mediaRef    = null;
 
+        $reportHtml  = trim((string) ($diagnosticReport['report_html'] ?? ''));
         $hasAttachment = ($attachment !== null && ! empty($attachment['data_base64']));
         $docRefSnomedCode = $isImaging ? '371531008' : '4241000179101';
         $docRefSnomedDisplay = $isImaging ? 'Report of radiological study' : 'Laboratory report';
