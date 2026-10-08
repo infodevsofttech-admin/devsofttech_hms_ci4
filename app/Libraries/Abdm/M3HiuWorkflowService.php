@@ -991,6 +991,12 @@ class M3HiuWorkflowService
             }
             $consent['patient']['id'] = $patientId;
 
+            // Target specific HIP facility if requested (e.g. same-entity / this hospital only, or custom HIP)
+            $hipId = trim((string) ($consent['hip']['id'] ?? $clean['hip_id'] ?? ''));
+            if ($hipId !== '') {
+                $consent['hip'] = ['id' => $hipId];
+            }
+
             $requesterName = trim((string) ($consent['requester']['name'] ?? ''));
             if ($requesterName === '' || strcasecmp($requesterName, 'Hospital HMS') === 0) {
                 $resolvedRequesterName = $this->resolveRequesterName();

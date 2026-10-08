@@ -99,5 +99,52 @@ class TestAbdmInspect extends BaseCommand
             }
             CLI::table($linkTable, ['Reference', 'Display', 'Status', 'Linked At', 'Source']);
         }
+
+        if (CLI::getOption('hiu')) {
+            CLI::newLine();
+            CLI::write("=== RECENT HIU CONSENTS ===", 'yellow');
+            if ($db->tableExists('abdm_hiu_consents')) {
+                $cons = $db->table('abdm_hiu_consents')
+                    ->orderBy('id', 'DESC')
+                    ->limit(10)
+                    ->get()
+                    ->getResultArray();
+                $conTable = [];
+                foreach ($cons as $c) {
+                    $conTable[] = [
+                        'ID' => $c['id'],
+                        'Pat' => $c['patient_id'] ?? 'N/A',
+                        'ReqID' => substr((string)($c['consent_request_id'] ?? ''), 0, 18),
+                        'ArtID' => substr((string)($c['consent_id'] ?? ''), 0, 18),
+                        'Status' => $c['status'] ?? '',
+                        'Created' => $c['created_at'] ?? '',
+                    ];
+                }
+                CLI::table($conTable, ['ID', 'Pat', 'ReqID', 'ArtID', 'Status', 'Created']);
+            }
+
+            CLI::newLine();
+            CLI::write("=== RECENT HIU DOCUMENTS ===", 'yellow');
+            if ($db->tableExists('abdm_hiu_documents')) {
+                $docs = $db->table('abdm_hiu_documents')
+                    ->orderBy('id', 'DESC')
+                    ->limit(15)
+                    ->get()
+                    ->getResultArray();
+                $docTable = [];
+                foreach ($docs as $d) {
+                    $docTable[] = [
+                        'ID' => $d['id'],
+                        'Pat' => $d['patient_id'] ?? 'N/A',
+                        'Ref' => substr((string)($d['care_context_reference'] ?? ''), 0, 22),
+                        'Title' => substr((string)($d['document_title'] ?? ''), 0, 22),
+                        'Org' => substr((string)($d['organization_name'] ?? 'N/A'), 0, 20),
+                        'ArtID' => substr((string)($d['consent_artifact_id'] ?? 'N/A'), 0, 16),
+                        'Date' => substr((string)($d['document_date'] ?? $d['created_at'] ?? ''), 0, 10),
+                    ];
+                }
+                CLI::table($docTable, ['ID', 'Pat', 'Ref', 'Title', 'Org', 'ArtID', 'Date']);
+            }
+        }
     }
 }
