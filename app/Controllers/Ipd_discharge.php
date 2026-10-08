@@ -9394,8 +9394,9 @@ class Ipd_discharge extends BaseController
             $dischargeCombined .= ' ' . $dischargeTimeRaw;
         }
 
+        $dischargeRaw = $dischargeCombined !== '' ? $dischargeCombined : $dischargeDateRaw;
         $admissionIso = $this->toIsoDateTimeOrNow($admissionCombined !== '' ? $admissionCombined : $admissionDateRaw);
-        $dischargeIso = $this->toIsoDateTimeOrNow($dischargeCombined !== '' ? $dischargeCombined : $dischargeDateRaw);
+        $dischargeIso = $this->toIsoDateTimeOrNow($dischargeRaw);
         $visitDate = $dischargeDateRaw !== ''
             ? date('Y-m-d', strtotime($dischargeDateRaw))
             : ($admissionDateRaw !== '' ? date('Y-m-d', strtotime($admissionDateRaw)) : date('Y-m-d'));
@@ -9816,8 +9817,13 @@ class Ipd_discharge extends BaseController
 
             if ($this->db && $this->db->tableExists('health_records')) {
                 $existingHr = $this->db->table('health_records')
-                    ->where('entity_type', 'ipd')
-                    ->where('entity_id', (string) $ipdId)
+                    ->groupStart()
+                        ->groupStart()
+                            ->where('entity_type', 'ipd')
+                            ->where('entity_id', (string) $ipdId)
+                        ->groupEnd()
+                        ->orWhere('care_context_reference LIKE', 'DISCHARGE-' . $ipdId . '%')
+                    ->groupEnd()
                     ->whereIn('hi_type', ['DischargeSummaryRecord', 'DischargeSummary'])
                     ->orderBy('id', 'DESC')
                     ->get(1)
