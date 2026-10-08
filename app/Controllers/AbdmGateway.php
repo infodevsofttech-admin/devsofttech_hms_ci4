@@ -10144,13 +10144,14 @@ class AbdmGateway extends BaseController
                 ]);
             }
 
-            return $this->response->setJSON([
+            $resp = [
                 'ok' => 1,
                 'status' => 'local_stored',
                 'health_record_id' => $healthRecordId,
                 'care_context_reference' => $ccRef,
                 'message' => 'ABHA not available. Record stored locally for later discovery.',
-            ]);
+            ];
+            return $this->response !== null ? $this->response->setJSON($resp) : $resp;
         }
 
         $queueId = null;
@@ -10231,18 +10232,19 @@ class AbdmGateway extends BaseController
             ]);
         }
 
-        return $this->response->setJSON([
+        $resp = [
             'ok' => $connectorError === null ? 1 : 0,
             'queue_id' => $queueId,
             'bridge_record_id' => $bridgeRecordId > 0 ? $bridgeRecordId : null,
             'health_record_id' => $healthRecordId,
             'care_context_reference' => $ccRef,
             'consent_handle' => $effectiveConsent,
+            'warning' => $consentWarning !== '' ? $consentWarning : null,
             'status' => $connectorError === null ? 'queued' : 'failed',
             'message' => $connectorError === null && $consentWarning !== '' ? 'Record pushed to gateway without active consent. Recheck link status in M2 ABDM Gateway.' : null,
-            'warning' => $consentWarning !== '' ? $consentWarning : null,
             'error' => $connectorError,
-        ]);
+        ];
+        return $this->response !== null ? $this->response->setJSON($resp) : $resp;
     }
 
     private function buildWellnessRecordPayload(int $patientId, int $opdId, string $abhaId): ?array
@@ -10447,6 +10449,13 @@ class AbdmGateway extends BaseController
     {
         try {
             $gateway = new self();
+            if ($gateway->response === null) {
+                $gateway->initController(
+                    \Config\Services::request(),
+                    \Config\Services::response(),
+                    \Config\Services::logger()
+                );
+            }
             return $gateway->executeAutoPushRecord($docType, $entityId, $patientId, $extra);
         } catch (\Throwable $e) {
             log_message('warning', '[autoPushRecord] Failed safely for ' . $docType . ' #' . $entityId . ': ' . $e->getMessage());
@@ -10514,7 +10523,26 @@ class AbdmGateway extends BaseController
                     return ['ok' => 0, 'status' => 'payload_null'];
                 }
                 $res = $this->pushAdditionalHiRecord($payload, (int) ($payload['patient_id'] ?? $patientId), $abhaId);
-                return ['ok' => 1, 'status' => 'pushed'];
+                $hrId = 0;
+                $isOk = false;
+                if ($res instanceof \CodeIgniter\HTTP\ResponseInterface) {
+                    $resData = json_decode($res->getBody(), true);
+                    $hrId = (int) ($resData['health_record_id'] ?? 0);
+                    $isOk = ! empty($resData['ok']);
+                } elseif (is_array($res)) {
+                    $hrId = (int) ($res['health_record_id'] ?? 0);
+                    $isOk = ! empty($res['ok']);
+                }
+                if ($entityId > 0 && $this->db->tableExists('immunization_records')) {
+                    $this->db->table('immunization_records')
+                        ->where('id', $entityId)
+                        ->update([
+                            'abdm_care_context_reference' => (string) ($payload['care_context_reference'] ?? ('IMM-' . $entityId)),
+                            'abdm_health_record_id' => $hrId > 0 ? $hrId : null,
+                            'abdm_push_status' => $isOk ? 'linked' : 'queued',
+                        ]);
+                }
+                return ['ok' => 1, 'status' => 'pushed', 'health_record_id' => $hrId, 'care_context_reference' => $payload['care_context_reference']];
 
             default:
                 return ['ok' => 0, 'status' => 'unknown_doc_type', 'message' => 'Unknown document type: ' . $docType];
