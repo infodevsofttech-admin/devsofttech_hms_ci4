@@ -100,8 +100,8 @@ class AbdmPushSync extends BaseCommand
         foreach ($rows as $row) {
             $bundle = $this->resolveFhirBundle($row);
             if ($bundle === null) {
-                CLI::write('  Record #' . $row['id'] . ' (' . ($row['hi_type'] ?? '') . ') - no valid FHIR bundle', 'red');
-                $failed++;
+                $db->table('health_records')->where('id', (int) $row['id'])->update(['push_status' => 'local_only']);
+                CLI::write('  Record #' . $row['id'] . ' (' . ($row['hi_type'] ?? '') . ') - marked local_only (no valid FHIR bundle)', 'yellow');
                 continue;
             }
 

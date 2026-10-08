@@ -6931,7 +6931,7 @@ class AbdmGateway extends BaseController
                     ->getRowArray();
 
                 if (! empty($labReq)) {
-                    $isImaging = ((int) ($labReq['lab_type'] ?? 0) === 6) || str_contains($taskType, 'radiology');
+                    $isImaging = in_array((int) ($labReq['lab_type'] ?? 0), [1, 2, 3, 4, 6], true) || str_contains($taskType, 'radiology');
                     $prefix = $isImaging ? 'RAD' : 'LAB';
                     $title = trim((string) ($labReq['report_name'] ?? ''));
                     if ($title === '' && ! empty($labReq['charge_id']) && $this->db->tableExists('radiology_ultrasound_template')) {
@@ -7257,7 +7257,8 @@ class AbdmGateway extends BaseController
                 ->getResultArray();
 
             foreach ($labRows as $lr) {
-                $isImaging = ((int) ($lr['lab_type'] ?? 0) === 6);
+                $labReqId = (int) $lr['id'];
+                $isImaging = in_array((int) ($lr['lab_type'] ?? 0), [1, 2, 3, 4, 6], true);
                 $prefix = $isImaging ? 'RAD' : 'LAB';
                 $title = trim((string) ($lr['report_name'] ?? ''));
                 if ($title === '' && ! empty($lr['charge_id']) && $this->db->tableExists('radiology_ultrasound_template')) {
@@ -7274,7 +7275,23 @@ class AbdmGateway extends BaseController
                     : (! empty($lr['Request_Date']) ? $lr['Request_Date'] : date('Y-m-d'));
                 $visitDate = date('Y-m-d', strtotime((string) $reportedDate));
                 $dateStr = date('d M Y', strtotime($visitDate));
-                $ccRef = $prefix . '-' . $lr['id'] . '-' . str_replace('-', '', $visitDate);
+                $ccRef = $prefix . '-' . $labReqId . '-' . str_replace('-', '', $visitDate);
+
+                // If health_records already has a reference for this entity_id (whether RAD- or LAB-), prefer that reference
+                if ($this->db->tableExists('health_records')) {
+                    $existingHr = $this->db->table('health_records')
+                        ->select('care_context_reference')
+                        ->where('patient_id', $patientId)
+                        ->where('entity_id', (string) $labReqId)
+                        ->whereIn('hi_type', ['DiagnosticReportRecord', 'DiagnosticReport'])
+                        ->orderBy('id', 'DESC')
+                        ->get(1)
+                        ->getRowArray();
+                    if (! empty($existingHr['care_context_reference'])) {
+                        $ccRef = trim((string) $existingHr['care_context_reference']);
+                    }
+                }
+
                 $cleanTitle = self::sanitizeCareContextDisplay($title);
                 $display = self::sanitizeCareContextDisplay(($isImaging ? 'Radiology Report - ' : 'Diagnostic Report - ') . $cleanTitle . ' ' . $dateStr);
 
@@ -13239,7 +13256,7 @@ class AbdmGateway extends BaseController
 
         [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientName, $taskType, $entityId, $taskId, $source);
 
-        // Fetch already-linked care contexts from Bridge if ABHA address is present
+        // Fetch already-linked care contexts from Bridge and Local DB (record_links & health_records)
         $linkedRefs = [];
         if ($effAbhaAddress !== '') {
             try {
@@ -13258,6 +13275,63 @@ class AbdmGateway extends BaseController
                 // Bridge query optional
             }
         }
+
+        // Also merge local record_links for this patient or ABHA
+        if ($this->db->tableExists('record_links')) {
+            $rlQuery = $this->db->table('record_links')
+                ->select('care_context_reference')
+                ->where('link_status', 'linked');
+            if ($effAbhaAddress !== '') {
+                $rlQuery->groupStart()
+                    ->where('abha_id', $effAbhaAddress)
+                    ->orWhere('care_context_reference LIKE', '%' . $patientId . '%')
+                ->groupEnd();
+            }
+            $rlRows = $rlQuery->get()->getResultArray();
+            foreach ($rlRows as $rl) {
+                $ref = trim((string) ($rl['care_context_reference'] ?? ''));
+                if ($ref !== '') {
+                    $linkedRefs[] = $ref;
+                }
+            }
+        }
+
+        // Also merge local health_records with push_status IN ('linked', 'pushed')
+        if ($this->db->tableExists('health_records') && $patientId > 0) {
+            $hrRows = $this->db->table('health_records')
+                ->select('care_context_reference')
+                ->where('patient_id', $patientId)
+                ->whereIn('push_status', ['linked', 'pushed'])
+                ->get()
+                ->getResultArray();
+            foreach ($hrRows as $hr) {
+                $ref = trim((string) ($hr['care_context_reference'] ?? ''));
+                if ($ref !== '') {
+                    $linkedRefs[] = $ref;
+                }
+            }
+        }
+
+        // Also merge completed abdm_work_tasks
+        if ($this->db->tableExists('abdm_work_tasks') && $patientId > 0) {
+            $wtRows = $this->db->table('abdm_work_tasks')
+                ->select('care_context_reference, last_action_result')
+                ->where('patient_id', $patientId)
+                ->where('status', 'completed')
+                ->get()
+                ->getResultArray();
+            foreach ($wtRows as $wt) {
+                $ref = trim((string) ($wt['care_context_reference'] ?? ''));
+                if ($ref !== '') {
+                    $linkedRefs[] = $ref;
+                }
+                if (preg_match('/(OPD|LAB|RAD|DISCHARGE|INVOICE|WELLNESS|IMM|DOC)-[A-Za-z0-9_-]+/i', (string) ($wt['last_action_result'] ?? ''), $m)) {
+                    $linkedRefs[] = $m[0];
+                }
+            }
+        }
+
+        $linkedRefs = array_values(array_unique($linkedRefs));
 
         $contextsList = [];
         foreach ($careContextsFull as $cc) {
