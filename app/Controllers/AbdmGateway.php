@@ -13315,18 +13315,20 @@ class AbdmGateway extends BaseController
         // Also merge completed abdm_work_tasks
         if ($this->db->tableExists('abdm_work_tasks') && $patientId > 0) {
             $wtRows = $this->db->table('abdm_work_tasks')
-                ->select('care_context_reference, last_action_result')
+                ->select('last_action_result, payload_json')
                 ->where('patient_id', $patientId)
                 ->where('status', 'completed')
                 ->get()
                 ->getResultArray();
             foreach ($wtRows as $wt) {
-                $ref = trim((string) ($wt['care_context_reference'] ?? ''));
-                if ($ref !== '') {
-                    $linkedRefs[] = $ref;
-                }
                 if (preg_match('/(OPD|LAB|RAD|DISCHARGE|INVOICE|WELLNESS|IMM|DOC)-[A-Za-z0-9_-]+/i', (string) ($wt['last_action_result'] ?? ''), $m)) {
                     $linkedRefs[] = $m[0];
+                }
+                if (! empty($wt['payload_json'])) {
+                    $pData = json_decode((string) $wt['payload_json'], true);
+                    if (! empty($pData['care_context_reference'])) {
+                        $linkedRefs[] = trim((string) $pData['care_context_reference']);
+                    }
                 }
             }
         }
