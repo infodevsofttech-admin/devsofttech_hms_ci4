@@ -377,9 +377,6 @@ if ($patientPhotoPath === '') {
                                 <div class="d-flex justify-content-between align-items-center mb-2">
                                     <div class="fw-semibold">Consent Request History</div>
                                     <div class="d-flex align-items-center">
-                                        <a href="<?= base_url('billing/patient/abdm_records_pdf/' . (int) ($patient->id ?? 0)) ?>" target="_blank" class="btn btn-outline-primary btn-sm py-0 px-2 me-3" title="Print all fetched health records for this patient as PDF">
-                                            <i class="fa fa-print me-1"></i> Print All Records
-                                        </a>
                                         <button type="button" class="btn btn-link btn-sm p-0 me-3" id="btnCheckLiveAbdmStatus">
                                             <span class="spinner-border spinner-border-sm d-none" id="abdmLiveStatusSpinner"></span>
                                             Check Live Status
@@ -397,7 +394,7 @@ if ($patientPhotoPath === '') {
                                                 <th>Date From</th>
                                                 <th>Date To</th>
                                                 <th>View</th>
-                                                <th class="text-end">Show Data</th>
+                                                <th class="text-end">Show Data / Print</th>
                                             </tr>
                                         </thead>
                                         <tbody>
@@ -1207,8 +1204,16 @@ $(function() {
             return '<div class="text-danger small">No consent details available.</div>';
         }
 
-        var steps = ['REQUESTED', 'GRANTED'];
         var statusUpper = (consent.status || '').toString().toUpperCase();
+        var eraseAt = (consent.erase_at || '').toString().trim();
+        if (statusUpper !== 'EXPIRED' && eraseAt !== '') {
+            var ed = new Date(eraseAt.indexOf('T') === -1 ? eraseAt.replace(' ', 'T') : eraseAt);
+            if (!isNaN(ed.getTime()) && ed.getTime() <= Date.now()) {
+                statusUpper = 'EXPIRED';
+            }
+        }
+
+        var steps = ['REQUESTED', 'GRANTED'];
         if (statusUpper === 'REVOKED') { steps.push('REVOKED'); }
         else if (statusUpper === 'EXPIRED') { steps.push('EXPIRED'); }
 
@@ -1224,7 +1229,7 @@ $(function() {
             + '<div class="col-md-6">Consent ID: <strong>' + escHtml(consent.consent_id || consent.abdm_consent_artifact_id || consent.consent_request_id || consent.request_id || '-') + '</strong></div>'
             + '<div class="col-md-6">ABHA: <strong>' + escHtml(consent.abha_address || '-') + '</strong></div>'
             + '<div class="col-md-6">Purpose: <strong>' + escHtml(consent.purpose || '-') + '</strong></div>'
-            + '<div class="col-md-6">Status: <strong>' + escHtml(consent.status || '-') + '</strong></div>'
+            + '<div class="col-md-6">Status: <strong>' + escHtml(statusUpper || '-') + '</strong></div>'
             + '<div class="col-md-6">Valid From: <strong>' + fmtConsentTs(consent.valid_from) + '</strong></div>'
             + '<div class="col-md-6">Valid To: <strong>' + fmtConsentTs(consent.valid_to) + '</strong></div>'
             + '<div class="col-md-6">Requested On: <strong>' + fmtConsentTs(consent.requested_on) + '</strong></div>'
@@ -1233,14 +1238,15 @@ $(function() {
 
         var rowsHtml = '';
         (consent.items || []).forEach(function(item) {
-            var ts = item.status === 'GRANTED' ? item.timestamp
-                : item.status === 'REVOKED' ? item.timestamp
-                : item.status === 'EXPIRED' ? item.timestamp
+            var itemStatus = statusUpper === 'EXPIRED' ? 'EXPIRED' : (item.status || '');
+            var ts = itemStatus === 'GRANTED' ? item.timestamp
+                : itemStatus === 'REVOKED' ? item.timestamp
+                : itemStatus === 'EXPIRED' ? (consent.expired_on || consent.erase_at || item.timestamp)
                 : item.timestamp;
             rowsHtml += '<tr>'
                 + '<td>' + escHtml(item.document_name || '') + '</td>'
                 + '<td>' + escHtml(item.permission || 'VIEW') + '</td>'
-                + '<td><span class="badge ' + consentItemBadgeClass(item.status) + '">' + escHtml(item.status || '') + '</span></td>'
+                + '<td><span class="badge ' + consentItemBadgeClass(itemStatus) + '">' + escHtml(itemStatus || '') + '</span></td>'
                 + '<td>' + fmtConsentTs(ts) + '</td>'
                 + '</tr>';
         });
@@ -1288,8 +1294,22 @@ $(function() {
         var html = '';
         requests.forEach(function(consent, idx) {
             var status = (consent.status || '').toString().toUpperCase();
-            var canFetch = (status === 'GRANTED' || status === 'COMPLETED');
+            var eraseAt = (consent.erase_at || '').toString().trim();
+            var isExpired = (status === 'EXPIRED');
+            if (!isExpired && eraseAt !== '') {
+                var ed = new Date(eraseAt.indexOf('T') === -1 ? eraseAt.replace(' ', 'T') : eraseAt);
+                if (!isNaN(ed.getTime()) && ed.getTime() <= Date.now()) {
+                    isExpired = true;
+                    status = 'EXPIRED';
+                }
+            }
+            var canFetch = (status === 'GRANTED' || status === 'COMPLETED') && !isExpired;
             var rowId = consent.id || (idx + 1);
+
+            var reqId = (consent.consent_request_id || consent.consent_id || consent.request_id || '').toString().trim();
+            var printUrl = abdmPrintPdfUrl + (reqId ? ('?consent_request_id=' + encodeURIComponent(reqId)) : '');
+            var actionHtml = '<button type="button" class="btn btn-link btn-sm p-0 abdm-fetch-request-btn me-2" data-idx="' + idx + '">Show Data</button>'
+                + '<a href="' + escHtml(printUrl) + '" target="_blank" class="btn btn-link btn-sm p-0 text-decoration-none" title="Print health records for this consent request"><i class="fa fa-print me-1"></i>Print</a>';
 
             html += '<tr>'
                 + '<td class="small">' + escHtml(rowId) + '</td>'
@@ -1299,7 +1319,7 @@ $(function() {
                 + '<td class="small">' + fmtConsentTs(consent.valid_to) + '</td>'
                 + '<td><button type="button" class="btn btn-link btn-sm p-0 abdm-view-request-btn" data-idx="' + idx + '">View</button></td>'
                 + '<td class="text-end">'
-                + (canFetch ? ('<button type="button" class="btn btn-link btn-sm p-0 abdm-fetch-request-btn" data-idx="' + idx + '">Show Data</button>') : '<span class="text-muted small">-</span>')
+                + (canFetch ? actionHtml : '<span class="text-muted small">-</span>')
                 + '</td>'
                 + '</tr>';
         });
@@ -1344,6 +1364,21 @@ $(function() {
         if (!consent) {
             return;
         }
+
+        var status = (consent.status || '').toString().toUpperCase();
+        var eraseAt = (consent.erase_at || '').toString().trim();
+        var isExpired = (status === 'EXPIRED');
+        if (!isExpired && eraseAt !== '') {
+            var ed = new Date(eraseAt.indexOf('T') === -1 ? eraseAt.replace(' ', 'T') : eraseAt);
+            if (!isNaN(ed.getTime()) && ed.getTime() <= Date.now()) {
+                isExpired = true;
+            }
+        }
+        if (isExpired) {
+            setAbdmStatus('This consent request has expired. Under ABDM guidelines, records cannot be fetched or accessed under an expired consent.', true);
+            return;
+        }
+
         fetchOnlyRunningIdx = idx;
         currentAbdmFetchModalIdx = idx;
         applyNewRequestButtonState();
@@ -1381,8 +1416,24 @@ $(function() {
     }
 
     function loadAbdmFetchResultModalData(consent) {
-        var reqId = (consent && consent.consent_request_id) ? consent.consent_request_id : '';
+        var reqId = (consent && (consent.consent_request_id || consent.consent_id || consent.request_id)) ? (consent.consent_request_id || consent.consent_id || consent.request_id) : '';
         currentAbdmFetchConsentRequestId = reqId;
+
+        var status = (consent && consent.status ? consent.status : '').toString().toUpperCase();
+        var eraseAt = (consent && consent.erase_at ? consent.erase_at : '').toString().trim();
+        var isExpired = (status === 'EXPIRED');
+        if (!isExpired && eraseAt !== '') {
+            var ed = new Date(eraseAt.indexOf('T') === -1 ? eraseAt.replace(' ', 'T') : eraseAt);
+            if (!isNaN(ed.getTime()) && ed.getTime() <= Date.now()) {
+                isExpired = true;
+            }
+        }
+        if (isExpired) {
+            $('#abdmPrintFetchedRecordsBtn').hide();
+            $('#abdmFetchResultModalBody').html('<div class="text-muted small text-center p-3">This consent request expired on <strong>' + escHtml(fmtConsentTs(eraseAt)) + '</strong>.<br>As per ABDM guidelines, health records are erased and no longer accessible.</div>');
+            return;
+        }
+
         var url = abdmDocumentsUrl + '?limit=200&include_summary=1';
         if (reqId !== '') {
             url += '&consent_request_id=' + encodeURIComponent(reqId);
@@ -1405,10 +1456,21 @@ $(function() {
     function renderAbdmFetchResultModal(docs) {
         if (!docs || !docs.length) {
             $('#abdmPrintFetchedRecordsBtn').hide();
-            var fetchBtnHtml = currentAbdmFetchModalIdx >= 0
+            var activeConsent = currentAbdmFetchModalIdx >= 0 ? currentAbdmRequests[currentAbdmFetchModalIdx] : null;
+            var isModalConsentExpired = false;
+            if (activeConsent) {
+                var mStat = (activeConsent.status || '').toString().toUpperCase();
+                var mErase = (activeConsent.erase_at || '').toString().trim();
+                if (mStat === 'EXPIRED') { isModalConsentExpired = true; }
+                else if (mErase !== '') {
+                    var mEd = new Date(mErase.indexOf('T') === -1 ? mErase.replace(' ', 'T') : mErase);
+                    if (!isNaN(mEd.getTime()) && mEd.getTime() <= Date.now()) { isModalConsentExpired = true; }
+                }
+            }
+            var fetchBtnHtml = (currentAbdmFetchModalIdx >= 0 && !isModalConsentExpired)
                 ? '<div class="text-center mt-2"><button type="button" class="btn btn-sm btn-primary abdm-fetch-again-btn" data-idx="' + currentAbdmFetchModalIdx + '">Fetch Data</button></div>'
                 : '';
-            $('#abdmFetchResultModalBody').html('<div class="text-muted small text-center">No fetched records found for this consent request yet.</div>' + fetchBtnHtml);
+            $('#abdmFetchResultModalBody').html('<div class="text-muted small text-center">No fetched records found for this consent request.</div>' + fetchBtnHtml);
             return;
         }
 

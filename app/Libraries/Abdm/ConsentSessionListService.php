@@ -702,6 +702,55 @@ class ConsentSessionListService
             ));
         }
 
+        // ABDM M3 HIU compliance: evaluate consent expiration against erase_at (dataEraseAt)
+        $isConsentExpired = false;
+        if ($phase === 'EXPIRED') {
+            $isConsentExpired = true;
+        } elseif ($eraseAt !== '') {
+            $eraseTimestamp = strtotime($eraseAt);
+            if ($eraseTimestamp !== false && $eraseTimestamp <= time()) {
+                $isConsentExpired = true;
+            }
+        }
+        if (! $isConsentExpired && $expiredOn !== '') {
+            $expTime = strtotime($expiredOn);
+            if ($expTime !== false && $expTime <= time()) {
+                $isConsentExpired = true;
+            }
+        }
+
+        if ($isConsentExpired) {
+            $phase = 'EXPIRED';
+            if ($expiredOn === '') {
+                $expiredOn = $eraseAt !== '' ? $eraseAt : (string) ($best['expired_at'] ?? date('Y-m-d H:i:s'));
+            }
+
+            // Persist terminal EXPIRED state to abdm_hiu_workflows for this session
+            if ($this->db->tableExists('abdm_hiu_workflows')) {
+                $sessionIdsToUpdate = [];
+                foreach ($rows as $r) {
+                    $rState = strtoupper(trim((string) ($r['workflow_state'] ?? '')));
+                    if ($rState !== 'EXPIRED' && ! empty($r['id'])) {
+                        $sessionIdsToUpdate[] = (int) $r['id'];
+                    }
+                }
+                if ($sessionIdsToUpdate !== []) {
+                    $updateData = ['workflow_state' => 'EXPIRED'];
+                    $wfFields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
+                    if (in_array('expired_at', $wfFields, true)) {
+                        $updateData['expired_at'] = date('Y-m-d H:i:s', (isset($eraseTimestamp) && $eraseTimestamp) ? $eraseTimestamp : time());
+                    }
+                    $this->db->table('abdm_hiu_workflows')->whereIn('id', $sessionIdsToUpdate)->update($updateData);
+                }
+            }
+
+            // ABDM M3 HIU compliance: erase stored health records once dataEraseAt is reached
+            $purgeRefs = array_filter([$consentRequestId, $consentId]);
+            if ($purgeRefs !== []) {
+                $this->purgeAbdmDocumentsByRefs($purgeRefs);
+            }
+        }
+
         $items = [];
         $typesForItems = $requestedHiTypes !== [] ? $requestedHiTypes : $grantedHiTypes;
         foreach ($typesForItems as $hiType) {
@@ -791,4 +840,64 @@ class ConsentSessionListService
 
         return $out;
     }
+
+    /**
+     * Deletes cached health records from abdm_hiu_documents for the given consent request
+     * or artifact references, complying with ABDM M3 dataEraseAt guidelines.
+     */
+    private function purgeAbdmDocumentsByRefs(array $refs): int
+    {
+        $refs = array_values(array_unique(array_filter(array_map('trim', $refs))));
+        if ($refs === [] || ! $this->db->tableExists('abdm_hiu_documents')) {
+            return 0;
+        }
+
+        // Also resolve any sibling artifact IDs under these umbrella consent_request_ids
+        if ($this->db->tableExists('abdm_hiu_consent_artifacts')) {
+            $siblingRows = $this->db->table('abdm_hiu_consent_artifacts')
+                ->select('artifact_id, consent_request_id')
+                ->whereIn('consent_request_id', $refs)
+                ->get()
+                ->getResultArray();
+            foreach ($siblingRows as $sr) {
+                $aId = trim((string) ($sr['artifact_id'] ?? ''));
+                if ($aId !== '') {
+                    $refs[] = $aId;
+                }
+            }
+            $refs = array_values(array_unique(array_filter($refs)));
+        }
+
+        $docFields = $this->db->getFieldNames('abdm_hiu_documents') ?? [];
+        $builder = $this->db->table('abdm_hiu_documents');
+        $builder->groupStart();
+        $hasClause = false;
+        if (in_array('consent_request_id', $docFields, true)) {
+            $builder->whereIn('consent_request_id', $refs);
+            $hasClause = true;
+        }
+        if (in_array('consent_artifact_id', $docFields, true)) {
+            if ($hasClause) {
+                $builder->orWhereIn('consent_artifact_id', $refs);
+            } else {
+                $builder->whereIn('consent_artifact_id', $refs);
+                $hasClause = true;
+            }
+        }
+        if (in_array('consent_ref', $docFields, true)) {
+            if ($hasClause) {
+                $builder->orWhereIn('consent_ref', $refs);
+            } else {
+                $builder->whereIn('consent_ref', $refs);
+                $hasClause = true;
+            }
+        }
+        $builder->groupEnd();
+        if (! $hasClause) {
+            return 0;
+        }
+        $builder->delete();
+        return (int) $this->db->affectedRows();
+    }
 }
+

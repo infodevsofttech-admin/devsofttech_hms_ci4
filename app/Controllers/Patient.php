@@ -2016,6 +2016,50 @@ class Patient extends BaseController
 			// Resolve all related umbrella and artifact IDs bidirectionally so
 			// documents from BOTH external and same-entity facilities are returned.
 			$sessionIds = $this->resolveAllRelatedConsentIds($filterConsentRequestId);
+
+			// ABDM M3 HIU compliance: check if this consent request is expired
+			$wfCheck = $this->db->table('abdm_hiu_workflows')
+				->select(['id', 'workflow_state', 'request_json', 'response_json', 'expired_at'])
+				->groupStart()
+					->where('request_id', $filterConsentRequestId)
+					->orWhere('consent_id', $filterConsentRequestId)
+					->orWhereIn('abdm_consent_request_id', $sessionIds !== [] ? $sessionIds : [$filterConsentRequestId])
+					->orWhereIn('abdm_consent_artifact_id', $sessionIds !== [] ? $sessionIds : [$filterConsentRequestId])
+				->groupEnd()
+				->orderBy('id', 'DESC')
+				->get(1)
+				->getRowArray();
+
+			$isFilterExpired = false;
+			if (is_array($wfCheck)) {
+				if (strtoupper(trim((string) ($wfCheck['workflow_state'] ?? ''))) === 'EXPIRED') {
+					$isFilterExpired = true;
+				} else {
+					$filterEraseAt = $this->extractDataEraseAtFromWorkflowRow($wfCheck);
+					if ($filterEraseAt !== '') {
+						$filterTs = strtotime($filterEraseAt);
+						if ($filterTs !== false && $filterTs <= time()) {
+							$isFilterExpired = true;
+						}
+					}
+				}
+			}
+
+			if ($isFilterExpired) {
+				// Purge cached records for this expired consent as per ABDM dataEraseAt guidelines
+				$purgeRefs = array_unique(array_merge([$filterConsentRequestId], $sessionIds));
+				$this->purgeAbdmDocumentsByRefs($purgeRefs);
+				return $this->response->setJSON([
+					'ok' => 1,
+					'count' => 0,
+					'items' => [],
+					'expired' => 1,
+					'error' => 'This consent request has expired. Health records are erased and no longer accessible as per ABDM guidelines.',
+					'abha' => $abhaContext,
+					'last_sync' => $lastSync,
+				]);
+			}
+
 			if ($sessionIds !== []) {
 				$builder->groupStart();
 				$hasClause = false;
@@ -2171,6 +2215,28 @@ class Patient extends BaseController
 		} elseif ($consentRequestId !== '') {
 			$docFields = $this->db->getFieldNames('abdm_hiu_documents') ?? [];
 			$sessionIds = $this->resolveAllRelatedConsentIds($consentRequestId);
+
+			// ABDM M3 HIU compliance: check if consent has expired
+			$wfCheck = $this->db->table('abdm_hiu_workflows')
+				->select(['id', 'workflow_state', 'request_json', 'response_json', 'expired_at'])
+				->groupStart()
+					->where('request_id', $consentRequestId)
+					->orWhere('consent_id', $consentRequestId)
+					->orWhereIn('abdm_consent_request_id', $sessionIds !== [] ? $sessionIds : [$consentRequestId])
+					->orWhereIn('abdm_consent_artifact_id', $sessionIds !== [] ? $sessionIds : [$consentRequestId])
+				->groupEnd()
+				->orderBy('id', 'DESC')
+				->get(1)
+				->getRowArray();
+
+			if (is_array($wfCheck)) {
+				$eraseAt = $this->extractDataEraseAtFromWorkflowRow($wfCheck);
+				if (strtoupper(trim((string) ($wfCheck['workflow_state'] ?? ''))) === 'EXPIRED' || ($eraseAt !== '' && strtotime($eraseAt) <= time())) {
+					$this->purgeAbdmDocumentsByRefs(array_merge([$consentRequestId], $sessionIds));
+					return $this->response->setStatusCode(403)->setBody('This consent request has expired. Health records are erased and cannot be viewed or printed as per ABDM guidelines.');
+				}
+			}
+
 			if ($sessionIds !== []) {
 				$builder->groupStart();
 				$hasClause = false;
@@ -2198,7 +2264,7 @@ class Patient extends BaseController
 			}
 			$builder->limit(30);
 		} else {
-			$builder->limit(15);
+			return $this->response->setStatusCode(400)->setBody('A valid consent request ID is required to print health records.');
 		}
 
 		$rows = $builder->get()->getResultArray();
@@ -3033,12 +3099,59 @@ class Patient extends BaseController
 		));
 
 		if ($overrideConsentId !== '' || $overrideConsentRequestId !== '') {
-			$phase = 'GRANTED';
 			$consentArtifactRef = $overrideConsentId;
 			$consentRequestRef = $overrideConsentRequestId;
+			$lookupTarget = $consentRequestRef !== '' ? $consentRequestRef : $consentArtifactRef;
+
+			// Verify whether this specific consent request is expired under ABDM dataEraseAt rules
+			$checkWf = $this->db->table('abdm_hiu_workflows')
+				->select(['id', 'workflow_state', 'request_json', 'response_json', 'expired_at'])
+				->groupStart()
+					->where('request_id', $lookupTarget)
+					->orWhere('consent_id', $lookupTarget)
+					->orWhere('abdm_consent_request_id', $lookupTarget)
+					->orWhere('abdm_consent_artifact_id', $lookupTarget)
+				->groupEnd()
+				->orderBy('id', 'DESC')
+				->get(1)
+				->getRowArray();
+
+			$isTargetExpired = false;
+			$targetEraseAt = '';
+			if (is_array($checkWf)) {
+				if (strtoupper(trim((string) ($checkWf['workflow_state'] ?? ''))) === 'EXPIRED') {
+					$isTargetExpired = true;
+				}
+				$targetEraseAt = $this->extractDataEraseAtFromWorkflowRow($checkWf);
+				if ($targetEraseAt !== '') {
+					$targetTs = strtotime($targetEraseAt);
+					if ($targetTs !== false && $targetTs <= time()) {
+						$isTargetExpired = true;
+					}
+				}
+			}
+
+			if ($isTargetExpired) {
+				$relatedPurgeIds = $this->resolveAllRelatedConsentIds($lookupTarget);
+				$this->purgeAbdmDocumentsByRefs(array_merge([$lookupTarget], $relatedPurgeIds));
+				return $this->response->setStatusCode(422)->setJSON([
+					'ok' => 0,
+					'phase' => 'EXPIRED',
+					'error' => 'This consent request expired on ' . ($targetEraseAt ? date('d/m/Y h:i:s A', strtotime($targetEraseAt)) : 'an earlier date') . '. Under ABDM guidelines, records cannot be fetched or accessed under an expired consent. Please create a new consent request.',
+				]);
+			}
+
+			$phase = 'GRANTED';
 		} else {
 			$lastSync = $this->getLatestAbdmSyncSnapshot((string) ($abhaContext['abha_address'] ?? ''));
 			$phase = strtoupper(trim((string) ($lastSync['phase'] ?? '')));
+			if ($phase === 'EXPIRED') {
+				return $this->response->setStatusCode(422)->setJSON([
+					'ok' => 0,
+					'phase' => 'EXPIRED',
+					'error' => 'The latest consent request has expired. Under ABDM guidelines, records cannot be fetched or accessed under an expired consent. Please create a new consent request.',
+				]);
+			}
 			if (! in_array($phase, ['GRANTED', 'COMPLETED'], true)) {
 				return $this->response->setStatusCode(422)->setJSON([
 					'ok' => 0,
@@ -5351,6 +5464,32 @@ class Patient extends BaseController
 		$snapshot['operation'] = (string) ($best['operation'] ?? '');
 		$snapshot['status'] = (string) ($best['status'] ?? '');
 
+		// Check if latest consent session has expired based on erase_at/dataEraseAt
+		if ($latestSessionStartId > 0 && $this->db->tableExists('abdm_hiu_workflows')) {
+			$anchorRow = $this->db->table('abdm_hiu_workflows')
+				->select(['id', 'workflow_state', 'request_json', 'response_json', 'expired_at'])
+				->where('id', $latestSessionStartId)
+				->get(1)
+				->getRowArray();
+			if (is_array($anchorRow)) {
+				$anchorEraseAt = $this->extractDataEraseAtFromWorkflowRow($anchorRow);
+				$isAnchorExpired = false;
+				if (strtoupper(trim((string) ($anchorRow['workflow_state'] ?? ''))) === 'EXPIRED') {
+					$isAnchorExpired = true;
+				} elseif ($anchorEraseAt !== '') {
+					$anchorEraseTs = strtotime($anchorEraseAt);
+					if ($anchorEraseTs !== false && $anchorEraseTs <= time()) {
+						$isAnchorExpired = true;
+					}
+				}
+				if ($isAnchorExpired) {
+					$snapshot['phase'] = 'EXPIRED';
+					$snapshot['message'] = 'Consent expired on ' . ($anchorEraseAt ? date('d/m/Y h:i:s A', strtotime($anchorEraseAt)) : 'an earlier date') . '. Start a new request to fetch updated records.';
+					$snapshot['restart_required'] = true;
+				}
+			}
+		}
+
 		// A consent request stuck in REQUESTED/PENDING for more than ABDM_PENDING_STALE_SECONDS
 		// (1 hour) with no GRANTED/DENIED callback from the bridge is considered abandoned by
 		// PHR/ABHA — the patient likely never saw/approved it, or the bridge silently dropped
@@ -6164,6 +6303,59 @@ class Patient extends BaseController
 			$grantedOn = trim((string) ($bestDecoded['granted_at'] ?? $best['updated_at'] ?? ''));
 		}
 
+		// ABDM M3 HIU compliance: evaluate consent expiration against erase_at (dataEraseAt)
+		$isConsentExpired = false;
+		if ($phase === 'EXPIRED') {
+			$isConsentExpired = true;
+		} elseif ($eraseAt !== '') {
+			$eraseTimestamp = strtotime($eraseAt);
+			if ($eraseTimestamp !== false && $eraseTimestamp <= time()) {
+				$isConsentExpired = true;
+			}
+		}
+		if (! $isConsentExpired && $expiredOn !== '') {
+			$expTime = strtotime($expiredOn);
+			if ($expTime !== false && $expTime <= time()) {
+				$isConsentExpired = true;
+			}
+		}
+
+		if ($isConsentExpired) {
+			$phase = 'EXPIRED';
+			if ($expiredOn === '') {
+				$expiredOn = $eraseAt !== '' ? $eraseAt : (string) ($best['expired_at'] ?? date('Y-m-d H:i:s'));
+			}
+
+			// Persist terminal EXPIRED state to abdm_hiu_workflows for this session
+			if ($this->db->tableExists('abdm_hiu_workflows')) {
+				$sessionIdsToUpdate = [];
+				foreach ($rows as $r) {
+					$rState = strtoupper(trim((string) ($r['workflow_state'] ?? '')));
+					if ($rState !== 'EXPIRED' && ! empty($r['id'])) {
+						$sessionIdsToUpdate[] = (int) $r['id'];
+					}
+				}
+				if ($sessionIdsToUpdate !== []) {
+					$updateData = ['workflow_state' => 'EXPIRED'];
+					$wfFields = $this->db->getFieldNames('abdm_hiu_workflows') ?? [];
+					if (in_array('expired_at', $wfFields, true)) {
+						$updateData['expired_at'] = date('Y-m-d H:i:s', (isset($eraseTimestamp) && $eraseTimestamp) ? $eraseTimestamp : time());
+					}
+					$this->db->table('abdm_hiu_workflows')->whereIn('id', $sessionIdsToUpdate)->update($updateData);
+				}
+			}
+
+			// ABDM M3 HIU compliance: erase stored health records once dataEraseAt is reached
+			$purgeRefs = array_filter([$consentRequestId, $consentId]);
+			if ($purgeRefs !== []) {
+				$sessionDocIds = $this->resolveAllRelatedConsentIds($consentRequestId !== '' ? $consentRequestId : $consentId);
+				if ($sessionDocIds !== []) {
+					$purgeRefs = array_merge($purgeRefs, $sessionDocIds);
+				}
+				$this->purgeAbdmDocumentsByRefs($purgeRefs);
+			}
+		}
+
 		$items = [];
 		$typesForItems = $requestedHiTypes !== [] ? $requestedHiTypes : $grantedHiTypes;
 		foreach ($typesForItems as $hiType) {
@@ -6893,5 +7085,86 @@ class Patient extends BaseController
 			log_message('warning', '[triggerBackgroundHiuPoll] ' . $e->getMessage());
 		}
 	}
+
+	/**
+	 * Extracts dataEraseAt timestamp from a workflow row's request_json or response_json.
+	 */
+	private function extractDataEraseAtFromWorkflowRow(array $row): string
+	{
+		$req = json_decode((string) ($row['request_json'] ?? ''), true);
+		$resp = json_decode((string) ($row['response_json'] ?? ''), true);
+		$containers = [
+			is_array($req) ? ($req['consent'] ?? null) : null,
+			is_array($req) ? ($req['consentDetail'] ?? null) : null,
+			is_array($req) ? ($req['data']['consent'] ?? null) : null,
+			is_array($req) ? $req : null,
+			is_array($resp) ? ($resp['consent'] ?? null) : null,
+			is_array($resp) ? ($resp['consentDetail'] ?? null) : null,
+			is_array($resp) ? ($resp['data']['consent'] ?? null) : null,
+			is_array($resp) ? $resp : null,
+		];
+		foreach ($containers as $c) {
+			if (! is_array($c)) {
+				continue;
+			}
+			$erase = trim((string) (
+				$c['permission']['dataEraseAt']
+				?? $c['permission']['data_erase_at']
+				?? (is_array($c['expiry'] ?? null) ? ($c['expiry']['date'] ?? null) : ($c['expiry'] ?? null))
+				?? $c['erase_at']
+				?? $c['eraseAt']
+				?? $c['dataEraseAt']
+				?? $c['data_erase_at']
+				?? ''
+			));
+			if ($erase !== '') {
+				return $erase;
+			}
+		}
+		return '';
+	}
+
+	/**
+	 * Deletes cached health records from abdm_hiu_documents for the given consent request
+	 * or artifact references, complying with ABDM M3 dataEraseAt guidelines.
+	 */
+	private function purgeAbdmDocumentsByRefs(array $refs): int
+	{
+		$refs = array_values(array_unique(array_filter(array_map('trim', $refs))));
+		if ($refs === [] || ! $this->db->tableExists('abdm_hiu_documents')) {
+			return 0;
+		}
+		$docFields = $this->db->getFieldNames('abdm_hiu_documents') ?? [];
+		$builder = $this->db->table('abdm_hiu_documents');
+		$builder->groupStart();
+		$hasClause = false;
+		if (in_array('consent_request_id', $docFields, true)) {
+			$builder->whereIn('consent_request_id', $refs);
+			$hasClause = true;
+		}
+		if (in_array('consent_artifact_id', $docFields, true)) {
+			if ($hasClause) {
+				$builder->orWhereIn('consent_artifact_id', $refs);
+			} else {
+				$builder->whereIn('consent_artifact_id', $refs);
+				$hasClause = true;
+			}
+		}
+		if (in_array('consent_ref', $docFields, true)) {
+			if ($hasClause) {
+				$builder->orWhereIn('consent_ref', $refs);
+			} else {
+				$builder->whereIn('consent_ref', $refs);
+				$hasClause = true;
+			}
+		}
+		$builder->groupEnd();
+		if (! $hasClause) {
+			return 0;
+		}
+		$builder->delete();
+		return (int) $this->db->affectedRows();
+	}
 }
+
 

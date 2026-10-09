@@ -107,22 +107,22 @@ class AbdmTaskBoardSyncService
 
         $opdIds = array_values(array_unique(array_map(static fn ($r) => (int) ($r['opd_id'] ?? 0), $validRows)));
 
-        // 2. Fetch latest FHIR documents for these OPD records
-        $docByOpd = [];
+        // 2. Fetch latest FHIR documents for these OPD records (both OPConsultRecord and PrescriptionRecord)
+        $docsByOpd = [];
         if (! empty($opdIds) && $this->db->tableExists('opd_fhir_documents')) {
             $docRows = $this->db->table('opd_fhir_documents')
-                ->select('id, opd_id, opd_session_id, bundle_type, bundle_json, generated_at')
+                ->select('id, opd_id, opd_session_id, bundle_type, bundle_json, generated_at, updated_at, created_at')
                 ->whereIn('opd_id', $opdIds)
                 ->whereIn('bundle_type', ['OPConsultRecord', 'MedicationRequestBundle', 'PrescriptionRecord'])
-                ->orderBy("CASE WHEN bundle_type = 'OPConsultRecord' THEN 1 ELSE 2 END", 'ASC', false)
                 ->orderBy('id', 'DESC')
                 ->get()
                 ->getResultArray();
 
             foreach ($docRows as $doc) {
                 $oid = (int) ($doc['opd_id'] ?? 0);
-                if ($oid > 0 && ! isset($docByOpd[$oid])) {
-                    $docByOpd[$oid] = $doc;
+                $bType = trim((string) ($doc['bundle_type'] ?? ''));
+                if ($oid > 0 && $bType !== '' && ! isset($docsByOpd[$oid][$bType])) {
+                    $docsByOpd[$oid][$bType] = $doc;
                 }
             }
         }
@@ -131,20 +131,22 @@ class AbdmTaskBoardSyncService
         $hrByOpd = [];
         if (! empty($opdIds) && $this->db->tableExists('health_records')) {
             $sessionIds = [];
-            foreach ($docByOpd as $d) {
-                $sId = (int) ($d['opd_session_id'] ?? 0);
-                if ($sId > 0) {
-                    $sessionIds[] = (string) $sId;
+            foreach ($docsByOpd as $oid => $bTypes) {
+                foreach ($bTypes as $d) {
+                    $sId = (int) ($d['opd_session_id'] ?? 0);
+                    if ($sId > 0) {
+                        $sessionIds[] = (string) $sId;
+                    }
                 }
             }
 
-            $searchEntityIds = array_merge(
+            $searchEntityIds = array_values(array_unique(array_merge(
                 array_map(static fn ($v) => (string) $v, $opdIds),
                 $sessionIds
-            );
+            )));
 
             $hrRows = $this->db->table('health_records')
-                ->select('id, entity_id, push_status, abdm_txn_id, bridge_record_id, care_context_reference, push_at, linked_at, updated_at')
+                ->select('id, entity_id, hi_type, push_status, abdm_txn_id, bridge_record_id, care_context_reference, push_at, linked_at, updated_at')
                 ->where('entity_type', 'opd')
                 ->whereIn('entity_id', $searchEntityIds)
                 ->orderBy('id', 'DESC')
@@ -153,11 +155,14 @@ class AbdmTaskBoardSyncService
 
             foreach ($hrRows as $hr) {
                 $eid = (int) ($hr['entity_id'] ?? 0);
+                $ccRef = trim((string) ($hr['care_context_reference'] ?? ''));
+                $ht = trim((string) ($hr['hi_type'] ?? ''));
                 if ($eid <= 0) {
                     continue;
                 }
-                if (! isset($hrByOpd[$eid])) {
-                    $hrByOpd[$eid] = $hr;
+                $typeKey = (str_starts_with($ccRef, 'PRESC-') || $ht === 'PrescriptionRecord') ? 'PrescriptionRecord' : 'OPConsultRecord';
+                if (! isset($hrByOpd[$eid][$typeKey])) {
+                    $hrByOpd[$eid][$typeKey] = $hr;
                 }
             }
         }
@@ -175,54 +180,24 @@ class AbdmTaskBoardSyncService
                 continue;
             }
 
-            $doc = $docByOpd[$opdId] ?? null;
-            if ($doc === null) {
+            $opdDocs = $docsByOpd[$opdId] ?? [];
+            if (empty($opdDocs)) {
                 // No FHIR bundle generated yet for this OPD
-                continue;
-            }
-
-            $sessionId = (int) ($doc['opd_session_id'] ?? 0);
-
-            // Reconcile: check if health_records row was stored under opd_id or session_id
-            $hr = $hrByOpd[$opdId] ?? ($sessionId > 0 ? ($hrByOpd[$sessionId] ?? null) : null);
-
-            // If stored under session_id, reconcile entity_id to opdId
-            if ($hr !== null && (string) ($hr['entity_id'] ?? '') === (string) $sessionId && (string) $sessionId !== (string) $opdId) {
-                try {
-                    $this->db->table('health_records')
-                        ->where('id', (int) $hr['id'])
-                        ->update(['entity_id' => (string) $opdId]);
-                    $hr['entity_id'] = (string) $opdId;
-                } catch (\Throwable) {
-                }
-            }
-
-            $pushStatus = strtolower(trim((string) ($hr['push_status'] ?? '')));
-
-            // Already pushed/submitted/linked successfully?
-            if (in_array($pushStatus, ['queued', 'linked', 'pushed'], true)) {
-                $summary['skipped']++;
                 continue;
             }
 
             $consultDate = (string) ($row['apointment_date'] ?? '');
             $visitDate = $consultDate !== '' ? date('Y-m-d', strtotime($consultDate)) : date('Y-m-d');
             $cleanDate = str_replace('-', '', $visitDate);
-            $derivedCcRef = 'OPD-' . $patientId . '-S' . ($sessionId > 0 ? $sessionId : 0) . '-' . $cleanDate;
-
-            $careContextRef = trim((string) ($hr['care_context_reference'] ?? ''));
-            if ($careContextRef === '') {
-                $careContextRef = $derivedCcRef;
-            }
 
             // Check cooling period from the latest modification/generation timestamp
-            $docTimestamps = array_filter([
-                ! empty($doc['updated_at']) ? (string) $doc['updated_at'] : null,
-                ! empty($doc['generated_at']) ? (string) $doc['generated_at'] : null,
-                ! empty($hr['updated_at']) ? (string) $hr['updated_at'] : null,
-                ! empty($doc['created_at']) ? (string) $doc['created_at'] : null,
-            ]);
-            $lastModified = ! empty($docTimestamps) ? max($docTimestamps) : ($row['apointment_date'] ?? date('Y-m-d H:i:s'));
+            $allTimestamps = [];
+            foreach ($opdDocs as $d) {
+                if (! empty($d['updated_at'])) $allTimestamps[] = (string) $d['updated_at'];
+                if (! empty($d['generated_at'])) $allTimestamps[] = (string) $d['generated_at'];
+                if (! empty($d['created_at'])) $allTimestamps[] = (string) $d['created_at'];
+            }
+            $lastModified = ! empty($allTimestamps) ? max($allTimestamps) : ($row['apointment_date'] ?? date('Y-m-d H:i:s'));
 
             $cooling = self::calculateCooling('opd_prescription_publish', $lastModified);
             if ($cooling['is_cooling_active']) {
@@ -231,7 +206,7 @@ class AbdmTaskBoardSyncService
                     'opd_id'            => $opdId,
                     'patient'           => trim((string) ($row['P_name'] ?? '')),
                     'abha'              => trim((string) ($row['abha_id'] ?? '')),
-                    'care_context'      => $careContextRef,
+                    'care_context'      => 'OPD-' . $patientId . '-...',
                     'last_modified'     => $lastModified,
                     'remaining_minutes' => $cooling['remaining_minutes'],
                     'auto_link_at'      => $cooling['auto_link_at'],
@@ -242,42 +217,92 @@ class AbdmTaskBoardSyncService
 
             $summary['eligible']++;
 
-            if ($dryRun) {
-                $summary['details'][] = [
-                    'opd_id' => $opdId,
-                    'patient' => trim((string) ($row['P_name'] ?? '')),
-                    'abha' => trim((string) ($row['abha_id'] ?? '')),
-                    'care_context' => $careContextRef,
-                    'status' => 'dry_run_eligible',
+            // Define targets: 1) OPConsultRecord, 2) PrescriptionRecord (if prescribed)
+            $syncTargets = [];
+
+            // Target A: OPConsultRecord
+            if (! empty($opdDocs['OPConsultRecord'])) {
+                $cDoc = $opdDocs['OPConsultRecord'];
+                $sId = (int) ($cDoc['opd_session_id'] ?? 0);
+                $cHr = $hrByOpd[$opdId]['OPConsultRecord'] ?? ($sId > 0 ? ($hrByOpd[$sId]['OPConsultRecord'] ?? null) : null);
+                $derivedRef = 'OPD-' . $patientId . '-S' . ($sId > 0 ? $sId : 0) . '-' . $cleanDate;
+                $ccRef = trim((string) ($cHr['care_context_reference'] ?? ''));
+                if ($ccRef === '') {
+                    $ccRef = $derivedRef;
+                }
+                $syncTargets[] = [
+                    'doc' => $cDoc,
+                    'hr'  => $cHr,
+                    'ref' => $ccRef,
                 ];
-                $processedCount++;
-                continue;
             }
 
-            // Perform care context linking and push to ABDM bridge
-            $pushResult = $this->linkAndPushOpdRecord($row, $doc, $careContextRef, $visitDate, $hr);
+            // Target B: PrescriptionRecord (separate context for PHR App Prescriptions tab)
+            $pDoc = $opdDocs['PrescriptionRecord'] ?? ($opdDocs['MedicationRequestBundle'] ?? null);
+            if (! empty($pDoc)) {
+                $sId = (int) ($pDoc['opd_session_id'] ?? 0);
+                $pHr = $hrByOpd[$opdId]['PrescriptionRecord'] ?? ($sId > 0 ? ($hrByOpd[$sId]['PrescriptionRecord'] ?? null) : null);
+                $derivedRef = 'PRESC-' . $patientId . '-S' . ($sId > 0 ? $sId : 0) . '-' . $cleanDate;
+                $ccRef = trim((string) ($pHr['care_context_reference'] ?? ''));
+                if ($ccRef === '') {
+                    $ccRef = $derivedRef;
+                }
+                $syncTargets[] = [
+                    'doc' => $pDoc,
+                    'hr'  => $pHr,
+                    'ref' => $ccRef,
+                ];
+            }
+
+            foreach ($syncTargets as $target) {
+                $docToPush = $target['doc'];
+                $hrToUse = $target['hr'];
+                $ccRefToUse = $target['ref'];
+                $pushStatus = strtolower(trim((string) ($hrToUse['push_status'] ?? '')));
+
+                // Already pushed/submitted/linked successfully?
+                if (in_array($pushStatus, ['queued', 'linked', 'pushed'], true)) {
+                    $summary['skipped']++;
+                    continue;
+                }
+
+                if ($dryRun) {
+                    $summary['details'][] = [
+                        'opd_id'       => $opdId,
+                        'patient'      => trim((string) ($row['P_name'] ?? '')),
+                        'abha'         => trim((string) ($row['abha_id'] ?? '')),
+                        'care_context' => $ccRefToUse,
+                        'status'       => 'dry_run_eligible',
+                    ];
+                    continue;
+                }
+
+                // Perform care context linking and push to ABDM bridge
+                $pushResult = $this->linkAndPushOpdRecord($row, $docToPush, $ccRefToUse, $visitDate, $hrToUse);
+
+                if ($pushResult['ok'] === 1) {
+                    $summary['linked']++;
+                    $summary['details'][] = [
+                        'opd_id'           => $opdId,
+                        'patient'          => trim((string) ($row['P_name'] ?? '')),
+                        'care_context'     => $ccRefToUse,
+                        'queue_id'         => $pushResult['queue_id'] ?? '',
+                        'bridge_record_id' => $pushResult['bridge_record_id'] ?? null,
+                        'status'           => 'linked',
+                    ];
+                } else {
+                    $summary['failed']++;
+                    $summary['details'][] = [
+                        'opd_id'       => $opdId,
+                        'patient'      => trim((string) ($row['P_name'] ?? '')),
+                        'care_context' => $ccRefToUse,
+                        'error'        => $pushResult['error'] ?? 'Unknown push error',
+                        'status'       => 'failed',
+                    ];
+                }
+            }
+
             $processedCount++;
-
-            if ($pushResult['ok'] === 1) {
-                $summary['linked']++;
-                $summary['details'][] = [
-                    'opd_id' => $opdId,
-                    'patient' => trim((string) ($row['P_name'] ?? '')),
-                    'care_context' => $careContextRef,
-                    'queue_id' => $pushResult['queue_id'] ?? '',
-                    'bridge_record_id' => $pushResult['bridge_record_id'] ?? null,
-                    'status' => 'linked',
-                ];
-            } else {
-                $summary['failed']++;
-                $summary['details'][] = [
-                    'opd_id' => $opdId,
-                    'patient' => trim((string) ($row['P_name'] ?? '')),
-                    'care_context' => $careContextRef,
-                    'error' => $pushResult['error'] ?? 'Unknown push error',
-                    'status' => 'failed',
-                ];
-            }
         }
 
         return $summary;

@@ -108,6 +108,25 @@ class AbdmPushSync extends BaseCommand
             $patientId = (int) ($row['patient_id'] ?? 0);
             $patient = $this->loadPatientDemographics($db, $patientId);
             $abhaId = trim((string) ($row['abha_id'] ?? ''));
+            $hiType = (string) ($row['hi_type'] ?? '');
+            $ccRef = (string) ($row['care_context_reference'] ?? '');
+            if ($hiType === '') {
+                $hiType = (str_starts_with($ccRef, 'PRESC-') || str_starts_with($ccRef, 'RX-'))
+                    ? 'PrescriptionRecord'
+                    : 'OPConsultRecord';
+            }
+            $vDate = substr((string) ($row['created_at'] ?? date('Y-m-d')), 0, 10);
+            $dateStr = date('d M Y', strtotime($vDate));
+            $ccDisplay = match ($hiType) {
+                'PrescriptionRecord'     => 'Prescription - ' . $dateStr,
+                'OPConsultRecord'        => 'Consultation Record - ' . $dateStr,
+                'DischargeSummaryRecord' => 'Discharge Summary - ' . $dateStr,
+                'DiagnosticReportRecord' => 'Diagnostic Report - ' . $dateStr,
+                'ImmunizationRecord'     => 'Immunization Record - ' . $dateStr,
+                'WellnessRecord'         => 'Wellness Record - ' . $dateStr,
+                'InvoiceRecord'          => 'Invoice - ' . $dateStr,
+                default                  => (string) ($row['care_context_display'] ?? ($hiType . ' ' . $dateStr)),
+            };
 
             try {
                 $result = $connector->pushRecord([
@@ -117,11 +136,11 @@ class AbdmPushSync extends BaseCommand
                     'abha_address'           => str_contains($abhaId, '@') ? $abhaId : $patient['abha_address'],
                     'gender'                 => $patient['gender'],
                     'year_of_birth'          => $patient['year_of_birth'],
-                    'hi_type'                => (string) ($row['hi_type'] ?? ''),
-                    'record_type'            => (string) ($row['hi_type'] ?? ''),
-                    'visit_date'             => substr((string) ($row['created_at'] ?? date('Y-m-d')), 0, 10),
-                    'care_context_reference' => (string) ($row['care_context_reference'] ?? ''),
-                    'care_context_display'   => (string) ($row['care_context_display'] ?? (($row['hi_type'] ?? '') . ' ' . substr((string) ($row['created_at'] ?? ''), 0, 10))),
+                    'hi_type'                => $hiType,
+                    'record_type'            => $hiType,
+                    'visit_date'             => $vDate,
+                    'care_context_reference' => $ccRef,
+                    'care_context_display'   => $ccDisplay,
                     'record_data'            => $bundle,
                 ]);
 

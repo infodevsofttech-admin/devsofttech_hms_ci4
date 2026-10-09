@@ -184,10 +184,19 @@
         var html = '';
         items.forEach(function(consent, idx) {
             var status = (consent.status || '').toString().toUpperCase();
+            var eraseAt = (consent.erase_at || '').toString().trim();
+            var isExpired = (status === 'EXPIRED');
+            if (!isExpired && eraseAt !== '') {
+                var ed = new Date(eraseAt.indexOf('T') === -1 ? eraseAt.replace(' ', 'T') : eraseAt);
+                if (!isNaN(ed.getTime()) && ed.getTime() <= Date.now()) {
+                    isExpired = true;
+                    status = 'EXPIRED';
+                }
+            }
             var hiTypes = (consent.requested_hi_types && consent.requested_hi_types.length) ? consent.requested_hi_types : (consent.granted_hi_types || []);
             var hiTypesText = hiTypes.length ? hiTypes.join(', ') : '-';
             var patientId = Number(consent.patient_id || 0);
-            var canFetch = (status === 'GRANTED' || status === 'COMPLETED') && patientId > 0;
+            var canFetch = (status === 'GRANTED' || status === 'COMPLETED') && patientId > 0 && !isExpired;
             var canOpen = patientId > 0;
 
             html += '<tr>'

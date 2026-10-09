@@ -1730,7 +1730,7 @@ class AbdmGateway extends BaseController
             $healthRecordId = $this->storeHealthRecord([
                 'patient_id'     => $patientId,
                 'abha_id'        => $hasAbha ? $abhaId : '',
-                'hi_type'        => 'OPConsultRecord',
+                'hi_type'        => $hiType,
                 'entity_type'    => 'opd',
                 'entity_id'      => (string) $opdId,
                 'fhir_bundle'    => $bundleJson,
@@ -5649,15 +5649,20 @@ class AbdmGateway extends BaseController
                 $bundleData = json_decode((string) $hrRow['record_data'], true);
                 if (is_array($bundleData)) {
                     $recHiType = $hrRow['hi_type'] ?? $hrRow['record_type'] ?? 'OPConsultRecord';
+                    if (str_starts_with($ref, 'PRESC-') || str_starts_with($ref, 'RX-')) {
+                        $recHiType = 'PrescriptionRecord';
+                    } elseif (str_starts_with($ref, 'OPD-')) {
+                        $recHiType = 'OPConsultRecord';
+                    }
                     $defaultDisp = match ($recHiType) {
-                        'ImmunizationRecord' => 'Immunization Record',
+                        'ImmunizationRecord'     => 'Immunization Record',
                         'DiagnosticReportRecord' => 'Diagnostic Report',
                         'DischargeSummaryRecord' => 'Discharge Summary',
-                        'PrescriptionRecord' => 'Prescription Record',
-                        'WellnessRecord' => 'Wellness Record',
-                        'InvoiceRecord' => 'Invoice Record',
-                        'HealthDocumentRecord' => 'Health Document',
-                        default => 'Consultation Record',
+                        'PrescriptionRecord'     => 'Prescription Record',
+                        'WellnessRecord'         => 'Wellness Record',
+                        'InvoiceRecord'          => 'Invoice Record',
+                        'HealthDocumentRecord'   => 'Health Document',
+                        default                  => 'Consultation Record',
                     };
                     $disp = ! empty($hrRow['care_context_display']) ? $hrRow['care_context_display'] : $defaultDisp;
                     if ($recHiType === 'ImmunizationRecord' && ! empty($hrRow['entity_id']) && $db->tableExists('immunization_records')) {
@@ -5964,7 +5969,13 @@ class AbdmGateway extends BaseController
         $targetOpdId = 0;
 
         if ($targetSessionId > 0 && $db->tableExists('opd_prescription')) {
-            $pRow = $db->table('opd_prescription')->select('opd_id')->where('id', $targetSessionId)->get(1)->getRowArray();
+            $pRow = $db->table('opd_prescription')
+                ->select('opd_id')
+                ->groupStart()
+                    ->where('id', $targetSessionId)
+                    ->orWhere('session_id', $targetSessionId)
+                ->groupEnd()
+                ->get(1)->getRowArray();
             $targetOpdId = (int) ($pRow['opd_id'] ?? 0);
         }
         if ($targetOpdId <= 0 && $targetPatientId > 0 && $db->tableExists('opd_master')) {
@@ -6020,13 +6031,12 @@ class AbdmGateway extends BaseController
             $bundleJson = json_encode($bundle, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES);
             $exHr = $db->table('health_records')->where('care_context_reference', $ref)->get(1)->getRowArray();
             if ($exHr) {
-                if (empty($exHr['record_data'])) {
-                    $db->table('health_records')->where('id', (int) $exHr['id'])->update([
-                        'record_data' => $bundleJson,
-                        'push_status' => 'linked',
-                        'updated_at'  => date('Y-m-d H:i:s'),
-                    ]);
-                }
+                $db->table('health_records')->where('id', (int) $exHr['id'])->update([
+                    'hi_type'     => $hiType,
+                    'record_data' => $bundleJson,
+                    'push_status' => 'linked',
+                    'updated_at'  => date('Y-m-d H:i:s'),
+                ]);
             } else {
                 $db->table('health_records')->insert([
                     'care_context_reference' => $ref,
@@ -7385,9 +7395,9 @@ class AbdmGateway extends BaseController
                     $ccRef = 'HR-' . (int) ($row['id'] ?? 0);
                 }
                 $rowEntType = strtolower(trim((string) ($row['entity_type'] ?? '')));
-                // Skip redundant/legacy separate PRESC- and WELLNESS- contexts (now unified under OPD-),
-                // but allow genuine standalone nursing Wellness records (entity_type = 'wellness')
-                if ($rowEntType !== 'wellness' && (str_starts_with($ccRef, 'PRESC-') || str_starts_with($ccRef, 'WELLNESS-'))) {
+                // Allow genuine separate PRESC- contexts (PrescriptionRecord),
+                // but skip redundant/legacy WELLNESS- aliases (now unified under OPD- or patient_wellness_records)
+                if ($rowEntType !== 'wellness' && str_starts_with($ccRef, 'WELLNESS-')) {
                     continue;
                 }
                 // OPD- and INVOICE- contexts are enriched with doctor/session/bill details in steps 4 & 6
@@ -7725,6 +7735,20 @@ class AbdmGateway extends BaseController
                     'is_fhir_ready'   => $hasFindings || $hasMeds || $hasVitals,
                     'is_primary'      => false,
                 ]);
+
+                if ($hasMeds) {
+                    $prescCcRef = 'PRESC-' . $patientId . '-S' . $sessionId . '-' . $cleanDate;
+                    $prescDisplay = 'Prescription - ' . $dateStr;
+                    $addContext([
+                        'careContextId'   => $prescCcRef,
+                        'referenceNumber' => $prescCcRef,
+                        'display'         => $prescDisplay,
+                        'record_type'     => 'PrescriptionRecord',
+                        'patient_id'      => $patientId,
+                        'is_fhir_ready'   => true,
+                        'is_primary'      => false,
+                    ]);
+                }
             }
         }
 
