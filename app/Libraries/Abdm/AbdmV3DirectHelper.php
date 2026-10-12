@@ -419,6 +419,173 @@ class AbdmV3DirectHelper
     }
 
     /**
+     * M1 12.1 VRFY_ABHA_401: Request OTP using 12-digit Aadhaar Number.
+     * Upstream: POST /abha/api/v3/profile/login/request/otp
+     *
+     * @return array{ok: int, txn_id?: string, message?: string, error_text?: string, resend_after?: int}
+     */
+    public function requestLoginOtpByAadhaar(string $aadhaarNumber): array
+    {
+        $digits = preg_replace('/\D/', '', $aadhaarNumber);
+        if (strlen($digits) !== 12) {
+            return ['ok' => 0, 'error_text' => 'Aadhaar Number is not valid.'];
+        }
+
+        try {
+            $token = $this->getSessionToken();
+            if ($token === '') {
+                return ['ok' => 0, 'error_text' => 'Could not obtain ABDM session token.'];
+            }
+
+            $encAadhaar = $this->encrypt($digits);
+            $payload = [
+                'scope'     => ['abha-login', 'aadhaar-verify'],
+                'loginHint' => 'aadhaar',
+                'loginId'   => $encAadhaar,
+                'otpSystem' => 'aadhaar',
+            ];
+
+            $resp = $this->curlCall($this->otpUrl, 'POST', $payload, [
+                'Authorization: Bearer ' . $token,
+                'REQUEST-ID: ' . $this->generateUuid(),
+                'TIMESTAMP: '  . gmdate('Y-m-d\TH:i:s.000\Z'),
+                'X-Client-ID: ' . $this->clientId,
+            ]);
+
+            if ($resp['code'] >= 200 && $resp['code'] < 300 && ! empty($resp['json'])) {
+                $newTxnId = (string) ($resp['json']['txnId'] ?? '');
+                $msg = (string) ($resp['json']['message'] ?? 'OTP sent to Aadhaar linked mobile number.');
+                return [
+                    'ok'           => 1,
+                    'txn_id'       => $newTxnId,
+                    'message'      => $msg,
+                    'resend_after' => 60,
+                ];
+            }
+
+            $errMsg = (string) ($resp['json']['message'] ?? $resp['json']['error']['message'] ?? '');
+            if ($errMsg === '') {
+                $errMsg = 'Failed to request Aadhaar OTP from ABDM.';
+            }
+            if (stripos($errMsg, 'invalid') !== false && stripos($errMsg, 'aadhaar') !== false) {
+                $errMsg = 'Aadhaar Number is not valid.';
+            }
+
+            return ['ok' => 0, 'error_text' => $errMsg, 'raw' => $resp['raw']];
+        } catch (\Throwable $e) {
+            log_message('error', '[AbdmV3DirectHelper] requestLoginOtpByAadhaar exception: ' . $e->getMessage());
+            return ['ok' => 0, 'error_text' => $e->getMessage()];
+        }
+    }
+
+    /**
+     * M1 12.1 VRFY_ABHA_402, 403, 404: Verify Aadhaar OTP and fetch complete ABHA profile + card.
+     * Upstream: POST /abha/api/v3/profile/login/verify
+     *
+     * @return array{ok: int, txn_id?: string, token?: string, accounts?: array, account?: array, full_profile?: array, card_base64?: string, no_abha_found?: bool, error_text?: string}
+     */
+    public function verifyLoginOtpByAadhaar(string $otpTxnId, string $otp): array
+    {
+        $digits = preg_replace('/\D/', '', $otp);
+        if (strlen($digits) !== 6) {
+            return ['ok' => 0, 'error_text' => 'Enter a valid 6-digit OTP.'];
+        }
+
+        try {
+            $token = $this->getSessionToken();
+            if ($token === '') {
+                return ['ok' => 0, 'error_text' => 'Could not obtain ABDM session token.'];
+            }
+
+            $encOtp = $this->encrypt($digits);
+            $payload = [
+                'scope'    => ['abha-login', 'aadhaar-verify'],
+                'authData' => [
+                    'authMethods' => ['otp'],
+                    'otp'         => [
+                        'txnId'    => $otpTxnId,
+                        'otpValue' => $encOtp,
+                    ],
+                ],
+            ];
+
+            $resp = $this->curlCall($this->verifyUrl, 'POST', $payload, [
+                'Authorization: Bearer ' . $token,
+                'REQUEST-ID: ' . $this->generateUuid(),
+                'TIMESTAMP: '  . gmdate('Y-m-d\TH:i:s.000\Z'),
+                'X-Client-ID: ' . $this->clientId,
+            ]);
+
+            if ($resp['code'] >= 200 && $resp['code'] < 300 && ! empty($resp['json'])) {
+                $authResult = strtolower((string) ($resp['json']['authResult'] ?? ''));
+                if ($authResult === 'failed') {
+                    $failMsg = (string) ($resp['json']['message'] ?? 'Incorrect OTP.');
+                    return ['ok' => 0, 'error_text' => $failMsg];
+                }
+
+                $userToken = (string) ($resp['json']['token'] ?? '');
+                $accounts  = (array) ($resp['json']['accounts'] ?? []);
+                $firstAcc  = isset($accounts[0]) && is_array($accounts[0]) ? $accounts[0] : [];
+
+                // Check VRFY_ABHA_403: No ABHA user registered with this Aadhaar Number
+                if (empty($userToken) && empty($accounts)) {
+                    return [
+                        'ok'            => 0,
+                        'no_abha_found' => true,
+                        'error_text'    => 'NO ABHA user registered with this Aadhaar Number',
+                    ];
+                }
+
+                $fullProfile = [];
+                $cardBase64  = '';
+                if ($userToken !== '') {
+                    $fullProfile = $this->fetchProfileDetails($userToken, $token);
+                    $cardBase64  = $this->fetchCardPng($userToken, $token);
+                }
+
+                return [
+                    'ok'           => 1,
+                    'txn_id'       => (string) ($resp['json']['txnId'] ?? $otpTxnId),
+                    'token'        => $userToken,
+                    'accounts'     => $accounts,
+                    'account'      => $firstAcc,
+                    'full_profile' => $fullProfile,
+                    'card_base64'  => $cardBase64,
+                ];
+            }
+
+            $errMsg = (string) ($resp['json']['message'] ?? $resp['json']['error']['message'] ?? '');
+
+            // Check if error is VRFY_ABHA_403: ABHA does not exist for this Aadhaar
+            if (stripos($errMsg, 'no abha') !== false ||
+                stripos($errMsg, 'not found') !== false ||
+                stripos($errMsg, 'not exist') !== false ||
+                stripos($errMsg, 'no user') !== false ||
+                stripos($errMsg, 'no account') !== false) {
+                return [
+                    'ok'            => 0,
+                    'no_abha_found' => true,
+                    'error_text'    => 'NO ABHA user registered with this Aadhaar Number',
+                    'raw'           => $resp['raw'],
+                ];
+            }
+
+            if (stripos($errMsg, 'otp') !== false || stripos($errMsg, 'invalid') !== false || stripos($errMsg, 'incorrect') !== false) {
+                $errMsg = 'Incorrect OTP';
+            }
+
+            if ($errMsg === '') {
+                $errMsg = 'OTP verification failed.';
+            }
+
+            return ['ok' => 0, 'error_text' => $errMsg, 'raw' => $resp['raw']];
+        } catch (\Throwable $e) {
+            log_message('error', '[AbdmV3DirectHelper] verifyLoginOtpByAadhaar exception: ' . $e->getMessage());
+            return ['ok' => 0, 'error_text' => $e->getMessage()];
+        }
+    }
+
+    /**
      * Fetch full profile details using the profile X-Token.
      * Upstream: GET /abha/api/v3/profile/account
      */

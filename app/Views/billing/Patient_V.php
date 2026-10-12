@@ -45,6 +45,7 @@
 <?= view('partials/abha_create_modal') ?>
 <?= view('partials/abha_qr_modal') ?>
 <?= view('partials/abha_mobile_modal') ?>
+<?= view('partials/abha_aadhaar_modal') ?>
 <?= view('partials/abdm_hip_link_modal') ?>
 <section class="content">
     <div class="row">
@@ -447,6 +448,7 @@
                                                 <button type="button" class="btn btn-success" onclick="abhaRegSelectMethod('number')"><i class="bi bi-person-vcard me-1"></i>By ABHA Number or ID</button>
                                                 <button type="button" class="btn btn-outline-primary" onclick="abhaRegSelectMethod('address')"><i class="bi bi-at me-1"></i>By ABHA Address</button>
                                                 <button type="button" class="btn btn-outline-secondary" onclick="abhaRegSelectMethod('mobile')"><i class="bi bi-phone me-1"></i>Find ABHA via Mobile</button>
+                                                <button type="button" class="btn btn-outline-info" onclick="abhaRegSelectMethod('aadhaar')"><i class="bi bi-fingerprint me-1"></i>Find ABHA via Aadhaar</button>
                                             </div>
                                         </div>
                                     </div>
@@ -1404,7 +1406,8 @@
                 address:  { icon: '@',   title: 'By ABHA Address',      sub: 'Secure modal verification' },
                 qr:       { icon: '📷', title: 'Scan Patient ABHA QR',   sub: 'Scan QR → patient details' },
                 facility: { icon: '🏥', title: 'Scan Facility QR',       sub: 'Patient scans via ABHA app' },
-                mobile:   { icon: '📱', title: 'Find ABHA via Mobile',   sub: 'Find an ABHA linked to this mobile number' }
+                mobile:   { icon: '📱', title: 'Find ABHA via Mobile',   sub: 'Find an ABHA linked to this mobile number' },
+                aadhaar:  { icon: '🪪', title: 'Find ABHA via Aadhaar',  sub: 'Retrieve ABHA using 12-digit Aadhaar number' }
             };
 
             window.abhaRegSelectMethod = function(method) {
@@ -1428,9 +1431,28 @@
                 } else if (method === 'mobile') {
                     $('#abhareg_panel_mobile').addClass('d-none');
                     openAbhaMobileVerification();
+                } else if (method === 'aadhaar') {
+                    $('#abhareg_panel_mobile').addClass('d-none');
+                    openAbhaAadhaarVerification();
                 } else if (method === 'qr') { openAbhaQrScan(); }
                 if (method === 'facility') { loadFacilityQr(false); }
             };
+
+            function openAbhaAadhaarVerification() {
+                if (!window.AbhaAadhaarModal) {
+                    alert('ABHA Aadhaar verification modal is unavailable. Reload the page and try again.');
+                    return;
+                }
+                window.AbhaAadhaarModal.open('', function(profile) {
+                    if (profile && profile.need_confirmation === false && Number(profile.patient_id || 0) > 0) {
+                        showRegResult(profile);
+                        return;
+                    }
+                    window.AbhaPatientMatchModal.open(profile, profile.candidates || [], function(finalResponse) {
+                        showRegResult(finalResponse);
+                    });
+                });
+            }
 
             function openAbhaMobileVerification() {
                 if (!window.AbhaMobileModal) {

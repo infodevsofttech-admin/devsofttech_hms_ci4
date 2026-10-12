@@ -1083,6 +1083,321 @@ class Abha extends BaseController
     }
 
     // -------------------------------------------------------------------------
+    // ABDM M1 Find ABHA via Aadhaar Flow
+    // TEST POINT: 12.1 VRFY_ABHA_401 to VRFY_ABHA_405
+    // FLOW: AADHAAR NUMBER -> OTP -> COMPLETE PROFILE FETCHED / CREATE ABHA
+    // -------------------------------------------------------------------------
+
+    /**
+     * VRFY_ABHA_401: Request OTP using 12-digit Aadhaar Number
+     * POST abha/find/aadhaar/request-otp
+     */
+    public function findAadhaarRequestOtp()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $aadhaar = preg_replace('/\D/', '', trim((string) ($this->request->getPost('aadhaar') ?? '')));
+        if (strlen($aadhaar) !== 12) {
+            return $this->response->setJSON([
+                'ok'         => 0,
+                'error_text' => 'Aadhaar Number is not valid. Please enter a valid 12-digit Aadhaar Number.',
+            ]);
+        }
+
+        try {
+            $helper = new \App\Libraries\Abdm\AbdmV3DirectHelper();
+            $result = $helper->requestLoginOtpByAadhaar($aadhaar);
+
+            if (! empty($result['ok']) && (int) $result['ok'] === 1) {
+                return $this->response->setJSON([
+                    'ok'           => 1,
+                    'txn_id'       => $result['txn_id'] ?? '',
+                    'message'      => $result['message'] ?? 'OTP sent to Aadhaar linked mobile number.',
+                    'resend_after' => $result['resend_after'] ?? 60,
+                ]);
+            }
+
+            return $this->response->setJSON([
+                'ok'         => 0,
+                'error_text' => $result['error_text'] ?? 'Failed to send OTP to Aadhaar linked mobile.',
+            ]);
+        } catch (\Throwable $e) {
+            log_message('error', '[ABHA] findAadhaarRequestOtp exception: ' . $e->getMessage());
+            return $this->response->setStatusCode(500)->setJSON([
+                'ok'         => 0,
+                'error_text' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    /**
+     * VRFY_ABHA_402, 403, 404, 405: Verify Aadhaar OTP and fetch complete ABHA profile + card
+     * POST abha/find/aadhaar/verify-otp
+     */
+    public function findAadhaarVerifyOtp()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $txnId = trim((string) ($this->request->getPost('txn_id') ?? $this->request->getPost('txnId') ?? ''));
+        $otp   = preg_replace('/\D/', '', trim((string) ($this->request->getPost('otp') ?? '')));
+
+        if ($txnId === '' || strlen($otp) !== 6) {
+            return $this->response->setJSON([
+                'ok'         => 0,
+                'error_text' => 'Transaction ID and 6-digit OTP are required.',
+            ]);
+        }
+
+        try {
+            $helper = new \App\Libraries\Abdm\AbdmV3DirectHelper();
+            $result = $helper->verifyLoginOtpByAadhaar($txnId, $otp);
+
+            // VRFY_ABHA_403: No ABHA user registered with this Aadhaar Number
+            if (! empty($result['no_abha_found'])) {
+                return $this->response->setJSON([
+                    'ok'            => 0,
+                    'no_abha_found' => true,
+                    'error_text'    => 'NO ABHA user registered with this Aadhaar Number',
+                ]);
+            }
+
+            if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+                return $this->response->setJSON([
+                    'ok'         => 0,
+                    'error_text' => $result['error_text'] ?? 'Incorrect OTP',
+                ]);
+            }
+
+            // VRFY_ABHA_404: ABHA exists -> extract profile details & card
+            $fullProfile = is_array($result['full_profile'] ?? null) ? $result['full_profile'] : [];
+            $account     = is_array($result['account'] ?? null) ? $result['account'] : [];
+            $userToken   = (string) ($result['token'] ?? '');
+
+            $firstNonEmpty = static function (array $values): string {
+                foreach ($values as $value) {
+                    if (is_scalar($value) && trim((string) $value) !== '') {
+                        return trim((string) $value);
+                    }
+                }
+                return '';
+            };
+
+            $abhaNum = $firstNonEmpty([
+                $account['ABHANumber'] ?? null,
+                $account['abhaNumber'] ?? null,
+                $account['abha_number'] ?? null,
+                $account['abha_id'] ?? null,
+                $fullProfile['ABHANumber'] ?? null,
+                $fullProfile['abhaNumber'] ?? null,
+                $fullProfile['abha_id'] ?? null,
+            ]);
+
+            $abhaAddress = $firstNonEmpty([
+                $account['preferredAbhaAddress'] ?? null,
+                $account['preferredAddress'] ?? null,
+                $account['abhaAddress'] ?? null,
+                $account['abha_address'] ?? null,
+                $fullProfile['preferredAbhaAddress'] ?? null,
+                $fullProfile['preferredAddress'] ?? null,
+                $fullProfile['abhaAddress'] ?? null,
+                $fullProfile['abha_address'] ?? null,
+            ]);
+
+            $name = $firstNonEmpty([
+                $account['name'] ?? null,
+                $account['fullName'] ?? null,
+                $account['full_name'] ?? null,
+                $fullProfile['name'] ?? null,
+                trim(($fullProfile['firstName'] ?? '') . ' ' . ($fullProfile['middleName'] ?? '') . ' ' . ($fullProfile['lastName'] ?? '')),
+            ]);
+
+            $genderRaw = $firstNonEmpty([
+                $account['gender'] ?? null,
+                $fullProfile['gender'] ?? null,
+            ]);
+            $genderUpper = strtoupper($genderRaw);
+            if ($genderUpper === 'M' || $genderUpper === '1' || $genderUpper === 'MALE') {
+                $gender = 'Male';
+            } elseif ($genderUpper === 'F' || $genderUpper === '2' || $genderUpper === 'FEMALE') {
+                $gender = 'Female';
+            } elseif ($genderUpper === 'O' || $genderUpper === '3' || $genderUpper === 'OTHER') {
+                $gender = 'Other';
+            } else {
+                $gender = $genderRaw;
+            }
+
+            $dob = $firstNonEmpty([
+                $account['dob'] ?? null,
+                $account['dateOfBirth'] ?? null,
+                $account['date_of_birth'] ?? null,
+                $fullProfile['dob'] ?? null,
+                $fullProfile['dateOfBirth'] ?? null,
+                $fullProfile['date_of_birth'] ?? null,
+            ]);
+            if ($dob === '') {
+                $day   = $firstNonEmpty([$account['dayOfBirth'] ?? null, $account['day_of_birth'] ?? null, $fullProfile['dayOfBirth'] ?? null, $fullProfile['day_of_birth'] ?? null]);
+                $month = $firstNonEmpty([$account['monthOfBirth'] ?? null, $account['month_of_birth'] ?? null, $fullProfile['monthOfBirth'] ?? null, $fullProfile['month_of_birth'] ?? null]);
+                $year  = $firstNonEmpty([$account['yearOfBirth'] ?? null, $account['year_of_birth'] ?? null, $fullProfile['yearOfBirth'] ?? null, $fullProfile['year_of_birth'] ?? null]);
+                if ($year !== '' && $month !== '' && $day !== '') {
+                    $dob = sprintf('%04d-%02d-%02d', (int) $year, (int) $month, (int) $day);
+                } elseif ($year !== '') {
+                    $dob = $year;
+                }
+            }
+
+            $profileMobile = $firstNonEmpty([
+                $account['mobile'] ?? null,
+                $account['mobileNumber'] ?? null,
+                $account['mobile_number'] ?? null,
+                $fullProfile['mobile'] ?? null,
+                $fullProfile['mobileNumber'] ?? null,
+            ]);
+
+            $photo = $firstNonEmpty([
+                $account['profilePhoto'] ?? null,
+                $account['profile_photo'] ?? null,
+                $fullProfile['profilePhoto'] ?? null,
+                $fullProfile['profile_photo'] ?? null,
+                $fullProfile['photo'] ?? null,
+                $fullProfile['kycPhoto'] ?? null,
+            ]);
+
+            $address = $firstNonEmpty([
+                $fullProfile['address'] ?? null,
+                $fullProfile['addressLine'] ?? null,
+                $fullProfile['address_line'] ?? null,
+                $account['address'] ?? null,
+                $account['addressLine'] ?? null,
+            ]);
+
+            $districtName = $firstNonEmpty([
+                $fullProfile['district'] ?? null,
+                $fullProfile['districtName'] ?? null,
+                $fullProfile['district_name'] ?? null,
+                $account['district'] ?? null,
+                $account['districtName'] ?? null,
+            ]);
+
+            $stateName = $firstNonEmpty([
+                $fullProfile['state'] ?? null,
+                $fullProfile['stateName'] ?? null,
+                $fullProfile['state_name'] ?? null,
+                $account['state'] ?? null,
+                $account['stateName'] ?? null,
+            ]);
+
+            $zip = $firstNonEmpty([
+                $fullProfile['pinCode'] ?? null,
+                $fullProfile['pincode'] ?? null,
+                $fullProfile['pin'] ?? null,
+                $account['pinCode'] ?? null,
+                $account['pincode'] ?? null,
+            ]);
+
+            $email = $firstNonEmpty([
+                $fullProfile['email'] ?? null,
+                $account['email'] ?? null,
+            ]);
+
+            $cardBase64 = (string) ($result['card_base64'] ?? '');
+
+            // Fallback to Bridge card endpoint if not retrieved directly
+            if ($cardBase64 === '' && ($abhaNum !== '' || $abhaAddress !== '')) {
+                try {
+                    $bridge = \App\Libraries\Abdm\AbdmConnectorFactory::make();
+                    $cardResult = $bridge->fetchOfficialAbhaCard([
+                        'abha_number'  => $abhaNum,
+                        'abha_address' => $abhaAddress,
+                        'token'        => $userToken,
+                        'x_token'      => $userToken,
+                    ]);
+                    if (! empty($cardResult['ok']) && ! empty($cardResult['card_base64'])) {
+                        $cardBase64 = (string) $cardResult['card_base64'];
+                    }
+                } catch (\Throwable $e) {
+                    log_message('warning', '[ABHA] Bridge card fetch fallback failed: ' . $e->getMessage());
+                }
+            }
+
+            $abhaMeta = [
+                'abha_address'      => $abhaAddress,
+                'profile_photo'     => $photo,
+                'verified_status'   => 'ACTIVE',
+                'verification_type' => 'VERIFIED',
+                'kyc_verified'      => true,
+                'mobile_verified'   => true,
+                'address'           => $address,
+                'district'          => $districtName,
+                'state'             => $stateName,
+                'zip'               => $zip,
+                'email'             => $email,
+            ];
+
+            $patientInfo = $this->tryAutoLinkByDirectMatch($abhaNum, $name, $profileMobile, $gender, $dob, $abhaMeta);
+
+            $responseBase = [
+                'ok'                => 1,
+                'txn_id'            => $result['txn_id'] ?? $txnId,
+                'token'             => $result['token'] ?? '',
+                'accounts'          => $result['accounts'] ?? [],
+                'card_base64'       => $cardBase64,
+                'card_content_type' => 'image/png',
+                'card_source'       => $cardBase64 !== '' ? 'abdm' : 'generated',
+                'card_message'      => $cardBase64 !== '' ? 'Official ABHA Card from ABDM' : '',
+                'abha_number'       => $abhaNum,
+                'name'              => $name,
+                'photo'             => $photo,
+                'mobile'            => $profileMobile,
+                'gender'            => $gender,
+                'dob'               => $dob,
+                'abha_address'      => $abhaAddress,
+                'verified_status'   => 'ACTIVE',
+                'verification_type' => 'VERIFIED',
+                'kyc_verified'      => true,
+                'mobile_verified'   => true,
+                'address'           => $address,
+                'district'          => $districtName,
+                'state'             => $stateName,
+                'zip'               => $zip,
+                'email'             => $email,
+            ];
+
+            if ($patientInfo !== null) {
+                return $this->response->setJSON($responseBase + [
+                    'need_confirmation' => false,
+                    'patient_id'        => $patientInfo['patient_id'],
+                    'p_code'            => $patientInfo['p_code'],
+                    'is_new_patient'    => $patientInfo['is_new'],
+                ]);
+            }
+
+            $db = \Config\Database::connect();
+            $fields = $db->getFieldNames('patient_master') ?? [];
+            $abhaField = $this->resolveAbhaFieldName($fields);
+            $abhaNumClean = preg_replace('/\D/', '', $abhaNum);
+            $candidates = $this->findMatchingCandidates($db, $fields, $name, $profileMobile, $gender, $dob, '', $abhaField, $abhaNumClean);
+
+            return $this->response->setJSON($responseBase + [
+                'need_confirmation' => true,
+                'patient_id'        => 0,
+                'p_code'            => '',
+                'is_new_patient'    => null,
+                'candidates'        => $candidates,
+            ]);
+        } catch (\Throwable $e) {
+            log_message('error', '[ABHA] findAadhaarVerifyOtp exception: ' . $e->getMessage());
+            return $this->response->setStatusCode(500)->setJSON([
+                'ok'         => 0,
+                'error_text' => $e->getMessage(),
+            ]);
+        }
+    }
+
+    // -------------------------------------------------------------------------
     // Step 4 — ABHA address suggestions / assignment
     // POST abha/create/address_suggestions, POST abha/create/address
     // -------------------------------------------------------------------------
