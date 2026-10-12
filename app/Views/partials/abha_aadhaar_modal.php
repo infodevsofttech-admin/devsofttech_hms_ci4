@@ -405,9 +405,9 @@ window.AbhaAadhaarModal = (function () {
             }
 
             if (!res || res.ok != 1) {
-                var err = (res && res.error_text) ? res.error_text : 'Incorrect OTP';
-                if (/incorrect|invalid|fail/i.test(err)) {
-                    err = 'Incorrect OTP';
+                var err = (res && res.error_text) ? res.error_text : 'Verification failed. Please try again.';
+                if (/incorrect\s*otp|otp\s*is\s*(either\s*)?incorrect|invalid\s*otp/i.test(err)) {
+                    err = 'Incorrect OTP. Please enter the valid OTP received on your Aadhaar-linked mobile.';
                 }
                 alertBox('danger', escapeHtml(err));
                 return;
@@ -417,11 +417,14 @@ window.AbhaAadhaarModal = (function () {
             renderProfile(res);
         }, 'json').fail(function (xhr) {
             btn.prop('disabled', false).html('<i class="bi bi-patch-check me-1"></i>Verify OTP &amp; Fetch Profile');
-            var err = (xhr.responseJSON && xhr.responseJSON.error_text) ? xhr.responseJSON.error_text : 'Incorrect OTP';
             if (xhr.responseJSON && xhr.responseJSON.no_abha_found) {
                 alertBox('warning', '<strong>NO ABHA user registered with this Aadhaar Number</strong>');
                 $('#abhaAadhaarNotFoundCard').removeClass('d-none');
                 return;
+            }
+            var err = (xhr.responseJSON && xhr.responseJSON.error_text) ? xhr.responseJSON.error_text : 'Verification failed. Please try again.';
+            if (/incorrect\s*otp|otp\s*is\s*(either\s*)?incorrect|invalid\s*otp/i.test(err)) {
+                err = 'Incorrect OTP. Please enter the valid OTP received on your Aadhaar-linked mobile.';
             }
             alertBox('danger', escapeHtml(err));
         });

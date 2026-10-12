@@ -1187,7 +1187,7 @@ class Abha extends BaseController
             }
 
             if (empty($result['ok']) || (int) $result['ok'] !== 1) {
-                $err = $this->extractBridgeErrorText($result, 'Incorrect OTP');
+                $err = $this->extractBridgeErrorText($result, 'Please enter a valid OTP. Entered OTP is either expired or incorrect.');
                 if (stripos($err, 'no abha') !== false || stripos($err, 'not registered') !== false || stripos($err, 'not exist') !== false || stripos($err, 'not found') !== false) {
                     return $this->response->setJSON([
                         'ok'            => 0,
@@ -1234,7 +1234,9 @@ class Abha extends BaseController
             );
 
             // VRFY_ABHA_403: No ABHA user registered with this Aadhaar Number
-            $isNew = ! empty($payload['is_new']) || ! empty($payload['new_user']) || ! empty($result['new_user']);
+            $isNew = ! empty($payload['is_new']) || ! empty($payload['new_user']) || ! empty($result['new_user'])
+                || (isset($payload['isNew']) && ($payload['isNew'] === true || $payload['isNew'] === 'true'))
+                || (isset($payload['new']) && ($payload['new'] === true || $payload['new'] === 'true'));
             if ((strlen($cleanAbha) !== 14 && $abhaAddress === '') || $isNew) {
                 return $this->response->setJSON([
                     'ok'            => 0,

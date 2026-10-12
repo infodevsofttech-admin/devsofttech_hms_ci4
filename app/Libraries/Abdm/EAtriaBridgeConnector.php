@@ -1080,7 +1080,7 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         $authResult = strtolower(trim((string) ($result['authResult'] ?? $result['data']['authResult'] ?? $result['auth_result'] ?? $result['data']['auth_result'] ?? '')));
         $status = strtolower(trim((string) ($result['status'] ?? $result['data']['status'] ?? '')));
         if ($authResult === 'failed' || in_array($status, ['failed', 'failure', 'error'], true)) {
-            $err = trim((string) ($result['message'] ?? $result['data']['message'] ?? $result['error_text'] ?? 'Please enter a valid OTP. Entered OTP is either expired or incorrect.'));
+            $err = trim((string) ($result['error_text'] ?? $result['message'] ?? $result['data']['message'] ?? 'Please enter a valid OTP. Entered OTP is either expired or incorrect.'));
             return array_merge($result, [
                 'ok' => 0,
                 'error_text' => $err !== '' ? $err : 'Please enter a valid OTP. Entered OTP is either expired or incorrect.',
