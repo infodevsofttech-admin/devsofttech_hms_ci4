@@ -1247,26 +1247,15 @@ class Abha extends BaseController
 
             $name          = $this->extractAbhaProfileName($profile, $payload);
             $photo         = $this->extractAbhaProfilePhoto($profile, $payload);
-            $profileMobile = (string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? '');
-            $profileGender = (string) ($profile['gender'] ?? $payload['gender'] ?? '');
-            $profileDob    = (string) ($profile['dob'] ?? $profile['date_of_birth'] ?? $payload['dob'] ?? $payload['date_of_birth'] ?? '');
-
-            $genderUpper = strtoupper($profileGender);
-            if ($genderUpper === 'M' || $genderUpper === '1' || $genderUpper === 'MALE') {
-                $gender = 'Male';
-            } elseif ($genderUpper === 'F' || $genderUpper === '2' || $genderUpper === 'FEMALE') {
-                $gender = 'Female';
-            } elseif ($genderUpper === 'O' || $genderUpper === '3' || $genderUpper === 'OTHER') {
-                $gender = 'Other';
-            } else {
-                $gender = $profileGender;
-            }
-
-            $address      = (string) (($profile['address'] ?? '') ?: ($profile['address_line'] ?? '') ?: ($payload['address'] ?? '') ?: ($payload['address_line'] ?? '') ?: '');
-            $zip          = (string) (($profile['pinCode'] ?? '') ?: ($profile['pin_code'] ?? '') ?: ($payload['pinCode'] ?? '') ?: ($payload['pin_code'] ?? '') ?: '');
-            $stateName    = (string) (($profile['stateName'] ?? '') ?: ($profile['state_name'] ?? '') ?: ($payload['stateName'] ?? '') ?: ($payload['state_name'] ?? '') ?: '');
-            $districtName = (string) (($profile['districtName'] ?? '') ?: ($profile['district_name'] ?? '') ?: ($payload['districtName'] ?? '') ?: ($payload['district_name'] ?? '') ?: '');
-            $email        = (string) (($profile['email'] ?? '') ?: ($payload['email'] ?? '') ?: '');
+            $profileMobile = $this->extractAbhaProfileMobile($profile, $payload);
+            $gender        = $this->extractAbhaProfileGender($profile, $payload);
+            $profileDob    = $this->extractAbhaProfileDob($profile, $payload);
+            $addrInfo      = $this->extractAbhaProfileAddress($profile, $payload);
+            $address       = $addrInfo['address'];
+            $districtName  = $addrInfo['district'];
+            $stateName     = $addrInfo['state'];
+            $zip           = $addrInfo['zip'];
+            $email         = (string) (($profile['email'] ?? '') ?: ($payload['email'] ?? '') ?: ($payload['gateway_patient']['email'] ?? ''));
 
             $cardBase64 = (string) (
                 $result['official_card']['card_base64']
@@ -3046,6 +3035,251 @@ class Abha extends BaseController
         }
 
         return '';
+    }
+
+    /**
+     * @param array<string, mixed> $profile
+     * @param array<string, mixed> $payload
+     */
+    private function extractAbhaProfileMobile(array $profile, array $payload): string
+    {
+        $sources = [
+            $profile,
+            $payload,
+            $payload['gateway_patient'] ?? [],
+            $payload['data']['gateway_patient'] ?? [],
+            $payload['patient_profile'] ?? [],
+            $payload['data']['patient_profile'] ?? [],
+            $payload['ABHAProfile'] ?? [],
+            $payload['data']['ABHAProfile'] ?? [],
+            $payload['profile'] ?? [],
+            $payload['data']['profile'] ?? [],
+            $payload['account'] ?? [],
+            $payload['data']['account'] ?? [],
+            $payload['accounts'][0] ?? [],
+            $payload['data']['accounts'][0] ?? [],
+            $payload['gateway_abha_profile'] ?? [],
+            $payload['data']['gateway_abha_profile'] ?? [],
+        ];
+
+        foreach ($sources as $source) {
+            if (! is_array($source)) {
+                continue;
+            }
+            foreach (['mobile', 'mobileNumber', 'mobile_number', 'phone', 'contact_no', 'mobile_no'] as $key) {
+                $raw = trim((string) ($source[$key] ?? ''));
+                $digits = preg_replace('/\D/', '', $raw);
+                if (strlen($digits) === 12 && str_starts_with($digits, '91')) {
+                    $digits = substr($digits, 2);
+                }
+                if (strlen($digits) === 10 && preg_match('/^[6-9]\d{9}$/', $digits)) {
+                    return $digits;
+                }
+            }
+        }
+
+        // Try extracting from JWT token claims
+        foreach ([$payload['token'] ?? null, $payload['data']['token'] ?? null, $payload['tokens']['token'] ?? null, $payload['data']['tokens']['token'] ?? null] as $candToken) {
+            if (is_string($candToken) && trim($candToken) !== '') {
+                $parts = explode('.', trim($candToken));
+                if (count($parts) >= 2) {
+                    $claims = json_decode(base64_decode(strtr($parts[1], '-_', '+/')), true);
+                    if (is_array($claims)) {
+                        foreach (['mobile', 'phone', 'mobileNumber', 'mobile_number'] as $key) {
+                            $raw = trim((string) ($claims[$key] ?? ''));
+                            $digits = preg_replace('/\D/', '', $raw);
+                            if (strlen($digits) === 12 && str_starts_with($digits, '91')) {
+                                $digits = substr($digits, 2);
+                            }
+                            if (strlen($digits) === 10) {
+                                return $digits;
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * @param array<string, mixed> $profile
+     * @param array<string, mixed> $payload
+     */
+    private function extractAbhaProfileGender(array $profile, array $payload): string
+    {
+        $sources = [
+            $profile,
+            $payload,
+            $payload['gateway_patient'] ?? [],
+            $payload['data']['gateway_patient'] ?? [],
+            $payload['patient_profile'] ?? [],
+            $payload['data']['patient_profile'] ?? [],
+            $payload['ABHAProfile'] ?? [],
+            $payload['data']['ABHAProfile'] ?? [],
+            $payload['profile'] ?? [],
+            $payload['data']['profile'] ?? [],
+            $payload['account'] ?? [],
+            $payload['data']['account'] ?? [],
+            $payload['accounts'][0] ?? [],
+            $payload['data']['accounts'][0] ?? [],
+        ];
+
+        foreach ($sources as $source) {
+            if (! is_array($source)) {
+                continue;
+            }
+            foreach (['gender', 'gender_code', 'sex'] as $key) {
+                $val = strtoupper(trim((string) ($source[$key] ?? '')));
+                if ($val === '') {
+                    continue;
+                }
+                if ($val === 'M' || $val === '1' || str_starts_with($val, 'MALE')) {
+                    return 'Male';
+                }
+                if ($val === 'F' || $val === '2' || str_starts_with($val, 'FEMALE')) {
+                    return 'Female';
+                }
+                if ($val === 'O' || $val === '3' || str_starts_with($val, 'OTHER')) {
+                    return 'Other';
+                }
+                return ucfirst(strtolower($val));
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * @param array<string, mixed> $profile
+     * @param array<string, mixed> $payload
+     */
+    private function extractAbhaProfileDob(array $profile, array $payload): string
+    {
+        $sources = [
+            $profile,
+            $payload,
+            $payload['gateway_patient'] ?? [],
+            $payload['data']['gateway_patient'] ?? [],
+            $payload['patient_profile'] ?? [],
+            $payload['data']['patient_profile'] ?? [],
+            $payload['ABHAProfile'] ?? [],
+            $payload['data']['ABHAProfile'] ?? [],
+            $payload['profile'] ?? [],
+            $payload['data']['profile'] ?? [],
+            $payload['account'] ?? [],
+            $payload['data']['account'] ?? [],
+            $payload['accounts'][0] ?? [],
+            $payload['data']['accounts'][0] ?? [],
+        ];
+
+        foreach ($sources as $source) {
+            if (! is_array($source)) {
+                continue;
+            }
+            foreach (['dob', 'date_of_birth', 'dateOfBirth', 'birthDate', 'birthdate'] as $key) {
+                $dob = trim((string) ($source[$key] ?? ''));
+                if ($dob !== '') {
+                    if (preg_match('/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/', $dob, $m)) {
+                        return sprintf('%02d-%02d-%04d', (int) $m[3], (int) $m[2], (int) $m[1]);
+                    }
+                    if (preg_match('/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/', $dob, $m)) {
+                        return sprintf('%02d-%02d-%04d', (int) $m[1], (int) $m[2], (int) $m[3]);
+                    }
+                    return $dob;
+                }
+            }
+
+            $y = $source['yearOfBirth'] ?? $source['year_of_birth'] ?? null;
+            $m = $source['monthOfBirth'] ?? $source['month_of_birth'] ?? null;
+            $d = $source['dayOfBirth'] ?? $source['day_of_birth'] ?? null;
+            if ($y !== null && (int) $y > 1900) {
+                if ($m !== null && $d !== null && (int) $m > 0 && (int) $d > 0) {
+                    return sprintf('%02d-%02d-%04d', (int) $d, (int) $m, (int) $y);
+                }
+                return (string) $y;
+            }
+        }
+
+        return '';
+    }
+
+    /**
+     * @param array<string, mixed> $profile
+     * @param array<string, mixed> $payload
+     * @return array{address: string, district: string, state: string, zip: string}
+     */
+    private function extractAbhaProfileAddress(array $profile, array $payload): array
+    {
+        $sources = [
+            $profile,
+            $payload,
+            $payload['gateway_patient'] ?? [],
+            $payload['data']['gateway_patient'] ?? [],
+            $payload['patient_profile'] ?? [],
+            $payload['data']['patient_profile'] ?? [],
+            $payload['ABHAProfile'] ?? [],
+            $payload['data']['ABHAProfile'] ?? [],
+            $payload['profile'] ?? [],
+            $payload['data']['profile'] ?? [],
+            $payload['account'] ?? [],
+            $payload['data']['account'] ?? [],
+        ];
+
+        $addr = '';
+        $dist = '';
+        $state = '';
+        $zip = '';
+
+        foreach ($sources as $source) {
+            if (! is_array($source)) {
+                continue;
+            }
+            if ($addr === '') {
+                foreach (['address', 'address_line', 'addressLine', 'villageTownCity', 'subDistrictName', 'line'] as $k) {
+                    $v = trim((string) ($source[$k] ?? ''));
+                    if ($v !== '') {
+                        $addr = $v;
+                        break;
+                    }
+                }
+            }
+            if ($dist === '') {
+                foreach (['districtName', 'district', 'district_name'] as $k) {
+                    $v = trim((string) ($source[$k] ?? ''));
+                    if ($v !== '') {
+                        $dist = $v;
+                        break;
+                    }
+                }
+            }
+            if ($state === '') {
+                foreach (['stateName', 'state', 'state_name'] as $k) {
+                    $v = trim((string) ($source[$k] ?? ''));
+                    if ($v !== '') {
+                        $state = $v;
+                        break;
+                    }
+                }
+            }
+            if ($zip === '') {
+                foreach (['pincode', 'pinCode', 'pin_code', 'postalCode', 'zip'] as $k) {
+                    $v = trim((string) ($source[$k] ?? ''));
+                    if ($v !== '') {
+                        $zip = $v;
+                        break;
+                    }
+                }
+            }
+        }
+
+        return [
+            'address'  => $addr,
+            'district' => $dist,
+            'state'    => $state,
+            'zip'      => $zip,
+        ];
     }
 
     /**

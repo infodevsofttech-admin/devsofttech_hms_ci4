@@ -450,8 +450,16 @@ window.AbhaAadhaarModal = (function () {
         $('#abhaAadhaarProfileGender').text(profile.gender || '-');
         $('#abhaAadhaarProfileMobile').text(profile.mobile || '-');
 
-        var fullAddr = [profile.address, profile.district, profile.state, profile.zip].filter(Boolean).join(', ');
-        $('#abhaAadhaarProfileFullAddress').text(fullAddr || '-');
+        var addrParts = [];
+        [profile.address, profile.district, profile.state, profile.zip].forEach(function (part) {
+            if (part && typeof part === 'string' && part.trim()) {
+                var clean = part.trim();
+                if (addrParts.indexOf(clean) === -1) {
+                    addrParts.push(clean);
+                }
+            }
+        });
+        $('#abhaAadhaarProfileFullAddress').text(addrParts.join(', ') || '-');
 
         // ABHA Card render
         if (profile.card_base64) {
