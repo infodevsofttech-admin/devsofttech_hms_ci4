@@ -1108,7 +1108,7 @@ class Abha extends BaseController
 
         try {
             $connector = AbdmConnectorFactory::make();
-            $result = $connector->abhaAadhaarGenerateOtp(['aadhaar' => $aadhaar]);
+            $result = $connector->abhaAadhaarGenerateOtp(['aadhaar' => $aadhaar, 'purpose' => 'search', 'flow' => 'search']);
 
             if (! empty($result['ok']) && (int) $result['ok'] === 1) {
                 $txnId = (string) ($result['txn_id'] ?? $result['data']['txnId'] ?? $result['data']['txn_id'] ?? '');
@@ -1178,7 +1178,7 @@ class Abha extends BaseController
 
         try {
             $connector = AbdmConnectorFactory::make();
-            $result = $connector->abhaAadhaarVerifyOtp(['txnId' => $txnId, 'otp' => $otp]);
+            $result = $connector->abhaAadhaarVerifyOtp(['txnId' => $txnId, 'otp' => $otp, 'purpose' => 'search', 'flow' => 'search']);
 
             $authResult = strtolower(trim((string) ($result['authResult'] ?? $result['data']['authResult'] ?? $result['auth_result'] ?? $result['data']['auth_result'] ?? '')));
             $status = strtolower(trim((string) ($result['status'] ?? $result['data']['status'] ?? '')));

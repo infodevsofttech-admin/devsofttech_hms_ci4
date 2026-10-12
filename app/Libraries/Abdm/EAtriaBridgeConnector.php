@@ -1053,6 +1053,12 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         $body = [
             'aadhaar' => (string) ($payload['aadhaar'] ?? $payload['loginId'] ?? ''),
         ];
+        if (!empty($payload['purpose'])) {
+            $body['purpose'] = (string) $payload['purpose'];
+        }
+        if (!empty($payload['flow'])) {
+            $body['flow'] = (string) $payload['flow'];
+        }
         if ($this->hfrId !== '' && empty($body['hfr_id'])) {
             $body['hfr_id'] = $this->hfrId;
         }
@@ -1066,6 +1072,12 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
             'txnId' => (string) ($payload['txnId'] ?? $payload['txn_id'] ?? ''),
             'otp'   => (string) ($payload['otp'] ?? ''),
         ];
+        if (!empty($payload['purpose'])) {
+            $body['purpose'] = (string) $payload['purpose'];
+        }
+        if (!empty($payload['flow'])) {
+            $body['flow'] = (string) $payload['flow'];
+        }
         // Only include mobile when a valid 10-digit number is supplied;
         // sending an empty string causes ABDM sandbox to reject the verify request.
         $mobile = (string) ($payload['mobile'] ?? '');
