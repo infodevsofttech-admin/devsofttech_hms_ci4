@@ -1099,7 +1099,7 @@ class Abha extends BaseController
         }
 
         $aadhaar = preg_replace('/\D/', '', trim((string) ($this->request->getPost('aadhaar') ?? '')));
-        if (strlen($aadhaar) !== 12) {
+        if (strlen($aadhaar) !== 12 || ! $this->validateVerhoeff($aadhaar)) {
             return $this->response->setJSON([
                 'ok'         => 0,
                 'error_text' => 'Aadhaar Number is not valid. Please enter a valid 12-digit Aadhaar Number.',
@@ -1107,21 +1107,45 @@ class Abha extends BaseController
         }
 
         try {
-            $helper = new \App\Libraries\Abdm\AbdmV3DirectHelper();
-            $result = $helper->requestLoginOtpByAadhaar($aadhaar);
+            $connector = AbdmConnectorFactory::make();
+            $result = $connector->abhaAadhaarGenerateOtp(['aadhaar' => $aadhaar]);
 
             if (! empty($result['ok']) && (int) $result['ok'] === 1) {
+                $txnId = (string) ($result['txn_id'] ?? $result['data']['txnId'] ?? $result['data']['txn_id'] ?? '');
+                $msg   = (string) ($result['message'] ?? $result['data']['message'] ?? 'OTP sent to Aadhaar linked mobile number.');
+                $maskedMobile = (string) ($result['masked_mobile'] ?? $result['data']['maskedMobile'] ?? $result['data']['masked_mobile'] ?? '');
+
                 return $this->response->setJSON([
-                    'ok'           => 1,
-                    'txn_id'       => $result['txn_id'] ?? '',
-                    'message'      => $result['message'] ?? 'OTP sent to Aadhaar linked mobile number.',
-                    'resend_after' => $result['resend_after'] ?? 60,
+                    'ok'            => 1,
+                    'txn_id'        => $txnId,
+                    'message'       => $msg,
+                    'masked_mobile' => $maskedMobile,
+                    'resend_after'  => 60,
                 ]);
+            }
+
+            // Fallback to direct V3 client if bridge call did not succeed
+            try {
+                $helper = new \App\Libraries\Abdm\AbdmV3DirectHelper();
+                $directResult = $helper->requestLoginOtpByAadhaar($aadhaar);
+                if (! empty($directResult['ok']) && (int) $directResult['ok'] === 1) {
+                    return $this->response->setJSON([
+                        'ok'           => 1,
+                        'txn_id'       => $directResult['txn_id'] ?? '',
+                        'message'      => $directResult['message'] ?? 'OTP sent to Aadhaar linked mobile number.',
+                        'resend_after' => $directResult['resend_after'] ?? 60,
+                    ]);
+                }
+            } catch (\Throwable $e) {}
+
+            $errMsg = $this->extractBridgeErrorText($result, 'Failed to send OTP to Aadhaar linked mobile.');
+            if (stripos($errMsg, 'invalid') !== false && stripos($errMsg, 'aadhaar') !== false) {
+                $errMsg = 'Aadhaar Number is not valid. Please enter a valid 12-digit Aadhaar Number.';
             }
 
             return $this->response->setJSON([
                 'ok'         => 0,
-                'error_text' => $result['error_text'] ?? 'Failed to send OTP to Aadhaar linked mobile.',
+                'error_text' => $errMsg,
             ]);
         } catch (\Throwable $e) {
             log_message('error', '[ABHA] findAadhaarRequestOtp exception: ' . $e->getMessage());
@@ -1153,11 +1177,65 @@ class Abha extends BaseController
         }
 
         try {
-            $helper = new \App\Libraries\Abdm\AbdmV3DirectHelper();
-            $result = $helper->verifyLoginOtpByAadhaar($txnId, $otp);
+            $connector = AbdmConnectorFactory::make();
+            $result = $connector->abhaAadhaarVerifyOtp(['txnId' => $txnId, 'otp' => $otp]);
+
+            $authResult = strtolower(trim((string) ($result['authResult'] ?? $result['data']['authResult'] ?? $result['auth_result'] ?? $result['data']['auth_result'] ?? '')));
+            $status = strtolower(trim((string) ($result['status'] ?? $result['data']['status'] ?? '')));
+            if ($authResult === 'failed' || in_array($status, ['failed', 'failure', 'error'], true)) {
+                $result['ok'] = 0;
+            }
+
+            if (empty($result['ok']) || (int) $result['ok'] !== 1) {
+                $err = $this->extractBridgeErrorText($result, 'Incorrect OTP');
+                if (stripos($err, 'no abha') !== false || stripos($err, 'not registered') !== false || stripos($err, 'not exist') !== false || stripos($err, 'not found') !== false) {
+                    return $this->response->setJSON([
+                        'ok'            => 0,
+                        'no_abha_found' => true,
+                        'error_text'    => 'NO ABHA user registered with this Aadhaar Number',
+                    ]);
+                }
+                return $this->response->setJSON([
+                    'ok'         => 0,
+                    'error_text' => $err,
+                ]);
+            }
+
+            $payload = $result;
+            if (is_array($result['data'] ?? null)) {
+                foreach ($result['data'] as $k => $v) {
+                    if (! array_key_exists($k, $payload)) {
+                        $payload[$k] = $v;
+                    }
+                }
+            }
+
+            $profile = $this->pickGatewayAbhaProfile($payload);
+
+            $abhaNum = (string) (
+                $profile['ABHANumber']
+                ?? $profile['abha_id']
+                ?? $profile['abha_number']
+                ?? $payload['ABHANumber']
+                ?? $payload['abha_id']
+                ?? $payload['abha_number']
+                ?? ''
+            );
+            $cleanAbha = preg_replace('/\D/', '', $abhaNum);
+
+            $abhaAddress = (string) (
+                ($profile['preferredAddress'] ?? '')
+                ?: ($profile['preferredAbhaAddress'] ?? '')
+                ?: ($profile['abha_address'] ?? '')
+                ?: ($payload['preferredAddress'] ?? '')
+                ?: ($payload['preferredAbhaAddress'] ?? '')
+                ?: ($payload['abha_address'] ?? '')
+                ?: ''
+            );
 
             // VRFY_ABHA_403: No ABHA user registered with this Aadhaar Number
-            if (! empty($result['no_abha_found'])) {
+            $isNew = ! empty($payload['is_new']) || ! empty($payload['new_user']) || ! empty($result['new_user']);
+            if ((strlen($cleanAbha) !== 14 && $abhaAddress === '') || $isNew) {
                 return $this->response->setJSON([
                     'ok'            => 0,
                     'no_abha_found' => true,
@@ -1165,61 +1243,13 @@ class Abha extends BaseController
                 ]);
             }
 
-            if (empty($result['ok']) || (int) $result['ok'] !== 1) {
-                return $this->response->setJSON([
-                    'ok'         => 0,
-                    'error_text' => $result['error_text'] ?? 'Incorrect OTP',
-                ]);
-            }
+            $name          = $this->extractAbhaProfileName($profile, $payload);
+            $photo         = $this->extractAbhaProfilePhoto($profile, $payload);
+            $profileMobile = (string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? '');
+            $profileGender = (string) ($profile['gender'] ?? $payload['gender'] ?? '');
+            $profileDob    = (string) ($profile['dob'] ?? $profile['date_of_birth'] ?? $payload['dob'] ?? $payload['date_of_birth'] ?? '');
 
-            // VRFY_ABHA_404: ABHA exists -> extract profile details & card
-            $fullProfile = is_array($result['full_profile'] ?? null) ? $result['full_profile'] : [];
-            $account     = is_array($result['account'] ?? null) ? $result['account'] : [];
-            $userToken   = (string) ($result['token'] ?? '');
-
-            $firstNonEmpty = static function (array $values): string {
-                foreach ($values as $value) {
-                    if (is_scalar($value) && trim((string) $value) !== '') {
-                        return trim((string) $value);
-                    }
-                }
-                return '';
-            };
-
-            $abhaNum = $firstNonEmpty([
-                $account['ABHANumber'] ?? null,
-                $account['abhaNumber'] ?? null,
-                $account['abha_number'] ?? null,
-                $account['abha_id'] ?? null,
-                $fullProfile['ABHANumber'] ?? null,
-                $fullProfile['abhaNumber'] ?? null,
-                $fullProfile['abha_id'] ?? null,
-            ]);
-
-            $abhaAddress = $firstNonEmpty([
-                $account['preferredAbhaAddress'] ?? null,
-                $account['preferredAddress'] ?? null,
-                $account['abhaAddress'] ?? null,
-                $account['abha_address'] ?? null,
-                $fullProfile['preferredAbhaAddress'] ?? null,
-                $fullProfile['preferredAddress'] ?? null,
-                $fullProfile['abhaAddress'] ?? null,
-                $fullProfile['abha_address'] ?? null,
-            ]);
-
-            $name = $firstNonEmpty([
-                $account['name'] ?? null,
-                $account['fullName'] ?? null,
-                $account['full_name'] ?? null,
-                $fullProfile['name'] ?? null,
-                trim(($fullProfile['firstName'] ?? '') . ' ' . ($fullProfile['middleName'] ?? '') . ' ' . ($fullProfile['lastName'] ?? '')),
-            ]);
-
-            $genderRaw = $firstNonEmpty([
-                $account['gender'] ?? null,
-                $fullProfile['gender'] ?? null,
-            ]);
-            $genderUpper = strtoupper($genderRaw);
+            $genderUpper = strtoupper($profileGender);
             if ($genderUpper === 'M' || $genderUpper === '1' || $genderUpper === 'MALE') {
                 $gender = 'Male';
             } elseif ($genderUpper === 'F' || $genderUpper === '2' || $genderUpper === 'FEMALE') {
@@ -1227,101 +1257,22 @@ class Abha extends BaseController
             } elseif ($genderUpper === 'O' || $genderUpper === '3' || $genderUpper === 'OTHER') {
                 $gender = 'Other';
             } else {
-                $gender = $genderRaw;
+                $gender = $profileGender;
             }
 
-            $dob = $firstNonEmpty([
-                $account['dob'] ?? null,
-                $account['dateOfBirth'] ?? null,
-                $account['date_of_birth'] ?? null,
-                $fullProfile['dob'] ?? null,
-                $fullProfile['dateOfBirth'] ?? null,
-                $fullProfile['date_of_birth'] ?? null,
-            ]);
-            if ($dob === '') {
-                $day   = $firstNonEmpty([$account['dayOfBirth'] ?? null, $account['day_of_birth'] ?? null, $fullProfile['dayOfBirth'] ?? null, $fullProfile['day_of_birth'] ?? null]);
-                $month = $firstNonEmpty([$account['monthOfBirth'] ?? null, $account['month_of_birth'] ?? null, $fullProfile['monthOfBirth'] ?? null, $fullProfile['month_of_birth'] ?? null]);
-                $year  = $firstNonEmpty([$account['yearOfBirth'] ?? null, $account['year_of_birth'] ?? null, $fullProfile['yearOfBirth'] ?? null, $fullProfile['year_of_birth'] ?? null]);
-                if ($year !== '' && $month !== '' && $day !== '') {
-                    $dob = sprintf('%04d-%02d-%02d', (int) $year, (int) $month, (int) $day);
-                } elseif ($year !== '') {
-                    $dob = $year;
-                }
-            }
+            $address      = (string) (($profile['address'] ?? '') ?: ($profile['address_line'] ?? '') ?: ($payload['address'] ?? '') ?: ($payload['address_line'] ?? '') ?: '');
+            $zip          = (string) (($profile['pinCode'] ?? '') ?: ($profile['pin_code'] ?? '') ?: ($payload['pinCode'] ?? '') ?: ($payload['pin_code'] ?? '') ?: '');
+            $stateName    = (string) (($profile['stateName'] ?? '') ?: ($profile['state_name'] ?? '') ?: ($payload['stateName'] ?? '') ?: ($payload['state_name'] ?? '') ?: '');
+            $districtName = (string) (($profile['districtName'] ?? '') ?: ($profile['district_name'] ?? '') ?: ($payload['districtName'] ?? '') ?: ($payload['district_name'] ?? '') ?: '');
+            $email        = (string) (($profile['email'] ?? '') ?: ($payload['email'] ?? '') ?: '');
 
-            $profileMobile = $firstNonEmpty([
-                $account['mobile'] ?? null,
-                $account['mobileNumber'] ?? null,
-                $account['mobile_number'] ?? null,
-                $fullProfile['mobile'] ?? null,
-                $fullProfile['mobileNumber'] ?? null,
-            ]);
-
-            $photo = $firstNonEmpty([
-                $account['profilePhoto'] ?? null,
-                $account['profile_photo'] ?? null,
-                $fullProfile['profilePhoto'] ?? null,
-                $fullProfile['profile_photo'] ?? null,
-                $fullProfile['photo'] ?? null,
-                $fullProfile['kycPhoto'] ?? null,
-            ]);
-
-            $address = $firstNonEmpty([
-                $fullProfile['address'] ?? null,
-                $fullProfile['addressLine'] ?? null,
-                $fullProfile['address_line'] ?? null,
-                $account['address'] ?? null,
-                $account['addressLine'] ?? null,
-            ]);
-
-            $districtName = $firstNonEmpty([
-                $fullProfile['district'] ?? null,
-                $fullProfile['districtName'] ?? null,
-                $fullProfile['district_name'] ?? null,
-                $account['district'] ?? null,
-                $account['districtName'] ?? null,
-            ]);
-
-            $stateName = $firstNonEmpty([
-                $fullProfile['state'] ?? null,
-                $fullProfile['stateName'] ?? null,
-                $fullProfile['state_name'] ?? null,
-                $account['state'] ?? null,
-                $account['stateName'] ?? null,
-            ]);
-
-            $zip = $firstNonEmpty([
-                $fullProfile['pinCode'] ?? null,
-                $fullProfile['pincode'] ?? null,
-                $fullProfile['pin'] ?? null,
-                $account['pinCode'] ?? null,
-                $account['pincode'] ?? null,
-            ]);
-
-            $email = $firstNonEmpty([
-                $fullProfile['email'] ?? null,
-                $account['email'] ?? null,
-            ]);
-
-            $cardBase64 = (string) ($result['card_base64'] ?? '');
-
-            // Fallback to Bridge card endpoint if not retrieved directly
-            if ($cardBase64 === '' && ($abhaNum !== '' || $abhaAddress !== '')) {
-                try {
-                    $bridge = \App\Libraries\Abdm\AbdmConnectorFactory::make();
-                    $cardResult = $bridge->fetchOfficialAbhaCard([
-                        'abha_number'  => $abhaNum,
-                        'abha_address' => $abhaAddress,
-                        'token'        => $userToken,
-                        'x_token'      => $userToken,
-                    ]);
-                    if (! empty($cardResult['ok']) && ! empty($cardResult['card_base64'])) {
-                        $cardBase64 = (string) $cardResult['card_base64'];
-                    }
-                } catch (\Throwable $e) {
-                    log_message('warning', '[ABHA] Bridge card fetch fallback failed: ' . $e->getMessage());
-                }
-            }
+            $cardBase64 = (string) (
+                $result['official_card']['card_base64']
+                ?? $payload['official_card']['card_base64']
+                ?? $result['card_base64']
+                ?? $payload['card_base64']
+                ?? ''
+            );
 
             $abhaMeta = [
                 'abha_address'      => $abhaAddress,
@@ -1337,23 +1288,21 @@ class Abha extends BaseController
                 'email'             => $email,
             ];
 
-            $patientInfo = $this->tryAutoLinkByDirectMatch($abhaNum, $name, $profileMobile, $gender, $dob, $abhaMeta);
+            $patientInfo = $this->tryAutoLinkByDirectMatch($cleanAbha, $name, $profileMobile, $gender, $profileDob, $abhaMeta);
 
             $responseBase = [
                 'ok'                => 1,
-                'txn_id'            => $result['txn_id'] ?? $txnId,
-                'token'             => $result['token'] ?? '',
-                'accounts'          => $result['accounts'] ?? [],
+                'txn_id'            => (string) ($payload['txnId'] ?? $payload['txn_id'] ?? $txnId),
                 'card_base64'       => $cardBase64,
                 'card_content_type' => 'image/png',
                 'card_source'       => $cardBase64 !== '' ? 'abdm' : 'generated',
                 'card_message'      => $cardBase64 !== '' ? 'Official ABHA Card from ABDM' : '',
-                'abha_number'       => $abhaNum,
+                'abha_number'       => $cleanAbha,
                 'name'              => $name,
                 'photo'             => $photo,
                 'mobile'            => $profileMobile,
                 'gender'            => $gender,
-                'dob'               => $dob,
+                'dob'               => $profileDob,
                 'abha_address'      => $abhaAddress,
                 'verified_status'   => 'ACTIVE',
                 'verification_type' => 'VERIFIED',
@@ -1378,8 +1327,7 @@ class Abha extends BaseController
             $db = \Config\Database::connect();
             $fields = $db->getFieldNames('patient_master') ?? [];
             $abhaField = $this->resolveAbhaFieldName($fields);
-            $abhaNumClean = preg_replace('/\D/', '', $abhaNum);
-            $candidates = $this->findMatchingCandidates($db, $fields, $name, $profileMobile, $gender, $dob, '', $abhaField, $abhaNumClean);
+            $candidates = $this->findMatchingCandidates($db, $fields, $name, $profileMobile, $gender, $profileDob, '', $abhaField, $cleanAbha);
 
             return $this->response->setJSON($responseBase + [
                 'need_confirmation' => true,
