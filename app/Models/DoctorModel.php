@@ -27,7 +27,16 @@ class DoctorModel
 
     public function getDoctors(): array
     {
-        return $this->db->table('doctor_master')->get()->getResult();
+        $builder = $this->db->table('doctor_master d');
+        if ($this->db->tableExists('user_profiles')) {
+            $builder->select('d.*, u.id as linked_user_id, u.username as linked_username, u.active as linked_user_active')
+                ->join('user_profiles up', 'up.doctor_id = d.id', 'left')
+                ->join('users u', 'u.id = up.user_id AND u.deleted_at IS NULL', 'left');
+        } else {
+            $builder->select('d.*');
+        }
+
+        return $builder->get()->getResult();
     }
 
     public function getDoctorById(int $id): array

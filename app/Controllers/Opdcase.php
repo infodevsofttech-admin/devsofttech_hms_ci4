@@ -41,11 +41,21 @@ class Opdcase extends BaseController
             $insuranceId = (int) $row->insurance_id;
         }
 
+        $defaultDocId = 0;
+        $user = function_exists('auth') ? auth()->user() : null;
+        if ($user && ! empty($user->id)) {
+            $profile = (new \App\Models\UserProfileModel())->getProfile((int) $user->id);
+            if (! empty($profile['doctor_id'])) {
+                $defaultDocId = (int) $profile['doctor_id'];
+            }
+        }
+
         return view('billing/opd_app_insurance_V', [
-            'person_info' => $data['person_info'],
-            'doc_spec_l' => $data['doc_spec_l'],
+            'person_info'     => $data['person_info'],
+            'doc_spec_l'      => $data['doc_spec_l'],
             'insurance_cards' => $cards,
-            'insurance_id' => $insuranceId,
+            'insurance_id'    => $insuranceId,
+            'default_doc_id'  => $defaultDocId,
         ]);
     }
 

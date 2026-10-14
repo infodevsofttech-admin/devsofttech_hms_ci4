@@ -61,18 +61,27 @@ class NurseModel
 
     public function getNurses(string $q = ''): array
     {
-        $builder = $this->db->table('nurse_master');
+        $builder = $this->db->table('nurse_master n');
+        if ($this->db->tableExists('user_profiles')) {
+            $builder->select('n.*, u.id as linked_user_id, u.username as linked_username, u.active as linked_user_active')
+                ->join('user_profiles up', 'up.nurse_id = n.id', 'left')
+                ->join('users u', 'u.id = up.user_id AND u.deleted_at IS NULL', 'left');
+        } else {
+            $builder->select('n.*');
+        }
+
         if ($q !== '') {
             $builder->groupStart()
-                ->like('name', $q)
-                ->orLike('nurse_code', $q)
-                ->orLike('hpr_id', $q)
-                ->orLike('registration_no', $q)
-                ->orLike('qualification', $q)
-                ->orLike('contact_no', $q)
+                ->like('n.name', $q)
+                ->orLike('n.nurse_code', $q)
+                ->orLike('n.hpr_id', $q)
+                ->orLike('n.registration_no', $q)
+                ->orLike('n.qualification', $q)
+                ->orLike('n.contact_no', $q)
                 ->groupEnd();
         }
-        return $builder->orderBy('name', 'ASC')->get()->getResultArray();
+
+        return $builder->orderBy('n.name', 'ASC')->get()->getResultArray();
     }
 
     public function getActiveNurses(): array

@@ -345,6 +345,7 @@ class AuthGroups extends ShieldAuthGroups
             'ipd_ot.schedule.manage',
             'ipd_ot.status.manage',
             'ipd_ot.postop.manage',
+            'settings.bed_status.view',
         ],
         'nurse' => [
             'ipd_nursing.view',
@@ -356,9 +357,11 @@ class AuthGroups extends ShieldAuthGroups
             'ipd_ot.request.manage',
             'ipd_ot.status.manage',
             'ipd_ot.postop.manage',
+            'settings.bed_status.view',
         ],
         'pharmacy_admin' => [
             'pharmacy.*',
+            'settings.bed_status.view',
         ],
         'stock_manager' => [
             'hospital_stock.access',
@@ -366,28 +369,33 @@ class AuthGroups extends ShieldAuthGroups
             'hospital_stock.indent.approve',
             'hospital_stock.purchase.manage',
             'hospital_stock.report.view',
+            'settings.bed_status.view',
         ],
         'stock_requester' => [
             'hospital_stock.access',
             'hospital_stock.indent.create',
             'hospital_stock.report.view',
+            'settings.bed_status.view',
         ],
         'stock_issuer' => [
             'hospital_stock.access',
             'hospital_stock.issue',
             'hospital_stock.purchase.manage',
             'hospital_stock.report.view',
+            'settings.bed_status.view',
         ],
         'department_head' => [
             'hospital_stock.access',
             'hospital_stock.indent.create',
             'hospital_stock.report.view',
+            'settings.bed_status.view',
         ],
         'storekeeper' => [
             'hospital_stock.access',
             'hospital_stock.issue',
             'hospital_stock.purchase.manage',
             'hospital_stock.report.view',
+            'settings.bed_status.view',
         ],
         'billing_cashier' => [
             'finance.workflow.view',
@@ -399,6 +407,7 @@ class AuthGroups extends ShieldAuthGroups
             'billing.refund.view',
             'billing.refund.manage',
             'ipd_discharge.view',
+            'settings.bed_status.view',
         ],
         'accounts_officer' => [
             'finance.workflow.view',
@@ -407,8 +416,11 @@ class AuthGroups extends ShieldAuthGroups
             'finance.bank.audit',
             'finance.bank.statement.update',
             'finance.payment.edit',
+            'settings.bed_status.view',
         ],
-        'user' => [],
+        'user' => [
+            'settings.bed_status.view',
+        ],
         'beta' => [
             'beta.access',
         ],

@@ -8,7 +8,7 @@
   </ol>
 </section>
 <section class="content">
-<form role="form" class="form1">
+<form role="form" class="form1" onsubmit="return false;">
 <?= csrf_field() ?>
 <?php
     $user = auth()->user();
@@ -215,51 +215,135 @@ $(document).ready(function(){
             load_form('<?= base_url('billing/charges/show') ?>/' + inv_id);
         });
     });
+
+    $('#input_qty, #input_rate').on('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            add_item_invoice();
+        }
+    });
 });
 
+function getChargesCsrf() {
+    return $('input[name="<?= csrf_token() ?>"]').last().val() || '<?= csrf_hash() ?>';
+}
+
+function updateChargesCsrf(data) {
+    if (!data) return;
+    try {
+        var $parsed = $('<div>').append($.parseHTML(data));
+        var newCsrf = $parsed.find('input[name="<?= csrf_token() ?>"]').val();
+        if (newCsrf) {
+            $('input[name="<?= csrf_token() ?>"]').val(newCsrf);
+        }
+    } catch (e) {}
+}
+
 function add_item_invoice() {
-    var csrf_value = $('input[name="<?= csrf_token() ?>"]').val();
-    if ($('#input_qty').val() > 0 && $('#itype_name_id').val() > 0) {
-        $.post('<?= base_url('billing/charges/item') ?>/1', {
-            "itype_name_id": $('#itype_name_id').val(),
+    var csrf_value = getChargesCsrf();
+    var qty = parseFloat($('#input_qty').val()) || 0;
+    var itemId = parseInt($('#itype_name_id').val(), 10) || 0;
+    var labInvoiceId = parseInt($('#lab_invoice_id').val(), 10) || 0;
+
+    if (itemId <= 0) {
+        alert('Please select a Charge Name before adding.');
+        $('#itype_name_id').select2('open');
+        return;
+    }
+    if (qty <= 0) {
+        alert('Quantity must be greater than 0.');
+        $('#input_qty').focus();
+        return;
+    }
+
+    var $btn = $('#additem');
+    $btn.prop('disabled', true);
+
+    $.ajax({
+        url: '<?= base_url('billing/charges/item') ?>/1',
+        type: 'POST',
+        data: {
+            "itype_name_id": itemId,
             "itype_idv": $('#itype_idv').val(),
-            "lab_invoice_id": $('#lab_invoice_id').val(),
+            "lab_invoice_id": labInvoiceId,
             "ins_id": $('#ins_id').val(),
             "input_qty": $('#input_qty').val(),
             "input_rate": $('#input_rate').val(),
             "<?= csrf_token() ?>": csrf_value
-        }, function(data){
+        },
+        success: function(data){
             $('#show_item_list').html(data);
-        });
-    }
+            updateChargesCsrf(data);
+            $('#input_rate').val('0.00');
+            $('#input_qty').val('1');
+            $('#itype_name_id').focus();
+        },
+        error: function(jqXHR, textStatus, errorThrown) {
+            console.error('add_item_invoice error', jqXHR.status, errorThrown);
+            var errMsg = 'Failed to add item.';
+            if (jqXHR.status === 403) {
+                errMsg = 'Permission Denied: Your account does not have permission to add or edit charges.';
+            } else if (jqXHR.responseText && jqXHR.responseText.indexOf('route') === -1) {
+                errMsg = jqXHR.responseText.replace(/<[^>]*>/g, ' ').substring(0, 150);
+            }
+            if (typeof window.notify === 'function') {
+                window.notify('danger', 'Charges Error: ', errMsg);
+            } else {
+                alert(errMsg);
+            }
+        },
+        complete: function() {
+            $btn.prop('disabled', false);
+        }
+    });
 }
 
 function remove_item_invoice(itemid) {
-    var csrf_value = $('input[name="<?= csrf_token() ?>"]').val();
-    if (confirm('Are you sure Remove this item')) {
-        $.post('<?= base_url('billing/charges/item') ?>/0', {
-            "itemid": itemid,
-            "lab_invoice_id": $('#lab_invoice_id').val(),
-            "<?= csrf_token() ?>": csrf_value
-        }, function(data){
-            $('#show_item_list').html(data);
+    var csrf_value = getChargesCsrf();
+    if (confirm('Are you sure you want to remove this item?')) {
+        $.ajax({
+            url: '<?= base_url('billing/charges/item') ?>/0',
+            type: 'POST',
+            data: {
+                "itemid": itemid,
+                "lab_invoice_id": $('#lab_invoice_id').val(),
+                "<?= csrf_token() ?>": csrf_value
+            },
+            success: function(data){
+                $('#show_item_list').html(data);
+                updateChargesCsrf(data);
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                console.error('remove_item_invoice error', jqXHR.status, errorThrown);
+                alert('Error removing item: ' + (jqXHR.statusText || 'Failed'));
+            }
         });
     }
 }
 
 function update_qty(itemid) {
-    var csrf_value = $('input[name="<?= csrf_token() ?>"]').val();
-    if (confirm('Are you sure Update this item')) {
-        var update_qty = $('#input_qty_' + itemid).val();
-        var item_rate = $('#hidden_rate_' + itemid).val();
-        $.post('<?= base_url('billing/charges/item') ?>/2', {
-            "itemid": itemid,
-            "lab_invoice_id": $('#lab_invoice_id').val(),
-            "update_qty": update_qty,
-            "item_rate": item_rate,
-            "<?= csrf_token() ?>": csrf_value
-        }, function(data){
-            $('#show_item_list').html(data);
+    var csrf_value = getChargesCsrf();
+    if (confirm('Are you sure you want to update this item?')) {
+        var update_qty_val = $('#input_qty_' + itemid).val();
+        var item_rate_val = $('#hidden_rate_' + itemid).val();
+        $.ajax({
+            url: '<?= base_url('billing/charges/item') ?>/2',
+            type: 'POST',
+            data: {
+                "itemid": itemid,
+                "lab_invoice_id": $('#lab_invoice_id').val(),
+                "update_qty": update_qty_val,
+                "item_rate": item_rate_val,
+                "<?= csrf_token() ?>": csrf_value
+            },
+            success: function(data){
+                $('#show_item_list').html(data);
+                updateChargesCsrf(data);
+            },
+            error: function(jqXHR, textStatus, errorThrown) {
+                console.error('update_qty error', jqXHR.status, errorThrown);
+                alert('Error updating item: ' + (jqXHR.statusText || 'Failed'));
+            }
         });
     }
 }

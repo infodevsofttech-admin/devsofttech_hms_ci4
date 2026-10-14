@@ -84,6 +84,8 @@ class Filters extends BaseFilters
                     'HealthplixGateway/*',
                     'stt-proxy',
                     'stt-proxy/*',
+                    'billing/charges',
+                    'billing/charges/*',
                 ],
             ],
             // 'honeypot',

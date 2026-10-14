@@ -250,6 +250,15 @@ class IpdPatient extends BaseController
         $nurseModel = new \App\Models\NurseModel();
         $nurseList = $nurseModel->getActiveNurses();
 
+        $defaultNurseId = 0;
+        $user = function_exists('auth') ? auth()->user() : null;
+        if ($user && ! empty($user->id)) {
+            $profile = (new \App\Models\UserProfileModel())->getProfile((int) $user->id);
+            if (! empty($profile['nurse_id'])) {
+                $defaultNurseId = (int) $profile['nurse_id'];
+            }
+        }
+
         return view('ipd_nursing/workspace', [
             'ipd_info' => $panelData['ipd_info'] ?? null,
             'person_info' => $person,
@@ -260,6 +269,7 @@ class IpdPatient extends BaseController
             'doctor_visit_fee_map' => $this->ipdBillingModel->getDoctorVisitFeeMap($doctorIds),
             'doc_list' => $docList,
             'nurse_list' => $nurseList,
+            'default_nurse_id' => $defaultNurseId,
             'history_fields' => $historyFields,
             'patient_history_row' => $patientHistoryRow,
             'opd_history_snapshot' => $opdHistorySnapshot,
@@ -412,6 +422,12 @@ class IpdPatient extends BaseController
         $recordedById = $user->id ?? null;
 
         $nurseIdPost = (int) ($this->request->getPost('recorded_by_nurse_id') ?? 0);
+        if ($nurseIdPost <= 0 && $user && ! empty($user->id)) {
+            $profile = (new \App\Models\UserProfileModel())->getProfile((int) $user->id);
+            if (! empty($profile['nurse_id'])) {
+                $nurseIdPost = (int) $profile['nurse_id'];
+            }
+        }
         if ($nurseIdPost > 0) {
             $nurseModel = new \App\Models\NurseModel();
             $nurseRow = $nurseModel->getNurseById($nurseIdPost);

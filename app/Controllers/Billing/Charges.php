@@ -267,8 +267,8 @@ class Charges extends BaseController
             return $resp;
         }
 
-        $tid = (int) $this->request->getPost('itype_idv');
-        $insId = (int) $this->request->getPost('ins_id');
+        $tid = (int) ($this->request->getVar('itype_idv') ?? 0);
+        $insId = (int) ($this->request->getVar('ins_id') ?? 0);
 
         if ($insId > 1) {
             $sql = "select m.id,m.itype,m.idesc,m.amount,t.itype_id,t.is_ipd_opd,t.group_desc,
@@ -292,6 +292,7 @@ class Charges extends BaseController
             echo '<option value=' . $row->id . '>' . $row->sdesc . '</option>';
         }
         echo '</select></div>';
+        echo '<input type="hidden" name="' . csrf_token() . '" value="' . csrf_hash() . '" class="ajax-csrf-token" />';
     }
 
     public function updateReferDoc()
@@ -300,9 +301,9 @@ class Charges extends BaseController
             return $resp;
         }
 
-        $invoiceId = (int) $this->request->getPost('inv_id');
-        $docId = (int) $this->request->getPost('doc_id');
-        $rawDate = (string) $this->request->getPost('inv_date');
+        $invoiceId = (int) ($this->request->getVar('inv_id') ?? 0);
+        $docId = (int) ($this->request->getVar('doc_id') ?? 0);
+        $rawDate = (string) ($this->request->getVar('inv_date') ?? '');
         $invDate = str_to_MysqlDate($rawDate);
         if (strpos($rawDate, '-') !== false && strlen($rawDate) === 10) {
             $invDate = $rawDate;
@@ -318,7 +319,7 @@ class Charges extends BaseController
         }
 
         if ($docId < 1) {
-            $referName = (string) $this->request->getPost('refername');
+            $referName = (string) ($this->request->getVar('refername') ?? '');
         } else {
             $sql = "select * from doctor_master where id=" . $docId;
             $query = $this->db->query($sql);
@@ -346,8 +347,8 @@ class Charges extends BaseController
         $invoiceModel = new InvoiceModel();
 
         if ($type === 1) {
-            $insId = (int) $this->request->getPost('ins_id');
-            $itemId = (int) $this->request->getPost('itype_name_id');
+            $insId = (int) ($this->request->getVar('ins_id') ?? 0);
+            $itemId = (int) ($this->request->getVar('itype_name_id') ?? 0);
 
             if ($insId > 1) {
                 $sql = "select m.id,m.itype,m.idesc as sdesc,m.amount,t.itype_id,t.is_ipd_opd,t.group_desc,i.isdelete,
@@ -361,11 +362,11 @@ class Charges extends BaseController
 
                 $itemRate = $itemlist[0]->amount1 ?? 0;
                 $orgCode = $itemlist[0]->org_code ?? '';
-                $customRate = (float) $this->request->getPost('input_rate');
+                $customRate = (float) ($this->request->getVar('input_rate') ?? 0);
                 if ($customRate > 0) {
                     $itemRate = $customRate;
                 }
-                $amountValue = (float) $this->request->getPost('input_qty') * $itemRate;
+                $amountValue = (float) ($this->request->getVar('input_qty') ?? 1) * $itemRate;
             } else {
                 $sql = "select id,idesc as sdesc,amount from hc_items where id=" . $itemId;
                 $query = $this->db->query($sql);
@@ -373,27 +374,27 @@ class Charges extends BaseController
 
                 $itemRate = $itemlist[0]->amount ?? 0;
                 $orgCode = '';
-                $customRate = (float) $this->request->getPost('input_rate');
+                $customRate = (float) ($this->request->getVar('input_rate') ?? 0);
                 if ($customRate > 0) {
                     $itemRate = $customRate;
                 }
-                $amountValue = (float) $this->request->getPost('input_qty') * $itemRate;
+                $amountValue = (float) ($this->request->getVar('input_qty') ?? 1) * $itemRate;
             }
 
             $insertInvoiceItem = [
-                'inv_master_id' => (int) $this->request->getPost('lab_invoice_id'),
-                'item_type' => (int) $this->request->getPost('itype_idv'),
+                'inv_master_id' => (int) ($this->request->getVar('lab_invoice_id') ?? 0),
+                'item_type' => (int) ($this->request->getVar('itype_idv') ?? 0),
                 'item_id' => $itemId,
                 'item_name' => $itemlist[0]->sdesc ?? '',
                 'item_rate' => $itemRate,
                 'item_added_date' => str_to_MysqlDate(date('d/m/Y')),
-                'item_qty' => (float) $this->request->getPost('input_qty'),
+                'item_qty' => (float) ($this->request->getVar('input_qty') ?? 1),
                 'item_amount' => $amountValue,
                 'ins_id' => $insId,
                 'org_code' => $orgCode,
             ];
 
-            $sql = "select * from invoice_item where inv_master_id=" . (int) $this->request->getPost('lab_invoice_id') . " and item_id=" . $itemId;
+            $sql = "select * from invoice_item where inv_master_id=" . (int) ($this->request->getVar('lab_invoice_id') ?? 0) . " and item_id=" . $itemId;
             $query = $this->db->query($sql);
             $itemCheck = $query->getResult();
 
@@ -401,18 +402,18 @@ class Charges extends BaseController
                 $invoiceModel->addInvoiceItem($insertInvoiceItem);
             }
         } elseif ($type === 2) {
-            $amountValue = (float) $this->request->getPost('update_qty') * (float) $this->request->getPost('item_rate');
+            $amountValue = (float) ($this->request->getVar('update_qty') ?? 1) * (float) ($this->request->getVar('item_rate') ?? 0);
             $updateInvoiceItem = [
                 'item_added_date' => str_to_MysqlDate(date('d/m/Y')),
-                'item_qty' => (float) $this->request->getPost('update_qty'),
+                'item_qty' => (float) ($this->request->getVar('update_qty') ?? 1),
                 'item_amount' => $amountValue,
             ];
-            $invoiceModel->updateItem($updateInvoiceItem, (int) $this->request->getPost('itemid'));
+            $invoiceModel->updateItem($updateInvoiceItem, (int) ($this->request->getVar('itemid') ?? 0));
         } else {
-            $invoiceModel->deleteInvoiceItem((int) $this->request->getPost('itemid'));
+            $invoiceModel->deleteInvoiceItem((int) ($this->request->getVar('itemid') ?? 0));
         }
 
-        $invoiceId = (int) $this->request->getPost('lab_invoice_id');
+        $invoiceId = (int) ($this->request->getVar('lab_invoice_id') ?? 0);
         $sql = "select i.*,t.group_desc from invoice_item i join hc_item_type t on i.item_type=t.itype_id where i.inv_master_id=" . $invoiceId . " Order by i.id";
         $query = $this->db->query($sql);
         $invoiceDetails = $query->getResult();

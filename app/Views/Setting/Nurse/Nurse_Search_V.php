@@ -41,6 +41,7 @@
                             <th style="width: 120px;">Designation</th>
                             <th>Qualification</th>
                             <th>Contact / Mobile</th>
+                            <th style="width: 120px;">User Account</th>
                             <th style="width: 90px;">Status</th>
                             <th style="width: 110px;" class="text-end pe-3">Actions</th>
                         </tr>
@@ -48,7 +49,7 @@
                     <tbody id="nurse_table_body">
                         <?php if (empty($nurses)): ?>
                             <tr>
-                                <td colspan="10" class="text-center py-4 text-muted">
+                                <td colspan="11" class="text-center py-4 text-muted">
                                     <i class="bi bi-person-x fs-3 d-block mb-1"></i>
                                     No nursing staff records found. Click <strong>"Add New Nurse"</strong> to create one.
                                 </td>
@@ -75,6 +76,17 @@
                                     <td><span class="badge bg-secondary-subtle text-dark border"><?= esc($nurse['designation'] ?: 'Staff Nurse') ?></span></td>
                                     <td><?= esc($nurse['qualification'] ?: '-') ?></td>
                                     <td><?= esc($nurse['contact_no'] ?: '-') ?></td>
+                                    <td>
+                                        <?php if (!empty($nurse['linked_username'])): ?>
+                                            <span class="badge bg-success-subtle text-success border border-success-subtle" title="Linked User Account">
+                                                <i class="bi bi-person-check me-1"></i><?= esc($nurse['linked_username']) ?>
+                                            </span>
+                                        <?php else: ?>
+                                            <button type="button" onclick="load_form_div('<?= base_url('setting/admin/user-management/new?nurse_id=' . (int)$nurse['id']) ?>','maindiv','Create User');" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size: 11px;">
+                                                <i class="bi bi-person-plus me-1"></i>Link User
+                                            </button>
+                                        <?php endif; ?>
+                                    </td>
                                     <td>
                                         <?php if ((int)$nurse['is_active'] === 1): ?>
                                             <span class="badge bg-success">Active</span>

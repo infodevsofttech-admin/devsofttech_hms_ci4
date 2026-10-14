@@ -91,6 +91,9 @@ $admRecordedAt = !empty($latestAdmissionEntry['recorded_at'])
     ? date('Y-m-d\TH:i', strtotime($latestAdmissionEntry['recorded_at'])) 
     : date('Y-m-d\TH:i');
 $admNurseId = (int) ($latestAdmissionEntry['recorded_by_id'] ?? 0);
+if ($admNurseId === 0 && ! empty($default_nurse_id)) {
+    $admNurseId = (int) $default_nurse_id;
+}
 $admComplaints = (string) ($latestAdmissionEntry['treatment_text'] ?? '');
 $admTempF = (isset($latestAdmissionEntry['temperature_c']) && $latestAdmissionEntry['temperature_c'] !== null && $latestAdmissionEntry['temperature_c'] !== '') 
     ? $toFahrenheit($latestAdmissionEntry['temperature_c']) 
@@ -560,7 +563,7 @@ $treatmentEntries = array_values(array_filter($entries, static fn ($r) => ($r['e
                             <select name="recorded_by_nurse_id" class="form-select">
                                 <option value="0">-- Select Nursing Staff --</option>
                                 <?php foreach (($nurse_list ?? []) as $nRow): ?>
-                                    <option value="<?= (int) $nRow['id'] ?>">
+                                    <option value="<?= (int) $nRow['id'] ?>" <?= (! empty($default_nurse_id) && (int) $default_nurse_id === (int) $nRow['id']) ? 'selected' : '' ?>>
                                         <?= esc(($nRow['nurse_code'] ? '[' . $nRow['nurse_code'] . '] ' : '') . $nRow['name']) ?>
                                     </option>
                                 <?php endforeach; ?>
@@ -653,7 +656,7 @@ $treatmentEntries = array_values(array_filter($entries, static fn ($r) => ($r['e
                             <select name="recorded_by_nurse_id" class="form-select">
                                 <option value="0">-- Select Nursing Staff --</option>
                                 <?php foreach (($nurse_list ?? []) as $nRow): ?>
-                                    <option value="<?= (int) $nRow['id'] ?>">
+                                    <option value="<?= (int) $nRow['id'] ?>" <?= (! empty($default_nurse_id) && (int) $default_nurse_id === (int) $nRow['id']) ? 'selected' : '' ?>>
                                         <?= esc(($nRow['nurse_code'] ? '[' . $nRow['nurse_code'] . '] ' : '') . $nRow['name']) ?>
                                     </option>
                                 <?php endforeach; ?>
@@ -757,7 +760,7 @@ $treatmentEntries = array_values(array_filter($entries, static fn ($r) => ($r['e
                             <select name="recorded_by_nurse_id" class="form-select">
                                 <option value="0">-- Select Nursing Staff --</option>
                                 <?php foreach (($nurse_list ?? []) as $nRow): ?>
-                                    <option value="<?= (int) $nRow['id'] ?>">
+                                    <option value="<?= (int) $nRow['id'] ?>" <?= (! empty($default_nurse_id) && (int) $default_nurse_id === (int) $nRow['id']) ? 'selected' : '' ?>>
                                         <?= esc(($nRow['nurse_code'] ? '[' . $nRow['nurse_code'] . '] ' : '') . $nRow['name']) ?>
                                     </option>
                                 <?php endforeach; ?>

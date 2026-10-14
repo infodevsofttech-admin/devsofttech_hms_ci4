@@ -632,16 +632,16 @@ $routes->post('patient/abdm_content_request_custom/(:num)', 'Patient::abdm_conte
     $routes->get('charges/add/(:num)/(:num)', 'Billing\\Charges::add/$1/$2');
     $routes->get('charges/add/(:num)/(:num)/(:num)', 'Billing\\Charges::add/$1/$2/$3');
     $routes->get('charges/edit/(:num)', 'Billing\\Charges::edit/$1');
-    $routes->post('charges/list-by-type', 'Billing\\Charges::listByType');
-    $routes->post('charges/item/(:num)', 'Billing\\Charges::item/$1');
-    $routes->post('charges/update-refer', 'Billing\\Charges::updateReferDoc');
+    $routes->match(['GET', 'POST'], 'charges/list-by-type', 'Billing\\Charges::listByType');
+    $routes->match(['GET', 'POST'], 'charges/item/(:num)', 'Billing\\Charges::item/$1');
+    $routes->match(['GET', 'POST'], 'charges/update-refer', 'Billing\\Charges::updateReferDoc');
     $routes->post('charges/confirm-payment', 'Billing\\Charges::confirm_payment');
     $routes->post('charges/cancel-invoice/(:num)', 'Billing\\Charges::cancel_invoice/$1');
     $routes->post('charges/update-correction', 'Billing\\Charges::update_correction_charges');
     $routes->get('charges/show/(:num)', 'Billing\\Charges::show/$1');
     $routes->get('charges/print_invoice/(:num)/(:num)', 'Billing\\Charges::print_invoice/$1/$2');
-    $routes->post('charges/delete', 'Billing\\Charges::delete');
-    $routes->post('charges/update-discount', 'Billing\\Charges::updateDiscount');
+    $routes->match(['GET', 'POST'], 'charges/delete', 'Billing\\Charges::delete');
+    $routes->match(['GET', 'POST'], 'charges/update-discount', 'Billing\\Charges::updateDiscount');
 });
 
 $routes->get('ipd/patient', 'IpdPatient::index', ['filter' => 'permission:ipd_nursing.view']);
@@ -1355,6 +1355,7 @@ $routes->group('setting', static function($routes) {
     $routes->get('admin/user-management/sessions', 'Setting\\UserManagement::sessions', ['filter' => 'permission:users.edit,users.manage-admins']);
     $routes->post('admin/user-management/sessions/force-logout/(:num)', 'Setting\\UserManagement::forceLogout/$1', ['filter' => ['permission:users.edit,users.manage-admins', 'csrf']]);
     $routes->post('admin/user-management/delete/(:num)', 'Setting\\UserManagement::delete/$1', ['filter' => ['permission:users.delete,users.manage-admins', 'csrf']]);
+    $routes->post('admin/user-management/toggle-status/(:num)', 'Setting\\UserManagement::toggleStatus/$1', ['filter' => ['permission:users.edit,users.manage-admins', 'csrf']]);
     $routes->get('admin/roles', 'Setting\\RoleManagement::index', ['filter' => 'permission:users.manage-admins']);
     $routes->get('admin/roles/new', 'Setting\\RoleManagement::create', ['filter' => 'permission:users.manage-admins']);
     $routes->post('admin/roles', 'Setting\\RoleManagement::store', ['filter' => ['permission:users.manage-admins', 'csrf']]);
@@ -1462,7 +1463,7 @@ $routes->group('setting', static function($routes) {
     $routes->post('admin/departments/save', 'Setting\\BedManagement::saveDepartment', ['filter' => $settingsBedFilter]);
     $routes->post('admin/departments/delete', 'Setting\\BedManagement::deleteDepartment', ['filter' => $settingsBedFilter]);
     $routes->get('admin/wards', 'Setting\\BedManagement::wards', ['filter' => $settingsBedFilter]);
-    $routes->get('admin/bed-status', 'Setting\\BedManagement::bedStatus', ['filter' => $settingsBedFilter]);
+    $routes->get('admin/bed-status', 'Setting\\BedManagement::bedStatus');
     $routes->post('admin/wards/save', 'Setting\\BedManagement::saveWard', ['filter' => $settingsBedFilter]);
     $routes->post('admin/wards/delete', 'Setting\\BedManagement::deleteWard', ['filter' => $settingsBedFilter]);
     $routes->get('admin/bed-categories', 'Setting\\BedManagement::categories', ['filter' => $settingsBedFilter]);

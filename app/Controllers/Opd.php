@@ -1520,6 +1520,16 @@ class Opd extends BaseController
             $data['org_case_master'] = $query->getResult();
         }
 
+        $defaultDocId = 0;
+        $user = function_exists('auth') ? auth()->user() : null;
+        if ($user && ! empty($user->id)) {
+            $profile = (new \App\Models\UserProfileModel())->getProfile((int) $user->id);
+            if (! empty($profile['doctor_id'])) {
+                $defaultDocId = (int) $profile['doctor_id'];
+            }
+        }
+        $data['default_doc_id'] = $defaultDocId;
+
         return view('billing/opd_appointment_V', $data);
     }
 

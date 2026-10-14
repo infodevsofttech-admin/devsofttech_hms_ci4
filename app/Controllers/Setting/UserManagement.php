@@ -4,11 +4,16 @@ namespace App\Controllers\Setting;
 
 use App\Controllers\BaseController;
 use App\Libraries\UserSessionRegistry;
+use App\Models\UserProfileModel;
 use CodeIgniter\Shield\Entities\User;
 use CodeIgniter\Shield\Models\UserModel;
 
 class UserManagement extends BaseController
 {
+    private function profileModel(): UserProfileModel
+    {
+        return model(UserProfileModel::class);
+    }
     private function currentUserId(): int
     {
         return function_exists('auth') ? (int) (auth()->user()->id ?? 0) : 0;
@@ -38,41 +43,60 @@ class UserManagement extends BaseController
 
     public function index(): string
     {
-        $userModel = model(UserModel::class);
+        $profileModel = $this->profileModel();
+        $filters = [
+            'role'   => (string) ($this->request->getGet('role') ?? ''),
+            'active' => (string) ($this->request->getGet('active') ?? ''),
+            'search' => (string) ($this->request->getGet('search') ?? ''),
+        ];
 
-        $users = $userModel
-            ->withIdentities()
-            ->withGroups()
-            ->findAll();
+        $users = $profileModel->getUsersList($filters);
 
         return view('Setting/Admin/UserManagement/index', [
-            'users' => $users,
+            'users'   => $users,
+            'roles'   => $this->availableRoles(),
+            'filters' => $filters,
         ]);
     }
 
     public function create(): string
     {
+        $profileModel = $this->profileModel();
+
         return view('Setting/Admin/UserManagement/create', [
-            'roles' => $this->availableRoles(),
+            'roles'              => $this->availableRoles(),
+            'doctors'            => $profileModel->getActiveDoctors(),
+            'nurses'             => $profileModel->getActiveNurses(),
+            'selected_doctor_id' => (int) ($this->request->getGet('doctor_id') ?? 0),
+            'selected_nurse_id'  => (int) ($this->request->getGet('nurse_id') ?? 0),
         ]);
     }
 
     public function store()
     {
         $rules = [
-            'username' => 'required|min_length[3]|max_length[30]|regex_match[/^[a-zA-Z0-9.]+$/]',
-            'email'    => 'required|valid_email|max_length[254]',
-            'password' => 'required|min_length[8]',
-            'role'     => 'required',
-            'person_name' => 'permit_empty|max_length[120]',
-            'phone_no' => 'permit_empty|regex_match[/^[0-9+()\\s-]{7,20}$/]',
+            'username'      => 'required|min_length[3]|max_length[30]|regex_match[/^[a-zA-Z0-9.]+$/]',
+            'email'         => 'required|valid_email|max_length[254]',
+            'password'      => 'required|min_length[8]',
+            'role'          => 'required',
+            'person_name'   => 'permit_empty|max_length[120]',
+            'phone_no'      => 'permit_empty|regex_match[/^[0-9+()\\s-]{7,20}$/]',
+            'doctor_id'     => 'permit_empty|is_natural_no_zero',
+            'nurse_id'      => 'permit_empty|is_natural_no_zero',
+            'department'    => 'permit_empty|max_length[100]',
+            'designation'   => 'permit_empty|max_length[100]',
+            'employee_code' => 'permit_empty|max_length[50]',
         ];
+
+        $profileModel = $this->profileModel();
 
         if (! $this->validate($rules)) {
             if ($this->request->isAJAX()) {
                 return view('Setting/Admin/UserManagement/create', [
-                    'roles' => $this->availableRoles(),
-                    'errors' => $this->validator->getErrors(),
+                    'roles'    => $this->availableRoles(),
+                    'doctors'  => $profileModel->getActiveDoctors(),
+                    'nurses'   => $profileModel->getActiveNurses(),
+                    'errors'   => $this->validator->getErrors(),
                     'formData' => $this->request->getPost(),
                 ]);
             }
@@ -86,8 +110,10 @@ class UserManagement extends BaseController
             $errors = ['role' => 'Invalid role selected.'];
             if ($this->request->isAJAX()) {
                 return view('Setting/Admin/UserManagement/create', [
-                    'roles' => $this->availableRoles(),
-                    'errors' => $errors,
+                    'roles'    => $this->availableRoles(),
+                    'doctors'  => $profileModel->getActiveDoctors(),
+                    'nurses'   => $profileModel->getActiveNurses(),
+                    'errors'   => $errors,
                     'formData' => $this->request->getPost(),
                 ]);
             }
@@ -108,8 +134,10 @@ class UserManagement extends BaseController
             }
         } catch (\Throwable $e) {
             return view('Setting/Admin/UserManagement/create', [
-                'roles' => $this->availableRoles(),
-                'errors' => ['user' => $e->getMessage() !== '' ? $e->getMessage() : 'Unable to create user.'],
+                'roles'    => $this->availableRoles(),
+                'doctors'  => $profileModel->getActiveDoctors(),
+                'nurses'   => $profileModel->getActiveNurses(),
+                'errors'   => ['user' => $e->getMessage() !== '' ? $e->getMessage() : 'Unable to create user.'],
                 'formData' => $this->request->getPost(),
             ]);
         }
@@ -117,26 +145,41 @@ class UserManagement extends BaseController
         $savedUser = $userModel->find($userModel->getInsertID());
         if ($savedUser !== null) {
             $savedUser->addGroup($role);
-            $this->syncIdentityMeta(
-                (int) $savedUser->id,
-                trim((string) $this->request->getPost('person_name')),
-                trim((string) $this->request->getPost('phone_no'))
-            );
+
+            $personName = trim((string) $this->request->getPost('person_name'));
+            $phoneNo = trim((string) $this->request->getPost('phone_no'));
+            $doctorId = (int) $this->request->getPost('doctor_id');
+            $nurseId = (int) $this->request->getPost('nurse_id');
+            $department = trim((string) $this->request->getPost('department'));
+            $designation = trim((string) $this->request->getPost('designation'));
+            $employeeCode = trim((string) $this->request->getPost('employee_code'));
+
+            $profileModel->saveProfile((int) $savedUser->id, [
+                'full_name'     => $personName,
+                'phone_no'      => $phoneNo,
+                'doctor_id'     => $doctorId > 0 ? $doctorId : null,
+                'nurse_id'      => $nurseId > 0 ? $nurseId : null,
+                'department'    => $department,
+                'designation'   => $designation,
+                'employee_code' => $employeeCode,
+            ]);
+
+            $this->syncIdentityMeta((int) $savedUser->id, $personName, $phoneNo);
             $this->auditClinicalUpdate('user_management', 'create', $savedUser->id, null, [
-                'username' => $savedUser->username,
-                'role' => $role,
-                'active' => 1,
+                'username'      => $savedUser->username,
+                'role'          => $role,
+                'active'        => 1,
+                'doctor_id'     => $doctorId > 0 ? $doctorId : null,
+                'nurse_id'      => $nurseId > 0 ? $nurseId : null,
+                'department'    => $department,
+                'employee_code' => $employeeCode,
             ]);
         }
 
         if ($this->request->isAJAX()) {
-            $users = $userModel
-                ->withIdentities()
-                ->withGroups()
-                ->findAll();
-
             return view('Setting/Admin/UserManagement/index', [
-                'users' => $users,
+                'users'   => $profileModel->getUsersList(),
+                'roles'   => $this->availableRoles(),
                 'message' => 'User created successfully.',
             ]);
         }
@@ -180,36 +223,42 @@ class UserManagement extends BaseController
             ->withGroups()
             ->find($userId);
 
-        if ($user === null) {
-            $users = $userModel
-                ->withIdentities()
-                ->withGroups()
-                ->findAll();
+        $profileModel = $this->profileModel();
 
+        if ($user === null) {
             return view('Setting/Admin/UserManagement/index', [
-                'users' => $users,
-                'errors' => ['User not found.'],
+                'users'   => $profileModel->getUsersList(),
+                'roles'   => $this->availableRoles(),
+                'errors'  => ['User not found.'],
             ]);
         }
 
         if ($this->isPrivilegedUser($user) && ! $this->canManageAdmins()) {
             return view('Setting/Admin/UserManagement/index', [
-                'users' => $userModel->withIdentities()->withGroups()->findAll(),
-                'errors' => ['You cannot edit an administrator account.'],
+                'users'   => $profileModel->getUsersList(),
+                'roles'   => $this->availableRoles(),
+                'errors'  => ['You cannot edit an administrator account.'],
             ]);
         }
 
         $emailIdentity = $user->getEmailIdentity();
         $email = $emailIdentity ? (string) ($emailIdentity->secret ?? '') : '';
-        $meta = $this->decodeIdentityExtra($emailIdentity->extra ?? null);
+        $profile = $profileModel->getProfile($userId);
 
         return view('Setting/Admin/UserManagement/edit', [
-            'user' => $user,
-            'email' => $email,
-            'person_name' => trim((string) ($meta['full_name'] ?? '')),
-            'phone_no' => trim((string) ($meta['phone_no'] ?? '')),
-            'roles' => $this->availableRoles(),
-            'current_role' => (string) (($user->getGroups() ?? [])[0] ?? ''),
+            'user'          => $user,
+            'email'         => $email,
+            'person_name'   => trim((string) ($profile['full_name'] ?? '')),
+            'phone_no'      => trim((string) ($profile['phone_no'] ?? '')),
+            'doctor_id'     => (int) ($profile['doctor_id'] ?? 0),
+            'nurse_id'      => (int) ($profile['nurse_id'] ?? 0),
+            'department'    => trim((string) ($profile['department'] ?? '')),
+            'designation'   => trim((string) ($profile['designation'] ?? '')),
+            'employee_code' => trim((string) ($profile['employee_code'] ?? '')),
+            'roles'         => $this->availableRoles(),
+            'current_role'  => (string) (($user->getGroups() ?? [])[0] ?? ''),
+            'doctors'       => $profileModel->getActiveDoctors(),
+            'nurses'        => $profileModel->getActiveNurses(),
         ]);
     }
 
@@ -217,22 +266,21 @@ class UserManagement extends BaseController
     {
         $userModel = model(UserModel::class);
         $user = $userModel->withGroups()->find($userId);
-        if ($user === null) {
-            $users = $userModel
-                ->withIdentities()
-                ->withGroups()
-                ->findAll();
+        $profileModel = $this->profileModel();
 
+        if ($user === null) {
             return view('Setting/Admin/UserManagement/index', [
-                'users' => $users,
-                'errors' => ['User not found.'],
+                'users'   => $profileModel->getUsersList(),
+                'roles'   => $this->availableRoles(),
+                'errors'  => ['User not found.'],
             ]);
         }
 
         if ($this->isPrivilegedUser($user) && ! $this->canManageAdmins()) {
             return view('Setting/Admin/UserManagement/index', [
-                'users' => $userModel->withIdentities()->withGroups()->findAll(),
-                'errors' => ['You cannot edit an administrator account.'],
+                'users'   => $profileModel->getUsersList(),
+                'roles'   => $this->availableRoles(),
+                'errors'  => ['You cannot edit an administrator account.'],
             ]);
         }
 
@@ -240,14 +288,19 @@ class UserManagement extends BaseController
         $email = trim((string) $this->request->getPost('email'));
         $personName = trim((string) $this->request->getPost('person_name'));
         $phoneNo = trim((string) $this->request->getPost('phone_no'));
+        $doctorId = (int) $this->request->getPost('doctor_id');
+        $nurseId = (int) $this->request->getPost('nurse_id');
+        $department = trim((string) $this->request->getPost('department'));
+        $designation = trim((string) $this->request->getPost('designation'));
+        $employeeCode = trim((string) $this->request->getPost('employee_code'));
         $password = (string) $this->request->getPost('password');
         $active = $this->request->getPost('active') ? 1 : 0;
         $role = strtolower(trim((string) $this->request->getPost('role')));
         $oldGroups = $user->getGroups() ?? [];
         $oldState = [
             'username' => (string) ($user->username ?? ''),
-            'groups' => $oldGroups,
-            'active' => (int) ($user->active ?? 0),
+            'groups'   => $oldGroups,
+            'active'   => (int) ($user->active ?? 0),
         ];
 
         $errors = [];
@@ -302,20 +355,32 @@ class UserManagement extends BaseController
 
         if (! empty($errors)) {
             return view('Setting/Admin/UserManagement/edit', [
-                'user' => $userModel->withIdentities()->find($userId),
-                'email' => $email,
-                'person_name' => $personName,
-                'phone_no' => $phoneNo,
-                'roles' => $this->availableRoles(),
-                'current_role' => $role,
-                'errors' => $errors,
-                'formData' => [
-                    'username' => $username,
-                    'email' => $email,
-                    'person_name' => $personName,
-                    'phone_no' => $phoneNo,
-                    'active' => $active,
-                    'role' => $role,
+                'user'          => $userModel->withIdentities()->find($userId),
+                'email'         => $email,
+                'person_name'   => $personName,
+                'phone_no'      => $phoneNo,
+                'doctor_id'     => $doctorId,
+                'nurse_id'      => $nurseId,
+                'department'    => $department,
+                'designation'   => $designation,
+                'employee_code' => $employeeCode,
+                'roles'         => $this->availableRoles(),
+                'current_role'  => $role,
+                'doctors'       => $profileModel->getActiveDoctors(),
+                'nurses'        => $profileModel->getActiveNurses(),
+                'errors'        => $errors,
+                'formData'      => [
+                    'username'      => $username,
+                    'email'         => $email,
+                    'person_name'   => $personName,
+                    'phone_no'      => $phoneNo,
+                    'doctor_id'     => $doctorId,
+                    'nurse_id'      => $nurseId,
+                    'department'    => $department,
+                    'designation'   => $designation,
+                    'employee_code' => $employeeCode,
+                    'active'        => $active,
+                    'role'          => $role,
                 ],
             ]);
         }
@@ -329,24 +394,35 @@ class UserManagement extends BaseController
 
         $userModel->save($user);
         $user->syncGroups($role);
+
+        $profileModel->saveProfile($userId, [
+            'full_name'     => $personName,
+            'phone_no'      => $phoneNo,
+            'doctor_id'     => $doctorId > 0 ? $doctorId : null,
+            'nurse_id'      => $nurseId > 0 ? $nurseId : null,
+            'department'    => $department,
+            'designation'   => $designation,
+            'employee_code' => $employeeCode,
+        ]);
+
         $this->syncIdentityMeta($userId, $personName, $phoneNo);
         $this->auditClinicalUpdate('user_management', 'update', $userId, $oldState, [
-            'username' => $username,
-            'groups' => [$role],
-            'active' => $active,
+            'username'      => $username,
+            'groups'        => [$role],
+            'active'        => $active,
+            'doctor_id'     => $doctorId > 0 ? $doctorId : null,
+            'nurse_id'      => $nurseId > 0 ? $nurseId : null,
+            'department'    => $department,
+            'employee_code' => $employeeCode,
         ]);
 
         if ($active !== 1) {
             (new UserSessionRegistry($this->db))->revokeUser($userId, $this->currentUserId(), 'account_deactivated');
         }
 
-        $users = $userModel
-            ->withIdentities()
-            ->withGroups()
-            ->findAll();
-
         return view('Setting/Admin/UserManagement/index', [
-            'users' => $users,
+            'users'   => $profileModel->getUsersList(),
+            'roles'   => $this->availableRoles(),
             'message' => 'User updated successfully.',
         ]);
     }
@@ -707,21 +783,79 @@ class UserManagement extends BaseController
             return $this->response->setStatusCode(403)->setJSON(['update' => 0, 'error_text' => 'You cannot delete an administrator.']);
         }
 
+        // Deactivate first to ensure no lingering access
+        $user->active = 0;
+        $userModel->save($user);
+
         (new UserSessionRegistry($this->db))->revokeUser($userId, $this->currentUserId(), 'account_deleted');
         $this->auditClinicalUpdate('user_management', 'delete', $userId, [
             'username' => $user->username,
-            'groups' => $user->getGroups() ?? [],
-        ], ['deleted' => true]);
+            'groups'   => $user->getGroups() ?? [],
+        ], ['deleted' => true, 'soft_delete' => true]);
 
         if (! $userModel->delete($userId)) {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Unable to delete user.']);
         }
 
         return $this->response->setJSON([
-            'update' => 1,
-            'error_text' => 'User deleted successfully.',
-            'csrfName' => csrf_token(),
-            'csrfHash' => csrf_hash(),
+            'update'     => 1,
+            'error_text' => 'User deactivated and removed from active list.',
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
+        ]);
+    }
+
+    public function toggleStatus(int $userId)
+    {
+        if ($userId === $this->currentUserId()) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'success'    => 0,
+                'error_text' => 'You cannot deactivate your own account.',
+                'csrfName'   => csrf_token(),
+                'csrfHash'   => csrf_hash(),
+            ]);
+        }
+
+        $userModel = model(UserModel::class);
+        $user = $userModel->withGroups()->find($userId);
+        if ($user === null) {
+            return $this->response->setStatusCode(404)->setJSON([
+                'success'    => 0,
+                'error_text' => 'User not found.',
+                'csrfName'   => csrf_token(),
+                'csrfHash'   => csrf_hash(),
+            ]);
+        }
+
+        if ($this->isPrivilegedUser($user) && ! $this->canManageAdmins()) {
+            return $this->response->setStatusCode(403)->setJSON([
+                'success'    => 0,
+                'error_text' => 'You cannot change the status of an administrator account.',
+                'csrfName'   => csrf_token(),
+                'csrfHash'   => csrf_hash(),
+            ]);
+        }
+
+        $newActive = (int) ($user->active ?? 0) === 1 ? 0 : 1;
+        $user->active = $newActive;
+        $userModel->save($user);
+
+        if ($newActive === 0) {
+            (new UserSessionRegistry($this->db))->revokeUser($userId, $this->currentUserId(), 'account_deactivated');
+        }
+
+        $this->auditClinicalUpdate('user_management', 'status_toggle', $userId, [
+            'active' => 1 - $newActive,
+        ], [
+            'active' => $newActive,
+        ]);
+
+        return $this->response->setJSON([
+            'success'    => 1,
+            'active'     => $newActive,
+            'message'    => $newActive === 1 ? 'User activated successfully.' : 'User deactivated and active session revoked.',
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
         ]);
     }
 }

@@ -24,6 +24,7 @@
                         <th>Name</th>
                         <th>Phone Number</th>
                         <th>Email</th>
+                        <th>User Account</th>
                         <th>Action</th>
                     </tr>
                 </thead>
@@ -35,6 +36,17 @@
                                 <td><?= esc($row->mphone1 ?? '') ?></td>
                                 <td><?= esc($row->email1 ?? '') ?></td>
                                 <td>
+                                    <?php if (! empty($row->linked_username)) : ?>
+                                        <span class="badge bg-success-subtle text-success border border-success-subtle" title="Linked User Account">
+                                            <i class="bi bi-person-check me-1"></i><?= esc($row->linked_username) ?>
+                                        </span>
+                                    <?php else : ?>
+                                        <button type="button" onclick="load_form_div('<?= base_url('setting/admin/user-management/new?doctor_id=' . (int)$row->id) ?>','maindiv','Create User');" class="btn btn-outline-secondary btn-sm py-0 px-2" style="font-size: 11px;">
+                                            <i class="bi bi-person-plus me-1"></i>Link User
+                                        </button>
+                                    <?php endif; ?>
+                                </td>
+                                <td>
                                     <button type="button" class="btn btn-outline-dark btn-sm me-1 btn-qr-doctor" data-id="<?= (int)$row->id ?>" data-name="<?= esc(($row->p_title ?? '') . ' ' . ($row->p_fname ?? '')) ?>">
                                         <i class="bi bi-qr-code"></i> QR
                                     </button>
@@ -44,7 +56,7 @@
                         <?php endforeach ?>
                     <?php else : ?>
                         <tr>
-                            <td colspan="4" class="text-center text-muted">No doctors found.</td>
+                            <td colspan="5" class="text-center text-muted">No doctors found.</td>
                         </tr>
                     <?php endif ?>
                 </tbody>

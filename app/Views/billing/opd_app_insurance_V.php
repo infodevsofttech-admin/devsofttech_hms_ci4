@@ -42,7 +42,7 @@
                                 <div class="border rounded p-2">
                                     <?php foreach ($doc_spec_l as $row) : ?>
                                         <label class="d-block">
-                                            <input type="radio" id="rdoc_id" name="rdoc_id" class="form-check-input me-1" value="<?= esc($row->id) ?>">
+                                            <input type="radio" id="rdoc_id" name="rdoc_id" class="form-check-input me-1" value="<?= esc($row->id) ?>" <?= (! empty($default_doc_id) && (int) $default_doc_id === (int) $row->id) ? 'checked' : '' ?>>
                                             <?= esc($row->p_fname) ?> [<i><?= esc($row->SpecName) ?></i>]
                                         </label>
                                     <?php endforeach ?>

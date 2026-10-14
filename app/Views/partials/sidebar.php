@@ -1,5 +1,11 @@
 <?php
 $user = function_exists('auth') ? auth()->user() : null;
+
+$isAdmin = false;
+if ($user && method_exists($user, 'inGroup')) {
+    $isAdmin = $user->inGroup('superadmin', 'admin', 'developer');
+}
+
 $canTemplate = false;
 if ($user && method_exists($user, 'can')) {
     $canTemplate = $user->can('template.pathology')
@@ -11,17 +17,9 @@ if ($user && method_exists($user, 'can')) {
         || $user->can('template.*');
 }
 
-if (! $canTemplate && $user && method_exists($user, 'inGroup')) {
-    $canTemplate = $user->inGroup('superadmin', 'admin', 'developer');
+if (! $canTemplate && $isAdmin) {
+    $canTemplate = true;
 }
-
-$canIpdBilling = $user && method_exists($user, 'can')
-    ? ($user->can('billing.ipd.access')
-        || $user->can('billing.ipd.current-admission')
-        || $user->can('billing.ipd.invoice')
-        || $user->can('billing.ipd.cash-balance')
-        || $user->can('billing.access'))
-    : false;
 
 $canIpdNursing = $user && method_exists($user, 'can')
     ? ($user->can('ipd_nursing.view') || $user->can('ipd_nursing.*'))
@@ -32,43 +30,34 @@ $canIpdDischarge = $user && method_exists($user, 'can')
 $canIpdOt = $user && method_exists($user, 'can')
     ? ($user->can('ipd_ot.view') || $user->can('ipd_ot.request.manage') || $user->can('ipd_ot.schedule.manage') || $user->can('ipd_ot.status.manage') || $user->can('ipd_ot.postop.manage') || $user->can('ipd_ot.*'))
     : false;
-if ($user && method_exists($user, 'inGroup') && $user->inGroup('superadmin', 'admin', 'developer')) {
+if ($isAdmin) {
     $canIpdNursing = true;
     $canIpdDischarge = true;
     $canIpdOt = true;
 }
 
-$canBilling = false;
-if ($user && method_exists($user, 'can')) {
-    $canBilling = $user->can('billing.access')
-        || $user->can('billing.opd.edit')
-        || $user->can('billing.opd.pay')
-        || $user->can('billing.charges.view')
-        || $user->can('billing.charges.edit')
-        || $user->can('billing.charges.date-edit')
-        || $user->can('billing.charges.pay')
-        || $user->can('billing.charges.cancel')
-        || $user->can('billing.charges.correct')
-        || $user->can('billing.ipd.access')
-        || $user->can('billing.ipd.current-admission')
-        || $user->can('billing.ipd.invoice')
-        || $user->can('billing.ipd.cash-balance')
-        || $user->can('billing.ipd.export')
-        || $user->can('billing.*');
-}
+// Granular billing links visibility:
+$canPatientList = $isAdmin || ($user && method_exists($user, 'can') && ($user->can('billing.access') || $user->can('billing.opd.edit') || $user->can('billing.*')));
+$canOpdInvoice = $isAdmin || ($user && method_exists($user, 'can') && ($user->can('billing.access') || $user->can('billing.opd.edit') || $user->can('billing.*')));
+$canChargesInvoice = $isAdmin || ($user && method_exists($user, 'can') && ($user->can('billing.charges.view') || $user->can('billing.access') || $user->can('billing.*')));
+$canIpdBilling = $isAdmin || ($user && method_exists($user, 'can') && ($user->can('billing.ipd.access') || $user->can('billing.ipd.current-admission') || $user->can('billing.ipd.invoice') || $user->can('billing.ipd.cash-balance') || $user->can('billing.access') || $user->can('billing.*')));
+$canOrgOpdInvoice = $isAdmin || ($user && method_exists($user, 'can') && ($user->can('billing.access') || $user->can('billing.opd.edit') || $user->can('billing.*')));
+$canPaymentRequest = $isAdmin || ($user && method_exists($user, 'can') && ($user->can('billing.payment_request.view') || $user->can('billing.payment_request.manage') || $user->can('billing.*')));
+$canRefundRequest = $isAdmin || ($user && method_exists($user, 'can') && ($user->can('billing.refund.view') || $user->can('billing.refund.manage') || $user->can('billing.*')));
+$canReportPanel = $isAdmin || ($user && method_exists($user, 'can') && ($user->can('billing.access') || $user->can('reports.access') || $user->can('billing.*')));
+$canOrgPacking = $isAdmin || ($user && method_exists($user, 'can') && ($user->can('billing.access') || $user->can('billing.charges.view') || $user->can('billing.*')));
+$canFinanceBilling = $isAdmin || ($user && method_exists($user, 'can') && ($user->can('finance.cash.billing.submit') || $user->can('finance.*')));
 
-if (! $canBilling && $user && method_exists($user, 'inGroup')) {
-    $canBilling = $user->inGroup('superadmin', 'admin', 'developer');
-}
+$canBilling = $canPatientList || $canOpdInvoice || $canChargesInvoice || $canIpdBilling || $canOrgOpdInvoice || $canPaymentRequest || $canRefundRequest || $canReportPanel || $canOrgPacking || $canFinanceBilling;
 
-$canPharmacy = true;
+$canPharmacy = false;
 if ($user && method_exists($user, 'can')) {
     $canPharmacy = $user->can('pharmacy.access')
-        || $user->can('billing.access');
+        || $user->can('pharmacy.*');
 }
 
-if (! $canPharmacy && $user && method_exists($user, 'inGroup')) {
-    $canPharmacy = $user->inGroup('superadmin', 'admin', 'developer');
+if (! $canPharmacy && ($isAdmin || ($user && method_exists($user, 'inGroup') && $user->inGroup('pharmacy_admin')))) {
+    $canPharmacy = true;
 }
 
 $canHospitalStock = false;
@@ -150,30 +139,18 @@ if (! $canAbdm && $user && method_exists($user, 'inGroup')) {
     $canAbdm = $user->inGroup('superadmin', 'admin', 'developer');
 }
 
-$canBedStatus = false;
-if ($user && method_exists($user, 'can')) {
-    $canBedStatus = $user->can('settings.bed_status.view')
-        || $user->can('admin.settings')
-        || $user->can('admin.access');
-}
+// Bed Status is open for all logged-in users
+$canBedStatus = ($user !== null);
 
-if (! $canBedStatus && $user && method_exists($user, 'inGroup')) {
-    $canBedStatus = $user->inGroup('superadmin', 'admin', 'developer');
-}
 
-$canReports = false;
-if ($user && method_exists($user, 'can')) {
-    $canReports = $user->can('reports.access')
-        || $user->can('reports.collection.view')
-        || $user->can('reports.insurance_credit.view')
-        || $user->can('reports.nabh_audit.view')
-        || $user->can('diagnosis.report.view')
-        || $user->can('diagnosis.access');
-}
+// Granular reports permissions:
+$canCollectionReport = $isAdmin || ($user && method_exists($user, 'can') && ($user->can('reports.collection.view') || $user->can('reports.access') || $user->can('reports.*')));
+$canOldPaymentReport = $isAdmin || ($user && method_exists($user, 'can') && ($user->can('reports.collection.view') || $user->can('reports.access') || $user->can('reports.*')));
+$canOpdTotalReport = $isAdmin || ($user && method_exists($user, 'can') && ($user->can('reports.access') || $user->can('reports.*') || $user->can('billing.access')));
+$canInsuranceCreditReport = $isAdmin || ($user && method_exists($user, 'can') && ($user->can('reports.insurance_credit.view') || $user->can('reports.access') || $user->can('reports.*')));
+$canNabhAuditReport = $isAdmin || ($user && method_exists($user, 'can') && ($user->can('reports.nabh_audit.view') || $user->can('reports.access') || $user->can('reports.*')));
 
-if (! $canReports && $user && method_exists($user, 'inGroup')) {
-    $canReports = $user->inGroup('superadmin', 'admin', 'developer');
-}
+$canReports = $canCollectionReport || $canOldPaymentReport || $canOpdTotalReport || $canDiagnosis || $canInsuranceCreditReport || $canNabhAuditReport;
 
 $canAdminPanel = false;
 if ($user && method_exists($user, 'can')) {
@@ -212,63 +189,79 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
         </li>
     <?php } ?>
     <?php if ($canBilling) { ?>
-        
     <li class="nav-heading">Billing</li>
+    <?php if ($canPatientList) { ?>
     <li class="nav-item">
         <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('/billing/patient') ?>','Patient List')">
             <i class="bi bi-person-lines-fill"></i>
             <span>Patient List</span>
         </a>
     </li>
+    <?php } ?>
+    <?php if ($canOpdInvoice) { ?>
     <li class="nav-item">
         <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Invoice/opdlist') ?>','OPD Invoice')">
             <i class="bi bi-receipt"></i>
             <span>OPD Invoice</span>
         </a>
     </li>
+    <?php } ?>
+    <?php if ($canChargesInvoice) { ?>
     <li class="nav-item">
         <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Invoice/chargeslist') ?>','Charges Invoice')">
             <i class="bi bi-journal-text"></i>
             <span>Charges Invoice</span>
         </a>
     </li>
-        <li class="nav-item">
-            <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('/billing/ipd') ?>','IPD List')">
-                <i class="bi bi-hospital"></i>
-                <span>IPD Billing</span>
-            </a>
-        </li>
-
+    <?php } ?>
+    <?php if ($canIpdBilling) { ?>
+    <li class="nav-item">
+        <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('/billing/ipd') ?>','IPD List')">
+            <i class="bi bi-hospital"></i>
+            <span>IPD Billing</span>
+        </a>
+    </li>
+    <?php } ?>
+    <?php if ($canOrgOpdInvoice) { ?>
     <li class="nav-item">
         <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Orgcase/search_all') ?>','Org. OPD\'s Invoice')">
             <i class="bi bi-receipt-cutoff"></i>
             <span>Org. OPD's Invoice</span>
         </a>
     </li>
+    <?php } ?>
+    <?php if ($canPaymentRequest) { ?>
     <li class="nav-item">
         <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Invoice/list_req_payment') ?>','Payment Request')">
             <i class="bi bi-cash-coin"></i>
             <span>Payment Request</span>
         </a>
     </li>
+    <?php } ?>
+    <?php if ($canRefundRequest) { ?>
     <li class="nav-item">
         <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Invoice/list_refund') ?>','Refund Amount Request')">
             <i class="bi bi-arrow-counterclockwise"></i>
             <span>Refund Amount Request</span>
         </a>
     </li>
+    <?php } ?>
+    <?php if ($canReportPanel) { ?>
     <li class="nav-item">
         <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/index') ?>','Report Panel')">
             <i class="bi bi-grid-1x2"></i>
             <span>Report Panel</span>
         </a>
     </li>
+    <?php } ?>
+    <?php if ($canOrgPacking) { ?>
     <li class="nav-item">
         <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('org-packing') ?>','Organization Packing')">
             <i class="bi bi-box-seam"></i>
             <span>Org Packing </span>
         </a>
     </li>
+    <?php } ?>
     <?php if ($canFinanceBilling) { ?>
     <li class="nav-item">
         <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('billing/cash-submission/create') ?>','Cash Submission')">
@@ -489,24 +482,30 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
     <?php if ($canReports) { ?>
         <li class="nav-heading">Reports</li>
 
+        <?php if ($canCollectionReport) { ?>
         <li class="nav-item">
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/collection_report') ?>','Collection Report')">
                 <i class="bi bi-graph-up"></i>
                 <span>Collection Report</span>
             </a>
         </li>
+        <?php } ?>
+        <?php if ($canOldPaymentReport) { ?>
         <li class="nav-item">
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/old_payment_received_report') ?>','Old Payment Received Report')">
                 <i class="bi bi-clock-history"></i>
                 <span>Old Payment Received</span>
             </a>
         </li>
+        <?php } ?>
+        <?php if ($canOpdTotalReport) { ?>
         <li class="nav-item">
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/report_opd_total') ?>','OPD Total Report')">
                 <i class="bi bi-bar-chart"></i>
                 <span>OPD Total Report</span>
             </a>
         </li>
+        <?php } ?>
         <?php if ($canDiagnosis) { ?>
             <li class="nav-item">
                 <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/diagnosis_report') ?>','Diagnosis Report')">
@@ -515,18 +514,22 @@ if (! $canChargesSettings && $user && method_exists($user, 'inGroup')) {
                 </a>
             </li>
         <?php } ?>
+        <?php if ($canInsuranceCreditReport) { ?>
         <li class="nav-item">
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/insurance_credit_main') ?>','Insurance Credit')">
                 <i class="bi bi-file-medical"></i>
                 <span>Insurance Credit </span>
             </a>
         </li>
+        <?php } ?>
+        <?php if ($canNabhAuditReport) { ?>
         <li class="nav-item">
             <a class="nav-link collapsed" href="javascript:load_form('<?= base_url('Report/nabh_audit_report') ?>','NABH Audit Report')">
                 <i class="bi bi-clipboard2-check"></i>
                 <span>NABH Audit Report</span>
             </a>
         </li>
+        <?php } ?>
     <?php } ?>
     
     

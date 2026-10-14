@@ -329,8 +329,16 @@ class BedManagement extends BaseController
         ]);
     }
 
-    public function bedStatus(): string
+    public function bedStatus()
     {
+        if (function_exists('auth') && ! auth()->loggedIn()) {
+            if ($this->request->isAJAX()) {
+                return $this->response->setStatusCode(401)->setBody('Unauthorized');
+            }
+
+            return redirect()->to(base_url('login'));
+        }
+
         // ── Stats counters ────────────────────────────────────────────────
         $stats = [
             'total'       => 0,

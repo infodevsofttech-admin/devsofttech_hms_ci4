@@ -295,12 +295,74 @@
                 });
             }
 
-            function handleAuthError(jqXHR) {
-                if (jqXHR.status === 401 || jqXHR.status === 403) {
-                    alert('You have been logged out. Please login again.');
-                    window.location.href = '/login';
+            function handleAuthError(jqXHR, containerId) {
+                if (!jqXHR) {
+                    return false;
+                }
+
+                // HTTP 401: Unauthorized -> User session is genuinely lost or expired
+                if (jqXHR.status === 401) {
+                    alert('Your session has expired or you have been logged out. Please login again.');
+                    window.location.href = '<?= base_url('login') ?>';
                     return true;
                 }
+
+                // HTTP 403: Forbidden -> User IS logged in, but lacks permission for this action/link
+                if (jqXHR.status === 403) {
+                    var raw = (jqXHR.responseText ? String(jqXHR.responseText) : '');
+                    var detailMsg = '';
+                    if (raw && !/<!DOCTYPE/i.test(raw)) {
+                        detailMsg = raw.replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                    }
+
+                    var accessDeniedHtml = 
+                        '<div class="container-fluid py-5">' +
+                            '<div class="row justify-content-center">' +
+                                '<div class="col-12 col-md-8 col-lg-6">' +
+                                    '<div class="card shadow-sm border-0 text-center p-4" style="border-radius: 12px; background: #fff;">' +
+                                        '<div class="card-body p-3">' +
+                                            '<div class="mb-3">' +
+                                                '<span class="d-inline-flex align-items-center justify-content-center rounded-circle bg-danger-subtle text-danger" style="width: 76px; height: 76px; font-size: 36px;">' +
+                                                    '<i class="bi bi-shield-lock-fill"></i>' +
+                                                '</span>' +
+                                            '</div>' +
+                                            '<h4 class="fw-bold text-dark mb-2">Access Restricted</h4>' +
+                                            '<p class="text-muted mb-3" style="font-size: 14px;">You do not have permission to access this module or view this information with your current user account.</p>' +
+                                            '<div class="alert alert-warning border-0 bg-warning-subtle text-warning-emphasis text-start p-3 mb-4 rounded-3 small">' +
+                                                '<div class="fw-bold mb-1"><i class="bi bi-info-circle-fill me-1"></i> How to get access:</div>' +
+                                                '<div>Please communicate with your <strong>Hospital Administrator</strong> or IT Department to assign the required permissions or roles to your account.</div>' +
+                                                (detailMsg ? '<div class="mt-2 pt-2 border-top border-warning-subtle text-muted" style="font-size: 11px;">Notice: ' + detailMsg.substring(0, 160) + '</div>' : '') +
+                                            '</div>' +
+                                            '<div class="d-flex justify-content-center gap-2 flex-wrap">' +
+                                                '<button type="button" class="btn btn-outline-secondary px-3 btn-sm" onclick="if(window.history.length > 1){ window.history.back(); } else { load_form(\'<?= base_url('dashboard') ?>\', \'Dashboard\'); }">' +
+                                                    '<i class="bi bi-arrow-left me-1"></i> Go Back' +
+                                                '</button>' +
+                                                '<button type="button" class="btn btn-primary px-3 btn-sm" onclick="load_form(\'<?= base_url('dashboard') ?>\', \'Dashboard\');">' +
+                                                    '<i class="bi bi-grid me-1"></i> Back to Dashboard' +
+                                                '</button>' +
+                                            '</div>' +
+                                        '</div>' +
+                                    '</div>' +
+                                '</div>' +
+                            '</div>' +
+                        '</div>';
+
+                    if (containerId) {
+                        var targetEl = document.getElementById(String(containerId));
+                        if (targetEl) {
+                            targetEl.innerHTML = accessDeniedHtml;
+                        } else if (window.jQuery) {
+                            $('#' + containerId).html(accessDeniedHtml);
+                        }
+                    }
+
+                    if (typeof window.notify === 'function') {
+                        window.notify('danger', 'Access Restricted: ', 'You do not have permission to access this module. Please communicate with your Hospital Administrator.');
+                    }
+
+                    return true;
+                }
+
                 return false;
             }
 
@@ -377,7 +439,7 @@
                     })
                     .fail(function(jqXHR, textStatus, errorThrown) {
                         $("#wait").css("display", "none");
-                        if (handleAuthError(jqXHR)) return;
+                        if (handleAuthError(jqXHR, 'main')) return;
                         console.error('load_form failed', {
                             url: normalizedUrl,
                             status: jqXHR.status,
@@ -428,7 +490,7 @@
                         if (top_title !== '') document.title = top_title;
                     })
                     .fail(function(jqXHR, textStatus, errorThrown) {
-                        if (handleAuthError(jqXHR)) return;
+                        if (handleAuthError(jqXHR, xdiv)) return;
                         console.error('load_form_div failed', {
                             url: ourl,
                             status: jqXHR.status,
