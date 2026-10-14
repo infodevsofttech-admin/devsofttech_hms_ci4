@@ -3859,13 +3859,18 @@ class Patient extends BaseController
 
 		$file = $this->request->getFile('upload_file');
 		if ($file && $file->isValid() && !$file->hasMoved()) {
-			$uploadPath = rtrim(FCPATH, '\\/') . '/uploads/patient';
-			if (!is_dir($uploadPath)) {
-				mkdir($uploadPath, 0755, true);
-			}
+			$ext = strtolower((string) ($file->getClientExtension() ?: pathinfo((string) $file->getName(), PATHINFO_EXTENSION)));
+			$allowedExts = ['pdf', 'jpg', 'jpeg', 'png', 'webp', 'doc', 'docx'];
+			if (! in_array($ext, $allowedExts, true)) {
+				$message = 'Invalid file format. Upload PDF, image, or document only.';
+			} else {
+				$uploadPath = rtrim(FCPATH, '\\/') . '/uploads/patient';
+				if (!is_dir($uploadPath)) {
+					mkdir($uploadPath, 0755, true);
+				}
 
-			$newName = $file->getRandomName();
-			if ($file->move($uploadPath, $newName)) {
+				$newName = $file->getRandomName();
+				if ($file->move($uploadPath, $newName)) {
 				$publicPath = '/uploads/patient/' . $newName;
 				$insertId = $this->insertFileUploadRecord($pid, $docType, $publicPath, $file);
 
@@ -3878,6 +3883,7 @@ class Patient extends BaseController
 				$message = $insertId > 0 ? 'File uploaded successfully.' : 'File uploaded, but record was not saved.';
 			} else {
 				$message = 'Unable to save the file.';
+			}
 			}
 		} elseif ($file && !$file->isValid()) {
 			$message = $file->getErrorString();

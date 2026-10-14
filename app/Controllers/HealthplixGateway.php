@@ -6,8 +6,21 @@ use App\Libraries\HealthplixService;
 
 class HealthplixGateway extends BaseController
 {
+    private function ensureAuthenticated()
+    {
+        if (! function_exists('auth') || ! auth()->loggedIn()) {
+            return $this->response->setStatusCode(401)->setJSON(['ok' => 0, 'error_text' => 'Authentication required']);
+        }
+
+        return null;
+    }
+
     public function generateToken()
     {
+        if ($deny = $this->ensureAuthenticated()) {
+            return $deny;
+        }
+
         if (! $this->request->isAJAX()) {
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
         }
@@ -30,6 +43,10 @@ class HealthplixGateway extends BaseController
 
     public function registerPatient()
     {
+        if ($deny = $this->ensureAuthenticated()) {
+            return $deny;
+        }
+
         if (! $this->request->isAJAX()) {
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
         }
@@ -61,6 +78,10 @@ class HealthplixGateway extends BaseController
 
     public function bookAppointment()
     {
+        if ($deny = $this->ensureAuthenticated()) {
+            return $deny;
+        }
+
         if (! $this->request->isAJAX()) {
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
         }

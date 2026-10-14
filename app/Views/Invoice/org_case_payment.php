@@ -6,35 +6,35 @@
 		<div class="row">
 			<div class="col-md-12">
 				<p>
-					<strong>Name :</strong><?=$person_info[0]->p_fname?>  {<i><?=$person_info[0]->p_rname?></i>}
-					<strong>/ Age :</strong><?=$person_info[0]->str_age?> 
-					<strong>/ Gender :</strong><?=$person_info[0]->xgender?> 
-					<strong>/ P Code :</strong><?=$person_info[0]->p_code?>
+					<strong>Name :</strong><?= esc($person_info[0]->p_fname ?? '') ?>  {<i><?= esc($person_info[0]->p_rname ?? '') ?></i>}
+					<strong>/ Age :</strong><?= esc($person_info[0]->str_age ?? '') ?> 
+					<strong>/ Gender :</strong><?= esc($person_info[0]->xgender ?? '') ?> 
+					<strong>/ P Code :</strong><?= esc($person_info[0]->p_code ?? '') ?>
 				</p>
-				<input type="hidden" value="<?=$org_info[0]->id ?>" id="org_id" name="org_id" />
+				<input type="hidden" value="<?= (int) ($org_info[0]->id ?? 0) ?>" id="org_id" name="org_id" />
 			</div>
 		</div>
 		<div class="row">
 			<div class="col-md-12">
 				<p>
-					<strong>Org Code :</strong><?=$org_info[0]->case_id_code?>
-					<strong>/ Org. Name :</strong><?=$org_info[0]->insurance_company_name?> 
-					<strong>/ Card No :</strong><?=$org_info[0]->insurance_no?>
-					 <?=$org_info[0]->insurance_no_1?> 
-					 <?=$org_info[0]->insurance_no_2?>
+					<strong>Org Code :</strong><?= esc($org_info[0]->case_id_code ?? '') ?>
+					<strong>/ Org. Name :</strong><?= esc($org_info[0]->insurance_company_name ?? '') ?> 
+					<strong>/ Card No :</strong><?= esc($org_info[0]->insurance_no ?? '') ?>
+					 <?= esc($org_info[0]->insurance_no_1 ?? '') ?> 
+					 <?= esc($org_info[0]->insurance_no_2 ?? '') ?>
 				</p>
-				<input type="hidden" value="<?=$org_info[0]->id ?>" id="org_id" name="org_id" />
+				<input type="hidden" value="<?= (int) ($org_info[0]->id ?? 0) ?>" id="org_id" name="org_id" />
 			</div>
 		</div>
 		<?php if(count($ipd_info)>0){ ?>
 			<div class="row">
 				<div class="col-md-12">
 					<p>
-						<strong>IPD Code :</strong><?=$ipd_info[0]->ipd_code?> 
-						<strong>/ Admit Date :</strong><?=$ipd_info[0]->str_register_date?> 
-						<strong>/ Dis. Date :</strong><?=$ipd_info[0]->str_discharge_date?> 
-						<strong>/ Charge Amt :</strong><?=$ipd_info[0]->charge_amount?>
-						<strong>/ Medical Bill :</strong><?=$ipd_info[0]->med_amount?> 
+						<strong>IPD Code :</strong><?= esc($ipd_info[0]->ipd_code ?? '') ?> 
+						<strong>/ Admit Date :</strong><?= esc($ipd_info[0]->str_register_date ?? '') ?> 
+						<strong>/ Dis. Date :</strong><?= esc($ipd_info[0]->str_discharge_date ?? '') ?> 
+						<strong>/ Charge Amt :</strong><?= esc($ipd_info[0]->charge_amount ?? '') ?>
+						<strong>/ Medical Bill :</strong><?= esc($ipd_info[0]->med_amount ?? '') ?> 
 					</p>
 				</div>
 			</div>
@@ -50,7 +50,7 @@
 			<div class="col-md-6">
 				<div class="form-group">
 				  <label >Payment Bank Info</label>
-					<input class="form-control varchar" id="input_pay_info" placeholder="Bank , NEFT Info" type="text" value="<?=$org_info[0]->amount_payment_info?>">
+					<input class="form-control varchar" id="input_pay_info" placeholder="Bank , NEFT Info" type="text" value="<?= esc($org_info[0]->amount_payment_info ?? '') ?>">
 				 </div>
 			</div>
 			<div class="col-md-3">

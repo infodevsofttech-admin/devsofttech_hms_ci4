@@ -141,6 +141,7 @@ NiceAdmin-pro/
 
 public/uploads/*
 !public/uploads/.gitkeep
+!public/uploads/.htaccess
 
 # Always allow branding assets to be committed when present
 !public/assets/

@@ -512,15 +512,31 @@ class DoctorDocument extends BaseController
         }
 
         $origName = $file->getClientName();
-        $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION) ?: 'pdf');
+        $ext = strtolower(pathinfo($origName, PATHINFO_EXTENSION) ?: '');
+        $allowedExts = ['pdf', 'jpg', 'jpeg', 'png', 'webp'];
+        if (! in_array($ext, $allowedExts, true)) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'status' => 'error',
+                'message' => 'Invalid file format. Only PDF, JPG, PNG, and WEBP files are allowed.',
+            ]);
+        }
+
         $mimeType = $file->getClientMimeType() ?: 'application/pdf';
+        $allowedMimes = ['application/pdf', 'image/jpeg', 'image/png', 'image/webp'];
+        if (! in_array($mimeType, $allowedMimes, true)) {
+            return $this->response->setStatusCode(400)->setJSON([
+                'status' => 'error',
+                'message' => 'Invalid file type. Only PDF and image uploads are permitted.',
+            ]);
+        }
 
         $uploadDir = FCPATH . 'uploads' . DIRECTORY_SEPARATOR . 'nabh_ipd' . DIRECTORY_SEPARATOR;
         if (! is_dir($uploadDir)) {
             @mkdir($uploadDir, 0755, true);
         }
 
-        $newFileName = 'NABH_IPD_' . $ipdId . '_' . str_replace('-', '_', $nabhCategory) . '_' . date('Ymd_His') . '.' . $ext;
+        $safeCategory = preg_replace('/[^A-Za-z0-9_]/', '_', $nabhCategory);
+        $newFileName = 'NABH_IPD_' . $ipdId . '_' . $safeCategory . '_' . date('Ymd_His') . '_' . bin2hex(random_bytes(4)) . '.' . $ext;
         $file->move($uploadDir, $newFileName);
 
         $fileFullPath = $uploadDir . $newFileName;

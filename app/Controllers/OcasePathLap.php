@@ -79,8 +79,8 @@ class OcasePathLap extends BaseController
 
     public function showinvoice(int $invoiceId)
     {
-        $sql = 'select i.*,t.desc from invoice_item i join hc_item_type t on i.item_type=t.itype_id where i.inv_master_id=' . $invoiceId;
-        $data['invoiceDetails'] = $this->db->query($sql)->getResult();
+        $sql = 'select i.*,t.desc from invoice_item i join hc_item_type t on i.item_type=t.itype_id where i.inv_master_id = ?';
+        $data['invoiceDetails'] = $this->db->query($sql, [$invoiceId])->getResult();
 
         $data['invoiceGtotal'] = $this->db->table('invoice_item')
             ->selectSum('item_amount', 'Gtotal')
@@ -97,8 +97,8 @@ class OcasePathLap extends BaseController
             return $this->response->setStatusCode(404)->setBody('Invoice not found');
         }
 
-        $sql = 'select *,if(gender=1,\'Male\',\'Female\') as xgender from patient_master where id=' . (int) $data['invoice_master'][0]->attach_id;
-        $data['patient_master'] = $this->db->query($sql)->getResult();
+        $sql = 'select *,if(gender=1,\'Male\',\'Female\') as xgender from patient_master where id = ?';
+        $data['patient_master'] = $this->db->query($sql, [(int) $data['invoice_master'][0]->attach_id])->getResult();
         $this->applyAge($data['patient_master']);
 
         $insCompId = (int) $data['invoice_master'][0]->insurance_id;
@@ -119,7 +119,7 @@ class OcasePathLap extends BaseController
             ->get()
             ->getResult();
 
-        $data['payment_history'] = $this->db->query('select sum(if(credit_debit>0,amount*-1,amount)) as paid_amount from payment_history where payof_type=2 and payof_id=' . $invoiceId)->getResult();
+        $data['payment_history'] = $this->db->query('select sum(if(credit_debit>0,amount*-1,amount)) as paid_amount from payment_history where payof_type=2 and payof_id = ?', [$invoiceId])->getResult();
 
         $discountAmount = (float) $data['invoice_master'][0]->discount_amount;
         $totalAmount = (float) ($data['invoiceGtotal'][0]->Gtotal ?? 0);
@@ -378,7 +378,7 @@ class OcasePathLap extends BaseController
             ->get()
             ->getResult();
 
-        $data['payment_history'] = $this->db->query('select *,(case payment_mode when  1 Then \'cash\' when  2 then \'Bank Card\' when 3 then \'Org Credit\' else \'Pending\' end) as Payment_type_str from payment_history where payof_type=2 and payof_id=' . $invoiceId)->getResult();
+        $data['payment_history'] = $this->db->query('select *,(case payment_mode when  1 Then \'cash\' when  2 then \'Bank Card\' when 3 then \'Org Credit\' else \'Pending\' end) as Payment_type_str from payment_history where payof_type=2 and payof_id = ?', [$invoiceId])->getResult();
 
         return view('Invoice/Organization_invoice_print_v', $data);
     }

@@ -12,9 +12,9 @@ class HealthplixCallback extends BaseController
         $expectedSecret = $this->resolveExpectedSecret();
         $providedSecret = trim((string) $this->request->getHeaderLine('X-Healthplix-Secret'));
 
-        if ($expectedSecret !== '' && ! hash_equals($expectedSecret, $providedSecret)) {
+        if ($expectedSecret === '' || ! hash_equals($expectedSecret, $providedSecret)) {
             $this->logFetchEvent('error', 401, [
-                'message' => 'Invalid callback secret',
+                'message' => 'Missing or invalid callback secret',
                 'payload_bytes' => strlen($rawBody),
                 'payload_keys' => array_keys($payload),
             ], 'Unauthorized callback request');

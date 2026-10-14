@@ -56,6 +56,15 @@ class Cookie extends BaseConfig
      */
     public bool $secure = false;
 
+    public function __construct()
+    {
+        parent::__construct();
+
+        if (ENVIRONMENT === 'production' || (! empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')) {
+            $this->secure = true;
+        }
+    }
+
     /**
      * --------------------------------------------------------------------------
      * Cookie HTTPOnly

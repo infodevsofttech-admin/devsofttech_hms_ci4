@@ -706,9 +706,9 @@ class CaseMaster extends BaseController
             $invoiceId = (int) $invoiceItem[0]->inv_master_id;
         }
 
-        $data['invoiceDetails'] = $this->db->query('select i.*,t.group_desc from invoice_item i join hc_item_type t on i.item_type=t.itype_id where i.inv_master_id=' . $invoiceId)->getResult();
+        $data['invoiceDetails'] = $this->db->query('select i.*,t.group_desc from invoice_item i join hc_item_type t on i.item_type=t.itype_id where i.inv_master_id = ?', [$invoiceId])->getResult();
         $data['invoiceGtotal'] = $this->db->table('invoice_item')->selectSum('item_amount', 'Gtotal')->where('inv_master_id', $invoiceId)->get()->getResult();
-        $data['invoice_master'] = $this->db->query("select *,(case payment_mode when  1 Then 'Cash' when  2 then 'Bank Card' when 3 then 'IPD Credit' when 4 then 'Org. Credit' else 'Pending' end) as Payment_type_str from invoice_master where id=" . $invoiceId)->getResult();
+        $data['invoice_master'] = $this->db->query("select *,(case payment_mode when  1 Then 'Cash' when  2 then 'Bank Card' when 3 then 'IPD Credit' when 4 then 'Org. Credit' else 'Pending' end) as Payment_type_str from invoice_master where id = ?", [$invoiceId])->getResult();
 
         $discountAmount = (float) ($data['invoice_master'][0]->discount_amount ?? 0);
         $correctionAmount = (float) ($data['invoice_master'][0]->correction_amount ?? 0);
@@ -1131,18 +1131,18 @@ class CaseMaster extends BaseController
         $data['MedInvoice'] = $this->db->query('select sum(m.net_amount) as Med_Amount,o.id ,count(m.id) as no_inv
                 from invoice_med_master m join ipd_master p join organization_case_master o
                 on m.ipd_id=p.id and p.case_id=o.id and m.ipd_credit=1 and m.ipd_credit_type=1
-                where o.id=' . $caseid . ' group by o.id')->getResult();
+                where o.id = ? group by o.id', [$caseid])->getResult();
 
-        $data['ipd_package'] = $this->db->query('SELECT p.* FROM  ipd_package p JOIN ipd_master m ON p.ipd_id=m.id WHERE m.case_id=' . $caseid)->getResult();
+        $data['ipd_package'] = $this->db->query('SELECT p.* FROM  ipd_package p JOIN ipd_master m ON p.ipd_id=m.id WHERE m.case_id = ?', [$caseid])->getResult();
 
         if (count($data['MedInvoice']) === 0) {
             $data['MedInvoice'] = $this->db->query('select sum(m.net_amount) as Med_Amount,o.id ,count(m.id) as no_inv
                 from invoice_med_master m join organization_case_master o
                 on m.case_id=o.id and m.case_credit=1
-                where o.id=' . $caseid . ' group by o.id')->getResult();
+                where o.id = ? group by o.id', [$caseid])->getResult();
         }
 
-        $ipdMaster = $this->db->query('select p.* from ipd_master p join organization_case_master o on  p.case_id=o.id where o.id=' . $caseid)->getResult();
+        $ipdMaster = $this->db->query('select p.* from ipd_master p join organization_case_master o on  p.case_id=o.id where o.id = ?', [$caseid])->getResult();
 
         $tableHead = '<table border="1" cellpadding="1" cellspacing="0" style="width:100%">'
             . '<tr><th style="width:50px">Sr.No.</th><th style="width:100px">Date</th><th>Details of Expenditure</th><th colspan="2">Number or Quantity</th><th style="width:100px;align:right;">Rate</th><th style="width:100px;align:right;">Per</th><th style="width:100px;align:right;">Amount</th></tr>';
@@ -1284,10 +1284,10 @@ class CaseMaster extends BaseController
 
         $orgId = (int) $data['org_info'][0]->id;
 
-        $data['ipd_info'] = $this->db->query("select * from v_ipd_list where org_id='" . $orgId . "' ")->getResult();
+        $data['ipd_info'] = $this->db->query("select * from v_ipd_list where org_id = ?", [$orgId])->getResult();
 
-        $sql = "select *,if(gender=1,'Male','Female') as xgender from patient_master where id='" . $data['org_info'][0]->p_id . "' ";
-        $data['person_info'] = $this->db->query($sql)->getResult();
+        $sql = "select *,if(gender=1,'Male','Female') as xgender from patient_master where id = ?";
+        $data['person_info'] = $this->db->query($sql, [$data['org_info'][0]->p_id])->getResult();
         $this->applyAge($data['person_info'], 'str_age');
 
         return view('Invoice/org_case_payment', $data);
@@ -1295,17 +1295,17 @@ class CaseMaster extends BaseController
 
     public function load_model_box(string $caseidcode)
     {
-        $data['org_info'] = $this->db->query("select * from organization_case_master where case_id_code='" . $caseidcode . "' ")->getResult();
+        $data['org_info'] = $this->db->query("select * from organization_case_master where case_id_code = ?", [$caseidcode])->getResult();
         if (empty($data['org_info'])) {
             return $this->response->setStatusCode(404)->setBody('Case not found');
         }
 
         $orgId = (int) $data['org_info'][0]->id;
 
-        $data['ipd_info'] = $this->db->query("select * from v_ipd_list where org_id='" . $orgId . "' ")->getResult();
+        $data['ipd_info'] = $this->db->query("select * from v_ipd_list where org_id = ?", [$orgId])->getResult();
 
-        $sql = "select *,if(gender=1,'Male','Female') as xgender from patient_master where id='" . $data['org_info'][0]->p_id . "' ";
-        $data['person_info'] = $this->db->query($sql)->getResult();
+        $sql = "select *,if(gender=1,'Male','Female') as xgender from patient_master where id = ?";
+        $data['person_info'] = $this->db->query($sql, [$data['org_info'][0]->p_id])->getResult();
         $this->applyAge($data['person_info'], 'str_age');
 
         return view('Invoice/org_case_payment', $data);
@@ -1340,7 +1340,7 @@ class CaseMaster extends BaseController
 
         if (! empty($orgInfo)) {
             $patientId = (int) $orgInfo[0]->p_id;
-            $personInfo = $this->db->query("select *,if(gender=1,'Male','Female') as xgender from patient_master where id='" . $patientId . "' ")->getResult();
+            $personInfo = $this->db->query("select *,if(gender=1,'Male','Female') as xgender from patient_master where id = ?", [$patientId])->getResult();
             $this->applyAge($personInfo, 'str_age');
             $orgDate = $orgInfo[0]->insert_datetime;
             $patientName = $personInfo[0]->p_fname ?? '';
@@ -1403,7 +1403,7 @@ class CaseMaster extends BaseController
 
         if (! empty($orgInfo)) {
             $patientId = (int) $orgInfo[0]->p_id;
-            $personInfo = $this->db->query("select *,if(gender=1,'Male','Female') as xgender from patient_master where id='" . $patientId . "' ")->getResult();
+            $personInfo = $this->db->query("select *,if(gender=1,'Male','Female') as xgender from patient_master where id = ?", [$patientId])->getResult();
             $this->applyAge($personInfo, 'str_age');
             $orgDate = $orgInfo[0]->insert_datetime;
             $patientName = $personInfo[0]->p_fname ?? '';

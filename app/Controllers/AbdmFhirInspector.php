@@ -33,11 +33,27 @@ class AbdmFhirInspector extends BaseController
         }
     }
 
+    private function ensureAuthenticated()
+    {
+        if (! function_exists('auth') || ! auth()->loggedIn()) {
+            if ($this->request->isAJAX() || str_contains((string) $this->request->getHeaderLine('Accept'), 'application/json')) {
+                return $this->response->setStatusCode(401)->setJSON(['ok' => 0, 'error' => 'Authentication required']);
+            }
+            return redirect()->to(base_url('login'))->with('error', 'Please log in to access the FHIR Inspector.');
+        }
+
+        return null;
+    }
+
     /**
      * Main page view for ABHA Filter & FHIR Inspector
      */
     public function index()
     {
+        if ($deny = $this->ensureAuthenticated()) {
+            return $deny;
+        }
+
         $filterAbha = trim((string) ($this->request->getGet('abha_address') ?? $this->request->getGet('abha') ?? ''));
         $patientId = (int) ($this->request->getGet('patient_id') ?? $this->request->getGet('id') ?? 0);
         $uhid = trim((string) ($this->request->getGet('uhid') ?? ''));
@@ -59,6 +75,10 @@ class AbdmFhirInspector extends BaseController
      */
     public function patientData()
     {
+        if ($deny = $this->ensureAuthenticated()) {
+            return $deny;
+        }
+
         $patientId = (int) ($this->request->getGet('patient_id') ?? 0);
         $abhaAddress = trim((string) ($this->request->getGet('abha_address') ?? $this->request->getGet('abha') ?? ''));
         $pCode = trim((string) ($this->request->getGet('p_code') ?? $this->request->getGet('uhid') ?? ''));
@@ -87,6 +107,10 @@ class AbdmFhirInspector extends BaseController
      */
     public function gatewayCheck()
     {
+        if ($deny = $this->ensureAuthenticated()) {
+            return $deny;
+        }
+
         $abha = trim((string) ($this->request->getGet('abha_address') ?? $this->request->getGet('abha') ?? ''));
         if ($abha === '') {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'ABHA address is required']);
@@ -131,6 +155,10 @@ class AbdmFhirInspector extends BaseController
      */
     public function previewBundle()
     {
+        if ($deny = $this->ensureAuthenticated()) {
+            return $deny;
+        }
+
         $ref = trim((string) ($this->request->getGet('ref') ?? $this->request->getPost('ref') ?? $_GET['ref'] ?? $_REQUEST['ref'] ?? ''));
         $patientId = (int) ($this->request->getGet('patient_id') ?? $this->request->getPost('patient_id') ?? $_GET['patient_id'] ?? $_REQUEST['patient_id'] ?? 0);
         $abha = trim((string) ($this->request->getGet('abha') ?? $this->request->getPost('abha') ?? $_GET['abha'] ?? $_REQUEST['abha'] ?? ''));

@@ -74,25 +74,23 @@ class Filters extends BaseFilters
     public array $globals = [
         'before' => [
             'singleSession',
-            // 'honeypot',
-            // 'csrf',
-            // 'invalidchars',
-        ],
-        'after' => [
-            'toolbar' => [
+            'invalidchars',
+            'csrf' => [
                 'except' => [
-                    'Opd/*',
-                    'Opd_prescription/*',
-                    'billing/patient/abdm_*',
-                    'billing/patient/abdm_*/*',
-                    'AbdmHiu',
-                    'AbdmHiu/*',
-                    'AbdmGateway/*',
                     'api/*',
+                    'AbdmGateway/*',
+                    'AbdmHiu/*',
+                    'HealthplixCallback/*',
+                    'HealthplixGateway/*',
+                    'stt-proxy',
+                    'stt-proxy/*',
                 ],
             ],
             // 'honeypot',
-            // 'secureheaders',
+        ],
+        'after' => [
+            'secureheaders',
+            // 'honeypot',
         ],
     ];
 

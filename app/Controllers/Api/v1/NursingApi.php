@@ -150,10 +150,27 @@ class NursingApi extends BaseController
             ]);
         }
 
+        $clientIp = (string) $this->request->getIPAddress();
+        $rateKey = 'nurse_pin_' . md5($clientIp . '_' . ($nurseRow['id'] ?? 0));
+        $cache = service('cache');
+        $failedAttempts = (int) ($cache->get($rateKey) ?? 0);
+        if ($failedAttempts >= 5) {
+            return $this->response->setStatusCode(429)->setJSON([
+                'status' => 0,
+                'message' => 'Too many failed PIN attempts. Account temporarily locked for 10 minutes.',
+            ]);
+        }
+
         $isValid = password_verify($pin, $hashedPin) || ($pin === $hashedPin);
 
         if (! $isValid) {
+            $cache->save($rateKey, $failedAttempts + 1, 600);
             return $this->response->setStatusCode(401)->setJSON(['status' => 0, 'message' => 'Incorrect Security PIN']);
+        }
+
+        $cache->delete($rateKey);
+        if (session_status() === PHP_SESSION_ACTIVE || ! session_id()) {
+            session()->set('pwa_auth_nurse_id', (int) $nurseRow['id']);
         }
 
         return $this->response->setJSON([
