@@ -327,25 +327,17 @@
                     </div>
                 </div>
 
-                <!-- Step 2: Staff User Selection -->
-                <div class="mb-3">
-                    <label class="form-label fw-bold small text-secondary mb-1" id="hdr_apps_staff_label">2. SELECT NURSING STAFF PROFILE</label>
-                    <select class="form-select form-select-sm" id="hdr_apps_nurse_select">
-                        <option value="">-- General / All Staff Access --</option>
-                    </select>
-                </div>
-
-                <!-- Step 3: QR Code & Access Link -->
+                <!-- Step 2: App Launch QR Code & Secure Intranet Link -->
                 <div class="p-3 bg-light rounded border text-center">
                     <div class="fw-bold small text-dark mb-1" id="hdr_apps_target_name">Nursing Care App</div>
                     <span class="badge bg-secondary mb-2" id="hdr_apps_target_code">/app/nursing</span>
 
                     <div class="my-2">
-                        <img id="hdr_apps_qr_img" src="" alt="App QR Code" style="width: 160px; height: 160px; border-radius: 8px;" class="border p-1 bg-white shadow-sm" />
+                        <img id="hdr_apps_qr_img" src="" alt="App QR Code" style="width: 170px; height: 170px; border-radius: 8px;" class="border p-1 bg-white shadow-sm" />
                     </div>
-                    <p class="small text-muted mb-2" style="font-size: 11px;">
-                        <i class="bi bi-qr-code-scan me-1"></i> Scan with Phone Camera to launch app on Mobile, or click link below to open on Computer.
-                    </p>
+                    <div class="alert alert-info py-2 px-3 small mb-2 text-start" style="font-size: 11px;">
+                        <i class="bi bi-shield-lock-fill me-1 text-primary"></i> <strong>Secure Staff Authentication:</strong> Staff will be prompted to enter their <strong>Staff ID / Username</strong>, <strong>PIN / Password</strong>, and one-time <strong>Device Security Code</strong> (set in Staff Master).
+                    </div>
 
                     <div class="input-group input-group-sm mb-2">
                         <input type="text" class="form-control form-control-sm text-center" id="hdr_apps_url_input" readonly />
@@ -373,11 +365,7 @@
     }
 
     function updateHdrAppDetails() {
-        var sel = document.getElementById('hdr_apps_nurse_select');
-        var code = sel ? sel.value : '';
-        var appBaseUrl = getAppBaseUrl();
-        var paramKey = (selectedApp === 'doctor') ? 'doctor_id=' : 'nurse_code=';
-        var appUrl = (selectedApp === 'pharmacy') ? appBaseUrl : (appBaseUrl + (code ? '?' + paramKey + encodeURIComponent(code) : ''));
+        var appUrl = getAppBaseUrl();
         var qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' + encodeURIComponent(appUrl);
 
         var qrImg = document.getElementById('hdr_apps_qr_img');
@@ -391,15 +379,10 @@
         if (launchLink) launchLink.href = appUrl;
 
         var title = (selectedApp === 'doctor') ? 'DoctorCare EMR App' : ((selectedApp === 'pharmacy') ? 'Medical Store & Pharmacy POS' : 'Nursing Care App');
+        var path = (selectedApp === 'pharmacy') ? '/MedicalStore' : ('/app/' + selectedApp);
 
-        if (code && sel && sel.options[sel.selectedIndex]) {
-            var text = sel.options[sel.selectedIndex].text;
-            if (targetName) targetName.textContent = title + ': ' + text;
-            if (targetCode) targetCode.textContent = code;
-        } else {
-            if (targetName) targetName.textContent = title;
-            if (targetCode) targetCode.textContent = (selectedApp === 'pharmacy') ? '/MedicalStore' : ('/app/' + selectedApp);
-        }
+        if (targetName) targetName.textContent = title;
+        if (targetCode) targetCode.textContent = path;
     }
 
     function showAppsModal() {
@@ -416,53 +399,8 @@
         }
     }
 
-    function loadAppStaffList() {
-        var sel = document.getElementById('hdr_apps_nurse_select');
-        var label = document.getElementById('hdr_apps_staff_label');
-        if (!sel) return;
-
-        if (selectedApp === 'pharmacy') {
-            if (label) label.textContent = '2. PHARMACY COUNTER / STORE ACCESS';
-            sel.innerHTML = '<option value="">-- All Pharmacy Counters (Auto-detect) --</option>';
-            updateHdrAppDetails();
-            return;
-        } else if (selectedApp === 'doctor') {
-            if (label) label.textContent = '2. SELECT DOCTOR PROFILE';
-            fetch('<?= base_url('api/v1/doctor/list') ?>')
-                .then(function(r) { return r.json(); })
-                .then(function(resp) {
-                    sel.innerHTML = '<option value="">-- General / All Doctor Access --</option>';
-                    if (resp && resp.status === 1 && Array.isArray(resp.data)) {
-                        resp.data.forEach(function(d) {
-                            var opt = document.createElement('option');
-                            opt.value = d.id;
-                            opt.textContent = d.name;
-                            sel.appendChild(opt);
-                        });
-                    }
-                    updateHdrAppDetails();
-                });
-        } else {
-            if (label) label.textContent = '2. SELECT NURSING STAFF PROFILE';
-            fetch('<?= base_url('api/v1/nursing/nurses') ?>')
-                .then(function(r) { return r.json(); })
-                .then(function(resp) {
-                    sel.innerHTML = '<option value="">-- General / All Staff Access --</option>';
-                    if (resp && resp.status === 1 && Array.isArray(resp.data)) {
-                        resp.data.forEach(function(n) {
-                            var opt = document.createElement('option');
-                            opt.value = n.nurse_code;
-                            opt.textContent = '[' + n.nurse_code + '] ' + n.name;
-                            sel.appendChild(opt);
-                        });
-                    }
-                    updateHdrAppDetails();
-                });
-        }
-    }
-
     function openAppsModal() {
-        loadAppStaffList();
+        updateHdrAppDetails();
         showAppsModal();
     }
 
@@ -485,7 +423,7 @@
                 });
                 appCard.classList.remove('border-secondary', 'bg-light', 'text-dark');
                 appCard.classList.add('border-primary', 'bg-primary-subtle', 'text-primary');
-                loadAppStaffList();
+                updateHdrAppDetails();
             }
             return;
         }
@@ -503,12 +441,6 @@
                 }
                 alert('App URL copied to clipboard!');
             }
-        }
-    });
-
-    document.addEventListener('change', function(e) {
-        if (e.target && e.target.id === 'hdr_apps_nurse_select') {
-            updateHdrAppDetails();
         }
     });
 })();

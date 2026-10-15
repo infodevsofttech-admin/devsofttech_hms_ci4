@@ -3195,6 +3195,7 @@ class Ipd extends BaseController
         return $this->response->setJSON([
             'update' => 1,
             'message' => $message,
+            'csrf_hash' => csrf_hash(),
             'html' => view('billing/ipd/panel_discharge', $panelData),
         ]);
     }

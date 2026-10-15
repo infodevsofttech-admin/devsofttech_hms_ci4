@@ -224,6 +224,28 @@ if (!empty($data) && !empty($data[0]) && !empty($data[0]->dob)) {
                         <?php endif; ?>
                     </div>
                 <?php endif; ?>
+                <div class="row g-3 mt-1">
+                    <div class="col-md-6">
+                        <div class="p-2 bg-warning-subtle border border-warning rounded">
+                            <label class="form-label fw-bold small text-dark mb-1"><i class="bi bi-key me-1"></i> Doctor Mobile App Security PIN</label>
+                            <input type="password" maxlength="6" class="form-control form-control-sm" id="doctor_app_pin" name="app_pin" placeholder="Set or update 4-6 digit PIN">
+                            <small class="text-muted" style="font-size: 10px;">Used by doctor to login/unlock DoctorCare PWA App</small>
+                        </div>
+                    </div>
+                    <div class="col-md-6">
+                        <div class="p-2 bg-light border rounded">
+                            <label class="form-label fw-bold small text-dark mb-1"><i class="bi bi-shield-lock me-1"></i> Device Security Code</label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" maxlength="10" class="form-control form-control-sm font-monospace fw-bold" id="doctor_device_code" name="device_code" value="<?= esc($data[0]->device_code ?? '') ?>" placeholder="6-digit security code">
+                                <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_regen_doc_code" title="Generate New Code">
+                                    <i class="bi bi-arrow-repeat"></i> New
+                                </button>
+                            </div>
+                            <small class="text-muted" style="font-size: 10px;">Provided by HMS Admin for doctor's first-time mobile pairing</small>
+                        </div>
+                    </div>
+                </div>
+
                 <div class="mt-3">
                     <button type="submit" class="btn btn-primary">Save</button>
                 </div>
@@ -500,5 +522,22 @@ if (!empty($data) && !empty($data[0]) && !empty($data[0]->dob)) {
                     updateCsrf(data);
                 }, 'json');
         }
+
+        $('#btn_regen_doc_code').on('click', function() {
+            var docId = parseInt($('#doc_id').val(), 10) || 0;
+            if (docId > 0) {
+                $.post('<?= base_url('setting/admin/doctor/regenerate-device-code') ?>', { id: docId }, function(resp) {
+                    if (resp && resp.ok && resp.device_code) {
+                        $('#doctor_device_code').val(resp.device_code);
+                    } else {
+                        $('#doctor_device_code').val(Math.floor(100000 + Math.random() * 900000).toString());
+                    }
+                }, 'json').fail(function() {
+                    $('#doctor_device_code').val(Math.floor(100000 + Math.random() * 900000).toString());
+                });
+            } else {
+                $('#doctor_device_code').val(Math.floor(100000 + Math.random() * 900000).toString());
+            }
+        });
     </script>
 <?php endif ?>

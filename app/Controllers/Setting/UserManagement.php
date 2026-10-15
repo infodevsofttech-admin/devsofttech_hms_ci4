@@ -74,8 +74,17 @@ class UserManagement extends BaseController
 
     public function store()
     {
+        $username = trim((string) $this->request->getPost('username'));
+        $email = trim((string) $this->request->getPost('email'));
+        if ($email === '' && $username !== '') {
+            $email = strtolower($username) . '@hospital.local';
+            $postData = $this->request->getPost();
+            $postData['email'] = $email;
+            $this->request->setGlobal('post', $postData);
+        }
+
         $rules = [
-            'username'      => 'required|min_length[3]|max_length[30]|regex_match[/^[a-zA-Z0-9.]+$/]',
+            'username'      => 'required|min_length[3]|max_length[30]|regex_match[/^[a-zA-Z0-9._-]+$/]',
             'email'         => 'required|valid_email|max_length[254]',
             'password'      => 'required|min_length[8]',
             'role'          => 'required',
@@ -304,8 +313,8 @@ class UserManagement extends BaseController
         ];
 
         $errors = [];
-        if ($username === '' || strlen($username) < 3 || strlen($username) > 30 || preg_match('/\A[a-zA-Z0-9\.]+\z/', $username) !== 1) {
-            $errors['username'] = 'Login ID must be 3-30 chars and only letters, numbers, dot.';
+        if ($username === '' || strlen($username) < 3 || strlen($username) > 30 || preg_match('/\A[a-zA-Z0-9._-]+\z/', $username) !== 1) {
+            $errors['username'] = 'Login ID must be 3-30 chars and only letters, numbers, dot (.), hyphen (-), underscore (_).';
         }
         if ($email === '' || ! filter_var($email, FILTER_VALIDATE_EMAIL)) {
             $errors['email'] = 'Valid email is required.';

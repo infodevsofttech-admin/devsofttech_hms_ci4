@@ -41,6 +41,7 @@
                             <th style="width: 120px;">Designation</th>
                             <th>Qualification</th>
                             <th>Contact / Mobile</th>
+                            <th style="width: 130px;">Device Code</th>
                             <th style="width: 120px;">User Account</th>
                             <th style="width: 90px;">Status</th>
                             <th style="width: 110px;" class="text-end pe-3">Actions</th>
@@ -77,6 +78,18 @@
                                     <td><?= esc($nurse['qualification'] ?: '-') ?></td>
                                     <td><?= esc($nurse['contact_no'] ?: '-') ?></td>
                                     <td>
+                                        <div class="d-flex align-items-center gap-1">
+                                            <span class="badge bg-warning-subtle text-dark border border-warning font-monospace fs-6 px-2 py-1" id="device_code_badge_<?= (int)$nurse['id'] ?>">
+                                                <i class="bi bi-shield-lock me-1 text-warning-emphasis"></i><?= esc($nurse['device_code'] ?? '-') ?>
+                                            </span>
+                                            <?php if (!empty($nurse['device_code'])): ?>
+                                                <button type="button" class="btn btn-outline-secondary btn-sm p-0 px-1 btn-copy-code" data-code="<?= esc($nurse['device_code']) ?>" title="Copy Device Code">
+                                                    <i class="bi bi-clipboard" style="font-size: 11px;"></i>
+                                                </button>
+                                            <?php endif; ?>
+                                        </div>
+                                    </td>
+                                    <td>
                                         <?php if (!empty($nurse['linked_username'])): ?>
                                             <span class="badge bg-success-subtle text-success border border-success-subtle" title="Linked User Account">
                                                 <i class="bi bi-person-check me-1"></i><?= esc($nurse['linked_username']) ?>
@@ -95,8 +108,8 @@
                                         <?php endif; ?>
                                     </td>
                                     <td class="text-end pe-3">
-                                        <button type="button" class="btn btn-outline-dark btn-sm py-0 px-2 me-1 btn-qr-nurse" data-code="<?= esc($nurse['nurse_code']) ?>" data-name="<?= esc($nurse['name']) ?>">
-                                            <i class="bi bi-qr-code"></i> QR
+                                        <button type="button" class="btn btn-outline-dark btn-sm py-0 px-2 me-1 btn-qr-nurse" data-code="<?= esc($nurse['nurse_code']) ?>" data-name="<?= esc($nurse['name']) ?>" data-device="<?= esc($nurse['device_code'] ?? '') ?>">
+                                            <i class="bi bi-qr-code"></i> App Access
                                         </button>
                                         <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2 btn-edit-nurse" data-id="<?= (int)$nurse['id'] ?>">
                                             <i class="bi bi-pencil-square"></i> Edit
@@ -201,12 +214,24 @@
                             <input type="email" class="form-control form-control-sm" id="nurse_email" name="email" placeholder="Email address">
                         </div>
 
-                        <!-- App Security PIN Section -->
+                        <!-- App Security PIN & Device Code Section -->
                         <div class="col-md-6 mt-2">
                             <div class="p-2 bg-warning-subtle border border-warning rounded">
                                 <label class="form-label fw-bold small text-dark mb-1"><i class="bi bi-key me-1"></i> Mobile App Security PIN</label>
                                 <input type="password" maxlength="6" class="form-control form-control-sm" id="nurse_app_pin" name="app_pin" placeholder="Set or update 4-6 digit PIN">
-                                <small class="text-muted" style="font-size: 10px;">Used by nurse to login to NursingCare PWA App</small>
+                                <small class="text-muted" style="font-size: 10px;">Used by nurse to login/unlock NursingCare PWA App</small>
+                            </div>
+                        </div>
+                        <div class="col-md-6 mt-2">
+                            <div class="p-2 bg-light border rounded">
+                                <label class="form-label fw-bold small text-dark mb-1"><i class="bi bi-shield-lock me-1"></i> Device Security Code</label>
+                                <div class="input-group input-group-sm">
+                                    <input type="text" maxlength="10" class="form-control form-control-sm font-monospace fw-bold" id="nurse_device_code" name="device_code" placeholder="6-digit security code">
+                                    <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_regen_nurse_code" title="Generate New Code">
+                                        <i class="bi bi-arrow-repeat"></i> New
+                                    </button>
+                                </div>
+                                <small class="text-muted" style="font-size: 10px;">Provided by HMS Admin for first-time mobile device pairing</small>
                             </div>
                         </div>
                     </div>
@@ -222,21 +247,43 @@
     </div>
 </div>
 
-<!-- Modal for Nurse App QR Code -->
+<!-- Modal for Nurse App Pairing & QR Code -->
 <div class="modal fade" id="nurseQrModal" tabindex="-1" aria-hidden="true">
-    <div class="modal-dialog modal-dialog-centered modal-sm">
-        <div class="modal-content text-center">
-            <div class="modal-header bg-light py-2">
-                <h5 class="modal-title text-primary fs-6 mb-0" id="qrModalTitle"><i class="bi bi-qr-code-scan me-1"></i> Nurse App QR Code</h5>
-                <button type="button" class="btn-close" data-bs-dismiss="modal" aria-label="Close"></button>
+    <div class="modal-dialog modal-dialog-centered">
+        <div class="modal-content text-center shadow-lg border-0">
+            <div class="modal-header bg-primary text-white py-2">
+                <h5 class="modal-title fs-6 mb-0" id="qrModalTitle"><i class="bi bi-phone me-1"></i> NursingCare Mobile App Access</h5>
+                <button type="button" class="btn-close btn-close-white" data-bs-dismiss="modal" aria-label="Close"></button>
             </div>
             <div class="modal-body py-3">
-                <h6 class="fw-bold mb-0 text-dark" id="qr_nurse_name">Staff Nurse</h6>
-                <span class="badge bg-secondary mb-3" id="qr_nurse_code">NUR-001</span>
-                <div class="p-2 border rounded d-inline-block bg-white shadow-sm mb-3">
-                    <img id="qr_code_img" src="" alt="Nurse App QR Code" style="width: 180px; height: 180px;" />
+                <h6 class="fw-bold mb-1 text-dark" id="qr_nurse_name">Staff Nurse</h6>
+                <div class="mb-3">
+                    <span class="badge bg-secondary me-1" id="qr_nurse_code">NUR-001</span>
+                    <span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-shield-check me-1"></i>Device Auth Secured</span>
                 </div>
-                <p class="small text-muted mb-0" style="font-size: 11px;">Scan with mobile phone to open <strong>NursingCare PWA</strong> for this nurse profile.</p>
+
+                <div class="p-2 border rounded d-inline-block bg-white shadow-sm mb-3">
+                    <img id="qr_code_img" src="" alt="Nurse App QR Code" style="width: 170px; height: 170px;" />
+                </div>
+                
+                <div class="card bg-light border-0 text-start mx-auto p-2 mb-2" style="max-width: 340px;">
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <small class="text-muted">Staff / User ID:</small>
+                        <span class="fw-bold font-monospace text-primary" id="qr_card_nurse_code">-</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center mb-1">
+                        <small class="text-muted">Device Security Code:</small>
+                        <span class="badge bg-warning text-dark font-monospace fs-6 px-2 py-0" id="qr_card_device_code">-</span>
+                    </div>
+                    <div class="d-flex justify-content-between align-items-center">
+                        <small class="text-muted">App Security PIN:</small>
+                        <span class="small text-secondary fst-italic">Configured in Master</span>
+                    </div>
+                </div>
+
+                <p class="small text-muted mb-0" style="font-size: 11px;">
+                    <i class="bi bi-info-circle me-1"></i> Scan to open the app on mobile, then enter the <strong>Staff ID</strong>, <strong>Device Security Code</strong>, and <strong>PIN</strong> to pair this phone.
+                </p>
             </div>
             <div class="modal-footer bg-light py-2 justify-content-center">
                 <button type="button" class="btn btn-secondary btn-sm" data-bs-dismiss="modal">Close</button>
@@ -249,6 +296,7 @@
 (function() {
     var saveUrl = '<?= base_url('setting/admin/nurse/save') ?>';
     var deleteUrlBase = '<?= base_url('setting/admin/nurse/delete') ?>';
+    var regenUrl = '<?= base_url('setting/admin/nurse/regenerate-device-code') ?>';
     var appBaseUrl = '<?= base_url('app/nursing') ?>';
 
     function resetNurseForm() {
@@ -263,6 +311,7 @@
         $('#nurse_contact_no').val('');
         $('#nurse_email').val('');
         $('#nurse_app_pin').val('');
+        $('#nurse_device_code').val(Math.floor(100000 + Math.random() * 900000).toString());
         $('#nurse_department').val('Nursing');
         $('#nurse_is_active').val('1');
         $('#nurse_form_status').addClass('d-none').text('');
@@ -272,11 +321,16 @@
     $(document).on('click', '.btn-qr-nurse', function() {
         var code = $(this).data('code') || '';
         var name = $(this).data('name') || '';
-        var appUrl = appBaseUrl + '?nurse_code=' + encodeURIComponent(code);
+        var deviceCode = $(this).data('device') || '';
+        
+        // Clean URL - No nurse credentials leaked in the public QR code
+        var appUrl = appBaseUrl;
         var qrApiUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=250x250&data=' + encodeURIComponent(appUrl);
 
         $('#qr_nurse_name').text(name);
         $('#qr_nurse_code').text(code);
+        $('#qr_card_nurse_code').text(code);
+        $('#qr_card_device_code').text(deviceCode || 'N/A');
         $('#qr_code_img').attr('src', qrApiUrl);
 
         var modalEl = document.getElementById('nurseQrModal');
@@ -284,6 +338,33 @@
             window.bootstrap.Modal.getOrCreateInstance(modalEl).show();
         } else {
             $(modalEl).modal('show');
+        }
+    });
+
+    $(document).on('click', '.btn-copy-code', function() {
+        var code = $(this).data('code') || '';
+        if (!code) return;
+        navigator.clipboard.writeText(code).then(function() {
+            alert('Device Security Code copied: ' + code);
+        }).catch(function() {
+            prompt('Copy Device Security Code:', code);
+        });
+    });
+
+    $('#btn_regen_nurse_code').on('click', function() {
+        var nurseId = parseInt($('#nurse_id').val(), 10) || 0;
+        if (nurseId > 0) {
+            $.post(regenUrl + '/' + nurseId, {}, function(resp) {
+                if (resp && resp.ok && resp.device_code) {
+                    $('#nurse_device_code').val(resp.device_code);
+                } else {
+                    $('#nurse_device_code').val(Math.floor(100000 + Math.random() * 900000).toString());
+                }
+            }, 'json').fail(function() {
+                $('#nurse_device_code').val(Math.floor(100000 + Math.random() * 900000).toString());
+            });
+        } else {
+            $('#nurse_device_code').val(Math.floor(100000 + Math.random() * 900000).toString());
         }
     });
 
@@ -308,6 +389,7 @@
         $('#nurse_qualification').val(data.qualification || '');
         $('#nurse_contact_no').val(data.contact_no || '');
         $('#nurse_email').val(data.email || '');
+        $('#nurse_device_code').val(data.device_code || Math.floor(100000 + Math.random() * 900000).toString());
         $('#nurse_department').val(data.department || 'Nursing');
         $('#nurse_is_active').val(data.is_active !== undefined ? data.is_active : '1');
         $('#nurse_form_status').addClass('d-none').text('');

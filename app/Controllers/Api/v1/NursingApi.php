@@ -73,7 +73,7 @@ class NursingApi extends BaseController
                        b.status, coalesce(b.bed_status, 'available') as bed_status,
                        w.ward_name, c.category_name,
                        i.id as ipd_id, i.ipd_code, i.p_id, i.r_doc_id, i.r_doc_name,
-                       p.p_fname as patient_name, p.p_code as uhid, p.mphone1, p.gender, p.age, p.dob,
+                       p.p_fname as patient_name, p.p_code as uhid, p.gender, p.age,
                        coalesce(ipd_doc_list.doc_name, concat('Dr. ', i.r_doc_name)) as doctor_name
                 FROM bed_master b
                 LEFT JOIN ward_master w ON b.ward_id = w.id
@@ -106,13 +106,54 @@ class NursingApi extends BaseController
 
     /**
      * GET api/v1/nursing/nurses
+     * Returns sanitized active nurse staff list for PWA staff switcher (Data Minimized & Credentials Stripped)
      */
     public function nurses()
     {
+        $nurses = $this->nurseModel->getActiveNurses();
+        $safeList = [];
+        foreach ($nurses as $n) {
+            $safeList[] = [
+                'id'          => (int) ($n['id'] ?? 0),
+                'nurse_code'  => (string) ($n['nurse_code'] ?? ''),
+                'name'        => (string) ($n['name'] ?? ''),
+                'gender'      => (string) ($n['gender'] ?? ''),
+                'designation' => (string) ($n['designation'] ?? 'Staff Nurse'),
+                'department'  => (string) ($n['department'] ?? 'Nursing'),
+                'has_pin'     => ! empty($n['app_pin']),
+                'is_active'   => (int) ($n['is_active'] ?? 1),
+            ];
+        }
+
         return $this->response->setJSON([
             'status' => 1,
-            'data' => $this->nurseModel->getActiveNurses()
+            'data'   => $safeList,
         ]);
+    }
+
+    private function isHospitalIntranet(string $ip): bool
+    {
+        if (in_array($ip, ['127.0.0.1', '::1', 'localhost'], true)) {
+            return true;
+        }
+        $privateRanges = [
+            '10.0.0.0/8',
+            '172.16.0.0/12',
+            '192.168.0.0/16',
+        ];
+        $ipLong = ip2long($ip);
+        if ($ipLong === false) {
+            return false;
+        }
+        foreach ($privateRanges as $range) {
+            [$subnet, $mask] = explode('/', $range);
+            $subnetLong = ip2long($subnet);
+            $maskLong = ~((1 << (32 - (int) $mask)) - 1);
+            if (($ipLong & $maskLong) === ($subnetLong & $maskLong)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -122,20 +163,101 @@ class NursingApi extends BaseController
     {
         $post = $this->request->getPost() ?: ($this->request->getJSON(true) ?? []);
         $nurseId = (int) ($post['nurse_id'] ?? 0);
-        $nurseCode = trim((string) ($post['nurse_code'] ?? ''));
-        $pin = trim((string) ($post['pin'] ?? ''));
+        $nurseCode = trim((string) ($post['staff_id'] ?? $post['nurse_code'] ?? $post['user_id'] ?? $post['username'] ?? ''));
+        $pin = trim((string) ($post['pin'] ?? $post['password'] ?? ''));
+        $deviceCode = trim((string) ($post['device_code'] ?? ''));
+        $deviceToken = trim((string) ($post['device_token'] ?? ''));
 
-        if ($nurseId <= 0 && $nurseCode !== '') {
-            $nurseRow = db_connect()->table('nurse_master')->where('nurse_code', $nurseCode)->get()->getRowArray();
-        } else {
+        $nurseRow = null;
+        if ($nurseId > 0) {
             $nurseRow = $this->nurseModel->getNurseById($nurseId);
         }
 
+        if (! $nurseRow && $nurseCode !== '') {
+            // 1. Direct search by nurse_code or id
+            $nurseRow = db_connect()->table('nurse_master')
+                ->where('nurse_code', $nurseCode)
+                ->orWhere('id', is_numeric($nurseCode) ? (int)$nurseCode : 0)
+                ->get()->getRowArray();
+
+            // 2. Search by linked username or employee_code
+            if (! $nurseRow && db_connect()->tableExists('user_profiles')) {
+                $linkedRow = db_connect()->table('user_profiles up')
+                    ->select('n.*, u.id as linked_user_id, u.username as linked_username')
+                    ->join('nurse_master n', 'n.id = up.nurse_id')
+                    ->join('users u', 'u.id = up.user_id AND u.deleted_at IS NULL', 'left')
+                    ->groupStart()
+                        ->where('u.username', $nurseCode)
+                        ->orWhere('up.employee_code', $nurseCode)
+                    ->groupEnd()
+                    ->get()->getRowArray();
+                if ($linkedRow) {
+                    $nurseRow = $linkedRow;
+                }
+            }
+        }
+
         if (! $nurseRow) {
-            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Nurse profile not found']);
+            return $this->response->setStatusCode(404)->setJSON([
+                'status' => 0,
+                'message' => 'Staff profile not found. Please verify your Staff ID / Username.'
+            ]);
+        }
+
+        $clientIp = (string) $this->request->getIPAddress();
+        $isIntranet = $this->isHospitalIntranet($clientIp);
+
+        // Device pairing check
+        $expectedDeviceCode = trim((string) ($nurseRow['device_code'] ?? ''));
+        if ($expectedDeviceCode === '') {
+            $expectedDeviceCode = (string) random_int(100000, 999999);
+            db_connect()->table('nurse_master')->where('id', $nurseRow['id'])->update(['device_code' => $expectedDeviceCode]);
+            $nurseRow['device_code'] = $expectedDeviceCode;
+        }
+
+        $expectedDeviceToken = hash_hmac('sha256', $nurseRow['id'] . '_' . ($nurseRow['nurse_code'] ?? ''), $expectedDeviceCode);
+
+        $isDeviceTrusted = false;
+        if ($deviceToken !== '' && hash_equals($expectedDeviceToken, $deviceToken)) {
+            $isDeviceTrusted = true;
+        }
+
+        if (! $isDeviceTrusted) {
+            if ($deviceCode === '') {
+                return $this->response->setStatusCode(401)->setJSON([
+                    'status' => 0,
+                    'need_device_code' => true,
+                    'message' => 'Device Security Code is required to register this mobile device. Obtain the 6-digit code from Nursing Staff Master in HMS Admin.'
+                ]);
+            }
+            if (strcasecmp($deviceCode, $expectedDeviceCode) !== 0) {
+                return $this->response->setStatusCode(401)->setJSON([
+                    'status' => 0,
+                    'need_device_code' => true,
+                    'message' => 'Invalid Device Security Code. Please enter the 6-digit Security Code provided in Nursing Staff Master.'
+                ]);
+            }
+            $isDeviceTrusted = true;
+        }
+
+        $rateKey = 'nurse_pin_' . md5($clientIp . '_' . ($nurseRow['id'] ?? 0));
+        $cache = service('cache');
+        $failedAttempts = (int) ($cache->get($rateKey) ?? 0);
+        if ($failedAttempts >= 5) {
+            return $this->response->setStatusCode(429)->setJSON([
+                'status' => 0,
+                'message' => 'Too many failed PIN attempts. Account temporarily locked for 10 minutes.',
+            ]);
         }
 
         $hashedPin = (string) ($nurseRow['app_pin'] ?? '');
+
+        // If PIN is not set yet and a new PIN is provided with a valid deviceCode, set it automatically
+        if ($hashedPin === '' && $pin !== '' && strlen($pin) >= 4) {
+            $hashedPin = password_hash($pin, PASSWORD_DEFAULT);
+            db_connect()->table('nurse_master')->where('id', $nurseRow['id'])->update(['app_pin' => $hashedPin]);
+            $nurseRow['app_pin'] = $hashedPin;
+        }
 
         if ($hashedPin === '') {
             return $this->response->setJSON([
@@ -150,25 +272,31 @@ class NursingApi extends BaseController
             ]);
         }
 
-        $clientIp = (string) $this->request->getIPAddress();
-        $rateKey = 'nurse_pin_' . md5($clientIp . '_' . ($nurseRow['id'] ?? 0));
-        $cache = service('cache');
-        $failedAttempts = (int) ($cache->get($rateKey) ?? 0);
-        if ($failedAttempts >= 5) {
-            return $this->response->setStatusCode(429)->setJSON([
-                'status' => 0,
-                'message' => 'Too many failed PIN attempts. Account temporarily locked for 10 minutes.',
-            ]);
-        }
-
+        // Verify PIN or Account Password
         $isValid = password_verify($pin, $hashedPin) || ($pin === $hashedPin);
+
+        // If not matched, check linked Shield user account password if linked
+        if (! $isValid && ! empty($nurseRow['linked_user_id'])) {
+            try {
+                $userModel = model(\CodeIgniter\Shield\Models\UserModel::class);
+                $user = $userModel->findById((int) $nurseRow['linked_user_id']);
+                if ($user && method_exists($user, 'checkPassword') && $user->checkPassword($pin)) {
+                    $isValid = true;
+                }
+            } catch (\Throwable $e) {}
+        }
 
         if (! $isValid) {
             $cache->save($rateKey, $failedAttempts + 1, 600);
-            return $this->response->setStatusCode(401)->setJSON(['status' => 0, 'message' => 'Incorrect Security PIN']);
+            return $this->response->setStatusCode(401)->setJSON([
+                'status' => 0,
+                'message' => 'Incorrect Security PIN or Password.'
+            ]);
         }
 
         $cache->delete($rateKey);
+
+        // Issue/return device pairing token
         if (session_status() === PHP_SESSION_ACTIVE || ! session_id()) {
             session()->set('pwa_auth_nurse_id', (int) $nurseRow['id']);
         }
@@ -176,11 +304,14 @@ class NursingApi extends BaseController
         return $this->response->setJSON([
             'status' => 1,
             'message' => 'Authentication successful',
+            'device_token' => $expectedDeviceToken,
+            'is_intranet' => $isIntranet,
             'nurse' => [
                 'id' => (int) $nurseRow['id'],
                 'nurse_code' => $nurseRow['nurse_code'],
                 'name' => $nurseRow['name'],
                 'designation' => $nurseRow['designation'] ?? 'Staff Nurse',
+                'department' => $nurseRow['department'] ?? 'Nursing',
             ],
         ]);
     }

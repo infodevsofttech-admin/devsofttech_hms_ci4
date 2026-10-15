@@ -49,6 +49,7 @@ class DoctorApi extends BaseController
 
     /**
      * GET api/v1/doctor/list
+     * Returns sanitized doctor list for UI pickers (Data Minimized: PII and signatures stripped)
      */
     public function doctors()
     {
@@ -56,19 +57,42 @@ class DoctorApi extends BaseController
         $list = [];
         foreach ($doctors as $d) {
             $list[] = [
-                'id' => (int) $d->id,
-                'name' => trim(($d->p_title ?? '') . ' ' . ($d->p_fname ?? '')),
-                'email' => $d->email1 ?? '',
-                'phone' => $d->mphone1 ?? '',
-                'doc_sign' => $d->doc_sign ?? '',
-                'has_pin' => ! empty($d->app_pin),
+                'id'         => (int) $d->id,
+                'name'       => trim(($d->p_title ?? '') . ' ' . ($d->p_fname ?? '')),
+                'department' => $d->department ?? '',
+                'has_pin'    => ! empty($d->app_pin),
             ];
         }
 
         return $this->response->setJSON([
             'status' => 1,
-            'data' => $list,
+            'data'   => $list,
         ]);
+    }
+
+    private function isHospitalIntranet(string $ip): bool
+    {
+        if (in_array($ip, ['127.0.0.1', '::1', 'localhost'], true)) {
+            return true;
+        }
+        $privateRanges = [
+            '10.0.0.0/8',
+            '172.16.0.0/12',
+            '192.168.0.0/16',
+        ];
+        $ipLong = ip2long($ip);
+        if ($ipLong === false) {
+            return false;
+        }
+        foreach ($privateRanges as $range) {
+            [$subnet, $mask] = explode('/', $range);
+            $subnetLong = ip2long($subnet);
+            $maskLong = ~((1 << (32 - (int) $mask)) - 1);
+            if (($ipLong & $maskLong) === ($subnetLong & $maskLong)) {
+                return true;
+            }
+        }
+        return false;
     }
 
     /**
@@ -77,21 +101,115 @@ class DoctorApi extends BaseController
     public function verifyPin()
     {
         $post = $this->request->getPost() ?: ($this->request->getJSON(true) ?? []);
-        $docId = (int) ($post['doctor_id'] ?? 0);
-        $pin = trim((string) ($post['pin'] ?? ''));
+        $rawDocId = trim((string) ($post['doctor_id'] ?? $post['staff_id'] ?? ''));
+        $docId = 0;
+        if (preg_match('/^DOC[-_]?(\d+)$/i', $rawDocId, $m)) {
+            $docId = (int) $m[1];
+        } elseif (is_numeric($rawDocId)) {
+            $docId = (int) $rawDocId;
+        }
+        $docCode = trim((string) ($post['doctor_code'] ?? $post['staff_id'] ?? $post['user_id'] ?? $post['username'] ?? $rawDocId));
+        $pin = trim((string) ($post['pin'] ?? $post['password'] ?? ''));
+        $deviceCode = trim((string) ($post['device_code'] ?? ''));
+        $deviceToken = trim((string) ($post['device_token'] ?? ''));
 
-        if ($docId <= 0) {
-            return $this->response->setStatusCode(422)->setJSON(['status' => 0, 'message' => 'Doctor ID is required']);
+        $doctorRow = null;
+        if ($docId > 0) {
+            $doctorRows = $this->doctorModel->getDoctorById($docId);
+            $doctorRow = $doctorRows[0] ?? null;
         }
 
-        $doctorRows = $this->doctorModel->getDoctorById($docId);
-        $doctorRow = $doctorRows[0] ?? null;
+        if (! $doctorRow && $docCode !== '') {
+            if (is_numeric($docCode)) {
+                $doctorRows = $this->doctorModel->getDoctorById((int) $docCode);
+                $doctorRow = $doctorRows[0] ?? null;
+            }
+
+            if (! $doctorRow && db_connect()->tableExists('user_profiles')) {
+                $linkedRow = db_connect()->table('user_profiles up')
+                    ->select('d.*, u.id as linked_user_id, u.username as linked_username')
+                    ->join('doctor_master d', 'd.id = up.doctor_id')
+                    ->join('users u', 'u.id = up.user_id AND u.deleted_at IS NULL', 'left')
+                    ->groupStart()
+                        ->where('u.username', $docCode)
+                        ->orWhere('up.employee_code', $docCode)
+                    ->groupEnd()
+                    ->get()->getRow();
+                if ($linkedRow) {
+                    $doctorRow = $linkedRow;
+                }
+            }
+
+            if (! $doctorRow) {
+                // Try searching by name or doctor_reg_no
+                $doctorRow = db_connect()->table('doctor_master')
+                    ->where('doctor_reg_no', $docCode)
+                    ->orWhere('mphone1', $docCode)
+                    ->get()->getRow();
+            }
+        }
 
         if (! $doctorRow) {
-            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Doctor profile not found']);
+            return $this->response->setStatusCode(404)->setJSON([
+                'status' => 0,
+                'message' => 'Doctor profile not found. Please verify your Doctor ID / Username.'
+            ]);
+        }
+
+        $clientIp = (string) $this->request->getIPAddress();
+        $isIntranet = $this->isHospitalIntranet($clientIp);
+
+        // Device pairing check
+        $expectedDeviceCode = trim((string) ($doctorRow->device_code ?? ''));
+        if ($expectedDeviceCode === '') {
+            $expectedDeviceCode = (string) random_int(100000, 999999);
+            db_connect()->table('doctor_master')->where('id', $doctorRow->id)->update(['device_code' => $expectedDeviceCode]);
+            $doctorRow->device_code = $expectedDeviceCode;
+        }
+
+        $expectedDeviceToken = hash_hmac('sha256', (string) $doctorRow->id, $expectedDeviceCode);
+
+        $isDeviceTrusted = false;
+        if ($deviceToken !== '' && hash_equals($expectedDeviceToken, $deviceToken)) {
+            $isDeviceTrusted = true;
+        }
+
+        if (! $isDeviceTrusted) {
+            if ($deviceCode === '') {
+                return $this->response->setStatusCode(401)->setJSON([
+                    'status' => 0,
+                    'need_device_code' => true,
+                    'message' => 'Device Security Code is required to register this mobile device. Obtain the 6-digit code from Doctor Master in HMS Admin.'
+                ]);
+            }
+            if (strcasecmp($deviceCode, $expectedDeviceCode) !== 0) {
+                return $this->response->setStatusCode(401)->setJSON([
+                    'status' => 0,
+                    'need_device_code' => true,
+                    'message' => 'Invalid Device Security Code. Please enter the 6-digit Security Code provided in Doctor Master.'
+                ]);
+            }
+            $isDeviceTrusted = true;
+        }
+
+        $rateKey = 'doc_pin_' . md5($clientIp . '_' . $doctorRow->id);
+        $cache = service('cache');
+        $failedAttempts = (int) ($cache->get($rateKey) ?? 0);
+        if ($failedAttempts >= 5) {
+            return $this->response->setStatusCode(429)->setJSON([
+                'status' => 0,
+                'message' => 'Too many failed PIN attempts. Account temporarily locked for 10 minutes.',
+            ]);
         }
 
         $hashedPin = (string) ($doctorRow->app_pin ?? '');
+
+        // If PIN is not set yet and a new PIN is provided with a valid deviceCode, set it automatically
+        if ($hashedPin === '' && $pin !== '' && strlen($pin) >= 4) {
+            $hashedPin = password_hash($pin, PASSWORD_DEFAULT);
+            db_connect()->table('doctor_master')->where('id', $doctorRow->id)->update(['app_pin' => $hashedPin]);
+            $doctorRow->app_pin = $hashedPin;
+        }
 
         if ($hashedPin === '') {
             return $this->response->setJSON([
@@ -104,25 +222,29 @@ class DoctorApi extends BaseController
             ]);
         }
 
-        $clientIp = (string) $this->request->getIPAddress();
-        $rateKey = 'doc_pin_' . md5($clientIp . '_' . $docId);
-        $cache = service('cache');
-        $failedAttempts = (int) ($cache->get($rateKey) ?? 0);
-        if ($failedAttempts >= 5) {
-            return $this->response->setStatusCode(429)->setJSON([
-                'status' => 0,
-                'message' => 'Too many failed PIN attempts. Account temporarily locked for 10 minutes.',
-            ]);
-        }
-
+        // Verify PIN or Account Password
         $isValid = password_verify($pin, $hashedPin) || ($pin === $hashedPin);
+
+        if (! $isValid && ! empty($doctorRow->linked_user_id)) {
+            try {
+                $userModel = model(\CodeIgniter\Shield\Models\UserModel::class);
+                $user = $userModel->findById((int) $doctorRow->linked_user_id);
+                if ($user && method_exists($user, 'checkPassword') && $user->checkPassword($pin)) {
+                    $isValid = true;
+                }
+            } catch (\Throwable $e) {}
+        }
 
         if (! $isValid) {
             $cache->save($rateKey, $failedAttempts + 1, 600);
-            return $this->response->setStatusCode(401)->setJSON(['status' => 0, 'message' => 'Incorrect Security PIN']);
+            return $this->response->setStatusCode(401)->setJSON([
+                'status' => 0,
+                'message' => 'Incorrect Security PIN or Password.'
+            ]);
         }
 
         $cache->delete($rateKey);
+
         if (session_status() === PHP_SESSION_ACTIVE || ! session_id()) {
             session()->set('pwa_auth_doctor_id', (int) $doctorRow->id);
         }
@@ -130,9 +252,11 @@ class DoctorApi extends BaseController
         return $this->response->setJSON([
             'status' => 1,
             'message' => 'Authentication successful',
+            'device_token' => $expectedDeviceToken,
+            'is_intranet' => $isIntranet,
             'doctor' => [
                 'id' => (int) $doctorRow->id,
-                'name' => trim(($doctorRow->p_title ?? '') . ' ' . ($doctorRow->p_fname ?? '')),
+                'name' => trim(($doctorRow->p_title ?? '') . ' ' . ($doctorRow->p_fname ?? '') . ' ' . ($doctorRow->p_lname ?? '')),
             ],
         ]);
     }

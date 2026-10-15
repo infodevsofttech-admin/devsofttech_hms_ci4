@@ -14,6 +14,10 @@
     <link href="<?= base_url('assets/img/favicon.png') ?>" rel="alternate icon" type="image/png">
     <link href="<?= base_url('assets/img/apple-touch-icon.png') ?>" rel="apple-touch-icon">
 
+    <meta name="csrf-token-name" content="<?= csrf_token() ?>">
+    <meta name="csrf-token" content="<?= csrf_hash() ?>">
+    <meta name="csrf-header" content="<?= config('Security')->headerName ?>">
+
     <!-- Google Fonts removed: offline app uses system fonts -->
 
     <link href="<?= base_url('assets/vendor/bootstrap/css/bootstrap.min.css') ?>" rel="stylesheet">
@@ -149,6 +153,7 @@
     <a href="#" class="back-to-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
 
     <script src="<?= base_url('assets/vendor/jquery/jquery-4.0.0.min.js') ?>"></script>
+    <script src="<?= base_url('assets/js/csrf-guard.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/inputmask/inputmask.min.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/inputmask/jquery.inputmask.min.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/jquery-ui/jquery-ui.min.js') ?>"></script>

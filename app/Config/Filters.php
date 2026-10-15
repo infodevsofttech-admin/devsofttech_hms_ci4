@@ -2,6 +2,7 @@
 
 namespace Config;
 
+use App\Filters\SecureHeadersFilter;
 use App\Filters\SingleActiveSessionFilter;
 use CodeIgniter\Config\Filters as BaseFilters;
 use CodeIgniter\Filters\Cors;
@@ -30,7 +31,7 @@ class Filters extends BaseFilters
         'toolbar'       => DebugToolbar::class,
         'honeypot'      => Honeypot::class,
         'invalidchars'  => InvalidChars::class,
-        'secureheaders' => SecureHeaders::class,
+        'secureheaders' => SecureHeadersFilter::class,
         'cors'          => Cors::class,
         'forcehttps'    => ForceHTTPS::class,
         'pagecache'     => PageCache::class,

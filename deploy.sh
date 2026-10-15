@@ -28,8 +28,10 @@ echo "=== Deploying to server ==="
 # with "syntax error, unexpected ')'" parse errors from an incompatible PHP CLI.
 REMOTE_CMDS="cd $PROJECT && git config core.fileMode false && git pull origin main && PHP_BIN=\$(command -v php83 || command -v php) && \$PHP_BIN spark migrate --namespace App && PHP_BIN=\$PHP_BIN bash scripts/install_hms_cron.sh $PROJECT && echo DEPLOY_OK"
 
-if command -v plink &>/dev/null; then
+if command -v plink &>/dev/null && [ -n "$HMS_SSH_PASS" ]; then
     plink -ssh -batch -pw "$HMS_SSH_PASS" $SERVER "$REMOTE_CMDS"
+elif ssh -q -o BatchMode=yes -o ConnectTimeout=3 hms-live exit &>/dev/null; then
+    ssh -o StrictHostKeyChecking=no hms-live "$REMOTE_CMDS"
 else
     ssh -o StrictHostKeyChecking=no $SERVER "$REMOTE_CMDS"
 fi

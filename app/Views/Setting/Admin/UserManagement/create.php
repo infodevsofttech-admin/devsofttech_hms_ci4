@@ -26,18 +26,28 @@
                 <div class="row g-3">
                     <div class="col-md-4">
                         <label class="form-label fw-semibold" for="username">Login ID / Username <span class="text-danger">*</span></label>
-                        <input class="form-control" id="username" name="username" type="text" maxlength="30" placeholder="e.g. dr.sharma or rajesh.k" value="<?= esc($formData['username'] ?? old('username')) ?>" required>
-                        <div class="form-text">3-30 characters, letters, numbers, and dot.</div>
+                        <input class="form-control" id="username" name="username" type="text" maxlength="30" placeholder="e.g. nur-637 or dr.sharma" value="<?= esc($formData['username'] ?? old('username')) ?>" required>
+                        <div class="form-text">3-30 characters, letters, numbers, dot (.), hyphen (-), underscore (_).</div>
                     </div>
                     <div class="col-md-4">
                         <label class="form-label fw-semibold" for="email">Email Address <span class="text-danger">*</span></label>
-                        <input class="form-control" id="email" name="email" type="email" placeholder="staff@hospital.com" value="<?= esc($formData['email'] ?? old('email')) ?>" required>
-                        <div class="form-text">Used for notifications and password recovery.</div>
+                        <input class="form-control" id="email" name="email" type="email" placeholder="staff@hospital.com (or leave blank for auto)" value="<?= esc($formData['email'] ?? old('email')) ?>">
+                        <div class="form-text">Used for notifications. Leave blank for auto-generated internal account.</div>
                     </div>
                     <div class="col-md-4">
-                        <label class="form-label fw-semibold" for="password">Password <span class="text-danger">*</span></label>
-                        <input class="form-control" id="password" name="password" type="password" minlength="8" placeholder="Minimum 8 characters" required>
-                        <div class="form-text">At least 8 characters.</div>
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <label class="form-label fw-semibold mb-0" for="password">Password <span class="text-danger">*</span></label>
+                            <button type="button" class="btn btn-link btn-sm p-0 text-decoration-none" id="btn_quick_pwd" style="font-size: 11px;">
+                                <i class="bi bi-magic me-1"></i>Set Staff@123
+                            </button>
+                        </div>
+                        <div class="input-group">
+                            <input class="form-control" id="password" name="password" type="password" minlength="8" placeholder="Minimum 8 characters" required>
+                            <button class="btn btn-outline-secondary" type="button" id="btn_toggle_pwd" title="Toggle Show/Hide Password">
+                                <i class="bi bi-eye" id="pwd_eye_icon"></i>
+                            </button>
+                        </div>
+                        <div class="form-text">At least 8 characters. Minimum standard security.</div>
                     </div>
 
                     <?php
@@ -171,6 +181,28 @@
     $('#role').off('change.roleSelect').on('change.roleSelect', handleRoleChange);
     handleRoleChange();
 
+    // Quick password and toggle visibility
+    $('#btn_quick_pwd').off('click').on('click', function() {
+        $('#password').val('Staff@123').trigger('input');
+        if (typeof notify === 'function') {
+            notify('info', 'Password Set', 'Default password set to Staff@123');
+        }
+    });
+
+    $('#btn_toggle_pwd').off('click').on('click', function() {
+        var pwdInput = document.getElementById('password');
+        var icon = document.getElementById('pwd_eye_icon');
+        if (pwdInput && icon) {
+            if (pwdInput.type === 'password') {
+                pwdInput.type = 'text';
+                icon.className = 'bi bi-eye-slash';
+            } else {
+                pwdInput.type = 'password';
+                icon.className = 'bi bi-eye';
+            }
+        }
+    });
+
     // Auto-populate when selecting a Doctor
     $('#doctor_id').off('change.docSelect').on('change.docSelect', function() {
         var docId = parseInt($(this).val() || '0', 10);
@@ -183,15 +215,21 @@
         var fname = (doc.p_fname || '').trim();
         var lname = (doc.p_lname || '').trim();
         var fullName = (title + ' ' + fname + ' ' + lname).trim();
+        var suggestedUser = 'dr.' + (fname ? fname.toLowerCase().replace(/[^a-z0-9._-]/g, '') : 'doc');
 
         if (!$('#person_name').val()) $('#person_name').val(fullName);
-        if (!$('#email').val() && doc.email1) $('#email').val(doc.email1);
         if (!$('#phone_no').val() && doc.mphone1) $('#phone_no').val(doc.mphone1);
         if (!$('#designation').val()) $('#designation').val('Doctor / Consultant');
         if (!$('#department').val()) $('#department').val('Clinical / OPD');
         if (!$('#username').val() && fname) {
-            var suggestedUser = 'dr.' + fname.toLowerCase();
             $('#username').val(suggestedUser);
+        }
+        if (!$('#email').val()) {
+            if (doc.email1) {
+                $('#email').val(doc.email1);
+            } else {
+                $('#email').val(suggestedUser + '@hospital.local');
+            }
         }
     });
 
@@ -203,14 +241,22 @@
         var nurse = nursesData.find(function(n) { return parseInt(n.id, 10) === nurseId; });
         if (!nurse) return;
 
+        var uName = (nurse.nurse_code ? nurse.nurse_code.toLowerCase().replace(/[^a-z0-9._-]/g, '') : '');
+
         if (!$('#person_name').val() && nurse.name) $('#person_name').val(nurse.name);
-        if (!$('#email').val() && nurse.email) $('#email').val(nurse.email);
         if (!$('#phone_no').val() && nurse.contact_no) $('#phone_no').val(nurse.contact_no);
         if (!$('#employee_code').val() && nurse.nurse_code) $('#employee_code').val(nurse.nurse_code);
         if (!$('#designation').val()) $('#designation').val(nurse.designation || 'Staff Nurse');
         if (!$('#department').val()) $('#department').val(nurse.department || 'Nursing');
-        if (!$('#username').val() && nurse.nurse_code) {
-            $('#username').val(nurse.nurse_code.toLowerCase());
+        if (!$('#username').val() && uName) {
+            $('#username').val(uName);
+        }
+        if (!$('#email').val()) {
+            if (nurse.email) {
+                $('#email').val(nurse.email);
+            } else if (uName) {
+                $('#email').val(uName + '@hospital.local');
+            }
         }
     });
 
@@ -220,9 +266,43 @@
         $('#nurse_id').trigger('change.nurseSelect');
     <?php endif; ?>
 
-    // AJAX Form submission
+    // AJAX Form submission with client-side validation
     $(form).off('submit.userCreate').on('submit.userCreate', function(event) {
         event.preventDefault();
+
+        var u = ($('#username').val() || '').trim();
+        var p = ($('#password').val() || '').trim();
+        var e = ($('#email').val() || '').trim();
+        var r = ($('#role').val() || '').trim();
+
+        if (!u || u.length < 3) {
+            if (typeof notify === 'function') notify('warning', 'Validation', 'Please enter a valid Login ID (minimum 3 characters).');
+            $('#username').focus();
+            return;
+        }
+
+        if (!/^[a-zA-Z0-9._-]+$/.test(u)) {
+            if (typeof notify === 'function') notify('warning', 'Validation', 'Login ID can only contain letters, numbers, dot, hyphen, or underscore.');
+            $('#username').focus();
+            return;
+        }
+
+        if (!r) {
+            if (typeof notify === 'function') notify('warning', 'Validation', 'Please select an assigned role.');
+            $('#role').focus();
+            return;
+        }
+
+        if (!p || p.length < 8) {
+            if (typeof notify === 'function') notify('warning', 'Validation', 'Password is required and must be at least 8 characters. Click "Set Staff@123" for quick fill.');
+            $('#password').focus();
+            return;
+        }
+
+        if (!e) {
+            e = u.toLowerCase() + '@hospital.local';
+            $('#email').val(e);
+        }
 
         $.post($(form).attr('action'), $(form).serialize())
             .done(function(html) {
@@ -232,7 +312,9 @@
                 }
             })
             .fail(function(xhr) {
-                notify('error', 'Create User', (xhr.responseJSON && xhr.responseJSON.error_text) || 'Request failed. Please check form validation.');
+                if (typeof notify === 'function') {
+                    notify('error', 'Create User', (xhr.responseJSON && xhr.responseJSON.error_text) || 'Request failed. Please check form validation.');
+                }
             });
     });
 })();

@@ -298,6 +298,59 @@ if ($ageLabel === '') {
 var baseUrl = '<?php echo rtrim(base_url(), '/'); ?>/';
 var invoiceId = '<?php echo htmlspecialchars((string) ($invoice_id ?? $invoice->inv_id ?? $invoice->id ?? '0')); ?>';
 var labType = '<?php echo htmlspecialchars((string) ($lab_type ?? '5')); ?>';
+var csrfTokenName = '<?php echo esc(csrf_token()); ?>';
+var csrfHash = '<?php echo esc(csrf_hash()); ?>';
+
+// Auto-inject CSRF token into all fetch and jQuery requests within this view
+(function() {
+    if (window.jQuery) {
+        window.jQuery.ajaxPrefilter(function(options, originalOptions, jqXHR) {
+            var method = (options.type || 'GET').toUpperCase();
+            if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+                jqXHR.setRequestHeader('X-CSRF-TOKEN', csrfHash);
+            }
+        });
+    }
+
+    var originalFetch = window.fetch;
+    window.fetch = function(url, options) {
+        options = options || {};
+        var method = (options.method || 'GET').toUpperCase();
+        if (method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+            options.headers = options.headers || {};
+            if (options.headers instanceof Headers) {
+                if (!options.headers.has('X-CSRF-TOKEN')) {
+                    options.headers.set('X-CSRF-TOKEN', csrfHash);
+                }
+            } else if (typeof options.headers === 'object') {
+                if (!options.headers['X-CSRF-TOKEN']) {
+                    options.headers['X-CSRF-TOKEN'] = csrfHash;
+                }
+            }
+            if (options.body instanceof FormData) {
+                if (!options.body.has(csrfTokenName)) {
+                    options.body.append(csrfTokenName, csrfHash);
+                }
+            } else if (typeof options.body === 'string' && options.body.indexOf('=') !== -1) {
+                try {
+                    var params = new URLSearchParams(options.body);
+                    if (!params.has(csrfTokenName)) {
+                        params.append(csrfTokenName, csrfHash);
+                        options.body = params.toString();
+                    }
+                } catch(e) {}
+            }
+        }
+
+        return originalFetch.call(this, url, options).then(function(response) {
+            var newHeader = response.headers.get('X-CSRF-TOKEN') || response.headers.get('x-csrf-token');
+            if (newHeader) {
+                csrfHash = newHeader;
+            }
+            return response;
+        });
+    };
+})();
 
 console.log('Page loaded - Invoice ID:', invoiceId, 'Lab Type:', labType);
 
@@ -313,6 +366,7 @@ function updateLabTiming() {
     const data = new FormData();
     data.append('invoice_id', invoiceId);
     data.append('lab_type', labType);
+    data.append(csrfTokenName, csrfHash);
     if (collectedTime) data.append('collected_time', collectedTime);
     if (reportedTime) data.append('reported_time', reportedTime);
 
@@ -359,6 +413,7 @@ function saveCollectionTime() {
 
     const data = new FormData();
     data.append('invoice_id', invoiceId);
+    data.append(csrfTokenName, csrfHash);
 
     fetch(baseUrl + 'diagnosis/sample-collection/' + testId + '/' + labType, {
         method: 'POST',
@@ -1200,6 +1255,7 @@ function onChangeUpdate(cb, itemId) {
 function removeTest(reqId) {
     if (confirm('Are you sure you want to remove this test?')) {
         const formData = new FormData();
+        formData.append(csrfTokenName, csrfHash);
 
         fetch(baseUrl + 'diagnosis/remove-test/' + reqId, {
             method: 'POST',

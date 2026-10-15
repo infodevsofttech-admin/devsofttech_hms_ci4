@@ -134,6 +134,9 @@ class Doctor extends BaseController
             $data['app_pin'] = password_hash($appPin, PASSWORD_DEFAULT);
         }
 
+        $deviceCode = trim((string) ($this->request->getPost('device_code') ?? ''));
+        $data['device_code'] = $deviceCode !== '' ? $deviceCode : str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+
         $insertId = $doctorModel->insert($data);
 
         if ($insertId <= 0) {
@@ -258,6 +261,11 @@ class Doctor extends BaseController
             $data['app_pin'] = password_hash($appPin, PASSWORD_DEFAULT);
         }
 
+        $deviceCode = trim((string) ($this->request->getPost('device_code') ?? ''));
+        if ($deviceCode !== '') {
+            $data['device_code'] = $deviceCode;
+        }
+
         $updated = $doctorModel->updateDoctor($data, $docId);
 
         return $this->response->setJSON([
@@ -265,6 +273,20 @@ class Doctor extends BaseController
             'showcontent' => $updated ? 'Data Saved successfully' : '',
             'error_text' => $updated ? '' : 'Please Check',
         ]);
+    }
+
+    public function regenerateDeviceCode()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setJSON(['ok' => false, 'error' => 'Invalid request']);
+        }
+        $id = (int) ($this->request->getPost('id') ?? 0);
+        if ($id <= 0) {
+            return $this->response->setJSON(['ok' => false, 'error' => 'Invalid doctor ID']);
+        }
+        $newCode = str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+        $this->db->table('doctor_master')->where('id', $id)->update(['device_code' => $newCode]);
+        return $this->response->setJSON(['ok' => true, 'device_code' => $newCode]);
     }
 
     public function doctorRecordSpec()

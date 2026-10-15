@@ -1396,6 +1396,7 @@ $routes->group('setting', static function($routes) {
     $routes->post('admin/doctor/fee/remove', 'Setting\\Doctor::removeFee');
     $routes->post('admin/doctor/ipd-fee/add', 'Setting\\Doctor::addIpdFee');
     $routes->post('admin/doctor/ipd-fee/remove', 'Setting\\Doctor::removeIpdFee');
+    $routes->post('admin/doctor/regenerate-device-code', 'Setting\\Doctor::regenerateDeviceCode');
     $routes->get('admin/doctor/specs', 'Setting\\Doctor::specs');
     $routes->post('admin/doctor/specs/create', 'Setting\\Doctor::storeSpec');
     $routes->post('admin/doctor/specs/update', 'Setting\\Doctor::updateSpec');
@@ -1439,6 +1440,8 @@ $routes->group('setting', static function($routes) {
     $routes->post('admin/reffer/types/delete', 'Setting\\Reffer::deleteType');
     $routes->get('admin/nurse', 'Setting\\Nurse::index');
     $routes->post('admin/nurse/save', 'Setting\\Nurse::save');
+    $routes->post('admin/nurse/regenerate-device-code', 'Setting\\Nurse::regenerate_device_code');
+    $routes->post('admin/nurse/regenerate-device-code/(:num)', 'Setting\\Nurse::regenerate_device_code/$1');
     $routes->post('admin/nurse/delete', 'Setting\\Nurse::delete');
     $routes->post('admin/nurse/delete/(:num)', 'Setting\\Nurse::delete/$1');
     $routes->get('admin/nurse/list_json', 'Setting\\Nurse::list_json');

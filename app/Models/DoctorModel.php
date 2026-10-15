@@ -21,6 +21,9 @@ class DoctorModel
             if (! in_array('app_pin', $fields, true)) {
                 $this->db->query("ALTER TABLE doctor_master ADD COLUMN app_pin VARCHAR(255) NULL");
             }
+            if (! in_array('device_code', $fields, true)) {
+                $this->db->query("ALTER TABLE doctor_master ADD COLUMN device_code VARCHAR(50) NULL");
+            }
         }
         return true;
     }
@@ -36,12 +39,28 @@ class DoctorModel
             $builder->select('d.*');
         }
 
-        return $builder->get()->getResult();
+        $list = $builder->get()->getResult();
+        foreach ($list as &$doc) {
+            if (empty($doc->device_code)) {
+                $newCode = (string) random_int(100000, 999999);
+                $this->db->table('doctor_master')->where('id', $doc->id)->update(['device_code' => $newCode]);
+                $doc->device_code = $newCode;
+            }
+        }
+        unset($doc);
+
+        return $list;
     }
 
     public function getDoctorById(int $id): array
     {
-        return $this->db->table('doctor_master')->where('id', $id)->get()->getResult();
+        $rows = $this->db->table('doctor_master')->where('id', $id)->get()->getResult();
+        if (! empty($rows) && empty($rows[0]->device_code)) {
+            $newCode = (string) random_int(100000, 999999);
+            $this->db->table('doctor_master')->where('id', $id)->update(['device_code' => $newCode]);
+            $rows[0]->device_code = $newCode;
+        }
+        return $rows;
     }
 
     public function insert(array $data): int

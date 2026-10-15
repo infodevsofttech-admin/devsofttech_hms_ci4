@@ -70,8 +70,10 @@ class Security extends BaseConfig
      * --------------------------------------------------------------------------
      *
      * Regenerate CSRF Token on every submission.
+     * Set to false for SPA and AJAX-heavy dashboards to ensure in-flight
+     * requests and concurrent tabs do not invalidate the session CSRF token.
      */
-    public bool $regenerate = true;
+    public bool $regenerate = false;
 
     /**
      * --------------------------------------------------------------------------

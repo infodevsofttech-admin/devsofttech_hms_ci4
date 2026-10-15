@@ -69,6 +69,13 @@ class Nurse extends BaseController
             'is_active' => $isActive,
         ];
 
+        $deviceCode = trim((string) ($this->request->getPost('device_code') ?? ''));
+        if ($deviceCode !== '') {
+            $payload['device_code'] = $deviceCode;
+        } elseif ($id === 0) {
+            $payload['device_code'] = str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+        }
+
         if ($appPin !== '') {
             $payload['app_pin'] = password_hash($appPin, PASSWORD_DEFAULT);
         }
@@ -86,6 +93,17 @@ class Nurse extends BaseController
             'id' => $savedId,
             'nurse' => $this->nurseModel->getNurseById($savedId),
         ]);
+    }
+
+    public function regenerate_device_code($id = null)
+    {
+        $id = (int) ($id ?? $this->request->getPost('id') ?? 0);
+        if ($id <= 0) {
+            return $this->response->setJSON(['ok' => false, 'error' => 'Invalid nurse ID.']);
+        }
+        $newCode = str_pad((string) random_int(100000, 999999), 6, '0', STR_PAD_LEFT);
+        $this->nurseModel->updateNurse($id, ['device_code' => $newCode]);
+        return $this->response->setJSON(['ok' => true, 'device_code' => $newCode]);
     }
 
     public function delete($id = null)

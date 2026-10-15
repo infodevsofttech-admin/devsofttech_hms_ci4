@@ -55,6 +55,9 @@ class NurseModel
         if (! in_array('app_pin', $fields, true)) {
             $this->db->query("ALTER TABLE nurse_master ADD COLUMN app_pin VARCHAR(255) NULL AFTER email");
         }
+        if (! in_array('device_code', $fields, true)) {
+            $this->db->query("ALTER TABLE nurse_master ADD COLUMN device_code VARCHAR(50) NULL AFTER app_pin");
+        }
 
         return true;
     }
@@ -81,7 +84,17 @@ class NurseModel
                 ->groupEnd();
         }
 
-        return $builder->orderBy('n.name', 'ASC')->get()->getResultArray();
+        $list = $builder->orderBy('n.name', 'ASC')->get()->getResultArray();
+        foreach ($list as &$nurse) {
+            if (empty($nurse['device_code'])) {
+                $newCode = (string) random_int(100000, 999999);
+                $this->db->table('nurse_master')->where('id', $nurse['id'])->update(['device_code' => $newCode]);
+                $nurse['device_code'] = $newCode;
+            }
+        }
+        unset($nurse);
+
+        return $list;
     }
 
     public function getActiveNurses(): array
@@ -96,6 +109,11 @@ class NurseModel
     public function getNurseById(int $id): ?array
     {
         $row = $this->db->table('nurse_master')->where('id', $id)->get()->getRowArray();
+        if ($row && empty($row['device_code'])) {
+            $newCode = (string) random_int(100000, 999999);
+            $this->db->table('nurse_master')->where('id', $id)->update(['device_code' => $newCode]);
+            $row['device_code'] = $newCode;
+        }
         return $row ?: null;
     }
 
@@ -103,6 +121,9 @@ class NurseModel
     {
         $data['created_at'] = date('Y-m-d H:i:s');
         $data['updated_at'] = date('Y-m-d H:i:s');
+        if (empty($data['device_code'])) {
+            $data['device_code'] = (string) random_int(100000, 999999);
+        }
         $this->db->table('nurse_master')->insert($data);
         return (int) $this->db->insertID();
     }

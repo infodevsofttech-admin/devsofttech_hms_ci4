@@ -1,4 +1,6 @@
 <?php
+$csrfName = csrf_token();
+$csrfHash = csrf_hash();
 $discharge = $discharge_info[0] ?? null;
 $ipd = $ipd_info ?? null;
 $canEditDischarge = (bool) ($can_edit_discharge ?? false);
@@ -168,8 +170,13 @@ $canManageIpdStatus = auth()->user()?->can('billing.ipd.status.manage') ?? false
             }
 
             var ipdId = <?= $ipdId ?>;
+            var csrfName = '<?= esc($csrfName) ?>';
+            var csrfHash = '<?= esc($csrfHash) ?>';
 
             function refreshDischargeTab(response) {
+                if (response && response.csrf_hash) {
+                    csrfHash = response.csrf_hash;
+                }
                 if (response && Number(response.update || 0) === 1 && response.html) {
                     $('#tab_discharge_content').html(response.html);
                     if (typeof window.notify === 'function') {
@@ -185,10 +192,17 @@ $canManageIpdStatus = auth()->user()?->can('billing.ipd.status.manage') ?? false
             }
 
             function post(url, payload) {
+                payload = payload || {};
+                if (typeof payload === 'object' && !Array.isArray(payload)) {
+                    payload[csrfName] = csrfHash;
+                }
                 return $.ajax({
                     url: url,
                     type: 'POST',
                     dataType: 'json',
+                    headers: {
+                        'X-CSRF-TOKEN': csrfHash
+                    },
                     data: payload
                 });
             }
