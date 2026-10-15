@@ -58,8 +58,9 @@ class Filters extends BaseFilters
             'pagecache',  // Web Page Caching
         ],
         'after' => [
-            'pagecache',   // Web Page Caching
-            'performance', // Performance Metrics
+            'pagecache',     // Web Page Caching
+            'performance',   // Performance Metrics
+            'secureheaders', // Unconditional security headers on all responses (including 404)
         ],
     ];
 

@@ -18,8 +18,6 @@
     <meta name="csrf-token" content="<?= csrf_hash() ?>">
     <meta name="csrf-header" content="<?= config('Security')->headerName ?>">
 
-    <link href="https://fonts.gstatic.com" rel="preconnect">
-    <link href="https://fonts.googleapis.com/css?family=Open+Sans:300,300i,400,400i,600,600i,700,700i|Nunito:300,300i,400,400i,600,600i,700,700i|Poppins:300,300i,400,400i,500,500i,600,600i,700,700i" rel="stylesheet">
 
     <link href="assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="assets/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
@@ -169,9 +167,15 @@
     </main>
 
     <?php
-    // Detect server network interfaces for LAN QR generation
+    $serverPort = $_SERVER['SERVER_PORT'] ?? '8080';
+    $httpHost = $_SERVER['HTTP_HOST'] ?? 'localhost:8080';
+    $hostOnly = explode(':', $httpHost)[0];
+    $requestScheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
+    $isLocalDev = in_array($hostOnly, ['localhost', '127.0.0.1', '::1'], true);
+
+    // Detect server network interfaces for LAN QR generation ONLY during local offline development
     $detectedNetworkInterfaces = [];
-    if (function_exists('shell_exec')) {
+    if ($isLocalDev && function_exists('shell_exec')) {
         if (strtoupper(substr(PHP_OS, 0, 3)) === 'WIN') {
             $netOutput = @shell_exec('ipconfig');
             if ($netOutput) {
@@ -205,25 +209,23 @@
         }
     }
 
-    $serverPort = $_SERVER['SERVER_PORT'] ?? '8080';
-    $httpHost = $_SERVER['HTTP_HOST'] ?? 'localhost:8080';
-    $requestScheme = (isset($_SERVER['HTTPS']) && $_SERVER['HTTPS'] === 'on') ? 'https' : 'http';
-
-    // Best default IP: Wi-Fi if present, else first LAN IP, else current host
-    $defaultIp = '';
-    foreach ($detectedNetworkInterfaces as $ipKey => $ipLabel) {
-        if (stripos($ipLabel, 'Wi-Fi') !== false || stripos($ipLabel, 'Wireless') !== false) {
-            $defaultIp = $ipKey;
-            break;
+    // Default host: Always use the HTTP host requested by client (e.g. demo.e-atria.net), 
+    // unless on localhost with detected LAN Wi-Fi
+    if (!$isLocalDev || empty($detectedNetworkInterfaces)) {
+        $defaultHost = $httpHost;
+    } else {
+        $defaultIp = '';
+        foreach ($detectedNetworkInterfaces as $ipKey => $ipLabel) {
+            if (stripos($ipLabel, 'Wi-Fi') !== false || stripos($ipLabel, 'Wireless') !== false) {
+                $defaultIp = $ipKey;
+                break;
+            }
         }
+        if (!$defaultIp) {
+            $defaultIp = array_key_first($detectedNetworkInterfaces);
+        }
+        $defaultHost = $defaultIp . ':' . $serverPort;
     }
-    if (!$defaultIp && !empty($detectedNetworkInterfaces)) {
-        $defaultIp = array_key_first($detectedNetworkInterfaces);
-    }
-    if (!$defaultIp) {
-        $defaultIp = explode(':', $httpHost)[0];
-    }
-    $defaultHost = ($defaultIp === 'localhost' || $defaultIp === '127.0.0.1') ? $httpHost : ($defaultIp . ':' . $serverPort);
     ?>
 
     <!-- ========================================================================= -->
@@ -276,21 +278,21 @@
                                 </div>
                                 <div class="col-lg-4 col-md-7">
                                     <select class="form-select form-select-sm fw-bold border-primary" id="mobile_qr_host_select" onchange="onMobileQrHostChanged(this.value)">
+                                        <option value="<?= esc($httpHost) ?>" <?= ($defaultHost === $httpHost) ? 'selected' : '' ?>>🌐 Current Host (<?= esc($httpHost) ?>)</option>
                                         <?php if (!empty($detectedNetworkInterfaces)): ?>
                                             <?php foreach ($detectedNetworkInterfaces as $ipVal => $ipDesc): ?>
-                                                <?php $isDef = ($ipVal === $defaultIp); ?>
-                                                <option value="<?= esc($ipVal . ':' . $serverPort) ?>" <?= $isDef ? 'selected' : '' ?>>
-                                                    📶 <?= esc($ipDesc) ?>:<?= esc($serverPort) ?> <?= $isDef ? '★ (Recommended)' : '' ?>
+                                                <?php $optVal = $ipVal . ':' . $serverPort; ?>
+                                                <option value="<?= esc($optVal) ?>" <?= ($defaultHost === $optVal) ? 'selected' : '' ?>>
+                                                    📶 <?= esc($ipDesc) ?>:<?= esc($serverPort) ?>
                                                 </option>
                                             <?php endforeach; ?>
                                         <?php endif; ?>
-                                        <option value="<?= esc($httpHost) ?>">💻 Browser Host (<?= esc($httpHost) ?>)</option>
-                                        <option value="custom">✏️ Custom Domain / IP Address...</option>
+                                        <option value="custom">✏️ Custom Domain / Host...</option>
                                     </select>
                                 </div>
                                 <div class="col-lg-3 col-md-5">
                                     <div class="input-group input-group-sm" id="custom_host_input_group" style="display: none;">
-                                        <input type="text" class="form-control" id="custom_host_input" placeholder="e.g. 192.168.1.50:8080" value="<?= esc($defaultHost) ?>">
+                                        <input type="text" class="form-control" id="custom_host_input" placeholder="e.g. hms.hospital.local:8080" value="<?= esc($defaultHost) ?>">
                                         <button class="btn btn-primary" type="button" onclick="applyCustomHost()">Apply</button>
                                     </div>
                                     <div id="selected_host_badge" class="text-end text-success small fw-bold" style="font-size: 11px;">

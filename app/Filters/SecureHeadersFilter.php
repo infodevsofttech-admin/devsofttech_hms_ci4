@@ -44,8 +44,21 @@ class SecureHeadersFilter implements FilterInterface
         // Cross-Origin isolation protections
         'Cross-Origin-Opener-Policy'        => 'same-origin-allow-popups',
 
-        // Content Security Policy (allowing self, inline scripts, styles, data URIs for canvas/charts)
-        'Content-Security-Policy'           => "default-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https:; frame-ancestors 'self';",
+        // Content Security Policy (strict sources, trusted CDNs, preventing wildcards and injection)
+        'Content-Security-Policy'           => "default-src 'self'; " .
+                                               "script-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdn.jsdelivr.net https://code.jquery.com https://cdn.datatables.net https://oss.maxcdn.com https://cdnjs.cloudflare.com; " .
+                                               "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.datatables.net https://fonts.googleapis.com https://cdnjs.cloudflare.com; " .
+                                               "font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; " .
+                                               "img-src 'self' data: blob: https://api.qrserver.com; " .
+                                               "connect-src 'self' blob: data:; " .
+                                               "frame-src 'self' data: blob:; " .
+                                               "media-src 'self' data: blob:; " .
+                                               "object-src 'none'; " .
+                                               "worker-src 'self' blob:; " .
+                                               "manifest-src 'self'; " .
+                                               "form-action 'self'; " .
+                                               "base-uri 'self'; " .
+                                               "frame-ancestors 'self';",
     ];
 
     public function before(RequestInterface $request, $arguments = null)
