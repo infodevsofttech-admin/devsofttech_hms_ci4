@@ -5296,6 +5296,91 @@ class AbdmGateway extends BaseController
         $db = \Config\Database::connect();
         $records = [];
 
+        // Parse granted HI types and date range filters (from ABDM consent)
+        $rawHiTypes = $body['hiTypes'] ?? $body['hi_types'] ?? null;
+        if (is_string($rawHiTypes)) {
+            $rawHiTypes = [$rawHiTypes];
+        }
+        $grantedHiTypes = null;
+        $normMap = [
+            'opconsultrecord'        => 'OPConsultation',
+            'opconsultation'         => 'OPConsultation',
+            'diagnosticreportrecord' => 'DiagnosticReport',
+            'diagnosticreport'       => 'DiagnosticReport',
+            'prescriptionrecord'     => 'Prescription',
+            'prescription'           => 'Prescription',
+            'dischargesummaryrecord' => 'DischargeSummary',
+            'dischargesummary'       => 'DischargeSummary',
+            'healthdocumentrecord'   => 'HealthDocumentRecord',
+            'healthdocument'         => 'HealthDocumentRecord',
+            'immunizationrecord'     => 'ImmunizationRecord',
+            'immunization'           => 'ImmunizationRecord',
+            'wellnessrecord'         => 'WellnessRecord',
+            'wellness'               => 'WellnessRecord',
+            'invoicerecord'          => 'Invoice',
+            'invoice'                => 'Invoice',
+        ];
+        if (is_array($rawHiTypes) && ! empty($rawHiTypes)) {
+            $grantedHiTypes = [];
+            foreach ($rawHiTypes as $ht) {
+                $k = strtolower(trim((string) $ht));
+                $grantedHiTypes[] = $normMap[$k] ?? trim((string) $ht);
+            }
+        }
+
+        $dateRange = $body['dateRange'] ?? $body['date_range'] ?? null;
+        $dateFrom = null;
+        $dateTo = null;
+        if (is_array($dateRange)) {
+            if (! empty($dateRange['from'])) {
+                $dateFrom = substr(trim((string) $dateRange['from']), 0, 10);
+            }
+            if (! empty($dateRange['to'])) {
+                $dateTo = substr(trim((string) $dateRange['to']), 0, 10);
+            }
+        }
+
+        $isTypeAllowed = static function (string $type) use ($grantedHiTypes, $normMap): bool {
+            if ($grantedHiTypes === null || empty($grantedHiTypes)) {
+                return true;
+            }
+            $std = $normMap[strtolower(trim($type))] ?? trim($type);
+            return in_array($std, $grantedHiTypes, true);
+        };
+
+        $isDateInRange = static function (?string $dateStr) use ($dateFrom, $dateTo): bool {
+            if ($dateStr === null || trim($dateStr) === '') {
+                return true;
+            }
+            $d = substr(trim($dateStr), 0, 10);
+            if ($dateFrom !== null && $d < $dateFrom) {
+                return false;
+            }
+            if ($dateTo !== null && $d > $dateTo) {
+                return false;
+            }
+            return true;
+        };
+
+        $extractBundleDate = static function (array $bundle): ?string {
+            if (! empty($bundle['timestamp'])) {
+                return substr((string) $bundle['timestamp'], 0, 10);
+            }
+            foreach ($bundle['entry'] ?? [] as $e) {
+                $res = $e['resource'] ?? [];
+                if (! empty($res['date'])) {
+                    return substr((string) $res['date'], 0, 10);
+                }
+                if (! empty($res['effectiveDateTime'])) {
+                    return substr((string) $res['effectiveDateTime'], 0, 10);
+                }
+                if (! empty($res['authoredOn'])) {
+                    return substr((string) $res['authoredOn'], 0, 10);
+                }
+            }
+            return null;
+        };
+
         foreach ($careContextRefs as $ref) {
             $ref = trim((string) $ref);
             if ($ref === '') {
@@ -5304,9 +5389,16 @@ class AbdmGateway extends BaseController
 
             // Strategy 0a: Live On-Demand Fresh Generation for LAB / Diagnostic Report (LAB-xxxx or RAD-xxxx)
             if (preg_match('/^(?:LAB|RAD)-/i', $ref)) {
+                if (! $isTypeAllowed('DiagnosticReport')) {
+                    continue;
+                }
                 try {
                     $diag = $this->buildDiagnosticReportBundle($ref);
-                    if ($diag !== null && !empty($diag['bundle'])) {
+                    if ($diag !== null && ! empty($diag['bundle'])) {
+                        $bDate = $extractBundleDate($diag['bundle']);
+                        if (! $isDateInRange($bDate)) {
+                            continue;
+                        }
                         $records[] = [
                             'careContextReference' => $ref,
                             'hiType'               => $diag['hiType'] ?? 'DiagnosticReportRecord',
@@ -5323,9 +5415,16 @@ class AbdmGateway extends BaseController
 
             // Strategy 0b: Live On-Demand Fresh Generation for Discharge Summary (DISCHARGE-xxxx or IPD-xxxx)
             if (preg_match('/^(?:DISCHARGE|IPD)-/i', $ref)) {
+                if (! $isTypeAllowed('DischargeSummary')) {
+                    continue;
+                }
                 try {
                     $discharge = $this->buildDischargeSummaryBundle($ref);
-                    if ($discharge !== null && !empty($discharge['bundle'])) {
+                    if ($discharge !== null && ! empty($discharge['bundle'])) {
+                        $bDate = $extractBundleDate($discharge['bundle']);
+                        if (! $isDateInRange($bDate)) {
+                            continue;
+                        }
                         $records[] = [
                             'careContextReference' => $ref,
                             'hiType'               => $discharge['hiType'] ?? 'DischargeSummaryRecord',
@@ -5342,9 +5441,19 @@ class AbdmGateway extends BaseController
 
             // Strategy 0c: Live On-Demand Fresh Generation for OPD Consult & Prescription Records
             if (preg_match('/^(OPD|PRESCRIPTION|PRESC|RX)-(\d+)(?:-S(\d+))?/i', $ref, $m)) {
+                $refPrefix = strtoupper($m[1]);
+                $isPresc = in_array($refPrefix, ['PRESC', 'PRESCRIPTION', 'RX'], true);
+                $reqType = $isPresc ? 'Prescription' : 'OPConsultation';
+                if (! $isTypeAllowed($reqType)) {
+                    continue;
+                }
                 try {
                     $opd = $this->buildOpConsultationBundle($ref);
-                    if ($opd !== null && !empty($opd['bundle'])) {
+                    if ($opd !== null && ! empty($opd['bundle'])) {
+                        $bDate = $extractBundleDate($opd['bundle']);
+                        if (! $isDateInRange($bDate)) {
+                            continue;
+                        }
                         $records[] = [
                             'careContextReference' => $ref,
                             'hiType'               => $opd['hiType'] ?? 'OPConsultRecord',
@@ -5361,6 +5470,9 @@ class AbdmGateway extends BaseController
 
             // Strategy 0b-reg: Live On-Demand Fresh Generation for Patient Registration / File (REG-xxxx)
             if (preg_match('/^REG-(.+)$/i', $ref, $regM)) {
+                if (! $isTypeAllowed('HealthDocumentRecord')) {
+                    continue;
+                }
                 $pRef = trim($regM[1]);
                 $patientRow = null;
                 if ($db->tableExists('patient_master')) {
@@ -5378,12 +5490,16 @@ class AbdmGateway extends BaseController
                     $abhaId = $this->resolvePatientAbhaIdentifier($patId);
                     $patientResource = $this->buildAbdmPatientResource($patientRow, $patId, $abhaId);
                     $docTitle = 'Patient File - ' . $this->patientDisplayName($patientRow);
+                    $regDate = $patientRow['created_at'] ?? $patientRow['insert_date'] ?? date('Y-m-d');
+                    if (! $isDateInRange($regDate)) {
+                        continue;
+                    }
                     $html = '<div xmlns="http://www.w3.org/1999/xhtml"><h3>' . esc($docTitle) . '</h3>'
                         . '<p><strong>Patient Name:</strong> ' . esc($this->patientDisplayName($patientRow)) . '</p>'
                         . '<p><strong>Patient Code:</strong> ' . esc($patientRow['p_code'] ?? '') . '</p>'
                         . '<p><strong>Gender:</strong> ' . esc($patientRow['gender'] ?? '') . '</p>'
                         . '<p><strong>Age:</strong> ' . esc($patientRow['age'] ?? '') . '</p>'
-                        . '<p><strong>Registration Date:</strong> ' . esc($patientRow['created_at'] ?? $patientRow['insert_date'] ?? date('Y-m-d')) . '</p>'
+                        . '<p><strong>Registration Date:</strong> ' . esc($regDate) . '</p>'
                         . '</div>';
                     $bundle = $this->buildSimpleHealthDocumentBundle($patientResource, $docTitle, 'text/html', base64_encode($html));
                     $records[] = [
@@ -5399,6 +5515,9 @@ class AbdmGateway extends BaseController
 
             // Strategy 0b: Live On-Demand Fresh Generation for Invoice Record
             if (preg_match('/^INVOICE-(CHG|OPD|IPD)-(\d+)/i', $ref, $invM)) {
+                if (! $isTypeAllowed('Invoice')) {
+                    continue;
+                }
                 $invSource = match(strtoupper($invM[1])) {
                     'CHG' => 'charges_invoice',
                     'OPD' => 'opd_invoice',
@@ -5407,7 +5526,11 @@ class AbdmGateway extends BaseController
                 $invId = (int) $invM[2];
                 try {
                     $invPayload = $this->buildInvoiceSourceRecordPayload($invSource, $invId, 0, '');
-                    if ($invPayload !== null && !empty($invPayload['bundle'])) {
+                    if ($invPayload !== null && ! empty($invPayload['bundle'])) {
+                        $bDate = $extractBundleDate($invPayload['bundle']);
+                        if (! $isDateInRange($bDate)) {
+                            continue;
+                        }
                         $records[] = [
                             'careContextReference' => $ref,
                             'hiType'               => 'InvoiceRecord',
@@ -5423,6 +5546,9 @@ class AbdmGateway extends BaseController
 
             // Strategy 0c: Live Retrieval & On-Demand Fresh Generation for Wellness Record
             if (str_starts_with(strtoupper($ref), 'WELLNESS-')) {
+                if (! $isTypeAllowed('WellnessRecord')) {
+                    continue;
+                }
                 $foundBundle = null;
                 $foundDisplay = null;
 
@@ -5518,6 +5644,10 @@ class AbdmGateway extends BaseController
                 }
 
                 if ($foundBundle !== null && ! empty($foundBundle)) {
+                    $bDate = $extractBundleDate($foundBundle);
+                    if (! $isDateInRange($bDate)) {
+                        continue;
+                    }
                     $records[] = [
                         'careContextReference' => $ref,
                         'hiType'               => 'WellnessRecord',
@@ -5530,10 +5660,17 @@ class AbdmGateway extends BaseController
 
             // Strategy 0d: Live On-Demand Fresh Generation for Health Document Record (DOC-file-{id}, DOC-{id})
             if (preg_match('/^DOC-(?:file-)?(\d+)/i', $ref, $docM)) {
+                if (! $isTypeAllowed('HealthDocumentRecord')) {
+                    continue;
+                }
                 $docTargetId = (int) $docM[1];
                 try {
                     $docPayload = $this->buildHealthDocumentRecordPayload(0, '', $docTargetId);
-                    if ($docPayload !== null && !empty($docPayload['bundle'])) {
+                    if ($docPayload !== null && ! empty($docPayload['bundle'])) {
+                        $bDate = $extractBundleDate($docPayload['bundle']);
+                        if (! $isDateInRange($bDate)) {
+                            continue;
+                        }
                         $records[] = [
                             'careContextReference' => $ref,
                             'hiType'               => 'HealthDocumentRecord',
@@ -5563,7 +5700,7 @@ class AbdmGateway extends BaseController
                                     'push_status'            => 'linked',
                                     'created_at'             => date('Y-m-d H:i:s'),
                                     'updated_at'             => date('Y-m-d H:i:s'),
-                                ]);
+                                    ]);
                             }
                         }
                         continue;
@@ -5575,11 +5712,18 @@ class AbdmGateway extends BaseController
 
             // Strategy 0e: Live On-Demand Fresh Generation for Immunization Record (IMM-{id})
             if (preg_match('/^IMM-(?:PAT-(\d+)|(?:(\d+)-V)?(\d+))/i', $ref, $immM)) {
+                if (! $isTypeAllowed('ImmunizationRecord')) {
+                    continue;
+                }
                 $immTargetId = (int) (! empty($immM[3]) ? $immM[3] : (! empty($immM[2]) ? $immM[2] : ($immM[1] ?? 0)));
                 $immPatientId = (int) (! empty($immM[1]) ? $immM[1] : (! empty($immM[2]) ? $immM[2] : 0));
                 try {
                     $immPayload = $this->buildImmunizationGatewayPayload($immPatientId, $immTargetId, '', false);
                     if ($immPayload !== null && ! empty($immPayload['bundle'])) {
+                        $bDate = $extractBundleDate($immPayload['bundle']);
+                        if (! $isDateInRange($bDate)) {
+                            continue;
+                        }
                         $vaccineName = 'Vaccine';
                         if (! empty($immPayload['records'][0]['vaccine_name'])) {
                             $vaccineName = trim((string) $immPayload['records'][0]['vaccine_name']);
@@ -5645,7 +5789,7 @@ class AbdmGateway extends BaseController
                 $hrRow = $hrBuilder->get(1)->getRowArray();
             }
 
-            if ($hrRow && !empty($hrRow['record_data'])) {
+            if ($hrRow && ! empty($hrRow['record_data'])) {
                 $bundleData = json_decode((string) $hrRow['record_data'], true);
                 if (is_array($bundleData)) {
                     $recHiType = $hrRow['hi_type'] ?? $hrRow['record_type'] ?? 'OPConsultRecord';
@@ -5653,6 +5797,13 @@ class AbdmGateway extends BaseController
                         $recHiType = 'PrescriptionRecord';
                     } elseif (str_starts_with($ref, 'OPD-')) {
                         $recHiType = 'OPConsultRecord';
+                    }
+                    if (! $isTypeAllowed($recHiType)) {
+                        continue;
+                    }
+                    $bDate = $extractBundleDate($bundleData);
+                    if (! $isDateInRange($bDate)) {
+                        continue;
                     }
                     $defaultDisp = match ($recHiType) {
                         'ImmunizationRecord'     => 'Immunization Record',
@@ -5683,15 +5834,23 @@ class AbdmGateway extends BaseController
                 }
             }
 
-            if ($hrRow && !empty($hrRow['fhir_bundle_enc'])) {
+            if ($hrRow && ! empty($hrRow['fhir_bundle_enc'])) {
                 try {
                     $enc = new FhirEncryptionService();
                     $decrypted = $enc->decrypt((string) $hrRow['fhir_bundle_enc']);
                     $bundleData = json_decode($decrypted, true);
                     if (is_array($bundleData)) {
+                        $recHiType = $hrRow['hi_type'] ?? $hrRow['record_type'] ?? 'OPConsultRecord';
+                        if (! $isTypeAllowed($recHiType)) {
+                            continue;
+                        }
+                        $bDate = $extractBundleDate($bundleData);
+                        if (! $isDateInRange($bDate)) {
+                            continue;
+                        }
                         $records[] = [
                             'careContextReference' => $ref,
-                            'hiType'               => $hrRow['hi_type'] ?? $hrRow['record_type'] ?? 'OPConsultRecord',
+                            'hiType'               => $recHiType,
                             'display'              => $hrRow['care_context_display'] ?? 'Consultation Record',
                             'bundle'               => $bundleData,
                         ];
@@ -5701,14 +5860,21 @@ class AbdmGateway extends BaseController
                 }
             }
 
-
             // Strategy B: Build compliant FHIR Document Bundle from patient_master & OPD
             // STRICTLY restricted to OPD/consultation care contexts.
             // NEVER synthesize dummy consultation records for invoices, discharge, labs, radiology, etc.
             if (preg_match('/^(?:OPD|PRESCRIPTION|PRESC|CONSULT)/i', $ref)) {
+                $isPresc = (bool) preg_match('/^(?:PRESC|PRESCRIPTION)/i', $ref);
+                $reqType = $isPresc ? 'Prescription' : 'OPConsultation';
+                if (! $isTypeAllowed($reqType)) {
+                    continue;
+                }
                 $bundle = $this->assembleFhirBundleForCareContext($ref);
                 if ($bundle !== null) {
-                    $isPresc = (bool) preg_match('/^(?:PRESC|PRESCRIPTION)/i', $ref);
+                    $bDate = $extractBundleDate($bundle);
+                    if (! $isDateInRange($bDate)) {
+                        continue;
+                    }
                     $records[] = [
                         'careContextReference' => $ref,
                         'hiType'               => $isPresc ? 'PrescriptionRecord' : 'OPConsultRecord',

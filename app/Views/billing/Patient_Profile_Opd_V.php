@@ -1153,6 +1153,22 @@ $(function() {
     var fetchOnlyRunningIdx = -1;
     var currentAbdmFetchModalIdx = -1;
 
+    function safeParseJson(resp) {
+        return resp.text().then(function(text) {
+            var data;
+            try {
+                data = JSON.parse(text);
+            } catch (e) {
+                var cleanText = (text || '').replace(/<[^>]*>/g, ' ').replace(/\s+/g, ' ').trim();
+                throw new Error('Server returned an unexpected response (HTTP ' + resp.status + '): ' + (cleanText ? cleanText.substring(0, 150) : 'Empty response'));
+            }
+            if (!resp.ok && (!data || data.ok !== 1)) {
+                throw new Error((data && data.error) || ('Server returned HTTP ' + resp.status));
+            }
+            return data;
+        });
+    }
+
     function consentStatusBadgeClass(status) {
         switch ((status || '').toString().toUpperCase()) {
             case 'GRANTED': return 'bg-info-subtle text-info border border-info-subtle';
@@ -1276,8 +1292,6 @@ $(function() {
         $('#btnNewAbdmRequest').prop('disabled', autoFlowRunning || fetchOnlyRunningIdx !== -1);
     }
 
-    // Renders one request's detail (from already-loaded list data, no extra
-    // network call) into the shared Consent Details modal.
     function showAbdmConsentDetailForIndex(idx) {
         var consent = currentAbdmRequests[idx];
         $('#abdmConsentDetailBody').html(renderAbdmConsentDetail(consent));
@@ -1337,7 +1351,7 @@ $(function() {
         $btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1" role="status" aria-hidden="true"></span>Refreshing...');
 
         fetch(abdmConsentRequestsUrl, { credentials: 'same-origin' })
-            .then(function(resp) { return resp.json(); })
+            .then(safeParseJson)
             .then(function(data) {
                 if (!data || data.ok !== 1) {
                     throw new Error((data && data.error) || 'Unable to load consent request history.');
@@ -1355,7 +1369,7 @@ $(function() {
     }
 
     // Re-pulls data for a specific (already GRANTED/COMPLETED) request row using
-    // its saved consent reference, without creating a brand-new consent request.
+    // its saved consent reference, verifying consent status first.
     function runFetchRecordsForRow(idx) {
         if (autoFlowRunning || fetchOnlyRunningIdx !== -1) {
             return;
@@ -1374,21 +1388,22 @@ $(function() {
                 isExpired = true;
             }
         }
-        if (isExpired) {
-            setAbdmStatus('This consent request has expired. Under ABDM guidelines, records cannot be fetched or accessed under an expired consent.', true);
+        if (isExpired || status === 'DENIED' || status === 'REVOKED') {
+            setAbdmStatus('This consent request is ' + (status || 'EXPIRED') + '. Under ABDM guidelines, records cannot be fetched or accessed.', true);
+            loadAbdmConsentRequests();
             return;
         }
 
         fetchOnlyRunningIdx = idx;
         currentAbdmFetchModalIdx = idx;
         applyNewRequestButtonState();
-        setAbdmStatus('Fetching latest records using existing granted consent...', false);
+        setAbdmStatus('Verifying consent status and fetching latest records...', false);
         openAbdmFetchResultModal();
-        $('#abdmFetchResultModalBody').html('<div class="text-muted small text-center">Fetching latest records...</div>');
+        $('#abdmFetchResultModalBody').html('<div class="text-muted small text-center p-4"><div class="spinner-border spinner-border-sm me-2 text-primary" role="status"></div>Verifying consent status & fetching records...</div>');
 
         var url = abdmFetchOnlyUrl + '?consent_id=' + encodeURIComponent(consent.consent_id || '') + '&consent_request_id=' + encodeURIComponent(consent.consent_request_id || '');
         fetch(url, { credentials: 'same-origin' })
-            .then(function(resp) { return resp.json(); })
+            .then(safeParseJson)
             .then(function(data) {
                 if (!data || data.ok !== 1) {
                     throw new Error((data && data.error) || 'Fetch failed.');
@@ -1404,9 +1419,10 @@ $(function() {
                 fetchOnlyRunningIdx = -1;
                 applyNewRequestButtonState();
                 setAbdmStatus('Fetch failed: ' + (err.message || err), true);
-                // Even if the fetch call itself failed, still show whatever records
-                // are already saved locally for this consent request.
-                loadAbdmFetchResultModalData(consent);
+                // Immediately refresh table so that if consent is expired/denied/revoked,
+                // the row badge turns EXPIRED/DENIED and the "Show Data" button is removed!
+                loadAbdmConsentRequests();
+                $('#abdmFetchResultModalBody').html('<div class="alert alert-warning small text-center m-3">' + escHtml(err.message || err) + '</div>');
             });
     }
 
@@ -1428,9 +1444,9 @@ $(function() {
                 isExpired = true;
             }
         }
-        if (isExpired) {
+        if (isExpired || status === 'DENIED' || status === 'REVOKED') {
             $('#abdmPrintFetchedRecordsBtn').hide();
-            $('#abdmFetchResultModalBody').html('<div class="text-muted small text-center p-3">This consent request expired on <strong>' + escHtml(fmtConsentTs(eraseAt)) + '</strong>.<br>As per ABDM guidelines, health records are erased and no longer accessible.</div>');
+            $('#abdmFetchResultModalBody').html('<div class="text-muted small text-center p-3">This consent request is <strong>' + escHtml(status || 'EXPIRED') + '</strong>.<br>As per ABDM guidelines, health records are erased and no longer accessible.</div>');
             return;
         }
 
@@ -1440,7 +1456,7 @@ $(function() {
         }
 
         fetch(url, { credentials: 'same-origin' })
-            .then(function(resp) { return resp.json(); })
+            .then(safeParseJson)
             .then(function(data) {
                 if (!data || data.ok !== 1) {
                     throw new Error((data && data.error) || 'Unable to load fetched records.');
@@ -1789,7 +1805,7 @@ $(function() {
         }
 
         fetch(url, { credentials: 'same-origin' })
-            .then(function(resp) { return resp.json(); })
+            .then(safeParseJson)
             .then(function(data) {
                 if (!data || data.ok !== 1) {
                     throw new Error((data && data.error) || 'Unable to load ABDM records.');
@@ -1816,7 +1832,7 @@ $(function() {
         }
 
         fetch(url, { credentials: 'same-origin' })
-            .then(function(resp) { return resp.json(); })
+            .then(safeParseJson)
             .then(function(data) {
                 if (!data || data.ok !== 1) {
                     throw new Error((data && data.error) || 'Auto flow failed.');
@@ -1868,7 +1884,7 @@ $(function() {
             return;
         }
         fetch(abdmDocDetailBaseUrl + '/' + encodeURIComponent(docId), { credentials: 'same-origin' })
-            .then(function(resp) { return resp.json(); })
+            .then(safeParseJson)
             .then(function(data) {
                 if (!data || data.ok !== 1) {
                     throw new Error((data && data.error) || 'Unable to load document detail.');
@@ -1899,7 +1915,7 @@ $(function() {
         setAbdmStatus('Checking live status with ABDM bridge…');
 
         fetch(abdmCheckLiveStatusUrl, { credentials: 'same-origin' })
-            .then(function(resp) { return resp.json(); })
+            .then(safeParseJson)
             .then(function(data) {
                 if (!data || data.ok !== 1) {
                     throw new Error((data && data.error) || 'Live status check failed.');
