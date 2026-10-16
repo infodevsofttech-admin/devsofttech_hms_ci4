@@ -94,12 +94,35 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         $patientRef = 'urn:uuid:patient-' . $patientId;
         $encounterRef = is_array($encounter) ? 'urn:uuid:' . (string) ($encounter['id'] ?? '') : null;
 
-        $diagnosesList = (array) ($source['diagnoses'] ?? $source['conditions'] ?? $source['ui_final_diagnosis'] ?? []);
         $chiefComplaintsList = (array) ($source['chief_complaints'] ?? $source['ui_complaints'] ?? []);
+        $rawDiagnosesList = (array) ($source['diagnoses'] ?? $source['conditions'] ?? $source['ui_final_diagnosis'] ?? []);
+
+        // Build normalized lookup of chief complaints to ensure Medical History never duplicates Chief Complaints
+        $complaintLookup = [];
+        foreach ($chiefComplaintsList as $cc) {
+            $t = strtolower(trim((string) ($cc['text'] ?? $cc['name'] ?? '')));
+            if ($t !== '') {
+                $complaintLookup[$t] = true;
+                if (str_contains($t, ' - ')) {
+                    $parts = explode(' - ', $t);
+                    $complaintLookup[trim($parts[0])] = true;
+                }
+            }
+        }
+
+        $diagnosesList = [];
+        $seenDiag = [];
+        foreach ($rawDiagnosesList as $diag) {
+            $dt = strtolower(trim((string) ($diag['text'] ?? $diag['name'] ?? '')));
+            if ($dt !== '' && ! isset($complaintLookup[$dt]) && empty($seenDiag[$dt])) {
+                $seenDiag[$dt] = true;
+                $diagnosesList[] = $diag;
+            }
+        }
 
         if (empty($diagnosesList) && empty($chiefComplaintsList)) {
             $problem = trim((string) ($source['problem'] ?? ''));
-            if ($problem !== '') {
+            if ($problem !== '' && ! isset($complaintLookup[strtolower($problem)])) {
                 $diagnosesList = [['text' => $problem, 'code' => '']];
             } else {
                 $diagnosesList = [['text' => 'Medical care and evaluation', 'code' => '']];
@@ -594,41 +617,81 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         $chiefComplaintsList = (array) ($source['ui_complaints'] ?? $source['chief_complaints'] ?? []);
         $complaintsNarrative = trim((string) ($source['ui_complaint_narrative'] ?? $source['chief_complaint_narrative'] ?? ''));
         
-        $diagnosesList = (array) ($source['ui_final_diagnosis'] ?? $source['diagnoses'] ?? $source['conditions'] ?? []);
+        $rawDiagnosesList = (array) ($source['ui_final_diagnosis'] ?? $source['diagnoses'] ?? $source['conditions'] ?? []);
         $clinicalHistoryNarrative = trim((string) ($source['ui_clinical_history'] ?? ''));
+
+        // Build normalized lookup of chief complaints
+        $complaintLookup = [];
+        foreach ($chiefComplaintsList as $cc) {
+            $t = strtolower(trim((string) ($cc['text'] ?? $cc['name'] ?? '')));
+            if ($t !== '') {
+                $complaintLookup[$t] = true;
+                if (str_contains($t, ' - ')) {
+                    $parts = explode(' - ', $t);
+                    $complaintLookup[trim($parts[0])] = true;
+                }
+            }
+        }
+
+        $diagnosesList = [];
+        $seenDiag = [];
+        foreach ($rawDiagnosesList as $diag) {
+            $dt = strtolower(trim((string) ($diag['text'] ?? $diag['name'] ?? '')));
+            if ($dt !== '' && ! isset($complaintLookup[$dt]) && empty($seenDiag[$dt])) {
+                $seenDiag[$dt] = true;
+                $diagnosesList[] = $diag;
+            }
+        }
 
         $sectionDefinitions = [];
         // Chief complaints
         if (! empty($chiefComplaintsList) || $complaintsNarrative !== '') {
-            $sectionDefinitions[] = ['title' => 'Chief complaints', 'code' => '422843007', 'display' => 'Chief complaint section', 'prefix' => 'discharge-chief-complaint-', 'items' => $chiefComplaintsList, 'narrative' => $complaintsNarrative];
+            $sectionDefinitions[] = [
+                'title' => 'Chief complaints',
+                'code' => '422843007',
+                'display' => 'Chief complaint section',
+                'prefix' => 'discharge-chief-complaint-',
+                'items' => $chiefComplaintsList,
+                'narrative' => $complaintsNarrative,
+                'entry_display' => 'Condition',
+            ];
         }
 
         // Discharge Diagnosis (Medical History)
         if (! empty($diagnosesList) || $clinicalHistoryNarrative !== '') {
-            $sectionDefinitions[] = ['title' => 'Medical History', 'code' => '1003642006', 'display' => 'Past medical history section', 'prefix' => 'discharge-diagnosis-', 'items' => $diagnosesList, 'narrative' => $clinicalHistoryNarrative];
+            $sectionDefinitions[] = [
+                'title' => 'Medical History',
+                'code' => '1003642006',
+                'display' => 'Past medical history section',
+                'prefix' => 'discharge-diagnosis-',
+                'items' => $diagnosesList,
+                'narrative' => $clinicalHistoryNarrative,
+                'entry_display' => 'Condition',
+            ];
         }
 
         // Surgery / Procedure
         $surgeries = (array) ($source['ui_surgeries'] ?? $source['procedures'] ?? []);
         if (! empty($surgeries)) {
-            $sectionDefinitions[] = ['title' => 'Procedures', 'code' => '1003640003', 'display' => 'History of past procedure section', 'prefix' => 'discharge-procedure-', 'items' => $surgeries];
+            $sectionDefinitions[] = [
+                'title' => 'Procedures',
+                'code' => '1003640003',
+                'display' => 'History of past procedure section',
+                'prefix' => 'discharge-procedure-',
+                'items' => $surgeries,
+                'entry_display' => 'Procedure',
+            ];
         }
 
-        // Medications
+        // Medications - NRCES DischargeSummaryRecord profile specifies SNOMED 1003606003 (Medication history section)
         if (! empty($validMeds)) {
             $sectionDefinitions[] = [
                 'title' => 'Medications',
-                'code' => '721912009',
-                'display' => 'Medication summary document',
+                'code' => '1003606003',
+                'display' => 'Medication history section',
                 'prefix' => 'discharge-medication-',
                 'items' => $validMeds,
-                'additional_coding' => [
-                    [
-                        'system' => 'http://snomed.info/sct',
-                        'code' => '1003606003',
-                        'display' => 'Medication history section',
-                    ],
-                ],
+                'entry_display' => 'MedicationRequest',
             ];
         }
 
@@ -636,23 +699,52 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         $investigations = (array) ($source['ui_investigations'] ?? $source['investigations'] ?? []);
         $invNarrative = trim((string) ($source['ui_summary_investigation'] ?? ''));
         if (! empty($investigations) || $invNarrative !== '') {
-            $sectionDefinitions[] = ['title' => 'Investigations', 'code' => '721981007', 'display' => 'Diagnostic studies report', 'prefix' => 'discharge-investigation-', 'items' => $investigations, 'narrative' => $invNarrative];
+            $sectionDefinitions[] = [
+                'title' => 'Investigations',
+                'code' => '721981007',
+                'display' => 'Diagnostic studies report',
+                'prefix' => 'discharge-investigation-',
+                'items' => $investigations,
+                'narrative' => $invNarrative,
+                'entry_display' => 'Diagnostic Report',
+            ];
         }
 
         // Care plans / Discharge advice & hospital course
         if (! empty($validCarePlans)) {
-            $sectionDefinitions[] = ['title' => 'Care Plan', 'code' => '734163000', 'display' => 'Care plan', 'prefix' => 'discharge-careplan-', 'items' => $validCarePlans];
+            $sectionDefinitions[] = [
+                'title' => 'Care Plan',
+                'code' => '734163000',
+                'display' => 'Care plan',
+                'prefix' => 'discharge-careplan-',
+                'items' => $validCarePlans,
+                'entry_display' => 'Care plan',
+            ];
         }
 
         // Document Reference
         if (! empty($documentsList)) {
-            $sectionDefinitions[] = ['title' => 'Document Reference', 'code' => '373942005', 'display' => 'Discharge summary', 'prefix' => 'discharge-document-', 'items' => $documentsList];
+            $sectionDefinitions[] = [
+                'title' => 'Document Reference',
+                'code' => '373942005',
+                'display' => 'Discharge summary',
+                'prefix' => 'discharge-document-',
+                'items' => $documentsList,
+                'entry_display' => 'Discharge Summary',
+            ];
         }
 
         // Allergies
         $allergies = (array) ($source['allergies'] ?? []);
         if (! empty($allergies)) {
-            $sectionDefinitions[] = ['title' => 'Allergies', 'code' => '722446000', 'display' => 'Allergy record', 'prefix' => 'discharge-allergy-', 'items' => $allergies];
+            $sectionDefinitions[] = [
+                'title' => 'Allergies',
+                'code' => '722446000',
+                'display' => 'Allergy record',
+                'prefix' => 'discharge-allergy-',
+                'items' => $allergies,
+                'entry_display' => 'AllergyIntolerance',
+            ];
         }
 
         $sections = [];
@@ -660,7 +752,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $references = [];
             $items = isset($definition['items_indexed']) ? $definition['items_indexed'] : (array) ($definition['items'] ?? []);
             foreach ($items as $idx => $item) {
-                $itemDisplay = $this->cleanPlainText((string) ($item['name'] ?? $item['text'] ?? $item['title'] ?? $definition['title']));
+                $itemDisplay = $definition['entry_display'] ?? $this->cleanPlainText((string) ($item['name'] ?? $item['text'] ?? $item['title'] ?? $definition['title']));
                 if ($itemDisplay === '') {
                     $itemDisplay = $definition['title'];
                 }

@@ -5472,7 +5472,32 @@ class Ipd_discharge extends BaseController
 
         $decoded = json_decode($raw, true);
         if (! is_array($decoded)) {
-            return ['food_ids' => [], 'other_text' => '', 'nabh' => []];
+            $cleanIds = [];
+            if (preg_match('/"food_ids"\s*:\s*\[([^\]]*)\]/', $raw, $m)) {
+                $cleanIds = array_values(array_filter(array_map('intval', explode(',', $m[1]))));
+            }
+            $extractKey = function (string $key) use ($raw): string {
+                if (preg_match('/"' . preg_quote($key, '/') . '"\s*:\s*"([^"]*)/', $raw, $m)) {
+                    return trim($m[1]);
+                }
+                return '';
+            };
+            return [
+                'food_ids' => $cleanIds,
+                'other_text' => $extractKey('other_text'),
+                'nabh' => [
+                    'drug_allergy_status' => $extractKey('drug_allergy_status'),
+                    'drug_allergy_details' => $extractKey('drug_allergy_details'),
+                    'adr_history' => $extractKey('adr_history'),
+                    'current_medications' => $extractKey('current_medications'),
+                    'co_morbidities' => $extractKey('co_morbidities'),
+                    'hpi_note' => $extractKey('hpi_note'),
+                    'women_lmp' => $extractKey('women_lmp'),
+                    'women_last_baby' => $extractKey('women_last_baby'),
+                    'women_pregnancy_related' => $extractKey('women_pregnancy_related'),
+                    'women_related_problems' => $extractKey('women_related_problems'),
+                ],
+            ];
         }
 
         $ids = $decoded['food_ids'] ?? [];
@@ -9401,21 +9426,6 @@ class Ipd_discharge extends BaseController
             ? date('Y-m-d', strtotime($dischargeDateRaw))
             : ($admissionDateRaw !== '' ? date('Y-m-d', strtotime($admissionDateRaw)) : date('Y-m-d'));
 
-        $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', ['comp_report'], 'id ASC', $ipdId);
-        $conditionRows = [];
-        foreach ($diagnosisRows as $row) {
-            $text = trim((string) ($row['comp_report'] ?? ''));
-            if ($text !== '') {
-                $conditionRows[] = ['text' => $text, 'code' => ''];
-            }
-        }
-        if (empty($conditionRows) && ! empty($ipdRow['problem'])) {
-            $prob = trim((string) $ipdRow['problem']);
-            if ($this->isMeaningfulDischargeValue($prob)) {
-                $conditionRows[] = ['text' => $prob, 'code' => ''];
-            }
-        }
-
         $chiefComplaintsList = [];
         if ($this->tableHasColumns('ipd_discharge_complaint', ['ipd_id', 'comp_report'])) {
             $complaintRows = $this->byIpdRows('ipd_discharge_complaint', ['comp_report', 'comp_remark'], 'id ASC', $ipdId);
@@ -9439,12 +9449,95 @@ class Ipd_discharge extends BaseController
             $chiefComplaintsList[] = ['text' => $complaintRemarkText, 'code' => ''];
         }
 
-        if (empty($conditionRows) && ! empty($chiefComplaintsList)) {
-            $conditionRows = $chiefComplaintsList;
+        // Build normalized lookup of chief complaints to avoid duplicating them into medical history
+        $complaintLookup = [];
+        foreach ($chiefComplaintsList as $cc) {
+            $t = strtolower(trim((string) ($cc['text'] ?? '')));
+            if ($t !== '') {
+                $complaintLookup[$t] = true;
+                if (str_contains($t, ' - ')) {
+                    $parts = explode(' - ', $t);
+                    $complaintLookup[trim($parts[0])] = true;
+                }
+            }
         }
-        if (empty($conditionRows)) {
-            $conditionRows[] = ['text' => 'Medical care and evaluation', 'code' => ''];
+
+        // Fetch discharge instructions early for comorbidities
+        $instructionRows = $this->byIpdRows('ipd_discharge_instructions', ['comp_report', 'comp_remark', 'review_after'], 'id DESC', $ipdId);
+        $instructionRow = ! empty($instructionRows) ? $instructionRows[0] : [];
+        $instructionMeta = ! empty($instructionRow) ? $this->parseInstructionMetaPayload((string) ($instructionRow['comp_report'] ?? '')) : ['food_ids' => [], 'other_text' => '', 'nabh' => []];
+        $nabhMeta = is_array($instructionMeta['nabh'] ?? null) ? $instructionMeta['nabh'] : [];
+
+        // Build Medical History / Diagnoses (discharge diagnoses + comorbidities + chronic illness, NEVER chief complaints)
+        $medicalHistoryRows = [];
+        $diagnosisRows = $this->byIpdRows('ipd_discharge_diagnosis', ['comp_report'], 'id ASC', $ipdId);
+        foreach ($diagnosisRows as $row) {
+            $text = trim((string) ($row['comp_report'] ?? ''));
+            if ($text !== '' && ! isset($complaintLookup[strtolower($text)])) {
+                $medicalHistoryRows[] = ['text' => $text, 'code' => ''];
+            }
         }
+
+        // Comorbidities from NABH metadata
+        $coMorbRaw = trim((string) ($nabhMeta['co_morbidities'] ?? ''));
+        if ($coMorbRaw !== '') {
+            $coMorbParts = preg_split('/[,;\n]+/', $coMorbRaw);
+            foreach ($coMorbParts as $cPart) {
+                $cText = trim((string) $cPart);
+                if ($cText !== '' && $this->isMeaningfulDischargeValue($cText) && ! isset($complaintLookup[strtolower($cText)])) {
+                    $medicalHistoryRows[] = ['text' => $cText, 'code' => ''];
+                }
+            }
+        }
+
+        // Chronic illness from patient_master
+        if ($patientId > 0 && $this->db->tableExists('patient_master')) {
+            $historyFields = [
+                'is_smoking' => 'Smoking',
+                'is_alcohol' => 'Alcohol',
+                'is_drug_abuse' => 'Drug Abuse',
+                'is_tobacoo' => 'Tobacco',
+                'is_hypertesion' => 'Hypertension',
+                'is_niddm' => 'Diabetes',
+                'is_diabetes' => 'Diabetes',
+                'is_ischaemic_heart_ds' => 'Ischemic Heart Disease',
+                'is_asthma_copd' => 'Asthma/COPD',
+                'is_bleeding_disorder' => 'Bleeding Disorder',
+                'is_heapatitis_type' => 'Hepatitis',
+                'is_blood_transfusion' => 'Blood Transfusion',
+                'is_hiv_std' => 'HIV/STD',
+                'is_hiv_I_II' => 'HIV/STD',
+                'is_epilepsy' => 'Epilepsy',
+                'is_tb' => 'TB',
+                'is_psychiatric_illness' => 'Psychiatric Illness',
+                'is_thyroid' => 'Thyroid',
+            ];
+            foreach ($historyFields as $f => $label) {
+                if ((int) ($patientRow[$f] ?? 0) === 1 && ! isset($complaintLookup[strtolower($label)])) {
+                    $medicalHistoryRows[] = ['text' => $label, 'code' => ''];
+                }
+            }
+        }
+
+        // Problem from IPD record if non-blank and not duplicate of complaints
+        if (empty($medicalHistoryRows) && ! empty($ipdRow['problem'])) {
+            $prob = trim((string) $ipdRow['problem']);
+            if ($this->isMeaningfulDischargeValue($prob) && ! isset($complaintLookup[strtolower($prob)])) {
+                $medicalHistoryRows[] = ['text' => $prob, 'code' => ''];
+            }
+        }
+
+        // Deduplicate medical history rows by text
+        $uniqueMedHistory = [];
+        $seenMedHistory = [];
+        foreach ($medicalHistoryRows as $mRow) {
+            $mt = strtolower(trim((string) ($mRow['text'] ?? '')));
+            if ($mt !== '' && empty($seenMedHistory[$mt])) {
+                $seenMedHistory[$mt] = true;
+                $uniqueMedHistory[] = $mRow;
+            }
+        }
+        $conditionRows = $uniqueMedHistory;
 
         $procedureRows = [];
         foreach ($this->byIpdRows('ipd_discharge_surgery', ['surgery_name', 'surgery_date'], 'id ASC', $ipdId) as $row) {

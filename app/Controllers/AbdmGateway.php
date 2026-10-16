@@ -3429,13 +3429,6 @@ class AbdmGateway extends BaseController
             ? date('Y-m-d', strtotime($dischargeDate))
             : ($admissionDate !== '' ? date('Y-m-d', strtotime($admissionDate)) : date('Y-m-d'));
 
-        $diagnoses = [];
-        foreach ($this->ipdRows('ipd_discharge_diagnosis', ['comp_report'], $ipdId) as $row) {
-            $text = trim((string) ($row['comp_report'] ?? ''));
-            if ($text !== '') {
-                $diagnoses[] = ['text' => $text, 'code' => ''];
-            }
-        }
         $chiefComplaints = [];
         foreach ($this->ipdRows('ipd_discharge_complaint', ['comp_report'], $ipdId) as $row) {
             $text = trim((string) ($row['comp_report'] ?? ''));
@@ -3443,19 +3436,95 @@ class AbdmGateway extends BaseController
                 $chiefComplaints[] = ['text' => $text, 'code' => ''];
             }
         }
+        $chiefComplaintNarrative = trim((string) (($this->ipdRows('ipd_discharge_complaint_remark', ['comp_remark'], $ipdId)[0]['comp_remark'] ?? '')));
+
+        // Build normalized lookup of chief complaints
+        $complaintLookup = [];
+        foreach ($chiefComplaints as $cc) {
+            $t = strtolower(trim((string) ($cc['text'] ?? '')));
+            if ($t !== '') {
+                $complaintLookup[$t] = true;
+                if (str_contains($t, ' - ')) {
+                    $parts = explode(' - ', $t);
+                    $complaintLookup[trim($parts[0])] = true;
+                }
+            }
+        }
+
+        // Fetch instructions early for comorbidities
+        $instructionRows = $this->ipdRows('ipd_discharge_instructions', ['comp_report', 'comp_remark', 'review_after'], $ipdId);
+        $instructionRow = ! empty($instructionRows) ? $instructionRows[0] : [];
+        $instructionMeta = ! empty($instructionRow) ? $this->parseJsonArray((string) ($instructionRow['comp_report'] ?? '')) : [];
+        $nabhMeta = is_array($instructionMeta['nabh'] ?? null) ? $instructionMeta['nabh'] : [];
+
+        // Build diagnoses / medical history
+        $diagnoses = [];
+        foreach ($this->ipdRows('ipd_discharge_diagnosis', ['comp_report'], $ipdId) as $row) {
+            $text = trim((string) ($row['comp_report'] ?? ''));
+            if ($text !== '' && ! isset($complaintLookup[strtolower($text)])) {
+                $diagnoses[] = ['text' => $text, 'code' => ''];
+            }
+        }
+
+        // Add comorbidities from NABH
+        $coMorbRaw = trim((string) ($nabhMeta['co_morbidities'] ?? ''));
+        if ($coMorbRaw !== '') {
+            $coMorbParts = preg_split('/[,;\n]+/', $coMorbRaw);
+            foreach ($coMorbParts as $cPart) {
+                $cText = trim((string) $cPart);
+                if ($cText !== '' && $this->isMeaningfulClinicalValue($cText) && ! isset($complaintLookup[strtolower($cText)])) {
+                    $diagnoses[] = ['text' => $cText, 'code' => ''];
+                }
+            }
+        }
+
+        // Add chronic conditions from patient_master
+        if ($patientId > 0 && $this->db && $this->db->tableExists('patient_master')) {
+            $historyFields = [
+                'is_smoking' => 'Smoking',
+                'is_alcohol' => 'Alcohol',
+                'is_drug_abuse' => 'Drug Abuse',
+                'is_tobacoo' => 'Tobacco',
+                'is_hypertesion' => 'Hypertension',
+                'is_niddm' => 'Diabetes',
+                'is_diabetes' => 'Diabetes',
+                'is_ischaemic_heart_ds' => 'Ischemic Heart Disease',
+                'is_asthma_copd' => 'Asthma/COPD',
+                'is_bleeding_disorder' => 'Bleeding Disorder',
+                'is_heapatitis_type' => 'Hepatitis',
+                'is_blood_transfusion' => 'Blood Transfusion',
+                'is_hiv_std' => 'HIV/STD',
+                'is_hiv_I_II' => 'HIV/STD',
+                'is_epilepsy' => 'Epilepsy',
+                'is_tb' => 'TB',
+                'is_psychiatric_illness' => 'Psychiatric Illness',
+                'is_thyroid' => 'Thyroid',
+            ];
+            foreach ($historyFields as $f => $label) {
+                if ((int) ($patientRow[$f] ?? 0) === 1 && ! isset($complaintLookup[strtolower($label)])) {
+                    $diagnoses[] = ['text' => $label, 'code' => ''];
+                }
+            }
+        }
+
         if (empty($diagnoses)) {
             $problem = trim((string) ($ipdRow['problem'] ?? ''));
-            if ($problem !== '') {
+            if ($problem !== '' && $this->isMeaningfulClinicalValue($problem) && ! isset($complaintLookup[strtolower($problem)])) {
                 $diagnoses[] = ['text' => $problem, 'code' => ''];
             }
         }
-        if (empty($diagnoses) && ! empty($chiefComplaints)) {
-            $diagnoses = $chiefComplaints;
+
+        // Deduplicate diagnoses
+        $uniqueDiag = [];
+        $seenDiag = [];
+        foreach ($diagnoses as $dRow) {
+            $dt = strtolower(trim((string) ($dRow['text'] ?? '')));
+            if ($dt !== '' && empty($seenDiag[$dt])) {
+                $seenDiag[$dt] = true;
+                $uniqueDiag[] = $dRow;
+            }
         }
-        if (empty($diagnoses) && empty($procedures)) {
-            $diagnoses[] = ['text' => 'Medical care and evaluation', 'code' => ''];
-        }
-        $chiefComplaintNarrative = trim((string) (($this->ipdRows('ipd_discharge_complaint_remark', ['comp_remark'], $ipdId)[0]['comp_remark'] ?? '')));
+        $diagnoses = $uniqueDiag;
         $diagnosisNarrative = trim((string) (($this->ipdRows('ipd_discharge_diagnosis_remark', ['comp_remark'], $ipdId)[0]['comp_remark'] ?? '')));
 
         $procedures = [];
@@ -4300,7 +4369,34 @@ class AbdmGateway extends BaseController
         }
 
         $decoded = json_decode($json, true);
-        return is_array($decoded) ? $decoded : [];
+        if (is_array($decoded)) {
+            return $decoded;
+        }
+
+        // Resilient fallback for truncated JSON strings
+        $cleanIds = [];
+        if (preg_match('/"food_ids"\s*:\s*\[([^\]]*)\]/', $json, $m)) {
+            $cleanIds = array_values(array_filter(array_map('intval', explode(',', $m[1]))));
+        }
+        $extractKey = function (string $key) use ($json): string {
+            if (preg_match('/"' . preg_quote($key, '/') . '"\s*:\s*"([^"]*)/', $json, $m)) {
+                return trim($m[1]);
+            }
+            return '';
+        };
+
+        return [
+            'food_ids' => $cleanIds,
+            'other_text' => $extractKey('other_text'),
+            'nabh' => [
+                'drug_allergy_status' => $extractKey('drug_allergy_status'),
+                'drug_allergy_details' => $extractKey('drug_allergy_details'),
+                'adr_history' => $extractKey('adr_history'),
+                'current_medications' => $extractKey('current_medications'),
+                'co_morbidities' => $extractKey('co_morbidities'),
+                'hpi_note' => $extractKey('hpi_note'),
+            ],
+        ];
     }
 
     private function isMeaningfulClinicalValue(string $value): bool

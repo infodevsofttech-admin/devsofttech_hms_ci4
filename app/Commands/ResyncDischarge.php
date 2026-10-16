@@ -72,6 +72,14 @@ class ResyncDischarge extends BaseCommand
                     }
                 }
 
+                CLI::write("\nConditions:", 'cyan');
+                foreach ($entries as $e) {
+                    if (($e['resource']['resourceType'] ?? '') === 'Condition') {
+                        $c = $e['resource'];
+                        CLI::write("  - ID: " . ($c['id'] ?? '') . " | Text: " . ($c['code']['text'] ?? ''));
+                    }
+                }
+
                 CLI::write("\nMedicationRequests:", 'cyan');
                 foreach ($entries as $e) {
                     if (($e['resource']['resourceType'] ?? '') === 'MedicationRequest') {
