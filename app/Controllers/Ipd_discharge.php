@@ -9276,7 +9276,7 @@ class Ipd_discharge extends BaseController
         }
     }
 
-    private function enqueueIpdDischargeSync(int $ipdId, int $patientId, string $action): void
+    public function enqueueIpdDischargeSync(int $ipdId, int $patientId = 0, string $action = 'sync'): void
     {
         if ($ipdId <= 0) {
             return;
