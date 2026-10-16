@@ -45,7 +45,8 @@ class ResyncDischarge extends BaseCommand
 
             if (! empty($row)) {
                 CLI::write("Latest Record ID: " . $row['id'] . " | Ref: " . $row['care_context_reference'] . " | Updated: " . $row['updated_at'], 'green');
-                $bundle = is_string($row['fhir_bundle']) ? json_decode($row['fhir_bundle'], true) : $row['fhir_bundle'];
+                $rawBundle = $row['record_data'] ?? $row['fhir_bundle'] ?? '';
+                $bundle = is_string($rawBundle) ? json_decode($rawBundle, true) : $rawBundle;
                 $entries = (array) ($bundle['entry'] ?? []);
                 
                 $typeCounts = [];
