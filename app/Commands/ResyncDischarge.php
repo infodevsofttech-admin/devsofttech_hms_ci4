@@ -33,17 +33,10 @@ class ResyncDischarge extends BaseCommand
 
         // Inspect gateway DB
         CLI::write("\n=== Verifying Record in Gateway DB ===", 'cyan');
-        $db = \Config\Database::connect();
         try {
-            $gatewayDb = \Config\Database::connect([
-                'DSN'      => '',
-                'hostname' => 'localhost',
-                'username' => 'root',
-                'password' => '',
-                'database' => 'abdm_gateway_db',
-                'DBDriver' => 'MySQLi',
-                'charset'  => 'utf8mb4',
-            ]);
+            $dbConfig = config('Database')->default;
+            $dbConfig['database'] = 'abdm_gateway_db';
+            $gatewayDb = \Config\Database::connect($dbConfig);
             $row = $gatewayDb->table('abdm_health_records')
                 ->where('care_context_reference LIKE', "%{$ipdId}%")
                 ->orderBy('id', 'DESC')
