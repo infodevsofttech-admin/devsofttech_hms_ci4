@@ -3607,9 +3607,9 @@ class AbdmGateway extends BaseController
                     $dietParts = [];
                     foreach ($foodRows as $fRow) {
                         $heading = trim((string) ($fRow['food_short'] ?? ''));
-                        $line = trim((string) ($fRow['food_desc_lang'] ?? ''));
+                        $line = trim((string) ($fRow['food_desc'] ?? ''));
                         if ($line === '') {
-                            $line = trim((string) ($fRow['food_desc'] ?? ''));
+                            $line = trim((string) ($fRow['food_desc_lang'] ?? ''));
                         }
                         if ($heading !== '' && $line !== '') {
                             $dietParts[] = $heading . ': ' . $line;
