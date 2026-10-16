@@ -2186,6 +2186,15 @@ class Opd extends BaseController
 
         $data['print_layout_mode'] = $layoutMode;
 
+        if ($includeContent) {
+            try {
+                $rxCtrl = new \App\Controllers\Opd_prescription();
+                $rxCtrl->storePrescriptionFhirBundle($opdId, $sessionId);
+            } catch (\Throwable $e) {
+                log_message('warning', '[opd_lettre_pdf] storePrescriptionFhirBundle error: ' . $e->getMessage());
+            }
+        }
+
         $isComposedTemplate = $templateKey !== '' && str_starts_with($templateKey, 'compose_');
         if ($isComposedTemplate) {
             $html = $this->renderComposedOpdPrint($data, $templateKey);

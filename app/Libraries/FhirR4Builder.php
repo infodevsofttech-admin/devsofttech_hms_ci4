@@ -374,12 +374,9 @@ class FhirR4Builder
             $drugName    = trim((string) ($medication['drug_name'] ?? ''));
             $genericName = trim((string) ($medication['generic_name'] ?? ''));
             $medType     = trim((string) ($medication['med_type'] ?? ''));
-            $displayText = $drugName;
-            if ($genericName !== '' && stripos($drugName, $genericName) === false) {
-                $displayText = trim($drugName . ' (' . $genericName . ')');
-            }
+            $displayText = $drugName !== '' ? $drugName : $genericName;
 
-            $medicationCodeableConcept = ['text' => $displayText !== '' ? $displayText : $drugName];
+            $medicationCodeableConcept = ['text' => $displayText !== '' ? $displayText : 'Medication'];
 
             $snomedCode = trim((string) ($medication['snomed_code'] ?? ''));
             $atcCode    = strtoupper(trim((string) ($medication['atc_code'] ?? '')));
@@ -478,6 +475,19 @@ class FhirR4Builder
                 'authoredOn'                => $issuedAt,
                 'dosageInstruction'         => [$dosageInstruction],
             ];
+
+            // Reason / Indication: Map salt composition if available; otherwise fallback to diagnosis or blank space
+            $saltReasonText = $genericName;
+            if ($saltReasonText === '') {
+                $firstCond = $conditions[0]['name'] ?? ($conditions[0]['text'] ?? ($context['diagnosis'] ?? ''));
+                $saltReasonText = is_string($firstCond) && trim($firstCond) !== '' ? trim($firstCond) : ' ';
+            }
+            if ($saltReasonText !== '') {
+                $medRes['reasonCode'] = [[
+                    'text' => $saltReasonText,
+                ]];
+            }
+
             if ($timingResult['asNeeded']) {
                 $medRes['asNeededBoolean'] = true;
             }
@@ -3399,7 +3409,8 @@ class FhirR4Builder
             }
 
             $medicationRefs[] = ['reference' => 'MedicationRequest/' . $medId];
-            $entries[] = ['resource' => [
+            $genericName = is_array($med) ? trim((string) ($med['generic_name'] ?? '')) : '';
+            $dsMedRes = [
                 'resourceType'              => 'MedicationRequest',
                 'id'                        => $medId,
                 'status'                    => 'active',
@@ -3408,7 +3419,11 @@ class FhirR4Builder
                 'encounter'                 => ['reference' => $encounterRef],
                 'medicationCodeableConcept' => $mc,
                 'dosageInstruction'         => [['text' => is_array($med) ? (string) ($med['dosage'] ?? '') : '']],
-            ]];
+            ];
+            if ($genericName !== '') {
+                $dsMedRes['reasonCode'] = [['text' => $genericName]];
+            }
+            $entries[] = ['resource' => $dsMedRes];
         }
         if (! empty($medicationRefs)) {
             $sections[] = ['title' => 'Medications', 'entry' => $medicationRefs];

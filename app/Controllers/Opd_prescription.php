@@ -13952,6 +13952,12 @@ OPD SNAPSHOT JSON: " . $payload;
         $this->createOpdPrescriptionWorkTask($opdId, $opdSessionId);
         $this->markOpdVisitedOnConsultCompletion((int) $opdId);
 
+        // Regenerate complete FHIR records with latest medications and PDF on print action
+        try {
+            $this->storePrescriptionFhirBundle($opdId, $opdSessionId);
+        } catch (\Throwable $e) {
+            log_message('warning', '[opd_prescription_print] storePrescriptionFhirBundle error: ' . $e->getMessage());
+        }
 
         $printConfig = $this->resolvePrescriptionLayoutByDoctorField($opdId, $printType);
         $layoutMode = (string) ($printConfig['layout'] ?? 'content_only');
