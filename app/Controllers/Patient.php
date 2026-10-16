@@ -1972,14 +1972,14 @@ class Patient extends BaseController
 			]);
 		}
 
-		$limit = (int) ($this->request->getGet('limit') ?? 100);
+		$limit = (int) ($this->request->getGet('limit') ?? $_GET['limit'] ?? 100);
 		if ($limit <= 0 || $limit > 300) {
 			$limit = 100;
 		}
 
-		$q = trim((string) ($this->request->getGet('q') ?? ''));
-		$filterConsentRequestId = trim((string) ($this->request->getGet('consent_request_id') ?? ''));
-		$includeSummary = ((int) ($this->request->getGet('include_summary') ?? 0)) === 1;
+		$q = trim((string) ($this->request->getGet('q') ?? $_GET['q'] ?? ''));
+		$filterConsentRequestId = trim((string) ($this->request->getGet('consent_request_id') ?? $_GET['consent_request_id'] ?? ''));
+		$includeSummary = ((int) ($this->request->getGet('include_summary') ?? $_GET['include_summary'] ?? 0)) === 1;
 
 		$docFields = $this->db->getFieldNames('abdm_hiu_documents') ?? [];
 		$selectCols = ['d.id', 'd.patient_id', 'd.abha_address', 'd.document_title', 'd.document_date', 'd.care_context_reference', 'd.practitioner_name', 'd.organization_name', 'd.bundle_type', 'd.created_at'];
