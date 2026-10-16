@@ -3586,6 +3586,70 @@ class AbdmGateway extends BaseController
                 ];
             }
 
+            // Dietary Advice from food_ids
+            $foodIds = is_array($instructionMeta['food_ids'] ?? null) ? ($instructionMeta['food_ids'] ?? []) : [];
+            if (empty($foodIds) && $this->db && $this->db->tableExists('ipd_discharge_drug_food_interaction')) {
+                try {
+                    $legacyFoodRow = $this->db->table('ipd_discharge_drug_food_interaction')->where('ipd_id', $ipdId)->get(1)->getRowArray();
+                    if (! empty($legacyFoodRow['food_id_list'])) {
+                        $foodIds = array_filter(array_map('intval', explode(',', (string) $legacyFoodRow['food_id_list'])));
+                    }
+                } catch (\Throwable $e) {
+                }
+            }
+            if (! empty($foodIds) && $this->db && $this->db->tableExists('ipd_discharge_master_food')) {
+                try {
+                    $foodRows = $this->db->table('ipd_discharge_master_food')
+                        ->select('id,food_short,food_desc,food_desc_lang')
+                        ->whereIn('id', array_map('intval', $foodIds))
+                        ->get()
+                        ->getResultArray();
+                    $dietParts = [];
+                    foreach ($foodRows as $fRow) {
+                        $heading = trim((string) ($fRow['food_short'] ?? ''));
+                        $line = trim((string) ($fRow['food_desc_lang'] ?? ''));
+                        if ($line === '') {
+                            $line = trim((string) ($fRow['food_desc'] ?? ''));
+                        }
+                        if ($heading !== '' && $line !== '') {
+                            $dietParts[] = $heading . ': ' . $line;
+                        } elseif ($line !== '') {
+                            $dietParts[] = $line;
+                        } elseif ($heading !== '') {
+                            $dietParts[] = $heading;
+                        }
+                    }
+                    if (! empty($dietParts)) {
+                        $carePlans[] = [
+                            'title' => 'Dietary Advice',
+                            'description' => implode("\n", $dietParts),
+                            'created_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
+                        ];
+                    }
+                } catch (\Throwable $e) {
+                }
+            }
+
+            // Other Advice
+            $otherText = trim((string) ($instructionMeta['other_text'] ?? ''));
+            if ($otherText !== '') {
+                $carePlans[] = [
+                    'title' => 'Other Advice',
+                    'description' => strip_tags($otherText),
+                    'created_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
+                ];
+            }
+
+            // Discharge Instructions / Remarks
+            $compRemark = trim((string) ($instructionRow['comp_remark'] ?? ''));
+            if ($compRemark !== '') {
+                $carePlans[] = [
+                    'title' => 'Discharge Instructions',
+                    'description' => strip_tags($compRemark),
+                    'created_at' => $this->toIsoDateTimeOrNow($dischargeRaw),
+                ];
+            }
+
             $reviewAfter = trim((string) ($instructionRow['review_after'] ?? ''));
             if ($reviewAfter !== '') {
                 $reviewDate = '';
@@ -3695,9 +3759,19 @@ class AbdmGateway extends BaseController
                 'room' => (string) ($locationInfo['room'] ?? ''),
                 'bed' => (string) ($locationInfo['bed'] ?? ''),
             ],
+            'ui_complaints' => $chiefComplaints,
+            'ui_complaint_narrative' => $chiefComplaintNarrative,
+            'ui_final_diagnosis' => $diagnoses,
+            'ui_clinical_history' => $diagnosisNarrative,
+            'ui_physical_exam' => $observations,
+            'ui_investigations' => $investigations,
+            'ui_surgeries' => $procedures,
+            'ui_discharge_medicine' => $medications,
+            'ui_discharge_summary' => $carePlans,
             'chief_complaints' => $chiefComplaints,
             'chief_complaint_narrative' => $chiefComplaintNarrative,
             'diagnoses' => $diagnoses,
+            'conditions' => $diagnoses,
             'diagnosis_narrative' => $diagnosisNarrative,
             'procedures' => $procedures,
             'medications' => $medications,
@@ -3846,13 +3920,14 @@ class AbdmGateway extends BaseController
         $abdmTemplate = $this->resolveAbdmDischargeTemplate();
         $abdmTemplateId = (int) ($abdmTemplate['id'] ?? 0);
 
+        $generatedBinary = null;
         try {
             $dischargeCtrl = new \App\Controllers\Ipd_discharge();
             $request = \Config\Services::request();
             $response = \Config\Services::response();
             $logger = \Config\Services::logger();
             $dischargeCtrl->initController($request, $response, $logger);
-            $dischargeCtrl->generateDischargeSummaryPdfBinary($ipdId, true, $abdmTemplateId > 0 ? $abdmTemplateId : null);
+            $generatedBinary = $dischargeCtrl->generateDischargeSummaryPdfBinary($ipdId, true, $abdmTemplateId > 0 ? $abdmTemplateId : null);
         } catch (\Throwable $e) {
             log_message('error', 'Auto-generating IPD Discharge Summary PDF failed for IPD {ipd}: {msg}', [
                 'ipd' => $ipdId,
@@ -3873,10 +3948,9 @@ class AbdmGateway extends BaseController
 
         foreach ($definitions as $definition) {
             $path = $directory . DIRECTORY_SEPARATOR . $definition['file'];
-            if (! is_file($path) || filesize($path) === 0) {
-                continue;
-            }
-            $binary = file_get_contents($path);
+            $binary = ($definition['file'] === 'discharge-summary.pdf' && is_string($generatedBinary) && str_starts_with($generatedBinary, '%PDF-'))
+                ? $generatedBinary
+                : (is_file($path) ? file_get_contents($path) : null);
             if (! is_string($binary) || ! str_starts_with($binary, '%PDF-')) {
                 continue;
             }

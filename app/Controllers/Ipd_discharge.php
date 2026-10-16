@@ -9019,8 +9019,9 @@ class Ipd_discharge extends BaseController
         $abdmTemplate = $this->resolveAbdmDischargeTemplate();
         $abdmTemplateId = (int) ($abdmTemplate['id'] ?? 0);
 
+        $generatedBinary = null;
         try {
-            $this->generateDischargeSummaryPdfBinary($ipdId, true, $abdmTemplateId > 0 ? $abdmTemplateId : null);
+            $generatedBinary = $this->generateDischargeSummaryPdfBinary($ipdId, true, $abdmTemplateId > 0 ? $abdmTemplateId : null);
         } catch (\Throwable $e) {
             log_message('error', 'Auto-generating IPD Discharge Summary PDF failed for IPD {ipd}: {msg}', [
                 'ipd' => $ipdId,
@@ -9041,10 +9042,9 @@ class Ipd_discharge extends BaseController
 
         foreach ($definitions as $definition) {
             $path = $directory . DIRECTORY_SEPARATOR . $definition['file'];
-            if (! is_file($path) || filesize($path) === 0) {
-                continue;
-            }
-            $binary = file_get_contents($path);
+            $binary = ($definition['file'] === 'discharge-summary.pdf' && is_string($generatedBinary) && str_starts_with($generatedBinary, '%PDF-'))
+                ? $generatedBinary
+                : (is_file($path) ? file_get_contents($path) : null);
             if (! is_string($binary) || ! str_starts_with($binary, '%PDF-')) {
                 continue;
             }
@@ -9597,6 +9597,62 @@ class Ipd_discharge extends BaseController
                 ];
             }
 
+            // Dietary Advice from food_ids
+            $foodIds = is_array($instructionMeta['food_ids'] ?? null) ? ($instructionMeta['food_ids'] ?? []) : [];
+            if (empty($foodIds) && $this->tableHasColumns('ipd_discharge_drug_food_interaction', ['ipd_id', 'food_id_list'])) {
+                $legacyFoodRow = $this->firstRowByIpd('ipd_discharge_drug_food_interaction', $ipdId);
+                $foodIds = $this->parseFoodIdCsv((string) ($legacyFoodRow['food_id_list'] ?? ''));
+            }
+            if (! empty($foodIds) && $this->tableHasColumns('ipd_discharge_master_food', ['id', 'food_short', 'food_desc'])) {
+                $foodRows = $this->db->table('ipd_discharge_master_food')
+                    ->select('id,food_short,food_desc,food_desc_lang')
+                    ->whereIn('id', array_map('intval', $foodIds))
+                    ->get()
+                    ->getResultArray();
+                $dietParts = [];
+                foreach ($foodRows as $fRow) {
+                    $heading = trim((string) ($fRow['food_short'] ?? ''));
+                    $line = trim((string) ($fRow['food_desc_lang'] ?? ''));
+                    if ($line === '') {
+                        $line = trim((string) ($fRow['food_desc'] ?? ''));
+                    }
+                    if ($heading !== '' && $line !== '') {
+                        $dietParts[] = $heading . ': ' . $line;
+                    } elseif ($line !== '') {
+                        $dietParts[] = $line;
+                    } elseif ($heading !== '') {
+                        $dietParts[] = $heading;
+                    }
+                }
+                if (! empty($dietParts)) {
+                    $carePlanRows[] = [
+                        'title' => 'Dietary Advice',
+                        'description' => implode("\n", $dietParts),
+                        'created_at' => $dischargeIso,
+                    ];
+                }
+            }
+
+            // Other Advice
+            $otherText = trim((string) ($instructionMeta['other_text'] ?? ''));
+            if ($otherText !== '') {
+                $carePlanRows[] = [
+                    'title' => 'Other Advice',
+                    'description' => strip_tags($otherText),
+                    'created_at' => $dischargeIso,
+                ];
+            }
+
+            // Discharge Instructions / Remarks
+            $compRemark = trim((string) ($instructionRow['comp_remark'] ?? ''));
+            if ($compRemark !== '') {
+                $carePlanRows[] = [
+                    'title' => 'Discharge Instructions',
+                    'description' => strip_tags($compRemark),
+                    'created_at' => $dischargeIso,
+                ];
+            }
+
             $reviewAfter = trim((string) ($instructionRow['review_after'] ?? ''));
             if ($reviewAfter !== '') {
                 $reviewDate = '';
@@ -9773,7 +9829,17 @@ class Ipd_discharge extends BaseController
             'ui_course_treatment' => $courseRows,
             'ui_course_treatment_narrative' => $courseRemark,
             'ui_discharge_medicine' => $medicationRows,
+            'ui_discharge_summary' => $carePlanRows,
+            'chief_complaints' => $chiefComplaintsList,
+            'chief_complaint_narrative' => $complaintRemarkText,
+            'diagnoses' => $conditionRows,
+            'conditions' => $conditionRows,
+            'diagnosis_narrative' => $uiClinicalHistoryText,
+            'procedures' => $procedureRows,
+            'medications' => $medicationRows,
+            'observations' => $observationRows,
             'allergies' => $allergyRows,
+            'care_plans' => $carePlanRows,
             'documents' => $documentsList,
             'template' => $this->resolveAbdmDischargeTemplate(),
         ];

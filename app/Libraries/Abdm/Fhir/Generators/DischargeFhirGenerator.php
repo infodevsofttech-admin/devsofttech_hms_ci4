@@ -230,12 +230,16 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
 
 
         // ── Discharge Medications ───────────────────────────────────────────────
-        foreach ((array) ($source['ui_discharge_medicine'] ?? $source['medications'] ?? []) as $idx => $med) {
-            $name = trim((string) ($med['name'] ?? ''));
-            if (! $this->isMeaningfulValue($name)) {
-                continue;
+        $rawMeds = ! empty($source['medications']) ? (array) $source['medications'] : (array) ($source['ui_discharge_medicine'] ?? []);
+        $validMeds = [];
+        foreach ($rawMeds as $med) {
+            if (is_array($med) && $this->isMeaningfulValue((string) ($med['name'] ?? ''))) {
+                $validMeds[] = $med;
             }
+        }
 
+        foreach ($validMeds as $idx => $med) {
+            $name = trim((string) ($med['name'] ?? ''));
             $medCode = trim((string) ($med['code'] ?? ''));
             $medCoding = [];
             if ($medCode !== '' && $this->isMeaningfulValue($medCode)) {
@@ -442,7 +446,11 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
 
 
         // ── Care Plans / Discharge Advice & Hospital Course ────────────────────
-        $carePlansList = (array) ($source['ui_discharge_summary'] ?? $source['care_plans'] ?? []);
+        $rawCarePlans = array_merge(
+            (array) ($source['care_plans'] ?? []),
+            (array) ($source['ui_discharge_summary'] ?? []),
+            (array) ($source['ui_care_plans'] ?? [])
+        );
 
         // Include hospital course / course of treatment if provided
         $courseItems = (array) ($source['ui_course_treatment'] ?? $source['course_treatment'] ?? []);
@@ -458,18 +466,37 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $courseParts[] = $courseNarrative;
         }
         if (! empty($courseParts)) {
-            $carePlansList[] = [
+            $rawCarePlans[] = [
                 'title' => 'Course of Treatment in Hospital',
                 'description' => implode("\n", array_unique($courseParts)),
             ];
         }
 
-        foreach ($carePlansList as $idx => $cp) {
+        $validCarePlans = [];
+        $seenCp = [];
+        foreach ($rawCarePlans as $cp) {
+            if (! is_array($cp)) {
+                continue;
+            }
             $title = $this->cleanPlainText((string) ($cp['title'] ?? 'Discharge Advice'));
             $description = $this->cleanPlainText((string) ($cp['description'] ?? ''));
             if (! $this->isMeaningfulValue($description)) {
                 continue;
             }
+            $key = $title . '|' . $description;
+            if (isset($seenCp[$key])) {
+                continue;
+            }
+            $seenCp[$key] = true;
+            $validCarePlans[] = [
+                'title' => $title !== '' ? $title : 'Discharge Advice',
+                'description' => $description,
+            ];
+        }
+
+        foreach ($validCarePlans as $idx => $cp) {
+            $title = $cp['title'];
+            $description = $cp['description'];
 
             $carePlanResource = [
                 'resourceType' => 'CarePlan',
@@ -477,11 +504,11 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/CarePlan']],
                 'text' => [
                     'status' => 'generated',
-                    'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>' . htmlspecialchars($title !== '' ? $title : 'Discharge Advice') . ':</b> ' . htmlspecialchars($description) . '</p></div>',
+                    'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>' . htmlspecialchars($title) . ':</b> ' . htmlspecialchars($description) . '</p></div>',
                 ],
                 'status' => 'active',
                 'intent' => 'plan',
-                'title' => $title !== '' ? $title : 'Discharge Advice',
+                'title' => $title,
                 'description' => $description,
                 'subject' => ['reference' => $patientRef, 'display' => (string) ($source['patient']['name'] ?? $source['patient_name'] ?? 'Patient')],
                 'category' => [
@@ -490,10 +517,10 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                             [
                                 'system' => 'http://snomed.info/sct',
                                 'code' => '734163000',
-                                'display' => 'Care plan'
-                            ]
-                        ]
-                    ]
+                                'display' => 'Care plan',
+                            ],
+                        ],
+                    ],
                 ],
             ];
 
@@ -588,9 +615,21 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         }
 
         // Medications
-        $meds = (array) ($source['ui_discharge_medicine'] ?? $source['medications'] ?? []);
-        if (! empty($meds)) {
-            $sectionDefinitions[] = ['title' => 'Medications', 'code' => '1003606003', 'display' => 'Medication history section', 'prefix' => 'discharge-medication-', 'items' => $meds];
+        if (! empty($validMeds)) {
+            $sectionDefinitions[] = [
+                'title' => 'Medications',
+                'code' => '721912009',
+                'display' => 'Medication summary document',
+                'prefix' => 'discharge-medication-',
+                'items' => $validMeds,
+                'additional_coding' => [
+                    [
+                        'system' => 'http://snomed.info/sct',
+                        'code' => '1003606003',
+                        'display' => 'Medication history section',
+                    ],
+                ],
+            ];
         }
 
         // Investigations
@@ -601,8 +640,8 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         }
 
         // Care plans / Discharge advice & hospital course
-        if (! empty($carePlansList)) {
-            $sectionDefinitions[] = ['title' => 'Care Plan', 'code' => '734163000', 'display' => 'Care plan', 'prefix' => 'discharge-careplan-', 'items' => $carePlansList];
+        if (! empty($validCarePlans)) {
+            $sectionDefinitions[] = ['title' => 'Care Plan', 'code' => '734163000', 'display' => 'Care plan', 'prefix' => 'discharge-careplan-', 'items' => $validCarePlans];
         }
 
         // Document Reference
@@ -633,13 +672,19 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             if ($references === []) {
                 continue;
             }
+            $coding = [[
+                'system' => 'http://snomed.info/sct',
+                'code' => $definition['code'],
+                'display' => $definition['display'],
+            ]];
+            if (! empty($definition['additional_coding']) && is_array($definition['additional_coding'])) {
+                foreach ($definition['additional_coding'] as $ac) {
+                    $coding[] = $ac;
+                }
+            }
             $sec = [
                 'title' => $definition['title'],
-                'code' => ['coding' => [[
-                    'system' => 'http://snomed.info/sct',
-                    'code' => $definition['code'],
-                    'display' => $definition['display'],
-                ]]],
+                'code' => ['coding' => $coding],
                 'entry' => $references,
             ];
             $sections[] = $sec;
@@ -943,8 +988,8 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         }
         $vitals = (array) ($source['observations'] ?? []);
         $procedures = (array) ($source['procedures'] ?? []);
-        $medications = (array) ($source['medications'] ?? []);
-        $carePlans = (array) ($source['care_plans'] ?? []);
+        $medications = ! empty($source['medications']) ? (array) $source['medications'] : (array) ($source['ui_discharge_medicine'] ?? []);
+        $carePlans = ! empty($source['care_plans']) ? (array) $source['care_plans'] : (array) ($source['ui_care_plans'] ?? $source['ui_discharge_summary'] ?? []);
 
         if ($templateHtml !== '') {
             $tokens = [
