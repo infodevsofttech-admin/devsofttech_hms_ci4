@@ -23,7 +23,7 @@ class ResyncDischarge extends BaseCommand
         $logger = \Config\Services::logger();
         $ctrl->initController($request, $response, $logger);
 
-        $ctrl->enqueueIpdDischargeSync($ipdId);
+        $ctrl->enqueueIpdDischargeSync($ipdId, 0, 'force');
         CLI::write("Discharge sync enqueued successfully.", 'green');
 
         CLI::write("Processing ABDM outbox...", 'yellow');
