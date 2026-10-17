@@ -9361,7 +9361,17 @@ class Ipd_discharge extends BaseController
             // Do not block discharge workflows if queue service is unavailable.
         }
 
-        // Also persist ABDM-compatible FHIR bundle in sync tables/outbox for M2 push.
+        // Only persist ABDM-compatible FHIR bundle if the patient is officially discharged
+        // (discarge_patient_status > 0 and valid discharge_date) or explicitly finalized.
+        // Intermediate draft saves while patient is still admitted must not create incomplete bundles.
+        $dischargeStatus = (int) ($ipdRow['discarge_patient_status'] ?? 0);
+        $dischargeDate = trim((string) ($ipdRow['discharge_date'] ?? ''));
+        $isDischarged = $dischargeStatus > 0 && $dischargeDate !== '' && $dischargeDate !== '0000-00-00';
+
+        if (! $isDischarged && ! in_array($action, ['final_discharge', 'force', 'auto_push'], true)) {
+            return;
+        }
+
         // Fail-open: discharge save flow must never fail due to ABDM sync issues.
         try {
             $this->enqueueIpdDischargeFhirSync($ipdId, $patientId, $ipdRow, $patientRow);
@@ -9478,8 +9488,19 @@ class Ipd_discharge extends BaseController
             }
         }
 
-        // Comorbidities from NABH metadata
+        // Comorbidities from NABH metadata with fallback to latest opd_prescription / history
         $coMorbRaw = trim((string) ($nabhMeta['co_morbidities'] ?? ''));
+        if ($coMorbRaw === '' && $patientId > 0 && $this->db->tableExists('opd_prescription')) {
+            $latestOpdRow = $this->db->table('opd_prescription')
+                ->where('p_id', $patientId)
+                ->orderBy('id', 'DESC')
+                ->get(1)
+                ->getRowArray();
+            if (! empty($latestOpdRow)) {
+                $hydratedNabh = $this->hydrateNabhFieldsFromOpdRow($latestOpdRow);
+                $coMorbRaw = trim((string) ($hydratedNabh['co_morbidities'] ?? ''));
+            }
+        }
         if ($coMorbRaw !== '') {
             $coMorbParts = preg_split('/[,;\n]+/', $coMorbRaw);
             foreach ($coMorbParts as $cPart) {

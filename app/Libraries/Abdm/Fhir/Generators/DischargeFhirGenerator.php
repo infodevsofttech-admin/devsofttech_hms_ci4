@@ -326,6 +326,114 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             $builder->addMedicationRequest($medResource);
         }
 
+        // ── Physical Examination & Vital Signs ──────────────────────────────
+        $rawObservations = (array) ($source['ui_physical_exam'] ?? $source['observations'] ?? []);
+        $validObservations = [];
+        foreach ($rawObservations as $idx => $obs) {
+            if (! is_array($obs)) {
+                continue;
+            }
+            $obsText = trim((string) ($obs['text'] ?? $obs['name'] ?? ''));
+            $obsValue = trim((string) ($obs['value'] ?? ''));
+            if ($obsText === '' || ! $this->isMeaningfulValue($obsText)) {
+                continue;
+            }
+            if ($obsValue === '' || ! $this->isMeaningfulValue($obsValue)) {
+                continue;
+            }
+            $validObservations[$idx] = $obs;
+        }
+
+        foreach ($validObservations as $idx => $obs) {
+            $obsText = trim((string) ($obs['text'] ?? $obs['name'] ?? ''));
+            $obsValue = trim((string) ($obs['value'] ?? ''));
+            $obsCategoryText = trim((string) ($obs['category'] ?? 'Physical Examination'));
+            $obsCategoryCode = trim((string) ($obs['category_code'] ?? ''));
+            $effectiveAt = (string) ($obs['effective_at'] ?? $obs['effective_date_time'] ?? $timestamp);
+
+            $isVital = in_array(strtolower($obsCategoryCode), ['vital-signs', 'vitals'], true)
+                || preg_match('/^(pulse|heart rate|bp|blood pressure|respiration|respiratory rate|temperature|temp|spo2|oxygen)/i', $obsText);
+
+            $catCode = $isVital ? 'vital-signs' : 'exam';
+            $catDisplay = $isVital ? 'Vital Signs' : 'Exam';
+
+            $observationId = 'discharge-observation-' . $recordId . '-' . $idx;
+
+            $coding = [];
+            $lowerText = strtolower($obsText);
+            if (str_contains($lowerText, 'pulse') || str_contains($lowerText, 'heart rate')) {
+                $coding[] = ['system' => 'http://snomed.info/sct', 'code' => '8499008', 'display' => 'Pulse rate'];
+            } elseif (str_contains($lowerText, 'respiration') || str_contains($lowerText, 'respiratory')) {
+                $coding[] = ['system' => 'http://snomed.info/sct', 'code' => '86290005', 'display' => 'Respiratory rate'];
+            } elseif (str_contains($lowerText, 'pallor')) {
+                $coding[] = ['system' => 'http://snomed.info/sct', 'code' => '271782001', 'display' => 'Pallor'];
+            } elseif (str_contains($lowerText, 'jaundice') || str_contains($lowerText, 'icterus')) {
+                $coding[] = ['system' => 'http://snomed.info/sct', 'code' => '18165001', 'display' => 'Jaundice'];
+            } elseif (str_contains($lowerText, 'cyanosis')) {
+                $coding[] = ['system' => 'http://snomed.info/sct', 'code' => '3415004', 'display' => 'Cyanosis'];
+            } elseif (str_contains($lowerText, 'clubbing')) {
+                $coding[] = ['system' => 'http://snomed.info/sct', 'code' => '30760006', 'display' => 'Clubbing'];
+            } elseif (str_contains($lowerText, 'edema') || str_contains($lowerText, 'oedema')) {
+                $coding[] = ['system' => 'http://snomed.info/sct', 'code' => '267038008', 'display' => 'Edema'];
+            } elseif (str_contains($lowerText, 'jvp') || str_contains($lowerText, 'jugular')) {
+                $coding[] = ['system' => 'http://snomed.info/sct', 'code' => '271649006', 'display' => 'Jugular venous pressure'];
+            } elseif (str_contains($lowerText, 'bp') || str_contains($lowerText, 'blood pressure')) {
+                $coding[] = ['system' => 'http://snomed.info/sct', 'code' => '75367002', 'display' => 'Blood pressure'];
+            } elseif (str_contains($lowerText, 'temp')) {
+                $coding[] = ['system' => 'http://snomed.info/sct', 'code' => '386725007', 'display' => 'Body temperature'];
+            } elseif (str_contains($lowerText, 'spo2') || str_contains($lowerText, 'oxygen saturation')) {
+                $coding[] = ['system' => 'http://snomed.info/sct', 'code' => '431314004', 'display' => 'Oxygen saturation'];
+            } else {
+                $resolved = $this->codingResolver->resolveSnomedForDiagnosisOrFinding((string) ($obs['code'] ?? ''), $obsText);
+                $coding = $this->withoutPlaceholderCoding((array) ($resolved['coding'] ?? []));
+                if ($coding === []) {
+                    $coding[] = ['system' => 'http://snomed.info/sct', 'code' => '404684003', 'display' => 'Clinical finding'];
+                }
+            }
+
+            $obsResource = [
+                'resourceType' => 'Observation',
+                'id' => $observationId,
+                'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/Observation']],
+                'text' => [
+                    'status' => 'generated',
+                    'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>' . htmlspecialchars($obsText) . ' (' . htmlspecialchars($obsCategoryText) . '):</b> ' . htmlspecialchars($obsValue) . '</p></div>',
+                ],
+                'status' => 'final',
+                'category' => [[
+                    'coding' => [[
+                        'system' => 'http://terminology.hl7.org/CodeSystem/observation-category',
+                        'code' => $catCode,
+                        'display' => $catDisplay,
+                    ]],
+                    'text' => $obsCategoryText !== '' ? $obsCategoryText : $catDisplay,
+                ]],
+                'code' => [
+                    'coding' => $coding,
+                    'text' => $obsText,
+                ],
+                'subject' => ['reference' => $patientRef, 'display' => (string) ($source['patient']['name'] ?? $source['patient_name'] ?? 'Patient')],
+                'effectiveDateTime' => $effectiveAt,
+            ];
+
+            $unit = trim((string) ($obs['unit'] ?? ''));
+            if ($unit === '' && preg_match('/^([\d\.]+)\s*(\/min|bpm|mmHg|°c|°f|%)$/i', $obsValue, $uParts)) {
+                $obsResource['valueQuantity'] = [
+                    'value' => (float) $uParts[1],
+                    'unit' => $uParts[2],
+                ];
+            } elseif (is_numeric($obsValue)) {
+                $obsResource['valueQuantity'] = [
+                    'value' => (float) $obsValue,
+                    'unit' => $unit,
+                ];
+            } else {
+                $obsResource['valueString'] = $obsValue;
+            }
+
+            $builder->addObservation($obsResource);
+        }
+
         // ── Investigations ─────────────────────────────────────────────────────
         foreach ((array) ($source['ui_investigations'] ?? $source['investigations'] ?? []) as $idx => $inv) {
             $text = trim((string) ($inv['text'] ?? ''));
@@ -667,6 +775,18 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 'items' => $diagnosesList,
                 'narrative' => $clinicalHistoryNarrative,
                 'entry_display' => 'Condition',
+            ];
+        }
+
+        // Physical Examination & Vital Signs
+        if (! empty($validObservations)) {
+            $sectionDefinitions[] = [
+                'title' => 'Physical Examination',
+                'code' => '425044008',
+                'display' => 'Physical examination section',
+                'prefix' => 'discharge-observation-',
+                'items_indexed' => $validObservations,
+                'entry_display' => 'Observation',
             ];
         }
 
@@ -1078,7 +1198,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
         if (empty($diagnoses) && ! empty($source['conditions'])) {
             $diagnoses = (array) $source['conditions'];
         }
-        $vitals = (array) ($source['observations'] ?? []);
+        $vitals = (array) ($source['ui_physical_exam'] ?? $source['observations'] ?? []);
         $procedures = (array) ($source['procedures'] ?? []);
         $medications = ! empty($source['medications']) ? (array) $source['medications'] : (array) ($source['ui_discharge_medicine'] ?? []);
         $carePlans = ! empty($source['care_plans']) ? (array) $source['care_plans'] : (array) ($source['ui_care_plans'] ?? $source['ui_discharge_summary'] ?? []);

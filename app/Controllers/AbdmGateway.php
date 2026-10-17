@@ -3466,8 +3466,20 @@ class AbdmGateway extends BaseController
             }
         }
 
-        // Add comorbidities from NABH
+        // Add comorbidities from NABH, with fallback to latest opd_prescription / history
         $coMorbRaw = trim((string) ($nabhMeta['co_morbidities'] ?? ''));
+        if ($coMorbRaw === '' && $patientId > 0 && $this->db && $this->db->tableExists('opd_prescription')) {
+            $latestPresc = $this->db->table('opd_prescription')
+                ->select('Prescriber_Remarks')
+                ->where('p_id', $patientId)
+                ->orderBy('id', 'DESC')
+                ->get(1)->getRowArray();
+            if (! empty($latestPresc['Prescriber_Remarks'])) {
+                if (preg_match('/^\s*Co-Morbidities\s*:\s*(.+)$/im', (string) $latestPresc['Prescriber_Remarks'], $m)) {
+                    $coMorbRaw = trim($m[1]);
+                }
+            }
+        }
         if ($coMorbRaw !== '') {
             $coMorbParts = preg_split('/[,;\n]+/', $coMorbRaw);
             foreach ($coMorbParts as $cPart) {

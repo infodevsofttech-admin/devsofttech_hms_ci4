@@ -988,6 +988,7 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertContains('Patient', $resourceTypes);
         $this->assertContains('Encounter', $resourceTypes);
         $this->assertContains('Condition', $resourceTypes);
+        $this->assertContains('Observation', $resourceTypes);
         $this->assertContains('MedicationRequest', $resourceTypes);
         $this->assertContains('DiagnosticReport', $resourceTypes);
         $this->assertContains('CarePlan', $resourceTypes);
@@ -996,6 +997,7 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $composition = $bundle['entry'][0]['resource'];
         $sectionTitles = array_column($composition['section'], 'title');
         $this->assertContains('Chief complaints', $sectionTitles);
+        $this->assertContains('Physical Examination', $sectionTitles);
         $this->assertContains('Medications', $sectionTitles);
         $this->assertContains('Care Plan', $sectionTitles);
     }

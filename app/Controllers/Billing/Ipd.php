@@ -1074,6 +1074,16 @@ class Ipd extends BaseController
                     ->where('id', $caseId)
                     ->update(['status' => 1]);
             }
+
+            // Trigger complete, final FHIR Discharge Summary generation & ABDM sync
+            try {
+                $patientId = (int) ($currentIpd['p_id'] ?? 0);
+                $dischargeCtrl = new \App\Controllers\Ipd_discharge();
+                $dischargeCtrl->initController($this->request, $this->response, service('logger'));
+                $dischargeCtrl->enqueueIpdDischargeSync($ipdId, $patientId, 'final_discharge');
+            } catch (\Throwable $e) {
+                log_message('warning', '[updateDischargeStatus] ABDM discharge sync trigger failed: ' . $e->getMessage());
+            }
         }
 
         return $this->buildDischargeProcessResponse($ipdId, 'Discharge status updated.');
