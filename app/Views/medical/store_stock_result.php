@@ -446,12 +446,12 @@ $ratioValues = $ratio_values ?? [];
             return Promise.resolve(true);
         }
 
-        loadCssOnce('medical-dt-css-core', 'https://cdn.datatables.net/1.13.8/css/jquery.dataTables.min.css');
-        loadCssOnce('medical-dt-css-bs5', 'https://cdn.datatables.net/1.13.8/css/dataTables.bootstrap5.min.css');
+        loadCssOnce('medical-dt-css-core', 'https://cdn.datatables.net/1.13.11/css/jquery.dataTables.min.css');
+        loadCssOnce('medical-dt-css-bs5', 'https://cdn.datatables.net/1.13.11/css/dataTables.bootstrap5.min.css');
 
-        return loadScriptOnce('medical-dt-js-core', 'https://cdn.datatables.net/1.13.8/js/jquery.dataTables.min.js')
+        return loadScriptOnce('medical-dt-js-core', 'https://cdn.datatables.net/1.13.11/js/jquery.dataTables.min.js')
             .then(function () {
-                return loadScriptOnce('medical-dt-js-bs5', 'https://cdn.datatables.net/1.13.8/js/dataTables.bootstrap5.min.js');
+                return loadScriptOnce('medical-dt-js-bs5', 'https://cdn.datatables.net/1.13.11/js/dataTables.bootstrap5.min.js');
             })
             .then(function () {
                 return !!(window.jQuery && window.jQuery.fn && typeof window.jQuery.fn.DataTable === 'function');
