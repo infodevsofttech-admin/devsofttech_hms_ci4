@@ -170,6 +170,15 @@ class OpdFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\AbstractModul
                 'dosageInstruction' => $dosageInstruction,
             ];
 
+            $salt = trim((string) ($med['salt'] ?? $med['generic'] ?? $med['generic_name'] ?? ''));
+            if ($salt !== '') {
+                $medResource['reasonCode'] = [
+                    [
+                        'text' => $salt,
+                    ],
+                ];
+            }
+
             $builder->addMedicationRequest($medResource);
         }
 

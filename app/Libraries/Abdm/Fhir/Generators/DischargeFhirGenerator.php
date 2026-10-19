@@ -280,7 +280,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
 
             $medCoding = [];
             if ($isSaltDistinct) {
-                // Primary coding represents the generic substance / salt so PHR displays it in the subtitle line instead of "NA"
+                // Primary coding represents the generic substance / salt
                 $medCoding[] = [
                     'system'  => 'http://snomed.info/sct',
                     'code'    => $saltCode,
@@ -343,6 +343,23 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                     'text'   => $name,
                 ],
             ];
+
+            // Reason / Indication: Map salt composition if available (matches OPD Consult pattern so PHR displays salt instead of "NA")
+            $saltReasonText = $salt;
+            if ($saltReasonText === '' || ! $this->isMeaningfulValue($saltReasonText)) {
+                $saltReasonText = $this->tryResolveGenericSalt($name, $medId);
+            }
+            if ($saltReasonText === '' || ! $this->isMeaningfulValue($saltReasonText)) {
+                $firstCond = $diagnosesList[0]['name'] ?? ($diagnosesList[0]['text'] ?? ($source['problem'] ?? ''));
+                $saltReasonText = is_string($firstCond) && trim($firstCond) !== '' ? trim($firstCond) : '';
+            }
+            if ($saltReasonText !== '') {
+                $medResource['reasonCode'] = [
+                    [
+                        'text' => $saltReasonText,
+                    ],
+                ];
+            }
 
             if (is_array($practitioner)) {
                 $medResource['requester'] = [
@@ -1800,18 +1817,22 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
 
         // Dose unit detection
         $doseUnit = 'Tablet';
-        $doseValue = 1;
+        $doseValue = '1';
 
         if (preg_match('/\b(SACHET|POWDER)\b/', $raw)) {
             $doseUnit = 'Sachet';
         } elseif (preg_match('/\b(SYRUP|SUSPENSION|ML)\b/', $raw)) {
             $doseUnit = 'mL';
-            $doseValue = 5;
+            $doseValue = '5';
         } elseif (preg_match('/\b(CAPSULE|CAP)\b/', $raw)) {
             $doseUnit = 'Capsule';
         } elseif (preg_match('/\b(DROPS?)\b/', $raw)) {
             $doseUnit = 'drops';
-            $doseValue = 2;
+            $doseValue = '2';
+        }
+
+        if (preg_match('/([0-9]+(?:\/[0-9]+|\.[0-9]+)?)\s*(?:Tab|Cap|Tablet|Capsule|Sachet|ml|drops)/i', $dosageText, $vm)) {
+            $doseValue = $vm[1];
         }
 
         // Duration detection

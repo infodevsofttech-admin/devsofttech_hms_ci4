@@ -400,58 +400,157 @@ class FhirR4Builder
                 ]];
             }
 
-            $dosageInstruction = ['text' => (string) ($medication['dosage'] ?? '')];
-            $routeText = trim((string) ($medication['route_text'] ?? ''));
-            $routeCode = trim((string) ($medication['route_code'] ?? ''));
-            if (! $this->isMeaningfulValue($routeText)) {
-                $medTypeUpper = strtoupper($medType);
-                if (in_array($medTypeUpper, ['INJ', 'INJECTION', 'IV', 'IM'], true)) {
-                    $routeText = 'Injection';
-                    $routeCode = '47625008';
-                } elseif (in_array($medTypeUpper, ['CREAM', 'OINT', 'OINTMENT', 'GEL', 'LOTION'], true)) {
-                    $routeText = 'Topical';
-                    $routeCode = '6064005';
-                } else {
-                    $routeText = 'Oral';
-                    $routeCode = '260548002';
-                }
-            } elseif ($routeCode === '') {
-                $routeCode = $this->resolveRouteSnomedCode($routeText);
+            $rawDosageText = trim((string) ($medication['dosage'] ?? ''));
+            $freqText = trim((string) ($medication['frequency_text'] ?? ''));
+            $timingResult = $this->buildFhirTimingStructure($freqText, $rawDosageText);
+
+            $combinedDosageContext = strtoupper($rawDosageText . ' ' . $freqText . ' ' . $medType . ' ' . $drugName);
+
+            // 1. Food relation / Additional Instruction (Point 2: standard SNOMED 307166007 / 307165006)
+            $addInstruct = null;
+            $foodSuffix = '';
+            if (preg_match('/\b(EMPTY STOMACH|BEFORE FOOD|BEFORE MEALS?|BF|AC)\b/', $combinedDosageContext)) {
+                $addInstruct = [[
+                    'coding' => [[
+                        'system'  => 'http://snomed.info/sct',
+                        'code'    => '307165006',
+                        'display' => 'Before meals',
+                    ]],
+                    'text' => 'Before food / Empty stomach',
+                ]];
+                $foodSuffix = 'before food / empty stomach';
+            } elseif (preg_match('/\b(AFTER FOOD|AFTER MEALS?|AF|PC)\b/', $combinedDosageContext)) {
+                $addInstruct = [[
+                    'coding' => [[
+                        'system'  => 'http://snomed.info/sct',
+                        'code'    => '307166007',
+                        'display' => 'After meals',
+                    ]],
+                    'text' => 'After food',
+                ]];
+                $foodSuffix = 'after food';
+            } elseif (preg_match('/\b(WITH FOOD|WITH MEALS?|WF)\b/', $combinedDosageContext)) {
+                $addInstruct = [[
+                    'coding' => [[
+                        'system'  => 'http://snomed.info/sct',
+                        'code'    => '311504000',
+                        'display' => 'With or after food',
+                    ]],
+                    'text' => 'With food',
+                ]];
+                $foodSuffix = 'with food';
             }
 
-            $routeEntry = ['text' => $routeText];
-            if ($this->isMeaningfulValue($routeCode) && $routeCode !== '371530004') {
-                $routeEntry['coding'] = [[
-                    'system'  => 'http://snomed.info/sct',
-                    'code'    => $routeCode,
-                    'display' => $routeText,
-                ]];
-            } else {
-                $routeEntry['coding'] = [[
-                    'system'  => 'http://snomed.info/sct',
-                    'code'    => '260548002',
-                    'display' => $routeText,
-                ]];
+            // 2. Timing display & frequency
+            $timingDisplay = 'Once daily';
+            if (! empty($timingResult['timing']['code']['coding'][0]['display'])) {
+                $timingDisplay = (string) $timingResult['timing']['code']['coding'][0]['display'];
+            } elseif (preg_match('/\b(TDS|TID|THRICE|3 TIMES)\b/', $combinedDosageContext)) {
+                $timingDisplay = 'Three times daily';
+            } elseif (preg_match('/\b(QID|4 TIMES)\b/', $combinedDosageContext)) {
+                $timingDisplay = 'Four times daily';
+            } elseif (preg_match('/\b(BD|BID|TWICE|2 TIMES)\b/', $combinedDosageContext)) {
+                $timingDisplay = 'Twice daily';
+            } elseif (preg_match('/\b(SOS|PRN|AS NEEDED)\b/', $combinedDosageContext)) {
+                $timingDisplay = 'As needed';
+            } elseif (preg_match('/\b(HS|BEDTIME|AT NIGHT)\b/', $combinedDosageContext)) {
+                $timingDisplay = 'At bedtime';
+            } elseif (preg_match('/\b(STAT|ONCE|NOW)\b/', $combinedDosageContext)) {
+                $timingDisplay = 'Immediately';
             }
-            $dosageInstruction['route'] = $routeEntry;
 
-            $methodText = trim((string) ($medication['method_text'] ?? $medType));
-            $methodCode = trim((string) ($medication['method_code'] ?? ''));
-            if ($this->isMeaningfulValue($methodText)) {
-                $methodEntry = ['text' => $methodText];
-                if ($this->isMeaningfulValue($methodCode) && $methodCode !== '371530004') {
-                    $methodEntry['coding'] = [[
+            // 3. Route & Method detection (Standard SNOMED: Oral Route 26643006 / Swallow 421521009)
+            $medTypeUpper = strtoupper($medType);
+            $routeCode = '26643006';
+            $routeDisplay = 'Oral Route';
+            $routeText = 'Oral Route';
+            $methodCode = '421521009'; // Swallow
+            $methodDisplay = 'Swallow';
+
+            if (preg_match('/\b(INJ|IV|INTRAVENOUS|INFUSION)\b/', $combinedDosageContext) || in_array($medTypeUpper, ['INJ', 'INJECTION', 'IV', 'INFUSION'], true)) {
+                $routeCode = '47625008';
+                $routeDisplay = 'Intravenous route';
+                $routeText = 'Intravenous (IV)';
+                $methodCode = '422145002';
+                $methodDisplay = 'Inject';
+            } elseif (preg_match('/\b(IM|INTRAMUSCULAR)\b/', $combinedDosageContext) || $medTypeUpper === 'IM') {
+                $routeCode = '78421000';
+                $routeDisplay = 'Intramuscular route';
+                $routeText = 'Intramuscular (IM)';
+                $methodCode = '422145002';
+                $methodDisplay = 'Inject';
+            } elseif (preg_match('/\b(DROPS?|EYE|EAR|OPHTHALMIC)\b/', $combinedDosageContext) || in_array($medTypeUpper, ['DROPS', 'DROP', 'EYE DROP', 'EAR DROP'], true)) {
+                $routeCode = '54485002';
+                $routeDisplay = 'Ophthalmic route';
+                $routeText = 'Drops';
+                $methodCode = '421553004';
+                $methodDisplay = 'Instill';
+            } elseif (preg_match('/\b(CREAM|OINTMENT|GEL|TOPICAL|LOTION)\b/', $combinedDosageContext) || in_array($medTypeUpper, ['CREAM', 'OINT', 'OINTMENT', 'GEL', 'LOTION'], true)) {
+                $routeCode = '6064005';
+                $routeDisplay = 'Topical route';
+                $routeText = 'Topical';
+                $methodCode = '417924000';
+                $methodDisplay = 'Apply';
+            }
+
+            // 4. Dose value & unit
+            $doseUnit = 'Tablet';
+            $doseValue = '1';
+            if (preg_match('/\b(SACHET|POWDER)\b/', $combinedDosageContext) || in_array($medTypeUpper, ['SACHET', 'POWDER'], true)) {
+                $doseUnit = 'Sachet';
+            } elseif (preg_match('/\b(SYRUP|SUSPENSION|ML)\b/', $combinedDosageContext) || in_array($medTypeUpper, ['SYP', 'SYRUP', 'SUSP', 'SUSPENSION', 'ML'], true)) {
+                $doseUnit = 'mL';
+                $doseValue = '5';
+            } elseif (preg_match('/\b(CAPSULE|CAP)\b/', $combinedDosageContext) || in_array($medTypeUpper, ['CAP', 'CAPSULE'], true)) {
+                $doseUnit = 'Capsule';
+            } elseif (preg_match('/\b(DROPS?)\b/', $combinedDosageContext) || in_array($medTypeUpper, ['DROPS', 'DROP'], true)) {
+                $doseUnit = 'drops';
+                $doseValue = '2';
+            }
+
+            if (preg_match('/([0-9]+(?:\/[0-9]+|\.[0-9]+)?)\s*(?:Tab|Cap|Tablet|Capsule|Sachet|ml|drops)/i', $rawDosageText, $vm)) {
+                $doseValue = $vm[1];
+            }
+
+            // 5. Duration
+            $durationDays = 0;
+            if (preg_match('/(?:FOR\s*)?(\d+)\s*DAYS?/i', $rawDosageText, $dm)) {
+                $durationDays = (int) $dm[1];
+            }
+
+            // 6. Build natural, understandable sentence (Point 3)
+            $instructionText = 'Take ' . $doseValue . ' ' . $doseUnit . ' ' . $timingDisplay;
+            if ($foodSuffix !== '') {
+                $instructionText .= ' ' . $foodSuffix;
+            }
+            if ($durationDays > 0) {
+                $instructionText .= ' for ' . $durationDays . ' days';
+            }
+
+            $dosageInstruction = [
+                'text' => $instructionText,
+                'route' => [
+                    'coding' => [[
+                        'system'  => 'http://snomed.info/sct',
+                        'code'    => $routeCode,
+                        'display' => $routeDisplay,
+                    ]],
+                    'text' => $routeText,
+                ],
+                'method' => [
+                    'coding' => [[
                         'system'  => 'http://snomed.info/sct',
                         'code'    => $methodCode,
-                        'display' => $methodText,
-                    ]];
-                }
-                $dosageInstruction['method'] = $methodEntry;
+                        'display' => $methodDisplay,
+                    ]],
+                    'text' => $methodDisplay,
+                ],
+            ];
+
+            if ($addInstruct !== null) {
+                $dosageInstruction['additionalInstruction'] = $addInstruct;
             }
 
-            $freqText = trim((string) ($medication['frequency_text'] ?? ''));
-            $dosageText = (string) ($medication['dosage'] ?? '');
-            $timingResult = $this->buildFhirTimingStructure($freqText, $dosageText);
             if ($timingResult['timing'] !== null) {
                 $dosageInstruction['timing'] = $timingResult['timing'];
             }

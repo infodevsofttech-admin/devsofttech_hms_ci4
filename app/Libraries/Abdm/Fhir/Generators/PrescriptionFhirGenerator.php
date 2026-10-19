@@ -141,6 +141,15 @@ class PrescriptionFhirGenerator extends AbstractModuleFhirGenerator
                 'dosageInstruction' => $dosageInstruction,
             ];
 
+            $salt = trim((string) ($med['salt'] ?? $med['generic'] ?? $med['generic_name'] ?? ''));
+            if ($salt !== '') {
+                $medResource['reasonCode'] = [
+                    [
+                        'text' => $salt,
+                    ],
+                ];
+            }
+
             if ($encounterRef !== null) {
                 $medResource['encounter'] = ['reference' => $encounterRef];
             }
