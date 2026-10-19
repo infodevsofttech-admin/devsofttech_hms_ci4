@@ -707,13 +707,10 @@ class Opd_prescription extends BaseController
             }
         }
 
+        // Do not generate or push FHIR records during intermediate form draft/save.
+        // FHIR records are only generated and finalized on Print action (opd_prescription_print),
+        // ensuring all medications, diagnoses, and final prescription PDF are complete.
         $fhirStored = false;
-        try {
-            $fhirStored = $this->storePrescriptionFhirBundle((int) $opdId, (int) $recordId, $patientRow, (array) $opdRow);
-            $this->createOpdPrescriptionWorkTask((int) $opdId, (int) $recordId);
-        } catch (\Throwable $fhirEx) {
-            log_message('error', 'FHIR bundle store failed during opd save: ' . $fhirEx->getMessage() . ' in ' . $fhirEx->getFile() . ':' . $fhirEx->getLine());
-        }
 
         $this->syncPatientAddictionFlags((int) ($opdRow->p_id ?? 0), [
             'is_smoking' => (int) $this->request->getPost('is_smoking'),
@@ -13949,15 +13946,8 @@ OPD SNAPSHOT JSON: " . $payload;
 
     public function opd_prescription_print(int $opdId, int $opdSessionId, int $printType = 0)
     {
-        $this->createOpdPrescriptionWorkTask($opdId, $opdSessionId);
-        $this->markOpdVisitedOnConsultCompletion((int) $opdId);
-
-        // Regenerate complete FHIR records with latest medications and PDF on print action
-        try {
-            $this->storePrescriptionFhirBundle($opdId, $opdSessionId);
-        } catch (\Throwable $e) {
-            log_message('warning', '[opd_prescription_print] storePrescriptionFhirBundle error: ' . $e->getMessage());
-        }
+        // Finalize FHIR records with latest medications and prescription PDF on print action
+        $this->finalizeOpdPrescriptionOnPrint($opdId, $opdSessionId);
 
         $printConfig = $this->resolvePrescriptionLayoutByDoctorField($opdId, $printType);
         $layoutMode = (string) ($printConfig['layout'] ?? 'content_only');
@@ -13974,8 +13964,35 @@ OPD SNAPSHOT JSON: " . $payload;
         return redirect()->to($url);
     }
 
+    /**
+     * Finalize OPD Consultation and Prescription FHIR bundles upon Print.
+     * Marks visit complete, generates complete FHIR bundles with all medicines & PDF,
+     * enqueues work task, and immediately pushes/syncs to ABDM Bridge.
+     */
+    public function finalizeOpdPrescriptionOnPrint(int $opdId, int $opdSessionId): void
+    {
+        $this->db = $this->db ?? \Config\Database::connect();
+        $this->markOpdVisitedOnConsultCompletion((int) $opdId);
+
+        try {
+            $this->storePrescriptionFhirBundle($opdId, $opdSessionId);
+            $this->createOpdPrescriptionWorkTask($opdId, $opdSessionId);
+
+            // Immediately push finalized records (OPConsultRecord + PrescriptionRecord) to Bridge
+            try {
+                $syncService = new \App\Libraries\Abdm\Sync\AbdmTaskBoardSyncService();
+                $syncService->syncOpdConsultRecords(1, false, $opdId);
+            } catch (\Throwable $syncEx) {
+                log_message('warning', '[finalizeOpdPrescriptionOnPrint] immediate bridge sync error: ' . $syncEx->getMessage());
+            }
+        } catch (\Throwable $e) {
+            log_message('warning', '[finalizeOpdPrescriptionOnPrint] storePrescriptionFhirBundle error: ' . $e->getMessage());
+        }
+    }
+
     private function markOpdVisitedOnConsultCompletion(int $opdId): void
     {
+        $this->db = $this->db ?? \Config\Database::connect();
         if ($opdId <= 0 || ! $this->db->tableExists('opd_master')) {
             return;
         }
@@ -14049,6 +14066,7 @@ OPD SNAPSHOT JSON: " . $payload;
 
     private function createOpdPrescriptionWorkTask(int $opdId, int $opdSessionId): void
     {
+        $this->db = $this->db ?? \Config\Database::connect();
         if ($opdId <= 0 || ! $this->db->tableExists('opd_master') || ! $this->db->tableExists('patient_master')) {
             return;
         }
@@ -14072,9 +14090,24 @@ OPD SNAPSHOT JSON: " . $payload;
             ->get(1)
             ->getRowArray();
 
-        $abhaId = trim((string) ($patient['abha_id'] ?? $patient['abha_no'] ?? $patient['abha_address'] ?? $patient['abha'] ?? ''));
-        if (! $this->isValidAbhaNumber($abhaId)) {
-            return;
+        $abhaId = '';
+        foreach (['abha_address', 'abha_id', 'abha_no', 'abha'] as $col) {
+            $cand = trim((string) ($patient[$col] ?? ''));
+            if ($cand !== '' && $this->isValidAbhaNumber($cand)) {
+                $abhaId = $cand;
+                break;
+            }
+        }
+        if ($abhaId === '') {
+            $cand = trim((string) ($patient['abha_address'] ?? $patient['abha_id'] ?? $patient['abha_no'] ?? $patient['abha'] ?? ''));
+            $clean14 = preg_replace('/\D/', '', $cand);
+            if (strlen($clean14) === 14) {
+                $abhaId = $clean14;
+            } elseif ($this->isValidAbhaNumber($cand)) {
+                $abhaId = $cand;
+            } else {
+                return;
+            }
         }
 
         $taskService = new AbdmWorkTaskService();
@@ -14097,6 +14130,11 @@ OPD SNAPSHOT JSON: " . $payload;
 
     private function isValidAbhaNumber(string $abhaId): bool
     {
-        return preg_match('/^\d{14}$/', trim($abhaId)) === 1;
+        $clean = preg_replace('/\D/', '', $abhaId);
+        if (strlen($clean) === 14) {
+            return true;
+        }
+
+        return str_contains($abhaId, '@') && preg_match('/^[a-zA-Z0-9.\-_]{3,}@[a-zA-Z]{3,}$/', $abhaId) === 1;
     }
 }

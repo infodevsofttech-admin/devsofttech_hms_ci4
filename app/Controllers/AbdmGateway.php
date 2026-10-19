@@ -8140,7 +8140,12 @@ class AbdmGateway extends BaseController
                     $display = $compStr . ' - ' . $dateStr;
                 }
 
-                $isReady = $hasStoredDoc || $hasHr || $isVisitDone || $hasFindings || $hasMeds || $hasVitals;
+                // For ABDM discovery (readyOnly=true), require finalized FHIR bundle to exist.
+                // Prevents advertising draft / incomplete consultations before the doctor prints the prescription.
+                $isReady = ($hasStoredDoc || $hasHr);
+                if (! $readyOnly) {
+                    $isReady = $isReady || $isVisitDone || $hasFindings || $hasMeds || $hasVitals;
+                }
 
                 // 1. Doctor Visit / OPD Consultation record
                 $addContext([

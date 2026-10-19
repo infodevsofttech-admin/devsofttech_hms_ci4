@@ -55,7 +55,7 @@ class AbdmTaskBoardSyncService
      *     details: array<int, array<string, mixed>>
      * }
      */
-    public function syncOpdConsultRecords(int $limit = 20, bool $dryRun = false): array
+    public function syncOpdConsultRecords(int $limit = 20, bool $dryRun = false, int $targetOpdId = 0): array
     {
         $summary = [
             'eligible' => 0,
@@ -71,19 +71,32 @@ class AbdmTaskBoardSyncService
         }
 
         $patientFields = $this->db->getFieldNames('patient_master') ?? [];
-        $abhaCol = $this->resolveFirstExistingColumn($patientFields, ['abha_id', 'abha_no', 'abha_address', 'abha']);
-        if ($abhaCol === null) {
+        $abhaCandidates = array_values(array_filter(['abha_address', 'abha_id', 'abha_no', 'abha'], fn ($c) => in_array($c, $patientFields, true)));
+        if (empty($abhaCandidates)) {
             return $summary;
         }
 
-        // 1. Fetch done appointments from the last 30 days where patient has ABHA
-        $rows = $this->db->table('opd_master o')
-            ->select('o.opd_id, o.p_id, o.P_name, o.apointment_date, o.opd_status, o.doc_name, p.' . $abhaCol . ' as abha_id, p.p_fname, p.gender, p.dob', false)
-            ->join('patient_master p', 'p.id = o.p_id', 'left')
-            ->where('o.opd_status', 2)
-            ->where('DATE(o.apointment_date) >=', date('Y-m-d', strtotime('-30 days')), false)
-            ->where('p.' . $abhaCol . ' !=', '')
-            ->orderBy('o.opd_id', 'DESC')
+        $selectAbha = 'COALESCE(' . implode(', ', array_map(fn ($c) => "NULLIF(p.{$c}, '')", $abhaCandidates)) . ", '') as abha_id";
+
+        // 1. Fetch appointments where patient has ABHA (either Done or targetOpdId specified on print)
+        $query = $this->db->table('opd_master o')
+            ->select('o.opd_id, o.p_id, o.P_name, o.apointment_date, o.opd_status, o.doc_name, ' . $selectAbha . ', p.p_fname, p.gender, p.dob', false)
+            ->join('patient_master p', 'p.id = o.p_id', 'left');
+
+        if ($targetOpdId > 0) {
+            $query->where('o.opd_id', $targetOpdId);
+        } else {
+            $query->where('o.opd_status', 2)
+                ->where('DATE(o.apointment_date) >=', date('Y-m-d', strtotime('-30 days')), false);
+        }
+
+        $query->groupStart();
+        foreach ($abhaCandidates as $c) {
+            $query->orWhere("p.{$c} !=", '');
+        }
+        $query->groupEnd();
+
+        $rows = $query->orderBy('o.opd_id', 'DESC')
             ->limit(max(50, $limit * 3))
             ->get()
             ->getResultArray();
@@ -200,7 +213,7 @@ class AbdmTaskBoardSyncService
             $lastModified = ! empty($allTimestamps) ? max($allTimestamps) : ($row['apointment_date'] ?? date('Y-m-d H:i:s'));
 
             $cooling = self::calculateCooling('opd_prescription_publish', $lastModified);
-            if ($cooling['is_cooling_active']) {
+            if ($targetOpdId <= 0 && $cooling['is_cooling_active']) {
                 $summary['cooling']++;
                 $summary['details'][] = [
                     'opd_id'            => $opdId,
@@ -261,7 +274,8 @@ class AbdmTaskBoardSyncService
                 $pushStatus = strtolower(trim((string) ($hrToUse['push_status'] ?? '')));
 
                 // Already pushed/submitted/linked successfully?
-                if (in_array($pushStatus, ['queued', 'linked', 'pushed'], true)) {
+                // When targeting a specific OPD on print, re-push to ensure Bridge receives the finalized bundle
+                if ($targetOpdId <= 0 && in_array($pushStatus, ['queued', 'linked', 'pushed'], true)) {
                     $summary['skipped']++;
                     continue;
                 }

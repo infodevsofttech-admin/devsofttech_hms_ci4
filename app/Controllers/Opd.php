@@ -2189,9 +2189,9 @@ class Opd extends BaseController
         if ($includeContent) {
             try {
                 $rxCtrl = new \App\Controllers\Opd_prescription();
-                $rxCtrl->storePrescriptionFhirBundle($opdId, $sessionId);
+                $rxCtrl->finalizeOpdPrescriptionOnPrint($opdId, $sessionId);
             } catch (\Throwable $e) {
-                log_message('warning', '[opd_lettre_pdf] storePrescriptionFhirBundle error: ' . $e->getMessage());
+                log_message('warning', '[opd_lettre_pdf] finalizeOpdPrescriptionOnPrint error: ' . $e->getMessage());
             }
         }
 
