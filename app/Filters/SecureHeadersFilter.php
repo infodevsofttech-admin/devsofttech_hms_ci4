@@ -43,10 +43,12 @@ class SecureHeadersFilter implements FilterInterface
 
         // Cross-Origin isolation protections
         'Cross-Origin-Opener-Policy'        => 'same-origin-allow-popups',
+        'Cross-Origin-Resource-Policy'      => 'same-origin',
+        'Cross-Origin-Embedder-Policy'      => 'credentialless',
 
         // Content Security Policy (strict sources, trusted CDNs, preventing wildcards and injection)
         'Content-Security-Policy'           => "default-src 'self'; " .
-                                               "script-src 'self' 'unsafe-inline' 'unsafe-eval' data: blob: https://cdn.jsdelivr.net https://code.jquery.com https://cdn.datatables.net https://oss.maxcdn.com https://cdnjs.cloudflare.com; " .
+                                               "script-src 'self' 'unsafe-inline' data: blob: https://cdn.jsdelivr.net https://code.jquery.com https://cdn.datatables.net https://cdnjs.cloudflare.com; " .
                                                "style-src 'self' 'unsafe-inline' https://cdn.jsdelivr.net https://cdn.datatables.net https://fonts.googleapis.com https://cdnjs.cloudflare.com; " .
                                                "font-src 'self' data: https://cdn.jsdelivr.net https://fonts.gstatic.com; " .
                                                "img-src 'self' data: blob: https://api.qrserver.com; " .
@@ -68,11 +70,27 @@ class SecureHeadersFilter implements FilterInterface
 
     public function after(RequestInterface $request, ResponseInterface $response, $arguments = null)
     {
+        $uriPath = trim((string) ($request->getUri()->getPath() ?? ''), '/');
+        $isApi = str_starts_with($uriPath, 'api/') || str_contains((string) $response->getHeaderLine('Content-Type'), 'application/json');
+
         foreach ($this->headers as $header => $value) {
+            // Apply strict sandbox CSP on API responses
+            if ($header === 'Content-Security-Policy' && $isApi) {
+                $response->setHeader('Content-Security-Policy', "default-src 'none'; frame-ancestors 'none'; sandbox;");
+                continue;
+            }
+
             // Only set if not already explicitly defined by a specific controller
             if (! $response->hasHeader($header)) {
                 $response->setHeader($header, $value);
             }
+        }
+
+        // Sensitive API endpoints must never be stored in browser/proxy caches
+        if ($isApi) {
+            $response->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0');
+            $response->setHeader('Pragma', 'no-cache');
+            $response->setHeader('Expires', '0');
         }
 
         // Provide fresh CSRF token header for AJAX/fetch calls

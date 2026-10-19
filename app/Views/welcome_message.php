@@ -152,7 +152,7 @@
     <div class="toast-container position-fixed top-0 end-0 p-3" id="toast-container"></div>
     <a href="#" class="back-to-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
 
-    <script src="<?= base_url('assets/vendor/jquery/jquery-4.0.0.min.js') ?>"></script>
+    <script src="<?= base_url('assets/vendor/jquery/jquery-3.7.1.min.js') ?>"></script>
     <script src="<?= base_url('assets/js/csrf-guard.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/inputmask/inputmask.min.js') ?>"></script>
     <script src="<?= base_url('assets/vendor/inputmask/jquery.inputmask.min.js') ?>"></script>

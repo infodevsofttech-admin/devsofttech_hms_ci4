@@ -68,6 +68,13 @@ class NursingApi extends BaseController
      */
     public function beds()
     {
+        if (! $this->isAuthenticatedNurseOrUser()) {
+            return $this->response->setStatusCode(401)->setJSON([
+                'status'  => 0,
+                'message' => 'Unauthorized access. Authentication is required to view hospital bed records.',
+            ]);
+        }
+
         $db = db_connect();
         $sql = "SELECT b.id, b.bed_number, b.bed_code, b.bed_category_id, b.ward_id, b.current_ipd_id,
                        b.status, coalesce(b.bed_status, 'available') as bed_status,
@@ -106,10 +113,17 @@ class NursingApi extends BaseController
 
     /**
      * GET api/v1/nursing/nurses
-     * Returns sanitized active nurse staff list for PWA staff switcher (Data Minimized & Credentials Stripped)
+     * Returns sanitized active nurse staff list for authorized users only (All Sensitive/Auth Fields Scrubbed)
      */
     public function nurses()
     {
+        if (! $this->isAuthenticatedNurseOrUser()) {
+            return $this->response->setStatusCode(401)->setJSON([
+                'status'  => 0,
+                'message' => 'Unauthorized access. Authentication is required to view nursing staff data.',
+            ]);
+        }
+
         $nurses = $this->nurseModel->getActiveNurses();
         $safeList = [];
         foreach ($nurses as $n) {
@@ -117,11 +131,8 @@ class NursingApi extends BaseController
                 'id'          => (int) ($n['id'] ?? 0),
                 'nurse_code'  => (string) ($n['nurse_code'] ?? ''),
                 'name'        => (string) ($n['name'] ?? ''),
-                'gender'      => (string) ($n['gender'] ?? ''),
                 'designation' => (string) ($n['designation'] ?? 'Staff Nurse'),
                 'department'  => (string) ($n['department'] ?? 'Nursing'),
-                'has_pin'     => ! empty($n['app_pin']),
-                'is_active'   => (int) ($n['is_active'] ?? 1),
             ];
         }
 
@@ -129,6 +140,61 @@ class NursingApi extends BaseController
             'status' => 1,
             'data'   => $safeList,
         ]);
+    }
+
+    /**
+     * Helper to verify if the requesting client has an active authenticated session or valid token
+     */
+    protected function isAuthenticatedNurseOrUser(): bool
+    {
+        if (function_exists('auth') && auth()->loggedIn()) {
+            return true;
+        }
+
+        $session = session();
+        if ($session->has('user_id') && (int) $session->get('user_id') > 0) {
+            return true;
+        }
+
+        if ($session->has('pwa_auth_nurse_id') && (int) $session->get('pwa_auth_nurse_id') > 0) {
+            return true;
+        }
+
+        if ($session->has('pwa_auth_doctor_id') && (int) $session->get('pwa_auth_doctor_id') > 0) {
+            return true;
+        }
+
+        $token = trim((string) $this->request->getHeaderLine('X-Device-Token'));
+        if ($token === '') {
+            $authHeader = trim((string) $this->request->getHeaderLine('Authorization'));
+            if (preg_match('/Bearer\s+([a-f0-9]{64})/i', $authHeader, $matches)) {
+                $token = $matches[1];
+            }
+        }
+        if ($token === '') {
+            $token = trim((string) ($this->request->getGet('device_token') ?? $this->request->getPost('device_token') ?? ''));
+        }
+
+        if ($token !== '' && strlen($token) === 64) {
+            if (service('cache')->get('api_device_token_' . $token)) {
+                return true;
+            }
+            $nurses = db_connect()->table('nurse_master')
+                ->select('id, nurse_code, device_code')
+                ->where('is_active', 1)
+                ->where('device_code IS NOT NULL')
+                ->where('device_code !=', '')
+                ->get()->getResultArray();
+            foreach ($nurses as $nurse) {
+                $expected = hash_hmac('sha256', $nurse['id'] . '_' . ($nurse['nurse_code'] ?? ''), (string) $nurse['device_code']);
+                if (hash_equals($expected, $token)) {
+                    service('cache')->save('api_device_token_' . $token, ['role' => 'nurse', 'id' => (int) $nurse['id']], 86400 * 30);
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function isHospitalIntranet(string $ip): bool
@@ -300,6 +366,7 @@ class NursingApi extends BaseController
         if (session_status() === PHP_SESSION_ACTIVE || ! session_id()) {
             session()->set('pwa_auth_nurse_id', (int) $nurseRow['id']);
         }
+        service('cache')->save('api_device_token_' . $expectedDeviceToken, ['role' => 'nurse', 'id' => (int) $nurseRow['id']], 86400 * 30);
 
         return $this->response->setJSON([
             'status' => 1,

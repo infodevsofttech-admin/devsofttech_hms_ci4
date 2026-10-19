@@ -49,18 +49,25 @@ class DoctorApi extends BaseController
 
     /**
      * GET api/v1/doctor/list
-     * Returns sanitized doctor list for UI pickers (Data Minimized: PII and signatures stripped)
+     * Returns sanitized doctor list for authorized users only (All Sensitive/Auth Fields Scrubbed)
      */
     public function doctors()
     {
+        if (! $this->isAuthenticatedDoctorOrUser()) {
+            return $this->response->setStatusCode(401)->setJSON([
+                'status'  => 0,
+                'message' => 'Unauthorized access. Authentication is required to view doctor directory.',
+            ]);
+        }
+
         $doctors = $this->doctorModel->getDoctors();
         $list = [];
         foreach ($doctors as $d) {
+            $name = trim(($d->p_title ?? '') . ' ' . ($d->p_fname ?? '') . ' ' . ($d->p_lname ?? ''));
             $list[] = [
                 'id'         => (int) $d->id,
-                'name'       => trim(($d->p_title ?? '') . ' ' . ($d->p_fname ?? '')),
+                'name'       => $name,
                 'department' => $d->department ?? '',
-                'has_pin'    => ! empty($d->app_pin),
             ];
         }
 
@@ -68,6 +75,61 @@ class DoctorApi extends BaseController
             'status' => 1,
             'data'   => $list,
         ]);
+    }
+
+    /**
+     * Helper to verify if the requesting client has an active authenticated session or valid token
+     */
+    protected function isAuthenticatedDoctorOrUser(): bool
+    {
+        if (function_exists('auth') && auth()->loggedIn()) {
+            return true;
+        }
+
+        $session = session();
+        if ($session->has('user_id') && (int) $session->get('user_id') > 0) {
+            return true;
+        }
+
+        if ($session->has('pwa_auth_doctor_id') && (int) $session->get('pwa_auth_doctor_id') > 0) {
+            return true;
+        }
+
+        if ($session->has('pwa_auth_nurse_id') && (int) $session->get('pwa_auth_nurse_id') > 0) {
+            return true;
+        }
+
+        $token = trim((string) $this->request->getHeaderLine('X-Device-Token'));
+        if ($token === '') {
+            $authHeader = trim((string) $this->request->getHeaderLine('Authorization'));
+            if (preg_match('/Bearer\s+([a-f0-9]{64})/i', $authHeader, $matches)) {
+                $token = $matches[1];
+            }
+        }
+        if ($token === '') {
+            $token = trim((string) ($this->request->getGet('device_token') ?? $this->request->getPost('device_token') ?? ''));
+        }
+
+        if ($token !== '' && strlen($token) === 64) {
+            if (service('cache')->get('api_device_token_' . $token)) {
+                return true;
+            }
+            $doctors = db_connect()->table('doctor_master')
+                ->select('id, device_code')
+                ->where('active', 1)
+                ->where('device_code IS NOT NULL')
+                ->where('device_code !=', '')
+                ->get()->getResultArray();
+            foreach ($doctors as $doc) {
+                $expected = hash_hmac('sha256', (string) $doc['id'], (string) $doc['device_code']);
+                if (hash_equals($expected, $token)) {
+                    service('cache')->save('api_device_token_' . $token, ['role' => 'doctor', 'id' => (int) $doc['id']], 86400 * 30);
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function isHospitalIntranet(string $ip): bool
@@ -248,6 +310,7 @@ class DoctorApi extends BaseController
         if (session_status() === PHP_SESSION_ACTIVE || ! session_id()) {
             session()->set('pwa_auth_doctor_id', (int) $doctorRow->id);
         }
+        service('cache')->save('api_device_token_' . $expectedDeviceToken, ['role' => 'doctor', 'id' => (int) $doctorRow->id], 86400 * 30);
 
         return $this->response->setJSON([
             'status' => 1,

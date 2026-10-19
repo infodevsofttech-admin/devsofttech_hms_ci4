@@ -1676,7 +1676,7 @@ $routes->match(['GET', 'HEAD'], 'app/queue/manifest.json', 'Api\v1\DoctorApi::qu
 $routes->match(['GET', 'HEAD'], 'app/queue/(:any)', 'Api\v1\DoctorApi::queueIndex');
 
 // Dedicated RESTful JSON API v1 Group for React PWAs & Mobile Apps
-$routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1'], static function ($routes) {
+$routes->group('api/v1', ['namespace' => 'App\Controllers\Api\v1', 'filter' => 'apiAuth'], static function ($routes) {
     // Live TV Queue Display API
     $routes->get('opd/queue/live', 'DoctorApi::liveQueueDisplay');
     // Nursing PWA APIs

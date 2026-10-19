@@ -2,6 +2,7 @@
 
 namespace Config;
 
+use App\Filters\ApiAuthFilter;
 use App\Filters\SecureHeadersFilter;
 use App\Filters\SingleActiveSessionFilter;
 use CodeIgniter\Config\Filters as BaseFilters;
@@ -37,6 +38,7 @@ class Filters extends BaseFilters
         'pagecache'     => PageCache::class,
         'performance'   => PerformanceMetrics::class,
         'singleSession' => SingleActiveSessionFilter::class,
+        'apiAuth'       => ApiAuthFilter::class,
     ];
 
     /**
