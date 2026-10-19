@@ -60,8 +60,18 @@
                 <div class="card-body pt-3">
                     <ul class="mb-0" style="list-style: disc;">
                         <li class="mb-3">
+                            <a href="javascript:load_form_div('<?= base_url('Medical/purchase_orders') ?>','medical-main','Purchase Orders :Pharmacy');">
+                                <i class="bi bi-file-earmark-text"></i> Purchase Order (PO)
+                            </a>
+                        </li>
+                        <li class="mb-3">
+                            <a href="javascript:load_form_div('<?= base_url('Medical/grn_list') ?>','medical-main','GRN Register :Pharmacy');">
+                                <i class="bi bi-box-seam"></i> Goods Received Note (GRN)
+                            </a>
+                        </li>
+                        <li class="mb-3">
                             <a href="javascript:load_form_div('<?= base_url('Medical/Purchase') ?>','medical-main','Purchase :Pharmacy');">
-                                <i class="bi bi-hand-index-thumb"></i> Purchase
+                                <i class="bi bi-hand-index-thumb"></i> Purchase Invoice
                             </a>
                         </li>
                         <li>

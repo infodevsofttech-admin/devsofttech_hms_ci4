@@ -125,7 +125,23 @@ $routes->post('Product_master/Product_search', 'Medical::product_search');
 $routes->get('Product_master/drug_terminology_autocomplete', 'Medical::drug_terminology_autocomplete');
 $routes->get('Product_master/drug_terminology_detail', 'Medical::drug_terminology_detail');
 $routes->get('Product_master/Product_edit/(:num)', 'Medical::product_edit/$1');
-$routes->post('Product_master/product_master_update/(:num)', 'Medical::product_master_update/$1');
+// Pharmacy Procurement: Purchase Orders (PO) & GRN
+$routes->get('Medical/purchase_orders', 'MedicalProcurement::po_list');
+$routes->get('Medical/po_new', 'MedicalProcurement::po_new');
+$routes->post('Medical/po_create', 'MedicalProcurement::po_create');
+$routes->get('Medical/po_edit/(:num)', 'MedicalProcurement::po_edit/$1');
+$routes->post('Medical/po_status/(:num)', 'MedicalProcurement::po_status/$1');
+$routes->get('Medical/po_print/(:num)', 'MedicalProcurement::po_print/$1');
+$routes->get('Medical/po_reorder_items/(:num)', 'MedicalProcurement::po_reorder_items/$1');
+
+$routes->get('Medical/grn_list', 'MedicalProcurement::grn_list');
+$routes->get('Medical/grn_new', 'MedicalProcurement::grn_new');
+$routes->get('Medical/grn_new/(:num)', 'MedicalProcurement::grn_new/$1');
+$routes->post('Medical/grn_create', 'MedicalProcurement::grn_create');
+$routes->get('Medical/grn_edit/(:num)', 'MedicalProcurement::grn_edit/$1');
+$routes->post('Medical/grn_post_inventory/(:num)', 'MedicalProcurement::grn_post_inventory/$1');
+$routes->get('Medical/grn_print/(:num)', 'MedicalProcurement::grn_print/$1');
+
 $routes->get('Medical/Purchase', 'Medical::purchase');
 $routes->post('Medical/PurchaseInvoice', 'Medical::purchase_invoice');
 $routes->get('Medical/PurchaseNew', 'Medical::purchase_new');

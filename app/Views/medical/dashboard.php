@@ -29,6 +29,12 @@
                 <a class="btn btn-outline-primary btn-sm" href="javascript:load_form_div('<?= base_url('Medical/main_store') ?>','medical-main','Store Main :Pharmacy');">
                     <i class="bi bi-display"></i> Store Main
                 </a>
+                <a class="btn btn-outline-info btn-sm" href="javascript:load_form_div('<?= base_url('Medical/purchase_orders') ?>','medical-main','Purchase Orders :Pharmacy');">
+                    <i class="bi bi-file-earmark-text"></i> Purchase Orders (PO)
+                </a>
+                <a class="btn btn-outline-success btn-sm" href="javascript:load_form_div('<?= base_url('Medical/grn_list') ?>','medical-main','GRN Register :Pharmacy');">
+                    <i class="bi bi-box-seam"></i> Inward GRN
+                </a>
                 <a class="btn btn-outline-primary btn-sm" href="javascript:load_form_div('<?= base_url('Medical/master') ?>','medical-main','Master :Pharmacy');">
                     <i class="bi bi-sliders"></i> Master
                 </a>
