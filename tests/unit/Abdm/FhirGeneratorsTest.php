@@ -1000,6 +1000,15 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $this->assertContains('Physical Examination', $sectionTitles);
         $this->assertContains('Medications', $sectionTitles);
         $this->assertContains('Care Plan', $sectionTitles);
+
+        // Verify medication generic/salt is populated on MedicationRequest
+        $medRequests = array_values(array_filter($bundle['entry'], static fn ($e) => ($e['resource']['resourceType'] ?? '') === 'MedicationRequest'));
+        $this->assertNotEmpty($medRequests);
+        $dozpanta = $medRequests[0]['resource'];
+        $this->assertSame('DOZPANTA DSR', $dozpanta['medicationCodeableConcept']['text']);
+        $this->assertSame('Pantoprazole + Domperidone', $dozpanta['medicationCodeableConcept']['coding'][0]['display']);
+        $this->assertSame('395821003', $dozpanta['medicationCodeableConcept']['coding'][0]['code']);
+        $this->assertStringContainsString('Pantoprazole + Domperidone', $dozpanta['text']['div']);
     }
 
     public function testDischargeMandatoryFieldsPatientEncounterDiagnosisAndOutcome(): void
@@ -1123,6 +1132,76 @@ final class FhirGeneratorsTest extends CIUnitTestCase
         $outExp = $this->factory->discharge()->generate($srcExp);
         $encExp = array_values(array_filter($outExp['fhir_bundle']['entry'], static fn (array $e): bool => ($e['resource']['resourceType'] ?? '') === 'Encounter'))[0]['resource'];
         $this->assertSame('exp', $encExp['hospitalization']['dischargeDisposition']['coding'][0]['code']);
+    }
+
+    public function testDischargeMedicationGenericSaltResolutionAndDisplay(): void
+    {
+        $generator = $this->factory->discharge();
+
+        // 1. Explicit salt passed in medication item
+        $srcExplicit = [
+            'record_id' => 8801,
+            'completed_at' => '2026-10-19T10:00:00+05:30',
+            'patient' => ['id' => 101, 'name' => 'John Doe', 'gender' => 'male', 'dob' => '1980-05-15'],
+            'encounter' => ['id' => 8801, 'start' => '2026-10-15T10:00:00+05:30', 'end' => '2026-10-19T10:00:00+05:30'],
+            'diagnoses' => [['text' => 'Acid Peptic Disorder']],
+            'medications' => [
+                [
+                    'name' => 'DOZPANTA DSR',
+                    'salt' => 'Pantoprazole + Domperidone',
+                    'dosage' => 'Take 1 Capsule Once daily before meals for 5 days',
+                ],
+                [
+                    'name' => 'ACILOC 150',
+                    'generic' => 'Ranitidine',
+                    'dosage' => '1 Tab Twice daily for 3 days',
+                ],
+            ],
+        ];
+
+        $outExplicit = $generator->generate($srcExplicit);
+        $this->assertTrue((bool) ($outExplicit['validation']['valid'] ?? false));
+        $bundleExp = $outExplicit['fhir_bundle'];
+
+        $medsExp = array_values(array_filter($bundleExp['entry'], static fn ($e) => ($e['resource']['resourceType'] ?? '') === 'MedicationRequest'));
+        $this->assertCount(2, $medsExp);
+
+        // First med: DOZPANTA DSR with salt Pantoprazole + Domperidone
+        $med1 = $medsExp[0]['resource'];
+        $this->assertSame('DOZPANTA DSR', $med1['medicationCodeableConcept']['text']);
+        $this->assertSame('Pantoprazole + Domperidone', $med1['medicationCodeableConcept']['coding'][0]['display']);
+        $this->assertSame('395821003', $med1['medicationCodeableConcept']['coding'][0]['code']);
+        $this->assertSame('DOZPANTA DSR', $med1['medicationCodeableConcept']['coding'][1]['display']);
+        $this->assertStringContainsString('DOZPANTA DSR (Pantoprazole + Domperidone)', $med1['text']['div']);
+
+        // Second med: ACILOC 150 with salt Ranitidine
+        $med2 = $medsExp[1]['resource'];
+        $this->assertSame('ACILOC 150', $med2['medicationCodeableConcept']['text']);
+        $this->assertSame('Ranitidine', $med2['medicationCodeableConcept']['coding'][0]['display']);
+        $this->assertSame('372755005', $med2['medicationCodeableConcept']['coding'][0]['code']);
+        $this->assertSame('ACILOC 150', $med2['medicationCodeableConcept']['coding'][1]['display']);
+
+        // 2. Heuristic resolution when salt is not explicitly given in source array
+        $srcHeuristic = [
+            'record_id' => 8802,
+            'completed_at' => '2026-10-19T10:00:00+05:30',
+            'patient' => ['id' => 102, 'name' => 'Jane Smith', 'gender' => 'female', 'dob' => '1992-08-20'],
+            'encounter' => ['id' => 8802, 'start' => '2026-10-15T10:00:00+05:30', 'end' => '2026-10-19T10:00:00+05:30'],
+            'diagnoses' => [['text' => 'Dyspepsia']],
+            'medications' => [
+                [
+                    'name' => 'DOZPANTA DSR',
+                    'dosage' => 'OD for 5 days',
+                ],
+            ],
+        ];
+
+        $outHeuristic = $generator->generate($srcHeuristic);
+        $this->assertTrue((bool) ($outHeuristic['validation']['valid'] ?? false));
+        $medsHeu = array_values(array_filter($outHeuristic['fhir_bundle']['entry'], static fn ($e) => ($e['resource']['resourceType'] ?? '') === 'MedicationRequest'));
+        $this->assertCount(1, $medsHeu);
+        $this->assertSame('DOZPANTA DSR', $medsHeu[0]['resource']['medicationCodeableConcept']['text']);
+        $this->assertSame('Pantoprazole + Domperidone', $medsHeu[0]['resource']['medicationCodeableConcept']['coding'][0]['display']);
     }
 
     public function testPrescriptionGeneratorHappyPath(): void

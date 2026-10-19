@@ -263,24 +263,56 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
 
         foreach ($validMeds as $idx => $med) {
             $name = trim((string) ($med['name'] ?? ''));
-            $medCode = trim((string) ($med['code'] ?? ''));
+            $salt = trim((string) ($med['salt'] ?? $med['generic'] ?? $med['med_salt'] ?? ''));
+            $medId = (int) ($med['med_id'] ?? $med['id'] ?? 0);
+            if ($salt === '' || ! $this->isMeaningfulValue($salt)) {
+                $salt = $this->tryResolveGenericSalt($name, $medId);
+            }
+
+            $medCode = trim((string) ($med['code'] ?? $med['snomed_code'] ?? ''));
+            $hasSalt = ($salt !== '' && $this->isMeaningfulValue($salt));
+            $isSaltDistinct = ($hasSalt && strcasecmp($salt, $name) !== 0);
+
+            $saltCode = $this->resolveDrugSnomedCode($hasSalt ? $salt : $name);
+            if ($saltCode === '105904009' && $medCode !== '' && $this->isMeaningfulValue($medCode)) {
+                $saltCode = $medCode;
+            }
+
             $medCoding = [];
-            if ($medCode !== '' && $this->isMeaningfulValue($medCode)) {
+            if ($isSaltDistinct) {
+                // Primary coding represents the generic substance / salt so PHR displays it in the subtitle line instead of "NA"
                 $medCoding[] = [
                     'system'  => 'http://snomed.info/sct',
-                    'code'    => $medCode,
+                    'code'    => $saltCode,
+                    'display' => $salt,
+                ];
+                // Secondary coding represents the prescribed brand name
+                $brandCode = ($medCode !== '' && $this->isMeaningfulValue($medCode) && $medCode !== $saltCode) ? $medCode : '105904009';
+                $medCoding[] = [
+                    'system'  => 'http://snomed.info/sct',
+                    'code'    => $brandCode,
                     'display' => $name,
                 ];
             } else {
+                $display = $hasSalt ? $salt : $name;
+                $code = ($medCode !== '' && $this->isMeaningfulValue($medCode)) ? $medCode : $saltCode;
                 $medCoding[] = [
                     'system'  => 'http://snomed.info/sct',
-                    'code'    => '105904009', // Type of drug
-                    'display' => $name,
+                    'code'    => $code,
+                    'display' => $display,
                 ];
             }
 
             $dosageText = trim((string) ($med['dosage'] ?? ''));
             $structuredDosage = $this->buildStructuredDosageInstruction($dosageText, $name);
+
+            $divMedText = htmlspecialchars($name);
+            if ($isSaltDistinct) {
+                $divMedText .= ' (' . htmlspecialchars($salt) . ')';
+            }
+            if ($dosageText !== '') {
+                $divMedText .= ' - ' . htmlspecialchars($dosageText);
+            }
 
             $medResource = [
                 'resourceType' => 'MedicationRequest',
@@ -288,7 +320,7 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 'meta' => ['profile' => ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/MedicationRequest']],
                 'text' => [
                     'status' => 'generated',
-                    'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Medication:</b> ' . htmlspecialchars($name) . ($dosageText !== '' ? (' - ' . htmlspecialchars($dosageText)) : '') . '</p></div>',
+                    'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p><b>Medication:</b> ' . $divMedText . '</p></div>',
                 ],
                 'status' => 'active',
                 'intent' => 'order',
@@ -1122,11 +1154,13 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
     /** @param array<string,mixed> $item */
     private function sectionItemNarrative(array $item): string
     {
-        // For medications: name + dosage
+        // For medications: name (salt) + dosage
         if (isset($item['name']) && $this->isMeaningfulValue((string) $item['name'])) {
             $name = trim((string) $item['name']);
+            $salt = trim((string) ($item['salt'] ?? $item['generic'] ?? $item['med_salt'] ?? ''));
             $dosage = trim((string) ($item['dosage'] ?? ''));
-            return trim($name . ($this->isMeaningfulValue($dosage) ? ' - ' . $dosage : ''));
+            $namePart = ($salt !== '' && strcasecmp($salt, $name) !== 0) ? ($name . ' (' . $salt . ')') : $name;
+            return trim($namePart . ($this->isMeaningfulValue($dosage) ? ' - ' . $dosage : ''));
         }
 
         // For observations: text + value (+ unit)
@@ -1324,10 +1358,15 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             if (! empty($medications)) {
                 $medHtml .= '<table class="grid"><tr><th>Medication Name</th><th>Dosage &amp; Frequency</th></tr>';
                 foreach ($medications as $med) {
-                    $name = is_array($med) ? ($med['name'] ?? '') : '';
-                    $dosage = is_array($med) ? ($med['dosage'] ?? '') : '';
+                    $name = is_array($med) ? trim((string) ($med['name'] ?? '')) : '';
+                    $salt = is_array($med) ? trim((string) ($med['salt'] ?? $med['generic'] ?? $med['med_salt'] ?? '')) : '';
+                    $dosage = is_array($med) ? trim((string) ($med['dosage'] ?? '')) : '';
                     if ($name !== '') {
-                        $medHtml .= '<tr><td>' . htmlspecialchars($name) . '</td><td>' . htmlspecialchars($dosage) . '</td></tr>';
+                        $nameDisplay = htmlspecialchars($name);
+                        if ($salt !== '' && strcasecmp($salt, $name) !== 0) {
+                            $nameDisplay .= '<br/><small style="color:#64748b;">(' . htmlspecialchars($salt) . ')</small>';
+                        }
+                        $medHtml .= '<tr><td>' . $nameDisplay . '</td><td>' . htmlspecialchars($dosage) . '</td></tr>';
                     }
                 }
                 $medHtml .= '</table>';
@@ -1457,10 +1496,15 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
                 $html .= '<div class="section-title">Prescribed Discharge Medications</div>';
                 $html .= '<table class="grid"><tr><th>Medication Name</th><th>Dosage &amp; Frequency</th></tr>';
                 foreach ($medications as $med) {
-                    $name = is_array($med) ? ($med['name'] ?? '') : '';
-                    $dosage = is_array($med) ? ($med['dosage'] ?? '') : '';
+                    $name = is_array($med) ? trim((string) ($med['name'] ?? '')) : '';
+                    $salt = is_array($med) ? trim((string) ($med['salt'] ?? $med['generic'] ?? $med['med_salt'] ?? '')) : '';
+                    $dosage = is_array($med) ? trim((string) ($med['dosage'] ?? '')) : '';
                     if ($name !== '') {
-                        $html .= '<tr><td>' . htmlspecialchars($name) . '</td><td>' . htmlspecialchars($dosage) . '</td></tr>';
+                        $nameDisplay = htmlspecialchars($name);
+                        if ($salt !== '' && strcasecmp($salt, $name) !== 0) {
+                            $nameDisplay .= '<br/><small style="color:#64748b;">(' . htmlspecialchars($salt) . ')</small>';
+                        }
+                        $html .= '<tr><td>' . $nameDisplay . '</td><td>' . htmlspecialchars($dosage) . '</td></tr>';
                     }
                 }
                 $html .= '</table>';
@@ -1843,4 +1887,234 @@ class DischargeFhirGenerator extends \App\Libraries\Abdm\Fhir\Generators\Abstrac
             'dosageInstruction' => [$instructionItem],
         ];
     }
+
+    /**
+     * Resolve Generic / Salt name of medicine from master database or common patterns
+     */
+    private function tryResolveGenericSalt(string $medName, int $medId = 0): string
+    {
+        $rawName = trim($medName);
+        if ($rawName === '' || ! $this->isMeaningfulValue($rawName)) {
+            return '';
+        }
+
+        try {
+            if (class_exists('\Config\Database')) {
+                $db = \Config\Database::connect();
+
+                // 1. By med_id if given
+                if ($medId > 0) {
+                    if ($db->tableExists('opd_med_master')) {
+                        $mRow = $db->table('opd_med_master')
+                            ->select('genericname, salt_name')
+                            ->where('id', $medId)
+                            ->get(1)
+                            ->getRowArray();
+                        if (!empty($mRow)) {
+                            $gen = trim((string) (!empty($mRow['genericname']) ? $mRow['genericname'] : ($mRow['salt_name'] ?? '')));
+                            if ($gen !== '' && $this->isMeaningfulValue($gen)) {
+                                return $gen;
+                            }
+                        }
+                    }
+                    if ($db->tableExists('med_product_master')) {
+                        $pRow = $db->table('med_product_master')
+                            ->select('genericname')
+                            ->where('id', $medId)
+                            ->get(1)
+                            ->getRowArray();
+                        if (!empty($pRow)) {
+                            $gen = trim((string) ($pRow['genericname'] ?? ''));
+                            if ($gen !== '' && $this->isMeaningfulValue($gen)) {
+                                return $gen;
+                            }
+                        }
+                    }
+                }
+
+                // 2. Clean medicine name and search by item_name
+                $clean = trim((string) preg_replace('/^(TAB|CAP|SYP|INJ|CREAM|OINT|GEL|DROPS|SPRAY)\s+/i', '', $rawName));
+                if ($clean !== '') {
+                    if ($db->tableExists('opd_med_master')) {
+                        $mRow = $db->table('opd_med_master')
+                            ->select('genericname, salt_name')
+                            ->groupStart()
+                                ->where('item_name', $clean)
+                                ->orLike('item_name', $clean, 'after')
+                                ->orLike('item_name', $clean, 'both')
+                            ->groupEnd()
+                            ->get(1)
+                            ->getRowArray();
+                        if (!empty($mRow)) {
+                            $gen = trim((string) (!empty($mRow['genericname']) ? $mRow['genericname'] : ($mRow['salt_name'] ?? '')));
+                            if ($gen !== '' && $this->isMeaningfulValue($gen)) {
+                                return $gen;
+                            }
+                        }
+                    }
+
+                    if ($db->tableExists('med_product_master')) {
+                        $pRow = $db->table('med_product_master')
+                            ->select('genericname')
+                            ->groupStart()
+                                ->where('item_name', $clean)
+                                ->orLike('item_name', $clean, 'after')
+                                ->orLike('item_name', $clean, 'both')
+                            ->groupEnd()
+                            ->get(1)
+                            ->getRowArray();
+                        if (!empty($pRow)) {
+                            $gen = trim((string) ($pRow['genericname'] ?? ''));
+                            if ($gen !== '' && $this->isMeaningfulValue($gen)) {
+                                return $gen;
+                            }
+                        }
+                    }
+
+                    // 3. Match significant words (>= 4 chars)
+                    $words = preg_split('/[\s\-_]+/', $clean);
+                    if (is_array($words)) {
+                        foreach ($words as $w) {
+                            if (strlen($w) >= 4 && !in_array(strtoupper($w), ['PLUS', 'FORTE', 'EXTRA', 'GOLD'], true)) {
+                                if ($db->tableExists('opd_med_master')) {
+                                    $wRow = $db->table('opd_med_master')
+                                        ->select('genericname, salt_name')
+                                        ->groupStart()
+                                            ->like('item_name', $w, 'after')
+                                            ->orLike('genericname', $w, 'after')
+                                            ->orLike('salt_name', $w, 'after')
+                                        ->groupEnd()
+                                        ->get(1)
+                                        ->getRowArray();
+                                    if (!empty($wRow)) {
+                                        $gen = trim((string) (!empty($wRow['genericname']) ? $wRow['genericname'] : ($wRow['salt_name'] ?? '')));
+                                        if ($gen !== '' && $this->isMeaningfulValue($gen)) {
+                                            return $gen;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // Safe fallback if database is inaccessible
+        }
+
+        // 4. Clinical brand heuristics for common hospital prescriptions
+        $u = strtoupper($rawName);
+        if (preg_match('/\b(DOZPANTA|PANTA|PANTOP|PAN\s*40|PAN\s*D|PANTOCID|PANTOCID\s*DSR|PANTODAC)\b/', $u) || str_contains($u, 'PANTOP')) {
+            return (str_contains($u, 'DSR') || str_contains($u, ' D')) ? 'Pantoprazole + Domperidone' : 'Pantoprazole';
+        }
+        if (preg_match('/\b(RABEKIND|RABEMAC|RABICIP|RABLET|RAZO)\b/', $u) || str_contains($u, 'RABE')) {
+            return (str_contains($u, 'DSR') || str_contains($u, ' D')) ? 'Rabeprazole + Domperidone' : 'Rabeprazole';
+        }
+        if (preg_match('/\b(OMEE|OPEZ|OCID)\b/', $u) || str_contains($u, 'OMEPRAZOLE')) {
+            return str_contains($u, ' D') ? 'Omeprazole + Domperidone' : 'Omeprazole';
+        }
+        if (preg_match('/\b(ACILOC|RANTAC|ZINETAC)\b/', $u) || str_contains($u, 'RANITIDINE')) {
+            return 'Ranitidine';
+        }
+        if (preg_match('/\b(DOLO|CALPOL|CROCIN|PACIMOL|SUMO\s*L)\b/', $u) || str_contains($u, 'PARACETAMOL')) {
+            return 'Paracetamol';
+        }
+        if (preg_match('/\b(AZITHRAL|AZI|AZEE|AZITHRO)\b/', $u) || str_contains($u, 'AZITHROMYCIN')) {
+            return 'Azithromycin';
+        }
+        if (preg_match('/\b(AUGMENTIN|MOXIKIND|CLAVAM|AMOXCLAV)\b/', $u)) {
+            return 'Amoxicillin + Clavulanic Acid';
+        }
+        if (preg_match('/\b(MONTEK|MONTICOPE|LEVO\s*M)\b/', $u)) {
+            return 'Levocetirizine + Montelukast';
+        }
+        if (preg_match('/\b(EMESET|VOMIKIND|ONDA)\b/', $u)) {
+            return 'Ondansetron';
+        }
+        if (str_contains($u, 'ORS') || str_contains($u, 'ELECTRAL')) {
+            return 'Oral Rehydration Salts';
+        }
+
+        return '';
+    }
+
+    /**
+     * Resolve SNOMED code for drug substance or generic salt
+     */
+    private function resolveDrugSnomedCode(string $drugOrSalt): string
+    {
+        $term = trim($drugOrSalt);
+        if ($term === '' || ! $this->isMeaningfulValue($term)) {
+            return '105904009';
+        }
+
+        try {
+            if (class_exists('\Config\Database')) {
+                $db = \Config\Database::connect();
+                if ($db->tableExists('snomed_description')) {
+                    $clean = trim((string) preg_replace('/[^\w\s]/', ' ', $term));
+                    $firstWord = trim((string) explode(' ', $clean)[0]);
+                    if (strlen($firstWord) >= 4) {
+                        $row = $db->table('snomed_description')
+                            ->select('concept_id')
+                            ->where('active', '1')
+                            ->whereIn('type_id', ['900000000000003001', '900000000000013009'])
+                            ->like('term_normalized', strtolower($firstWord), 'after')
+                            ->limit(1)
+                            ->get()
+                            ->getRowArray();
+                        if (!empty($row['concept_id'])) {
+                            return (string) $row['concept_id'];
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // DB fallback
+        }
+
+        $upper = strtoupper($term);
+        if (str_contains($upper, 'PANTOPRAZOLE')) {
+            return '395821003';
+        }
+        if (str_contains($upper, 'RANITIDINE')) {
+            return '372755005';
+        }
+        if (str_contains($upper, 'PARACETAMOL') || str_contains($upper, 'ACETAMINOPHEN')) {
+            return '384977007';
+        }
+        if (str_contains($upper, 'AZITHROMYCIN')) {
+            return '387531004';
+        }
+        if (str_contains($upper, 'AMOXICILLIN')) {
+            return '372687004';
+        }
+        if (str_contains($upper, 'DOMPERIDONE')) {
+            return '387181004';
+        }
+        if (str_contains($upper, 'ONDANSETRON')) {
+            return '387570007';
+        }
+        if (str_contains($upper, 'METFORMIN')) {
+            return '372567009';
+        }
+        if (str_contains($upper, 'ATORVASTATIN')) {
+            return '387584000';
+        }
+        if (str_contains($upper, 'ASPIRIN')) {
+            return '387458008';
+        }
+        if (str_contains($upper, 'RABEPRAZOLE')) {
+            return '387180000';
+        }
+        if (str_contains($upper, 'OMEPRAZOLE')) {
+            return '372544007';
+        }
+        if (str_contains($upper, 'ORAL REHYDRATION')) {
+            return '260548002';
+        }
+
+        return '105904009';
+    }
 }
+

@@ -9583,14 +9583,19 @@ class Ipd_discharge extends BaseController
         }
 
         $medicationRows = [];
-        $legacyMeds = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['med_name', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'remark'], 'id ASC', $ipdId);
+        $legacyMeds = $this->byIpdRows('ipd_discharge_prescrption_prescribed', ['med_id', 'med_name', 'med_salt', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'remark'], 'id ASC', $ipdId);
         if (empty($legacyMeds)) {
-            $legacyMeds = $this->byIpdRows('ipd_discharge_prescription_prescribed', ['med_name', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'remark'], 'id ASC', $ipdId);
+            $legacyMeds = $this->byIpdRows('ipd_discharge_prescription_prescribed', ['med_id', 'med_name', 'med_salt', 'med_type', 'dosage', 'dosage_when', 'dosage_freq', 'no_of_days', 'remark'], 'id ASC', $ipdId);
         }
         foreach ($legacyMeds as $row) {
             $name = trim((string) ($row['med_name'] ?? ''));
             if (! $this->isMeaningfulDischargeValue($name)) {
                 continue;
+            }
+            $salt = trim((string) ($row['med_salt'] ?? ''));
+            $medId = (int) ($row['med_id'] ?? 0);
+            if ($salt === '' || ! $this->isMeaningfulDischargeValue($salt)) {
+                $salt = $this->resolveDischargeMedSaltName($name, $medId);
             }
             $dose = $this->formatDischargeMedDirections(
                 $row['dosage'] ?? '',
@@ -9599,19 +9604,33 @@ class Ipd_discharge extends BaseController
                 (string) ($row['no_of_days'] ?? ''),
                 (string) ($row['remark'] ?? '')
             );
-            $medicationRows[] = ['name' => $name, 'dosage' => $dose];
+            $medicationRows[] = [
+                'name'    => $name,
+                'salt'    => $salt,
+                'generic' => $salt,
+                'dosage'  => $dose,
+                'med_id'  => $medId,
+                'type'    => trim((string) ($row['med_type'] ?? '')),
+            ];
         }
         if (empty($medicationRows)) {
-            foreach ($this->byIpdRows('ipd_discharge_drug', ['drug_name', 'drug_dose', 'drug_day'], 'id ASC', $ipdId) as $row) {
+            foreach ($this->byIpdRows('ipd_discharge_drug', ['drug_code', 'drug_name', 'drug_dose', 'drug_day', 'formulation'], 'id ASC', $ipdId) as $row) {
                 $name = trim((string) ($row['drug_name'] ?? ''));
                 if (! $this->isMeaningfulDischargeValue($name)) {
                     continue;
                 }
+                $salt = $this->resolveDischargeMedSaltName($name);
                 $dose = trim(implode(' ', array_filter([
                     (string) ($row['drug_dose'] ?? ''),
                     (string) ($row['drug_day'] ?? ''),
                 ], fn ($v) => $this->isMeaningfulDischargeValue((string) $v))));
-                $medicationRows[] = ['name' => $name, 'dosage' => $dose];
+                $medicationRows[] = [
+                    'name'    => $name,
+                    'salt'    => $salt,
+                    'generic' => $salt,
+                    'dosage'  => $dose,
+                    'type'    => trim((string) ($row['formulation'] ?? '')),
+                ];
             }
         }
 
@@ -10068,6 +10087,154 @@ class Ipd_discharge extends BaseController
         }
 
         return ! in_array(strtoupper($value), ['0', 'NA', 'N/A'], true);
+    }
+
+    /**
+     * Auto-resolves generic/salt name of medicine from master tables or clinical patterns.
+     */
+    private function resolveDischargeMedSaltName(string $rawName, int $medId = 0): string
+    {
+        $rawName = trim($rawName);
+        if ($rawName === '' || ! $this->isMeaningfulDischargeValue($rawName)) {
+            return '';
+        }
+
+        try {
+            if ($this->db) {
+                // 1. If med_id provided, look up masters directly
+                if ($medId > 0) {
+                    if ($this->db->tableExists('opd_med_master')) {
+                        $mRow = $this->db->table('opd_med_master')
+                            ->select('genericname, salt_name')
+                            ->where('id', $medId)
+                            ->get(1)
+                            ->getRowArray();
+                        if (!empty($mRow)) {
+                            $gen = trim((string) (!empty($mRow['genericname']) ? $mRow['genericname'] : ($mRow['salt_name'] ?? '')));
+                            if ($gen !== '' && $this->isMeaningfulDischargeValue($gen)) {
+                                return $gen;
+                            }
+                        }
+                    }
+                    if ($this->db->tableExists('med_product_master')) {
+                        $pRow = $this->db->table('med_product_master')
+                            ->select('genericname')
+                            ->where('id', $medId)
+                            ->get(1)
+                            ->getRowArray();
+                        if (!empty($pRow)) {
+                            $gen = trim((string) ($pRow['genericname'] ?? ''));
+                            if ($gen !== '' && $this->isMeaningfulDischargeValue($gen)) {
+                                return $gen;
+                            }
+                        }
+                    }
+                }
+
+                // 2. Clean dosage prefix and look up masters by item_name
+                $clean = trim((string) preg_replace('/^(TAB|CAP|SYP|INJ|CREAM|OINT|GEL|DROPS|SPRAY)\s+/i', '', $rawName));
+                if ($clean !== '') {
+                    if ($this->db->tableExists('opd_med_master')) {
+                        $mRow = $this->db->table('opd_med_master')
+                            ->select('genericname, salt_name')
+                            ->groupStart()
+                                ->where('item_name', $clean)
+                                ->orLike('item_name', $clean, 'after')
+                                ->orLike('item_name', $clean, 'both')
+                            ->groupEnd()
+                            ->get(1)
+                            ->getRowArray();
+                        if (!empty($mRow)) {
+                            $gen = trim((string) (!empty($mRow['genericname']) ? $mRow['genericname'] : ($mRow['salt_name'] ?? '')));
+                            if ($gen !== '' && $this->isMeaningfulDischargeValue($gen)) {
+                                return $gen;
+                            }
+                        }
+                    }
+
+                    if ($this->db->tableExists('med_product_master')) {
+                        $pRow = $this->db->table('med_product_master')
+                            ->select('genericname')
+                            ->groupStart()
+                                ->where('item_name', $clean)
+                                ->orLike('item_name', $clean, 'after')
+                                ->orLike('item_name', $clean, 'both')
+                            ->groupEnd()
+                            ->get(1)
+                            ->getRowArray();
+                        if (!empty($pRow)) {
+                            $gen = trim((string) ($pRow['genericname'] ?? ''));
+                            if ($gen !== '' && $this->isMeaningfulDischargeValue($gen)) {
+                                return $gen;
+                            }
+                        }
+                    }
+
+                    // 3. Keyword / token lookup for words >= 4 letters
+                    $words = preg_split('/[\s\-_]+/', $clean);
+                    if (is_array($words)) {
+                        foreach ($words as $w) {
+                            if (strlen($w) >= 4 && !in_array(strtoupper($w), ['PLUS', 'FORTE', 'EXTRA', 'GOLD'], true)) {
+                                if ($this->db->tableExists('opd_med_master')) {
+                                    $wRow = $this->db->table('opd_med_master')
+                                        ->select('genericname, salt_name')
+                                        ->groupStart()
+                                            ->like('item_name', $w, 'after')
+                                            ->orLike('genericname', $w, 'after')
+                                            ->orLike('salt_name', $w, 'after')
+                                        ->groupEnd()
+                                        ->get(1)
+                                        ->getRowArray();
+                                    if (!empty($wRow)) {
+                                        $gen = trim((string) (!empty($wRow['genericname']) ? $wRow['genericname'] : ($wRow['salt_name'] ?? '')));
+                                        if ($gen !== '' && $this->isMeaningfulDischargeValue($gen)) {
+                                            return $gen;
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        } catch (\Throwable $e) {
+            // DB fallback
+        }
+
+        // 4. Clinical brand heuristics for common hospital prescriptions
+        $u = strtoupper($rawName);
+        if (preg_match('/\b(DOZPANTA|PANTA|PANTOP|PAN\s*40|PAN\s*D|PANTOCID|PANTOCID\s*DSR|PANTODAC)\b/', $u) || str_contains($u, 'PANTOP')) {
+            return (str_contains($u, 'DSR') || str_contains($u, ' D')) ? 'Pantoprazole + Domperidone' : 'Pantoprazole';
+        }
+        if (preg_match('/\b(RABEKIND|RABEMAC|RABICIP|RABLET|RAZO)\b/', $u) || str_contains($u, 'RABE')) {
+            return (str_contains($u, 'DSR') || str_contains($u, ' D')) ? 'Rabeprazole + Domperidone' : 'Rabeprazole';
+        }
+        if (preg_match('/\b(OMEE|OPEZ|OCID)\b/', $u) || str_contains($u, 'OMEPRAZOLE')) {
+            return str_contains($u, ' D') ? 'Omeprazole + Domperidone' : 'Omeprazole';
+        }
+        if (preg_match('/\b(ACILOC|RANTAC|ZINETAC)\b/', $u) || str_contains($u, 'RANITIDINE')) {
+            return 'Ranitidine';
+        }
+        if (preg_match('/\b(DOLO|CALPOL|CROCIN|PACIMOL|SUMO\s*L)\b/', $u) || str_contains($u, 'PARACETAMOL')) {
+            return 'Paracetamol';
+        }
+        if (preg_match('/\b(AZITHRAL|AZI|AZEE|AZITHRO)\b/', $u) || str_contains($u, 'AZITHROMYCIN')) {
+            return 'Azithromycin';
+        }
+        if (preg_match('/\b(AUGMENTIN|MOXIKIND|CLAVAM|AMOXCLAV)\b/', $u)) {
+            return 'Amoxicillin + Clavulanic Acid';
+        }
+        if (preg_match('/\b(MONTEK|MONTICOPE|LEVO\s*M)\b/', $u)) {
+            return 'Levocetirizine + Montelukast';
+        }
+        if (preg_match('/\b(EMESET|VOMIKIND|ONDA)\b/', $u)) {
+            return 'Ondansetron';
+        }
+        if (str_contains($u, 'ORS') || str_contains($u, 'ELECTRAL')) {
+            return 'Oral Rehydration Salts';
+        }
+
+        return '';
     }
 
     private function toIsoDateTimeOrNow(string $value): string
