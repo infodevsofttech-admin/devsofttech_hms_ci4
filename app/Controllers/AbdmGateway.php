@@ -4175,7 +4175,7 @@ class AbdmGateway extends BaseController
             $response = \Config\Services::response();
             $logger = \Config\Services::logger();
             $dischargeCtrl->initController($request, $response, $logger);
-            $generatedBinary = $dischargeCtrl->generateDischargeSummaryPdfBinary($ipdId, true, $abdmTemplateId > 0 ? $abdmTemplateId : null);
+            $generatedBinary = $dischargeCtrl->generateDischargeSummaryPdfBinary($ipdId, true, $abdmTemplateId > 0 ? $abdmTemplateId : null, true);
         } catch (\Throwable $e) {
             log_message('error', 'Auto-generating IPD Discharge Summary PDF failed for IPD {ipd}: {msg}', [
                 'ipd' => $ipdId,

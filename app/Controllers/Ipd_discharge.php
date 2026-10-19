@@ -1971,14 +1971,25 @@ class Ipd_discharge extends BaseController
 
         $builder = $this->db->table($table)->where('ipd_id', $ipdId);
         if ($columns !== ['*']) {
-            $builder->select(implode(',', $columns));
+            $existingCols = [];
+            foreach ($columns as $col) {
+                $cleanCol = trim($col);
+                if ($cleanCol !== '' && $this->db->fieldExists($cleanCol, $table)) {
+                    $existingCols[] = $cleanCol;
+                }
+            }
+            if (! empty($existingCols)) {
+                $builder->select(implode(',', $existingCols));
+            }
         }
 
         if ($orderBy !== '') {
             $parts = explode(' ', trim($orderBy));
             $field = $parts[0] ?? 'id';
             $dir = strtoupper($parts[1] ?? 'ASC');
-            $builder->orderBy($field, $dir === 'DESC' ? 'DESC' : 'ASC');
+            if ($this->db->fieldExists($field, $table)) {
+                $builder->orderBy($field, $dir === 'DESC' ? 'DESC' : 'ASC');
+            }
         }
 
         return $builder->get()->getResultArray();
@@ -8873,7 +8884,7 @@ class Ipd_discharge extends BaseController
         }
     }
 
-    public function generateDischargeSummaryPdfBinary(int $ipdId, bool $withHeader = true, ?int $templateId = null): ?string
+    public function generateDischargeSummaryPdfBinary(int $ipdId, bool $withHeader = true, ?int $templateId = null, bool $forceFresh = false): ?string
     {
         if ($ipdId <= 0) {
             return null;
@@ -8884,7 +8895,10 @@ class Ipd_discharge extends BaseController
             return null;
         }
 
-        $content = $this->getDischargeContent($ipdId);
+        $content = '';
+        if (! $forceFresh) {
+            $content = $this->getDischargeContent($ipdId);
+        }
         if (trim(strip_tags($content)) === '') {
             $content = $this->buildAutoDischargeContent($ipdId, $panelData);
             if (trim(strip_tags($content)) !== '') {
@@ -9046,7 +9060,7 @@ class Ipd_discharge extends BaseController
 
         $generatedBinary = null;
         try {
-            $generatedBinary = $this->generateDischargeSummaryPdfBinary($ipdId, true, $abdmTemplateId > 0 ? $abdmTemplateId : null);
+            $generatedBinary = $this->generateDischargeSummaryPdfBinary($ipdId, true, $abdmTemplateId > 0 ? $abdmTemplateId : null, true);
         } catch (\Throwable $e) {
             log_message('error', 'Auto-generating IPD Discharge Summary PDF failed for IPD {ipd}: {msg}', [
                 'ipd' => $ipdId,
