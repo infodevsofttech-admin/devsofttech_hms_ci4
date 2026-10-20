@@ -55,8 +55,8 @@ max_execution_time  = 120
 ## 2. Fresh Installation
 
 ```bash
-# 1. Clone the repository
-git clone https://github.com/infodevsofttech-admin/devsofttech_hms_ci4.git hms
+# 1. Clone the repository (public - no login required)
+git clone https://git.e-atria.net/d_s_bisht/devsofttech_hms_ci4.git hms
 cd hms
 
 # 2. Install PHP dependencies
@@ -303,18 +303,27 @@ chown -R www-data:www-data writable/ public/assets/uploads/ public/uploads/
 ## 9. Updating an Existing Installation
 
 ```bash
-# Pull latest code
+# 1. If your server was originally pulling from GitHub, switch to Gitea:
+git remote set-url origin https://git.e-atria.net/d_s_bisht/devsofttech_hms_ci4.git
+
+# 2. Pull latest code (public repository — no password/token required)
 git pull origin main
 
-# Install any new Composer packages
+# 3. Install any new Composer packages (using PHP 8.3)
 composer install --no-dev --optimize-autoloader
+# If server has multiple PHP versions (e.g. CentOS/cPanel):
+# php83 $(which composer) install --no-dev --optimize-autoloader
 
-# Run any new migrations
+# 4. Run any new migrations
 php spark migrate
 
-# If lab templates were updated by the developer, re-seed them
+# 5. If lab templates were updated by the developer, re-seed them
 php spark db:seed LabTemplateSeeder
 ```
+
+> **Developer Note (Pushing Code):** Developers with SSH keys push via:
+> `git remote set-url origin git@git.e-atria.net:d_s_bisht/devsofttech_hms_ci4.git`
+> `git push origin main`
 
 > Always run `php spark migrate` after every `git pull` — it is safe to run on an
 > already-migrated database (it skips already-applied migrations).
