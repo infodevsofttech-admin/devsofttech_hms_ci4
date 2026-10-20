@@ -372,7 +372,7 @@ class AbdmGatewaySettings extends BaseController
     }
 
     // -------------------------------------------------------------------------
-    // Helpers (same pattern as HealthplixSettings)
+    // Helpers
     // -------------------------------------------------------------------------
 
     private function canManageSettings(): bool

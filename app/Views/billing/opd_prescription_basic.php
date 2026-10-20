@@ -1023,7 +1023,7 @@
                                             title="Save as custom keyword">+keyword</button>
                                 </div>
 
-                                <!-- Healthplix-style inline complaint table -->
+                                <!-- Inline complaint table -->
                                 <table class="table table-sm table-bordered align-middle mb-1" id="complaint_table">
                                     <thead class="table-light">
                                         <tr>
@@ -1100,7 +1100,7 @@
                                     </div>
                                 </div>
 
-                                <!-- Healthplix-style inline diagnosis table -->
+                                <!-- Inline diagnosis table -->
                                 <table class="table table-sm table-bordered align-middle mb-1" id="diagnosis_table">
                                     <thead class="table-light">
                                         <tr>

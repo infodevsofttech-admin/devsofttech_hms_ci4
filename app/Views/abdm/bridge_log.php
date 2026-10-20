@@ -19,7 +19,6 @@
         .badge-channel-bridge    { background:#0d6efd; }
         .badge-channel-eatria    { background:#198754; }
         .badge-channel-csnotk    { background:#6f42c1; }
-        .badge-channel-healthplix{ background:#fd7e14; }
         .status-success { color:#198754; font-weight:600; }
         .status-error   { color:#dc3545; font-weight:600; }
         .status-pending { color:#fd7e14; font-weight:600; }
@@ -64,7 +63,6 @@
                         <option value="bridge">bridge</option>
                         <option value="csnotk">csnotk</option>
                         <option value="abdm">abdm</option>
-                        <option value="healthplix">healthplix</option>
                     </select>
                 </div>
                 <div class="col-auto">
@@ -194,7 +192,7 @@ function statusClass(s) {
     return 'status-pending';
 }
 function channelBadge(ch) {
-    const map = { eatria_bridge:'success', bridge:'primary', csnotk:'purple', abdm:'info', healthplix:'warning' };
+    const map = { eatria_bridge:'success', bridge:'primary', csnotk:'purple', abdm:'info' };
     const color = map[ch] ?? 'secondary';
     return `<span class="badge bg-${color}">${escHtml(ch ?? '-')}</span>`;
 }

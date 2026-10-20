@@ -293,7 +293,6 @@
 
 ### System Integration Settings
 - AI settings (model, API key, usage monitoring)
-- HealthPlix integration
 - ABDM gateway configuration (HFR ID, bridge token)
 - ABDM report doctor mapping
 

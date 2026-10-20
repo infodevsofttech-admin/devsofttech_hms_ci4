@@ -28,7 +28,6 @@ class Doctor extends BaseController
             'opd_print_template_options' => $templateContext['opd_print_options'],
             'template_fields' => $templateContext['fields'],
             'hospital_default_opd_valid_no_days' => $this->getHospitalDefaultOpdValidityDays(),
-            'healthplix_enabled' => $this->isHealthplixEnabled(),
         ]);
     }
 
@@ -50,7 +49,6 @@ class Doctor extends BaseController
                     'opd_print_template_options' => $templateContext['opd_print_options'],
                     'template_fields' => $templateContext['fields'],
                     'hospital_default_opd_valid_no_days' => $this->getHospitalDefaultOpdValidityDays(),
-                    'healthplix_enabled' => $this->isHealthplixEnabled(),
                 ]);
             }
 
@@ -60,7 +58,6 @@ class Doctor extends BaseController
         $doctorModel = new DoctorModel();
         $regField = $this->resolveDoctorRegField();
         $hprField = $this->resolveDoctorHprField();
-        $healthplixDoctorIdentifier = trim((string) $this->request->getPost('input_healthplix_doctor_identifier'));
         $doctorFields = $this->db->tableExists('doctor_master') ? ($this->db->getFieldNames('doctor_master') ?? []) : [];
         $shortDescription = trim((string) $this->request->getPost('txt_doc_sign'));
         $regInput = trim((string) $this->request->getPost('input_doc_reg_no'));
@@ -79,7 +76,6 @@ class Doctor extends BaseController
                     'template_options' => $templateContext['options'],
                     'opd_print_template_options' => $templateContext['opd_print_options'],
                     'template_fields' => $templateContext['fields'],
-                    'healthplix_enabled' => $this->isHealthplixEnabled(),
                 ]);
             }
 
@@ -125,9 +121,6 @@ class Doctor extends BaseController
         if ($hprField !== null) {
             $data[$hprField] = $hprInput;
         }
-        if (in_array('healthplix_doctor_identifier', $doctorFields, true)) {
-            $data['healthplix_doctor_identifier'] = $healthplixDoctorIdentifier;
-        }
 
         $appPin = trim((string) ($this->request->getPost('app_pin') ?? ''));
         if ($appPin !== '') {
@@ -150,7 +143,6 @@ class Doctor extends BaseController
                     'opd_print_template_options' => $templateContext['opd_print_options'],
                     'template_fields' => $templateContext['fields'],
                     'hospital_default_opd_valid_no_days' => $this->getHospitalDefaultOpdValidityDays(),
-                    'healthplix_enabled' => $this->isHealthplixEnabled(),
                 ]);
             }
 
@@ -180,7 +172,6 @@ class Doctor extends BaseController
             'template_fields' => $templateContext['fields'],
             'hospital_default_opd_valid_no_days' => $this->getHospitalDefaultOpdValidityDays(),
             'doctor_opd_valid_no_days' => $this->resolveDoctorOpdValidityDaysForView($doctorRow),
-            'healthplix_enabled' => $this->isHealthplixEnabled(),
         ]);
     }
 
@@ -194,7 +185,6 @@ class Doctor extends BaseController
         $docId = (int) $this->request->getPost('doc_id');
         $regField = $this->resolveDoctorRegField();
         $hprField = $this->resolveDoctorHprField();
-        $healthplixDoctorIdentifier = trim((string) $this->request->getPost('input_healthplix_doctor_identifier'));
         $doctorFields = $this->db->tableExists('doctor_master') ? ($this->db->getFieldNames('doctor_master') ?? []) : [];
         $shortDescription = trim((string) $this->request->getPost('txt_doc_sign'));
         $regInput = trim((string) $this->request->getPost('input_doc_reg_no'));
@@ -251,9 +241,6 @@ class Doctor extends BaseController
         }
         if ($hprField !== null) {
             $data[$hprField] = $hprInput;
-        }
-        if (in_array('healthplix_doctor_identifier', $doctorFields, true)) {
-            $data['healthplix_doctor_identifier'] = $healthplixDoctorIdentifier;
         }
 
         $appPin = trim((string) ($this->request->getPost('app_pin') ?? ''));
@@ -859,26 +846,6 @@ class Doctor extends BaseController
         }
 
         return 5;
-    }
-
-    private function isHealthplixEnabled(): bool
-    {
-        $envValue = trim((string) env('HEALTHPLIX_ENABLED', ''));
-        if ($envValue !== '') {
-            return $envValue === '1';
-        }
-
-        if (! $this->db->tableExists('hospital_setting')) {
-            return false;
-        }
-
-        $row = $this->db->table('hospital_setting')
-            ->select('s_value')
-            ->where('s_name', 'HEALTHPLIX_ENABLED')
-            ->get(1)
-            ->getRowArray();
-
-        return trim((string) ($row['s_value'] ?? '0')) === '1';
     }
 
 }

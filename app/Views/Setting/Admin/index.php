@@ -89,12 +89,7 @@
                     <span>AI Settings</span>
                 </a>
             </div>
-            <div class="col-6 col-md-2 col-lg-2">
-                <a class="admin-tile" href="javascript:openAdminSubPage('<?= base_url('setting/admin/healthplix-settings') ?>','HealthPlix Integration');">
-                    <i class="bi bi-link-45deg"></i>
-                    <span>HealthPlix Integration</span>
-                </a>
-            </div>
+
             <div class="col-6 col-md-2 col-lg-2">
                 <a class="admin-tile" href="javascript:openAdminSubPage('<?= base_url('setting/admin/abdm-gateway') ?>','ABDM Gateway Config');">
                     <i class="bi bi-hdd-network" style="color:#0d6efd"></i>

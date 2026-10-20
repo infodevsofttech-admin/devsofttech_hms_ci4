@@ -84,8 +84,6 @@ class Filters extends BaseFilters
                     'api/*',
                     'AbdmGateway/*',
                     'AbdmHiu/*',
-                    'HealthplixCallback/*',
-                    'HealthplixGateway/*',
                     'records',
                     'records/*',
                     'v3/*',

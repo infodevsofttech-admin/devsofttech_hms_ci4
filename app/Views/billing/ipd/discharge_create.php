@@ -625,7 +625,7 @@ $historyFields = [
                             <div class="card-body">
                                 <input type="hidden" name="complaint_remove_id" id="complaint_remove_id" value="0">
 
-                                <!-- Healthplix-style inline complaint table (OPD-like Autotext) -->
+                                <!-- Inline complaint table (OPD-like Autotext) -->
                                 <table class="table table-sm table-bordered align-middle mb-1" id="discharge_complaint_table">
                                     <thead class="table-light">
                                         <tr>

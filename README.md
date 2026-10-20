@@ -189,15 +189,6 @@ EKA_BEARER_TOKEN = your-token
 # EKA_WEBHOOK_SECRET = shared-secret-for-callback-signature
 ```
 
-### HealthPlix callback secret fallback
-
-If `HEALTHPLIX_FETCH_SECRET` is set in `.env`, `POST /healthplix/fetch` uses it as fallback
-when the hospital setting value is empty.
-
-```dotenv
-HEALTHPLIX_FETCH_SECRET = your-shared-secret
-```
-
 Then process queue normally:
 
 ```bash
