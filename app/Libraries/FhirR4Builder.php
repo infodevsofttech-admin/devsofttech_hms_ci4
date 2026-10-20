@@ -1607,7 +1607,7 @@ class FhirR4Builder
      */
     public function buildClaimBundle(array $patient, array $encounter, array $claim): array
     {
-        $issuedAt = Time::now('Asia/Kolkata')->toDateTimeString();
+        $issuedAt = $this->isoTimestamp();
         $patientRef = 'Patient/' . (string) ($patient['id'] ?? 'unknown');
         $encounterRef = 'Encounter/' . (string) ($encounter['id'] ?? 'unknown');
 
@@ -3019,7 +3019,7 @@ class FhirR4Builder
         ?array $practitioner = null,
         ?array $organization = null
     ): array {
-        $issuedAt   = Time::now('Asia/Kolkata')->toDateTimeString();
+        $issuedAt   = $this->isoTimestamp();
         $patientRef = 'Patient/' . (string) ($patient['id'] ?? 'unknown');
         $reportId   = 'lab-rpt-' . (string) ($diagnosticReport['id'] ?? date('YmdHis'));
 
@@ -3290,7 +3290,7 @@ class FhirR4Builder
         array $encounter,
         array $summary
     ): array {
-        $issuedAt    = Time::now('Asia/Kolkata')->toDateTimeString();
+        $issuedAt    = $this->isoTimestamp();
         $encounterId = (string) ($encounter['id'] ?? 'enc-' . date('YmdHis'));
         $patientRef  = 'Patient/' . (string) ($patient['id'] ?? 'unknown');
         $encounterRef = 'Encounter/' . $encounterId;
@@ -3640,7 +3640,7 @@ class FhirR4Builder
         array $lifestyle = [],
         ?array $practitioner = null
     ): array {
-        $issuedAt   = Time::now('Asia/Kolkata')->toDateTimeString();
+        $issuedAt   = $this->isoTimestamp();
         $patientRef = 'Patient/' . (string) ($patient['id'] ?? 'unknown');
         $entries    = [['resource' => $this->buildPatientResource($patient)]];
 

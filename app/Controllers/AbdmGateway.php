@@ -12284,12 +12284,42 @@ class AbdmGateway extends BaseController
         $hospital = $this->getHospitalProfileForFhir();
         $hospitalName = trim((string) ($hospital['name'] ?? '')) ?: 'Healthcare Facility';
         $hospitalIdentifier = trim((string) ($hospital['hfr_id'] ?? '')) ?: 'local-hospital';
-        $invoiceDateTimestamp = strtotime((string) ($invoice['inv_date'] ?? ''));
-        $invoiceDate = $invoiceDateTimestamp !== false ? date('Y-m-d', $invoiceDateTimestamp) : date('Y-m-d');
-        $encounterStartTimestamp = strtotime((string) ($invoice['encounter_start'] ?? ''));
-        $encounterEndTimestamp = strtotime((string) ($invoice['encounter_end'] ?? ''));
-        $encounterStart = $encounterStartTimestamp !== false ? date('Y-m-d', $encounterStartTimestamp) : $invoiceDate;
-        $encounterEnd = $encounterEndTimestamp !== false ? date('Y-m-d', $encounterEndTimestamp) : $encounterStart;
+        $rawInvDate = trim((string) ($invoice['inv_date'] ?? ''));
+        $invoiceDateTimestamp = $rawInvDate !== '' ? strtotime($rawInvDate) : false;
+        $invoiceDateOnly = $invoiceDateTimestamp !== false ? date('Y-m-d', $invoiceDateTimestamp) : date('Y-m-d');
+        if ($rawInvDate !== '') {
+            if (str_contains($rawInvDate, ':')) {
+                $invoiceDate = (new \DateTime($rawInvDate, new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP');
+            } elseif ($invoiceDateOnly === date('Y-m-d')) {
+                $invoiceDate = $issuedAt;
+            } else {
+                $invoiceDate = $invoiceDateOnly;
+            }
+        } else {
+            $invoiceDate = $issuedAt;
+        }
+
+        $rawStart = trim((string) ($invoice['encounter_start'] ?? ''));
+        if ($rawStart !== '') {
+            if (str_contains($rawStart, ':')) {
+                $encounterStart = (new \DateTime($rawStart, new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP');
+            } else {
+                $encounterStart = $rawStart;
+            }
+        } else {
+            $encounterStart = $invoiceDate;
+        }
+
+        $rawEnd = trim((string) ($invoice['encounter_end'] ?? ''));
+        if ($rawEnd !== '') {
+            if (str_contains($rawEnd, ':')) {
+                $encounterEnd = (new \DateTime($rawEnd, new \DateTimeZone('Asia/Kolkata')))->format('Y-m-d\TH:i:sP');
+            } else {
+                $encounterEnd = $rawEnd;
+            }
+        } else {
+            $encounterEnd = $encounterStart;
+        }
         $netAmount = (float) ($invoice['net_amount'] ?? $invoice['total_amount'] ?? 0);
         $grossAmount = (float) ($invoice['total_amount'] ?? $invoice['net_amount'] ?? 0);
         $invoiceTypeCode = trim((string) ($invoice['invoice_type_code'] ?? '99')) ?: '99';
@@ -12565,7 +12595,7 @@ class AbdmGateway extends BaseController
             'text' => [
                 'status' => 'generated',
                 'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p>' . $escape($invoiceTypeDisplay)
-                    . ' visit on ' . $escape($invoiceDate) . ' at ' . $escape($hospitalName) . '</p></div>',
+                    . ' visit on ' . $escape($invoiceDateOnly) . ' at ' . $escape($hospitalName) . '</p></div>',
             ],
             'identifier' => [['system' => $identifierSystem . '/encounter', 'value' => $invoiceNumber]],
             'status' => 'finished',

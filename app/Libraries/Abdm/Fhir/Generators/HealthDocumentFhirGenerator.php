@@ -20,8 +20,7 @@ class HealthDocumentFhirGenerator extends AbstractModuleFhirGenerator
             $docTitle = 'Medical Certificate';
         }
 
-        $cleanDate = str_replace('-', '', $visitDate);
-        $defaultRef = 'DOC-' . $recordId . '-' . $cleanDate;
+        $defaultRef = 'DOC-' . $recordId . '-' . $visitDate;
         $careContextReference = (string) ($source['care_context_reference'] ?? $defaultRef);
         $careContextDisplay = (string) ($source['care_context_display'] ?? ($docTitle . ' (' . $visitDate . ')'));
 

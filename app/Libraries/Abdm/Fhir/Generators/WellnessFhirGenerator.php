@@ -24,6 +24,11 @@ class WellnessFhirGenerator extends AbstractModuleFhirGenerator
         $composition = $this->buildBaseComposition($source, 'Wellness Record', '94500-6', 'Health and Wellness Record');
         $composition['meta']['profile'] = ['https://nrces.in/ndhm/fhir/r4/StructureDefinition/WellnessRecord'];
         $composition['type'] = [
+            'coding' => [[
+                'system'  => 'http://loinc.org',
+                'code'    => '94500-6',
+                'display' => 'Wellness Record',
+            ]],
             'text' => 'Wellness Record',
         ];
 
