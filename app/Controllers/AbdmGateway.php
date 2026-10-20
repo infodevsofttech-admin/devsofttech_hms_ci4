@@ -12643,6 +12643,22 @@ class AbdmGateway extends BaseController
             ];
         }
 
+        $sectionEntries = [
+            ['reference' => $invoiceRef, 'type' => 'Invoice'],
+        ];
+        if ($documentReference !== null) {
+            $sectionEntries[] = [
+                'reference' => $documentReferenceRef,
+                'type' => 'DocumentReference',
+            ];
+        }
+        if ($pdfBinary !== null) {
+            $sectionEntries[] = [
+                'reference' => 'urn:uuid:' . $pdfBinaryId,
+                'type' => 'Binary',
+            ];
+        }
+
         $composition = [
             'resourceType' => 'Composition',
             'id' => $compositionId,
@@ -12676,37 +12692,19 @@ class AbdmGateway extends BaseController
             'custodian' => ['reference' => 'Organization/' . $organizationId],
             'section' => [[
                 'title' => 'Invoice details',
+                'code' => ['coding' => [[
+                    'system' => 'http://loinc.org',
+                    'code' => '34775-2',
+                    'display' => 'Hospital Invoice',
+                ]]],
                 'text' => [
                     'status' => 'generated',
                     'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p>Billing details for invoice '
                         . $escape($invoiceNumber) . '</p></div>',
                 ],
-                'entry' => [['reference' => $invoiceRef, 'type' => 'Invoice']],
+                'entry' => $sectionEntries,
             ]],
         ];
-        if ($documentReference !== null) {
-            $composition['section'][] = [
-                'title' => 'Document Reference',
-                'code' => ['coding' => [[
-                    'system' => 'http://snomed.info/sct',
-                    'code' => '725458005',
-                    'display' => 'Receipt',
-                ]]],
-                'entry' => [[
-                    'reference' => $documentReferenceRef,
-                    'type' => 'DocumentReference',
-                ]],
-            ];
-        }
-        if ($pdfBinary !== null) {
-            $composition['section'][] = [
-                'title' => 'Invoice PDF',
-                'entry' => [[
-                    'reference' => 'Binary/' . $pdfBinaryId,
-                    'type' => 'Binary',
-                ]],
-            ];
-        }
 
         $resources = [$composition, $patient, $organization, $encounter, $invoiceResource];
         if ($documentReference !== null) {

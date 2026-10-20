@@ -422,7 +422,7 @@ final class FhirGeneratorsTest extends CIUnitTestCase
             $composition['section'][0]['entry'][0]['type'] ?? null,
             'NRCeS InvoiceRecord 6.5.0 requires Reference.type to be Invoice'
         );
-        $this->assertCount(1, $composition['section'][0]['entry'] ?? []);
+        $this->assertCount(3, $composition['section'][0]['entry'] ?? []);
         $this->assertNotEmpty($composition['author'][0]['reference'] ?? '');
         $this->assertNotEmpty($composition['custodian']['reference'] ?? '');
         $this->assertContains('https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient', $patient['meta']['profile'] ?? []);
@@ -469,19 +469,18 @@ final class FhirGeneratorsTest extends CIUnitTestCase
             $composition['section'][0]['entry'][0]['reference'] ?? null,
             $documentReference['context']['related'][0]['reference'] ?? null
         );
-        $this->assertSame('DocumentReference', $composition['section'][1]['entry'][0]['type'] ?? null);
-        $this->assertSame($fullUrlByResourceType['DocumentReference'][0] ?? null, $composition['section'][1]['entry'][0]['reference'] ?? null, 'Document Reference section must point to the DocumentReference');
+        $this->assertCount(1, $composition['section'], 'NRCeS InvoiceRecord profile requires max 1 section');
+        $this->assertSame('DocumentReference', $composition['section'][0]['entry'][1]['type'] ?? null);
+        $this->assertSame($fullUrlByResourceType['DocumentReference'][0] ?? null, $composition['section'][0]['entry'][1]['reference'] ?? null, 'Document Reference entry must point to the DocumentReference');
         $this->assertSame('725458005', $documentReference['type']['coding'][0]['code'] ?? null);
         $this->assertSame('Receipt', $documentReference['type']['coding'][0]['display'] ?? null);
-        $this->assertSame('725458005', $composition['section'][1]['code']['coding'][0]['code'] ?? null);
-        $this->assertSame('Receipt', $composition['section'][1]['code']['coding'][0]['display'] ?? null);
         $binaries = array_values(array_filter(
             $bundle['entry'],
             static fn (array $entry): bool => ($entry['resource']['resourceType'] ?? '') === 'Binary'
         ));
         $this->assertCount(1, $binaries);
-        $this->assertSame('Binary', $composition['section'][2]['entry'][0]['type'] ?? null);
-        $this->assertSame('Binary/invoice-19-pdf-content', $composition['section'][2]['entry'][0]['reference'] ?? null);
+        $this->assertSame('Binary', $composition['section'][0]['entry'][2]['type'] ?? null);
+        $this->assertSame($fullUrlByResourceType['Binary'][0] ?? null, $composition['section'][0]['entry'][2]['reference'] ?? null);
         $this->assertSame('application/pdf', $binaries[0]['resource']['contentType'] ?? null);
         $this->assertSame($attachment['data'] ?? null, $binaries[0]['resource']['data'] ?? null);
 
