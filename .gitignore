@@ -162,6 +162,7 @@ E-AtriaHMS.docx
 E-AtriaHMS.zip
 *.xlsx
 scratch/
+dev/
 
 # Local development, debug, and diagnostic scripts (Root only)
 /check_*.php
