@@ -422,7 +422,7 @@ final class FhirGeneratorsTest extends CIUnitTestCase
             $composition['section'][0]['entry'][0]['type'] ?? null,
             'NRCeS InvoiceRecord 6.5.0 requires Reference.type to be Invoice'
         );
-        $this->assertCount(3, $composition['section'][0]['entry'] ?? []);
+        $this->assertCount(2, $composition['section'][0]['entry'] ?? []);
         $this->assertNotEmpty($composition['author'][0]['reference'] ?? '');
         $this->assertNotEmpty($composition['custodian']['reference'] ?? '');
         $this->assertContains('https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient', $patient['meta']['profile'] ?? []);
@@ -479,8 +479,6 @@ final class FhirGeneratorsTest extends CIUnitTestCase
             static fn (array $entry): bool => ($entry['resource']['resourceType'] ?? '') === 'Binary'
         ));
         $this->assertCount(1, $binaries);
-        $this->assertSame('Binary', $composition['section'][0]['entry'][2]['type'] ?? null);
-        $this->assertSame($fullUrlByResourceType['Binary'][0] ?? null, $composition['section'][0]['entry'][2]['reference'] ?? null);
         $this->assertSame('application/pdf', $binaries[0]['resource']['contentType'] ?? null);
         $this->assertSame($attachment['data'] ?? null, $binaries[0]['resource']['data'] ?? null);
 

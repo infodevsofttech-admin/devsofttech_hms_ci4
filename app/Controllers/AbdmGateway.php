@@ -12552,12 +12552,19 @@ class AbdmGateway extends BaseController
             'status' => 'current',
             'docStatus' => 'final',
             'type' => [
-                'coding' => [[
-                    'system' => 'http://snomed.info/sct',
-                    'code' => '725458005',
-                    'display' => 'Receipt',
-                ]],
-                'text' => 'Invoice Record',
+                'coding' => [
+                    [
+                        'system' => 'http://snomed.info/sct',
+                        'code' => '725458005',
+                        'display' => 'Receipt',
+                    ],
+                    [
+                        'system' => 'http://snomed.info/sct',
+                        'code' => '419891008',
+                        'display' => 'Record artifact',
+                    ],
+                ],
+                'text' => 'Invoice Receipt PDF',
             ],
             'subject' => ['reference' => $patientRef, 'display' => $patientName],
             'date' => $issuedAt,
@@ -12650,12 +12657,6 @@ class AbdmGateway extends BaseController
             $sectionEntries[] = [
                 'reference' => $documentReferenceRef,
                 'type' => 'DocumentReference',
-            ];
-        }
-        if ($pdfBinary !== null) {
-            $sectionEntries[] = [
-                'reference' => 'urn:uuid:' . $pdfBinaryId,
-                'type' => 'Binary',
             ];
         }
 
