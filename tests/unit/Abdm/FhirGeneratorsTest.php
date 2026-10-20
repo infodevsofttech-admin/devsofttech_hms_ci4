@@ -422,7 +422,7 @@ final class FhirGeneratorsTest extends CIUnitTestCase
             $composition['section'][0]['entry'][0]['type'] ?? null,
             'NRCeS InvoiceRecord 6.5.0 requires Reference.type to be Invoice'
         );
-        $this->assertCount(2, $composition['section'][0]['entry'] ?? []);
+        $this->assertCount(1, $composition['section'][0]['entry'] ?? []);
         $this->assertNotEmpty($composition['author'][0]['reference'] ?? '');
         $this->assertNotEmpty($composition['custodian']['reference'] ?? '');
         $this->assertContains('https://nrces.in/ndhm/fhir/r4/StructureDefinition/Patient', $patient['meta']['profile'] ?? []);
@@ -469,9 +469,9 @@ final class FhirGeneratorsTest extends CIUnitTestCase
             $composition['section'][0]['entry'][0]['reference'] ?? null,
             $documentReference['context']['related'][0]['reference'] ?? null
         );
-        $this->assertCount(1, $composition['section'], 'NRCeS InvoiceRecord profile requires max 1 section');
-        $this->assertSame('DocumentReference', $composition['section'][0]['entry'][1]['type'] ?? null);
-        $this->assertSame($fullUrlByResourceType['DocumentReference'][0] ?? null, $composition['section'][0]['entry'][1]['reference'] ?? null, 'Document Reference entry must point to the DocumentReference');
+        $this->assertCount(2, $composition['section'], 'Composition sections for invoice and document reference');
+        $this->assertSame('DocumentReference', $composition['section'][1]['entry'][0]['type'] ?? null);
+        $this->assertSame($fullUrlByResourceType['DocumentReference'][0] ?? null, $composition['section'][1]['entry'][0]['reference'] ?? null, 'Document Reference entry must point to the DocumentReference');
         $this->assertSame('725458005', $documentReference['type']['coding'][0]['code'] ?? null);
         $this->assertSame('Receipt', $documentReference['type']['coding'][0]['display'] ?? null);
         $binaries = array_values(array_filter(

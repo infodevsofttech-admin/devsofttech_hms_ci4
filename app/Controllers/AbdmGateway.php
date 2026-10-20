@@ -11508,35 +11508,9 @@ class AbdmGateway extends BaseController
 
     public function buildInvoiceRecordPayload(int $invoiceId, int $patientId, string $abhaId): ?array
     {
-        if ($this->db->tableExists('invoice_master')) {
-            $invoice = $this->db->table('invoice_master')->where('id', $invoiceId)->get(1)->getRowArray() ?? [];
-            if (! empty($invoice)) {
-                if ($patientId <= 0) {
-                    $patientId = (int) ($invoice['attach_id'] ?? 0);
-                }
-                $patientRow = $this->loadPatientRow($patientId);
-                if ($patientId > 0 && ! empty($patientRow)) {
-                    $items = $this->db->tableExists('invoice_item')
-                        ? $this->db->table('invoice_item')->where('inv_master_id', $invoiceId)->orderBy('id', 'ASC')->get()->getResultArray()
-                        : [];
-
-                    $visitDate = (string) ($invoice['inv_date'] ?? date('Y-m-d'));
-                    $patient = $this->buildAbdmPatientResource($patientRow, $patientId, $abhaId);
-                    $bundle = $this->buildSimpleInvoiceBundle($patient, $invoice, $items);
-
-                    return [
-                        'hi_type' => 'InvoiceRecord',
-                        'entity_type' => 'invoice',
-                        'entity_id' => (string) $invoiceId,
-                        'patient_id' => $patientId,
-                        'patient_name' => $this->patientDisplayName($patientRow),
-                        'visit_date' => date('Y-m-d', strtotime($visitDate)),
-                        'care_context_reference' => 'INV-' . $invoiceId . '-' . date('Y-m-d', strtotime($visitDate)),
-                        'care_context_display' => 'Invoice ' . (string) ($invoice['invoice_code'] ?? $invoiceId),
-                        'bundle' => $bundle,
-                    ];
-                }
-            }
+        $payload = $this->buildInvoiceSourceRecordPayload('charges_invoice', $invoiceId, $patientId, $abhaId);
+        if ($payload !== null) {
+            return $payload;
         }
 
         // Support pharmacy invoice_med_master as well
@@ -12650,13 +12624,41 @@ class AbdmGateway extends BaseController
             ];
         }
 
-        $sectionEntries = [
-            ['reference' => $invoiceRef, 'type' => 'Invoice'],
+        $sections = [
+            [
+                'title' => 'Invoice details',
+                'code' => ['coding' => [[
+                    'system' => 'http://loinc.org',
+                    'code' => '34775-2',
+                    'display' => 'Hospital Invoice',
+                ]]],
+                'text' => [
+                    'status' => 'generated',
+                    'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p>Billing details for invoice '
+                        . $escape($invoiceNumber) . '</p></div>',
+                ],
+                'entry' => [
+                    ['reference' => $invoiceRef, 'type' => 'Invoice'],
+                ],
+            ],
         ];
+
         if ($documentReference !== null) {
-            $sectionEntries[] = [
-                'reference' => $documentReferenceRef,
-                'type' => 'DocumentReference',
+            $sections[] = [
+                'title' => 'Document Reference',
+                'code' => ['coding' => [[
+                    'system' => 'http://snomed.info/sct',
+                    'code' => '419891008',
+                    'display' => 'Record artifact',
+                ]]],
+                'text' => [
+                    'status' => 'generated',
+                    'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p>Document reference for invoice '
+                        . $escape($invoiceNumber) . '</p></div>',
+                ],
+                'entry' => [
+                    ['reference' => $documentReferenceRef, 'type' => 'DocumentReference'],
+                ],
             ];
         }
 
@@ -12691,20 +12693,7 @@ class AbdmGateway extends BaseController
             ]],
             'title' => 'Invoice ' . $invoiceNumber,
             'custodian' => ['reference' => 'Organization/' . $organizationId],
-            'section' => [[
-                'title' => 'Invoice details',
-                'code' => ['coding' => [[
-                    'system' => 'http://loinc.org',
-                    'code' => '34775-2',
-                    'display' => 'Hospital Invoice',
-                ]]],
-                'text' => [
-                    'status' => 'generated',
-                    'div' => '<div xmlns="http://www.w3.org/1999/xhtml"><p>Billing details for invoice '
-                        . $escape($invoiceNumber) . '</p></div>',
-                ],
-                'entry' => $sectionEntries,
-            ]],
+            'section' => $sections,
         ];
 
         $resources = [$composition, $patient, $organization, $encounter, $invoiceResource];
