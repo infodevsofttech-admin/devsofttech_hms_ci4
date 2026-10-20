@@ -160,5 +160,47 @@ writable/debug/*
 writable/github_update_cache.json
 E-AtriaHMS.docx
 E-AtriaHMS.zip
+*.xlsx
 scratch/
 
+# Local development, debug, and diagnostic scripts (Root only)
+/check_*.php
+/clear_*.php
+/debug_*.php
+/compare_*.php
+/find_*.php
+/dedupe_*.php
+/delete_*.php
+/run_*.php
+/test_*.php
+/verify_*.php
+/wipe_*.php
+/list_*.php
+/inspect_*.php
+/raw_*.php
+
+# Temporary root test, SQL, and config files
+/*.conf
+/*.sql
+/*.xlsx
+/pdf_test_html.html
+/TEST_DEPLOYMENT.txt
+/info_script.sh
+/setup_git_config.sh
+
+# Developer session logs and internal handover notes (Root only)
+/ABDM_*.md
+/ACTION_PLAN_*.md
+/BED_MANAGEMENT_*.md
+/BRIDGE_SYNC_*.md
+/DICOM_AI_*.md
+/DISCHARGE_*.md
+/DUAL_BRIDGE_*.md
+/FILE_INDEX_*.md
+/HMS_MEDICAL_STORE_*.md
+/MPDF_*.md
+/SESSION_SUMMARY_*.md
+/SURGERY_PROCEDURE_*.md
+/SYSTEM_OPS_TEST.md
+/WASA_SECURITY_*.md
+/WORKLOG_*.md
