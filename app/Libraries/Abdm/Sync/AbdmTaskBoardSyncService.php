@@ -910,6 +910,8 @@ class AbdmTaskBoardSyncService
 
         $pushData = [
             'patient_id'             => (string) $patientId,
+            'patient_ref'            => ! empty($demo['patient_code']) ? $demo['patient_code'] : (string) $patientId,
+            'local_patient_id'       => ! empty($demo['patient_code']) ? $demo['patient_code'] : (string) $patientId,
             'patient_name'           => $patientName !== '' ? $patientName : ('PATIENT-' . $patientId),
             'abha_id'                => $abhaNumber,
             'abha_address'           => $abhaAddress,
