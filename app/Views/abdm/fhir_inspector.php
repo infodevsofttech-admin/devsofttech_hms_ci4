@@ -103,6 +103,8 @@
                         type="button"
                         class="btn btn-sm btn-light border py-1 px-2 text-primary quick-pill"
                         data-abha="<?= esc($val) ?>"
+                        data-patient-id="<?= (int) ($rp['id'] ?? 0) ?>"
+                        data-uhid="<?= esc((string) ($rp['p_code'] ?? '')) ?>"
                         data-name="<?= esc($rp['name'] ?? '') ?>"
                         style="font-size: 11.5px; border-radius: 6px;"
                     >
@@ -130,6 +132,15 @@
     <!-- Active Patient Inspector Container (shown after search/selection) -->
     <div id="inspActivePatientContainer" class="<?= (empty($filter_abha) && empty($patient_id)) ? 'd-none' : '' ?>">
         
+        <!-- Multiple Patients Alert (shown when 1 ABHA matches multiple patients) -->
+        <div id="inspMultiplePatientsAlert" class="alert alert-warning py-2 px-3 mb-3 d-none shadow-sm border d-flex align-items-center justify-content-between flex-wrap gap-2" style="border-radius: 8px;">
+            <div class="d-flex align-items-center flex-wrap gap-2">
+                <i class="bi bi-people-fill text-warning fs-5"></i>
+                <span class="fw-semibold text-dark">Multiple patient records found for this ABHA address:</span>
+                <div id="inspMultiplePatientsPills" class="d-inline-flex align-items-center flex-wrap gap-1"></div>
+            </div>
+        </div>
+
         <!-- Patient Banner Card -->
         <div class="card shadow-sm mb-3 border-0 bg-white" style="border-radius: 10px; overflow: hidden;">
             <div class="card-header bg-primary text-white py-3 px-3 d-flex justify-content-between align-items-center flex-wrap gap-2">
@@ -325,9 +336,12 @@
     }
 
     // Load Patient Demographics & Care Contexts
-    window.inspectPatient = function(searchVal) {
+    window.inspectPatient = function(searchVal, optPatientId, optUhid) {
         searchVal = (searchVal || '').trim();
-        if (!searchVal) {
+        optPatientId = optPatientId ? parseInt(optPatientId, 10) : 0;
+        optUhid = (optUhid || '').trim();
+
+        if (!searchVal && !optPatientId && !optUhid) {
             alert('Please enter an ABHA Address, ABHA Number, or Patient UHID.');
             return;
         }
@@ -335,13 +349,36 @@
         var emptyPrompt = document.getElementById('inspEmptyPrompt');
         var container = document.getElementById('inspActivePatientContainer');
         var tbody = document.getElementById('careContextsTbody');
+        var multAlert = document.getElementById('inspMultiplePatientsAlert');
 
         if (emptyPrompt) emptyPrompt.classList.add('d-none');
         if (container) container.classList.remove('d-none');
+        if (multAlert) multAlert.classList.add('d-none');
 
         tbody.innerHTML = '<tr><td colspan="6" class="text-center text-muted py-4"><div class="spinner-border spinner-border-sm text-primary me-2" role="status"></div>Loading patient care contexts &amp; FHIR status...</td></tr>';
 
-        var url = '<?= base_url('AbdmFhirInspector/patient_data') ?>?abha_address=' + encodeURIComponent(searchVal);
+        var queryParams = [];
+        if (optPatientId > 0) {
+            queryParams.push('patient_id=' + encodeURIComponent(optPatientId));
+        }
+        if (optUhid) {
+            queryParams.push('p_code=' + encodeURIComponent(optUhid));
+        }
+        if (searchVal) {
+            if (searchVal.indexOf('@') !== -1) {
+                queryParams.push('abha_address=' + encodeURIComponent(searchVal));
+            } else if (/^\d{14}$/.test(searchVal.replace(/\D/g, ''))) {
+                queryParams.push('abha_address=' + encodeURIComponent(searchVal));
+            } else if (/^P\d+/i.test(searchVal)) {
+                queryParams.push('p_code=' + encodeURIComponent(searchVal));
+            } else if (/^\d+$/.test(searchVal) && optPatientId <= 0) {
+                queryParams.push('patient_id=' + encodeURIComponent(searchVal));
+            } else {
+                queryParams.push('abha_address=' + encodeURIComponent(searchVal));
+            }
+        }
+
+        var url = '<?= base_url('AbdmFhirInspector/patient_data') ?>?' + queryParams.join('&');
 
         fetch(url, {
             headers: {
@@ -353,9 +390,9 @@
         .then(function(res) {
             if (!res || !res.ok || !res.patient) {
                 var errTxt = (res && (res.error_text || res.error || res.message)) || 'Patient record not found';
-                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-warning py-4"><i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>' + hesc(errTxt) + ' for <strong>' + hesc(searchVal) + '</strong>.</td></tr>';
+                tbody.innerHTML = '<tr><td colspan="6" class="text-center text-warning py-4"><i class="bi bi-exclamation-triangle-fill me-2 fs-5"></i>' + hesc(errTxt) + ' for <strong>' + hesc(searchVal || optUhid || optPatientId) + '</strong>.</td></tr>';
                 document.getElementById('dspPatientName').textContent = 'Patient Not Found';
-                document.getElementById('dspAbhaAddress').textContent = searchVal;
+                document.getElementById('dspAbhaAddress').textContent = searchVal || '-';
                 document.getElementById('dspAbhaNumber').textContent = '-';
                 document.getElementById('dspPhone').textContent = '-';
                 document.getElementById('dspGatewayStatus').innerHTML = '<span class="badge bg-secondary">Unchecked</span>';
@@ -383,6 +420,22 @@
             document.getElementById('dspAbhaAddress').textContent = p.abha_address || searchVal;
             document.getElementById('dspAbhaNumber').textContent = p.abha_number || '-';
             document.getElementById('dspPhone').textContent = p.phone || '-';
+
+            // Multiple Patients Switcher
+            if (res.multiple_patients && res.multiple_patients.length > 1) {
+                var pDiv = document.getElementById('inspMultiplePatientsPills');
+                if (pDiv && multAlert) {
+                    pDiv.innerHTML = res.multiple_patients.map(function(mp) {
+                        if (mp.is_current) {
+                            return '<span class="badge bg-primary py-1 px-2 shadow-sm"><i class="bi bi-check-circle-fill me-1"></i>' + hesc(mp.name) + ' (' + hesc(mp.p_code) + ')</span>';
+                        }
+                        return '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 fw-semibold" onclick="inspectPatient(\'\', ' + mp.id + ', \'' + hesc(mp.p_code) + '\')"><i class="bi bi-arrow-repeat me-1"></i>Switch to ' + hesc(mp.name) + ' (' + hesc(mp.p_code) + ')</button>';
+                    }).join('');
+                    multAlert.classList.remove('d-none');
+                }
+            } else if (multAlert) {
+                multAlert.classList.add('d-none');
+            }
 
             // Gateway Status
             if (linkedRefs.length > 0) {
@@ -523,9 +576,11 @@
     document.querySelectorAll('.quick-pill').forEach(function(p) {
         p.addEventListener('click', function() {
             var val = p.dataset.abha;
-            if (val) {
-                searchInput.value = val;
-                inspectPatient(val);
+            var pid = p.dataset.patientId;
+            var uhid = p.dataset.uhid;
+            if (val || pid || uhid) {
+                searchInput.value = val || uhid;
+                inspectPatient(val, pid, uhid);
             }
         });
     });

@@ -1337,14 +1337,33 @@ class Patient extends BaseController
 			]);
 		}
 
-		// Enforce unique ABHA ID across patients (excluding current patient)
-		if ($abhaId !== '') {
-			$conflictAbha = $this->findPatientByAbha($abhaId, $pid);
+		// Enforce unique ABHA ID and Address across patients (excluding current patient)
+		if ($abhaId !== '' || $abhaAddress !== '') {
+			$conflictAbha = \App\Libraries\Abdm\AbhaDemographicValidator::checkUniqueness($abhaId, $abhaAddress, $pid, $this->db);
 			if ($conflictAbha !== null) {
 				return $this->response->setJSON([
 					'update' => 0,
-					'error_text' => 'This ABHA ID is already linked to patient ' . ($conflictAbha['p_code'] ?? '') . ' (' . ($conflictAbha['p_fname'] ?? '') . '). ABHA ID must be unique to one person.',
+					'error_text' => $conflictAbha['error_text'],
 				]);
+			}
+
+			// Validate demographics if known ABHA profile exists
+			$knownProfile = $this->resolveKnownAbhaProfile($abhaId, $abhaAddress);
+			if (! empty($knownProfile)) {
+				$candidatePatient = [
+					'p_fname' => (string) $this->request->getPost('input_name'),
+					'gender' => $this->request->getPost('optionsRadios_gender'),
+					'dob' => $this->request->getPost('datepicker_dob'),
+					'age' => $this->request->getPost('input_age_year'),
+					'mphone1' => $this->request->getPost('input_mphone1'),
+				];
+				$demoError = \App\Libraries\Abdm\AbhaDemographicValidator::validateDemographicsMatch($candidatePatient, $knownProfile);
+				if ($demoError !== null) {
+					return $this->response->setJSON([
+						'update' => 0,
+						'error_text' => $demoError,
+					]);
+				}
 			}
 		}
 
@@ -1543,17 +1562,31 @@ class Patient extends BaseController
 			]);
 		}
 
-		// ABHA number must be unique across patient_master — block if another
-		// patient already carries this exact ABHA id.
-		if ($abhaId !== '') {
-			$conflict = $this->findPatientByAbha($abhaId, $pid);
+		// ABHA ID and Address must be unique across patient_master — block if another
+		// patient already carries this exact ABHA ID or address.
+		if ($abhaId !== '' || $abhaAddress !== '') {
+			$conflict = \App\Libraries\Abdm\AbhaDemographicValidator::checkUniqueness($abhaId, $abhaAddress, $pid, $this->db);
 			if ($conflict !== null) {
 				return $this->response->setJSON([
 					'update' => 0,
-					'error_text' => 'This ABHA ID is already linked to patient '
-						. ($conflict['p_code'] ?? '') . ' (' . ($conflict['p_fname'] ?? '') . '). '
-						. 'An ABHA ID can only be linked to one patient.',
+					'error_text' => $conflict['error_text'],
 				]);
+			}
+
+			// Enforce demographic matching if known ABHA profile exists
+			$patientModel = new PatientModel();
+			$patRow = $patientModel->find($pid);
+			if (is_array($patRow)) {
+				$knownProfile = $this->resolveKnownAbhaProfile($abhaId, $abhaAddress);
+				if (! empty($knownProfile)) {
+					$demoError = \App\Libraries\Abdm\AbhaDemographicValidator::validateDemographicsMatch($patRow, $knownProfile);
+					if ($demoError !== null) {
+						return $this->response->setJSON([
+							'update' => 0,
+							'error_text' => $demoError,
+						]);
+					}
+				}
 			}
 		}
 
@@ -4952,6 +4985,57 @@ class Patient extends BaseController
 			'abha_id' => (string) ($row['abha_id'] ?? ''),
 			'udai' => (string) ($row['udai'] ?? ''),
 		];
+	}
+
+	/**
+	 * Attempt to resolve known ABHA verified profile data (from session or bridge)
+	 * for demographic validation during linking.
+	 */
+	public function resolveKnownAbhaProfile(string $abhaId = '', string $abhaAddress = ''): ?array
+	{
+		$cleanAbha = preg_replace('/\D/', '', $abhaId);
+		$cleanAddr = trim($abhaAddress);
+
+		// 1. Session check
+		$sessProfile = session()->get('abha_verified_profile') ?? session()->get('abha_profile');
+		if (is_array($sessProfile)) {
+			$sessAddr = trim((string) ($sessProfile['abha_address'] ?? ''));
+			$sessId   = preg_replace('/\D/', '', (string) ($sessProfile['abha_number'] ?? $sessProfile['abha_id'] ?? ''));
+			if (($cleanAddr !== '' && $sessAddr === $cleanAddr) || ($cleanAbha !== '' && $sessId === $cleanAbha)) {
+				return $sessProfile;
+			}
+		}
+
+		// 2. Query bridge abdm_gateway_db.abdm_abha_profiles if available
+		try {
+			$bridgeDb = \Config\Database::connect('abdm_gateway_db', false);
+			if ($bridgeDb && $bridgeDb->tableExists('abdm_abha_profiles')) {
+				$b = $bridgeDb->table('abdm_abha_profiles');
+				if ($cleanAddr !== '' && $cleanAbha !== '') {
+					$b->groupStart()->where('abha_address', $cleanAddr)->orWhere('abha_number LIKE', "%{$cleanAbha}%")->groupEnd();
+				} elseif ($cleanAddr !== '') {
+					$b->where('abha_address', $cleanAddr);
+				} elseif ($cleanAbha !== '') {
+					$b->where('abha_number LIKE', "%{$cleanAbha}%");
+				}
+				$row = $b->orderBy('id', 'DESC')->get(1)->getRowArray();
+				if (! empty($row)) {
+					return [
+						'name'          => (string) ($row['full_name'] ?? $row['name'] ?? ''),
+						'gender'        => (string) ($row['gender'] ?? ''),
+						'date_of_birth' => (string) ($row['date_of_birth'] ?? ''),
+						'year_of_birth' => (string) ($row['year_of_birth'] ?? ''),
+						'mobile'        => (string) ($row['mobile'] ?? ''),
+						'abha_address'  => (string) ($row['abha_address'] ?? ''),
+						'abha_number'   => (string) ($row['abha_number'] ?? ''),
+					];
+				}
+			}
+		} catch (\Throwable $e) {
+			// Secondary DB connection not configured, fallback to null
+		}
+
+		return null;
 	}
 
 	/**

@@ -83,12 +83,28 @@ class AbdmFhirInspector extends BaseController
         $abhaAddress = trim((string) ($this->request->getGet('abha_address') ?? $this->request->getGet('abha') ?? ''));
         $pCode = trim((string) ($this->request->getGet('p_code') ?? $this->request->getGet('uhid') ?? ''));
 
+        if ($abhaAddress !== '' && ! str_contains($abhaAddress, '@')) {
+            if (is_numeric($abhaAddress) && strlen($abhaAddress) < 14 && $patientId <= 0) {
+                $patientId = (int) $abhaAddress;
+            } elseif (preg_match('/^P\d+/i', $abhaAddress) && $pCode === '') {
+                $pCode = $abhaAddress;
+            }
+        }
+
         if ($patientId <= 0 && $abhaAddress === '' && $pCode === '') {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'ABHA Address, Patient ID, or UHID is required']);
         }
 
         // Delegate to AbdmGateway for canonical patient discovery & care contexts
         try {
+            if ($patientId > 0) {
+                $_GET['patient_id'] = (string) $patientId;
+                $_REQUEST['patient_id'] = (string) $patientId;
+            }
+            if ($pCode !== '') {
+                $_GET['p_code'] = $pCode;
+                $_REQUEST['p_code'] = $pCode;
+            }
             $gateway = new \App\Controllers\AbdmGateway();
             $gateway->initController($this->request, $this->response, service('logger'));
             return $gateway->hipPatientCareContexts();

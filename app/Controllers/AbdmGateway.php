@@ -11786,6 +11786,23 @@ class AbdmGateway extends BaseController
             }
         }
 
+        // Fallback: If pCode was not provided, but abhaAddress or abhaNumber was actually given as a UHID or numeric patient_id
+        $rawSearch = trim($pCode !== '' ? $pCode : ($abhaAddress !== '' ? $abhaAddress : $abhaNumber));
+        if ($rawSearch !== '' && ! str_contains($rawSearch, '@')) {
+            if (is_numeric($rawSearch)) {
+                $row = $this->db->table('patient_master')->where('id', (int) $rawSearch)->get(1)->getRowArray();
+                if (! empty($row)) {
+                    return $row;
+                }
+            }
+            if (preg_match('/^P\d+/i', $rawSearch)) {
+                $row = $this->db->table('patient_master')->where('p_code', $rawSearch)->get(1)->getRowArray();
+                if (! empty($row)) {
+                    return $row;
+                }
+            }
+        }
+
         $cleanAbhaNumber = preg_replace('/\D/', '', $abhaNumber !== '' ? $abhaNumber : $abhaAddress);
         $cleanAbhaNumber = strlen($cleanAbhaNumber) === 14 ? $cleanAbhaNumber : '';
 
@@ -11811,7 +11828,10 @@ class AbdmGateway extends BaseController
             } elseif ($hasIdCol) {
                 $builder->where('abha_id', $cleanAbhaAddress);
             }
-            $row = $builder->get(1)->getRowArray();
+            if ($hasIdCol) {
+                $builder->orderBy("CASE WHEN NULLIF(TRIM(abha_id), '') IS NOT NULL THEN 1 ELSE 2 END", 'ASC', false);
+            }
+            $row = $builder->orderBy('id', 'DESC')->get(1)->getRowArray();
             if (! empty($row)) {
                 return $row;
             }
@@ -11827,7 +11847,7 @@ class AbdmGateway extends BaseController
             } elseif ($hasIdCol) {
                 $builder->where('abha_id', $cleanAbhaNumber);
             }
-            $row = $builder->get(1)->getRowArray();
+            $row = $builder->orderBy('id', 'DESC')->get(1)->getRowArray();
             if (! empty($row)) {
                 return $row;
             }
@@ -13695,22 +13715,13 @@ class AbdmGateway extends BaseController
             }
         }
 
-        if (empty($body['patient_ref']) || $body['patient_ref'] === $body['abha_address']) {
-            if (! empty($body['care_contexts']) && is_array($body['care_contexts'])) {
-                $firstCc = $body['care_contexts'][0];
-                $cRef = trim((string) ($firstCc['ref'] ?? $firstCc['referenceNumber'] ?? $firstCc['reference_number'] ?? ''));
-                if ($cRef !== '') {
-                    $body['patient_ref'] = $cRef;
-                }
-            }
-            if (empty($body['patient_ref']) || $body['patient_ref'] === $body['abha_address']) {
-                if (! empty($patientRow['p_code'])) {
-                    $body['patient_ref'] = (string) $patientRow['p_code'];
-                } elseif ($patientId > 0) {
-                    $body['patient_ref'] = 'P-' . $patientId;
-                } else {
-                    $body['patient_ref'] = $body['abha_address'];
-                }
+        if (empty($body['patient_ref']) || $body['patient_ref'] === $body['abha_address'] || preg_match('/^(OPD|PRESC|INVOICE|LAB|RAD|WELLNESS)-/i', (string) $body['patient_ref'])) {
+            if (! empty($patientRow['p_code'])) {
+                $body['patient_ref'] = (string) $patientRow['p_code'];
+            } elseif ($patientId > 0) {
+                $body['patient_ref'] = 'P-' . $patientId;
+            } else {
+                $body['patient_ref'] = (string) ($body['abha_address'] ?? 'Patient');
             }
         }
         if (empty($body['display']) || $body['display'] === $body['patient_ref']) {
@@ -13806,17 +13817,22 @@ class AbdmGateway extends BaseController
 
             // 1. Update patient_master verification status & timestamps
             if ($patientId > 0 && $this->db->tableExists('patient_master')) {
-                $pmUp = [
-                    'abha_verified_status' => 'LINKED',
-                    'abdm_linked_at'       => $now,
-                ];
-                if (! empty($body['abha_address'])) {
+                $pmUp = [];
+                if ($this->db->fieldExists('abha_verified_status', 'patient_master')) {
+                    $pmUp['abha_verified_status'] = 'LINKED';
+                }
+                if ($this->db->fieldExists('abdm_linked_at', 'patient_master')) {
+                    $pmUp['abdm_linked_at'] = $now;
+                }
+                if (! empty($body['abha_address']) && $this->db->fieldExists('abha_address', 'patient_master')) {
                     $pmUp['abha_address'] = (string) $body['abha_address'];
                 }
-                if (! empty($body['abha_number'])) {
+                if (! empty($body['abha_number']) && $this->db->fieldExists('abha_id', 'patient_master')) {
                     $pmUp['abha_id'] = (string) $body['abha_number'];
                 }
-                $this->db->table('patient_master')->where('id', $patientId)->update($pmUp);
+                if ($pmUp !== []) {
+                    $this->db->table('patient_master')->where('id', $patientId)->update($pmUp);
+                }
             }
 
             // 2. Persist care contexts into record_links so status is instantly marked LINKED in UI
@@ -14217,6 +14233,28 @@ class AbdmGateway extends BaseController
             }
         }
 
+        $multiplePatients = [];
+        if ($effAbhaAddress !== '' && str_contains($effAbhaAddress, '@') && $this->db->tableExists('patient_master') && $this->db->fieldExists('abha_address', 'patient_master')) {
+            $otherRows = $this->db->table('patient_master')
+                ->where('abha_address', $effAbhaAddress)
+                ->orderBy('id', 'DESC')
+                ->limit(5)
+                ->get()
+                ->getResultArray();
+            if (count($otherRows) > 1) {
+                foreach ($otherRows as $or) {
+                    $multiplePatients[] = [
+                        'id'         => (int) $or['id'],
+                        'p_code'     => (string) ($or['p_code'] ?? ''),
+                        'name'       => trim(($or['p_fname'] ?? '') . ' ' . ($or['p_lname'] ?? '')),
+                        'gender'     => ((int) ($or['gender'] ?? 0) === 2 || strtoupper((string) ($or['gender'] ?? '')) === 'F') ? 'F' : 'M',
+                        'dob'        => (string) ($or['dob'] ?? ''),
+                        'is_current' => (int) $or['id'] === $patientId,
+                    ];
+                }
+            }
+        }
+
         return $this->response->setJSON([
             'ok'      => 1,
             'patient' => [
@@ -14231,9 +14269,10 @@ class AbdmGateway extends BaseController
                 'abha_number'   => $effAbhaNumber,
                 'phone'         => $cleanPhone,
             ],
-            'care_contexts' => $contextsList,
-            'linked_refs'   => $linkedRefs,
-            'hospital_name' => $hospitalName,
+            'care_contexts'     => $contextsList,
+            'linked_refs'       => $linkedRefs,
+            'hospital_name'     => $hospitalName,
+            'multiple_patients' => $multiplePatients,
         ]);
     }
 }

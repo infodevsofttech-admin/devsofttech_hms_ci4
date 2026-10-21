@@ -2149,44 +2149,22 @@ class Abha extends BaseController
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'Missing ABHA identifier.']);
         }
 
-        // ABHA number must be unique across patient_master — never let two
-        // patient rows carry the same ABHA.
-        if ($abhaNumClean !== '') {
-            $formattedAbha = (strlen($abhaNumClean) === 14)
-                ? substr($abhaNumClean, 0, 2) . '-' . substr($abhaNumClean, 2, 4) . '-' . substr($abhaNumClean, 6, 4) . '-' . substr($abhaNumClean, 10, 4)
-                : '';
-            $checkVals = array_values(array_filter([$abhaNumClean, $formattedAbha]));
-
-            $conflictBuilder = $db->table('patient_master')->select('id,p_code,p_fname');
-            $hasAbhaCheck = false;
-            $conflictBuilder->groupStart();
-            foreach (['abha_id', 'abha_no', 'abha'] as $cand) {
-                if (in_array($cand, $fields, true)) {
-                    if (! $hasAbhaCheck) {
-                        $conflictBuilder->whereIn($cand, $checkVals);
-                        $hasAbhaCheck = true;
-                    } else {
-                        $conflictBuilder->orWhereIn($cand, $checkVals);
-                    }
-                }
-            }
-            $conflictBuilder->groupEnd();
-
-            if ($hasAbhaCheck) {
-                $conflict = $conflictBuilder->get()->getRowArray();
-                if ($conflict) {
-                    $conflictId = (int) ($conflict['id'] ?? 0);
-                    if ($action === 'new' || $conflictId !== $patientId) {
-                        return $this->response->setJSON([
-                            'ok' => 0,
-                            'error_text' => 'This ABHA number is already linked to patient '
-                                . ($conflict['p_code'] ?? '') . ' (' . ($conflict['p_fname'] ?? '') . '). '
-                                . 'Please select that patient instead.',
-                            'conflict_patient_id' => $conflictId,
-                            'conflict_p_code' => (string) ($conflict['p_code'] ?? ''),
-                        ]);
-                    }
-                }
+        // ABHA ID and Address must be unique across patient_master — never let two
+        // patient rows carry the same ABHA number or address.
+        if ($abhaNumClean !== '' || $abhaAddress !== '') {
+            $conflict = \App\Libraries\Abdm\AbhaDemographicValidator::checkUniqueness(
+                $abhaNumClean,
+                $abhaAddress,
+                $action === 'existing' ? $patientId : null,
+                $db
+            );
+            if ($conflict !== null) {
+                return $this->response->setJSON([
+                    'ok' => 0,
+                    'error_text' => $conflict['error_text'],
+                    'conflict_patient_id' => $conflict['conflict_patient_id'],
+                    'conflict_p_code' => $conflict['p_code'],
+                ]);
             }
         }
 
@@ -2205,6 +2183,23 @@ class Abha extends BaseController
                 return $this->response->setJSON([
                     'ok' => 0,
                     'error_text' => 'Selected patient already has a different ABHA linked (' . $row[$abhaField] . '). Cannot link a second ABHA to the same patient.',
+                ]);
+            }
+
+            // Enforce demographic validation: Name, Age/DOB, and Gender must match!
+            $demoError = \App\Libraries\Abdm\AbhaDemographicValidator::validateDemographicsMatch(
+                $row,
+                [
+                    'name'   => $name,
+                    'gender' => $gender,
+                    'dob'    => $dob,
+                    'mobile' => $mobile,
+                ]
+            );
+            if ($demoError !== null) {
+                return $this->response->setJSON([
+                    'ok'         => 0,
+                    'error_text' => $demoError,
                 ]);
             }
 
@@ -2289,7 +2284,16 @@ class Abha extends BaseController
 
         if ($existing) {
             $patientId = (int) ($existing['id'] ?? 0);
-            return $this->linkAbhaToPatient($db, $patientId, $name, $mobile, $gender, $dob, $abhaMeta, $abhaNumClean, $abhaAddress, $fields, $abhaField);
+            $demoError = \App\Libraries\Abdm\AbhaDemographicValidator::validateDemographicsMatch($existing, [
+                'name'   => $name,
+                'gender' => $gender,
+                'dob'    => $dob,
+                'mobile' => $mobile,
+            ]);
+            if ($demoError === null) {
+                return $this->linkAbhaToPatient($db, $patientId, $name, $mobile, $gender, $dob, $abhaMeta, $abhaNumClean, $abhaAddress, $fields, $abhaField);
+            }
+            log_message('warning', '[tryAutoLinkByDirectMatch] Skipped auto-link due to demographic mismatch: {msg}', ['msg' => $demoError]);
         }
 
         // Safe repair path for orphan placeholder rows created during prior failed mapping.
