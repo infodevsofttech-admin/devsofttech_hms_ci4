@@ -3,6 +3,7 @@
 namespace Config;
 
 use App\Filters\ApiAuthFilter;
+use App\Filters\LoginThrottleFilter;
 use App\Filters\SecureHeadersFilter;
 use App\Filters\SingleActiveSessionFilter;
 use CodeIgniter\Config\Filters as BaseFilters;
@@ -39,6 +40,7 @@ class Filters extends BaseFilters
         'performance'   => PerformanceMetrics::class,
         'singleSession' => SingleActiveSessionFilter::class,
         'apiAuth'       => ApiAuthFilter::class,
+        'loginThrottle' => LoginThrottleFilter::class,
     ];
 
     /**
@@ -125,5 +127,14 @@ class Filters extends BaseFilters
      *
      * @var array<string, array<string, list<string>>>
      */
-    public array $filters = [];
+    public array $filters = [
+        'loginThrottle' => [
+            'before' => [
+                'login',
+                'login/*',
+                'register',
+                'register/*',
+            ],
+        ],
+    ];
 }

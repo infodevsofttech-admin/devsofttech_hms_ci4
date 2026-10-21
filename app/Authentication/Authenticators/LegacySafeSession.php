@@ -11,6 +11,12 @@ use CodeIgniter\Shield\Result;
 
 class LegacySafeSession extends Session
 {
+    /**
+     * Dummy bcrypt hash with cost 10 used to equalize execution timing
+     * when a username is not found in the database.
+     */
+    private const DUMMY_HASH = '$2y$10$cfqH24k.mHkYnkyj5jT4k.UvY6oQzU/80pBf1K5k6v78d78f99e4K';
+
     public function completeLogin(User $user): void
     {
         parent::completeLogin($user);
@@ -38,9 +44,15 @@ class LegacySafeSession extends Session
         $givenPassword = (string) $credentials['password'];
         unset($credentials['password']);
 
+        /** @var Passwords $passwords */
+        $passwords = service('passwords');
+
         $user = $this->provider->findByCredentials($credentials);
 
         if ($user === null) {
+            // Mitigate user enumeration timing attack by performing a dummy hash verification
+            $passwords->verify($givenPassword, self::DUMMY_HASH);
+
             return new Result([
                 'success' => false,
                 'reason'  => lang('Auth.badAttempt'),
@@ -49,19 +61,18 @@ class LegacySafeSession extends Session
 
         $hash = $user->password_hash ?? null;
         if (!is_string($hash) || trim($hash) === '') {
+            $passwords->verify($givenPassword, self::DUMMY_HASH);
+
             return new Result([
                 'success' => false,
-                'reason'  => lang('Auth.invalidPassword'),
+                'reason'  => lang('Auth.badAttempt'),
             ]);
         }
-
-        /** @var Passwords $passwords */
-        $passwords = service('passwords');
 
         if (!$passwords->verify($givenPassword, $hash)) {
             return new Result([
                 'success' => false,
-                'reason'  => lang('Auth.invalidPassword'),
+                'reason'  => lang('Auth.badAttempt'),
             ]);
         }
 
