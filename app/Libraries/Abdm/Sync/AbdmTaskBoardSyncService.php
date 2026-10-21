@@ -394,9 +394,12 @@ class AbdmTaskBoardSyncService
 
         $effectiveAbha = $abhaAddress !== '' ? $abhaAddress : $abhaNumber;
 
+        $patientCode = trim((string) ($patientRow['p_code'] ?? ''));
+
         return [
             'name'           => $patientName,
             'patient_name'   => $patientName,
+            'patient_code'   => $patientCode,
             'gender'         => $gender,
             'year_of_birth'  => $yearOfBirth,
             'abha_address'   => $abhaAddress,
@@ -489,9 +492,14 @@ class AbdmTaskBoardSyncService
             log_message('error', "[AbdmTaskBoardSync] health_records upsert error: " . $e->getMessage());
         }
 
+        $patientCode = trim((string) ($demo['patient_code'] ?? ''));
+        $patientRef = $patientCode !== '' ? $patientCode : (string) $patientId;
+
         // 2. Push to ABDM Bridge Gateway
         $pushData = [
-            'patient_id'             => (string) $patientId,
+            'patient_id'             => $patientRef,
+            'patient_ref'            => $patientRef,
+            'local_patient_id'       => $patientRef,
             'patient_name'           => $patientName !== '' ? $patientName : ('PATIENT-' . $patientId),
             'abha_id'                => $abhaNumber,
             'abha_address'           => $abhaAddress,
@@ -573,7 +581,7 @@ class AbdmTaskBoardSyncService
                     'care_context_reference' => $careContextRef,
                     'health_record_id'       => $healthRecordId > 0 ? $healthRecordId : null,
                     'abdm_txn_id'            => $queueId !== '' ? $queueId : null,
-                    'link_status'            => $isSuccess ? 'pending' : 'failed',
+                    'link_status'            => $isSuccess ? 'linked' : 'failed',
                     'updated_at'             => $now,
                 ];
 
