@@ -10,13 +10,15 @@ use CodeIgniter\HTTP\RequestInterface;
 use CodeIgniter\HTTP\ResponseInterface;
 
 /**
- * Authentication Endpoint Rate Limiting Filter (WASA CWE-307 Compliant)
+ * Authentication Endpoint Rate Limiting & CAPTCHA Filter (WASA CWE-307 Compliant)
  *
- * Enforces server-side rate limiting on authentication attempts:
- * - Restricts requests to a maximum of 5 attempts per 60 seconds per IP address.
- * - When threshold is exceeded, returns HTTP 429 Too Many Requests.
- * - Emits standard Retry-After and X-RateLimit-* headers.
- * - Logs violations for security monitoring and incident response.
+ * Enforces dual-layer defense on authentication endpoints:
+ * 1. Server-side Rate Limiting (Token Bucket):
+ *    - Restricts login POST requests to a maximum of 5 attempts per 60 seconds per IP address.
+ *    - When threshold is exceeded, returns HTTP 429 Too Many Requests with Retry-After header.
+ *    - Logs security events for SIEM / audit monitoring.
+ * 2. Visual Security Verification (CAPTCHA):
+ *    - Validates human presence to block automated credential brute-force, password spraying, and bots.
  */
 class LoginThrottleFilter implements FilterInterface
 {
@@ -40,7 +42,16 @@ class LoginThrottleFilter implements FilterInterface
             return;
         }
 
-        // Only throttle state-changing authentication attempts (POST)
+        $uri = trim($request->getUri()->getPath(), '/');
+        // Only target authentication endpoints
+        $authRoutes = ['login', 'login/magic-link', 'register'];
+        $isAuthRoute = in_array($uri, $authRoutes, true) || str_starts_with($uri, 'login/') || str_starts_with($uri, 'register/');
+
+        if (! $isAuthRoute) {
+            return;
+        }
+
+        // Only throttle state-changing requests (POST)
         if (strtoupper($request->getMethod()) !== 'POST') {
             return;
         }
@@ -49,7 +60,7 @@ class LoginThrottleFilter implements FilterInterface
         $ip = $request->getIPAddress();
         $throttleKey = 'auth_throttle_' . md5($ip);
 
-        // Check if the request exceeds capacity
+        // 1. Check IP rate limit (Token Bucket)
         if ($throttler->check($throttleKey, $this->maxAttempts, $this->decaySeconds, 1) === false) {
             $retryAfter = max(1, $throttler->getTokenTime());
             $resetTime = time() + $retryAfter;
@@ -57,7 +68,7 @@ class LoginThrottleFilter implements FilterInterface
             // Log security warning for SIEM / audit monitoring
             log_message(
                 'warning',
-                "[WASA-CWE-307] Authentication rate limit exceeded. IP: {$ip}, Path: {$request->getUri()->getPath()}, Retry-After: {$retryAfter}s"
+                "[WASA-CWE-307] Authentication rate limit exceeded. IP: {$ip}, Path: {$uri}, Retry-After: {$retryAfter}s"
             );
 
             /** @var ResponseInterface $response */
@@ -80,7 +91,7 @@ class LoginThrottleFilter implements FilterInterface
                 ]);
             }
 
-            // Return HTML response for standard browser form submissions
+            // Return HTML response for standard browser submissions
             $body = '<!DOCTYPE html><html lang="en"><head><meta charset="utf-8">'
                 . '<title>429 Too Many Requests</title>'
                 . '<meta name="viewport" content="width=device-width, initial-scale=1">'
@@ -103,6 +114,24 @@ class LoginThrottleFilter implements FilterInterface
                 . '</body></html>';
 
             return $response->setBody($body);
+        }
+
+        // 2. Validate CAPTCHA for standard login POST
+        if ($uri === 'login' || $uri === 'login/') {
+            $submittedCaptcha = trim((string) $request->getPost('captcha'));
+            $expectedCaptcha  = (string) session('login_captcha');
+
+            if ($expectedCaptcha === '' || strcasecmp($submittedCaptcha, $expectedCaptcha) !== 0) {
+                // Invalidate session captcha so it cannot be retried
+                session()->remove('login_captcha');
+
+                return redirect()->route('login')
+                    ->withInput()
+                    ->with('error', 'Invalid Security Verification (CAPTCHA) code. Please enter the characters shown in the image.');
+            }
+
+            // Consume captcha to prevent replay attacks
+            session()->remove('login_captcha');
         }
     }
 

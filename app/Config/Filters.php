@@ -79,6 +79,7 @@ class Filters extends BaseFilters
      */
     public array $globals = [
         'before' => [
+            'loginThrottle',
             'singleSession',
             'invalidchars',
             'csrf' => [

@@ -376,6 +376,7 @@ $routes->post('Finance/bank_pos_settlement_create', 'Finance::bankPosSettlementC
 $routes->post('Finance/bank_pos_settlement_accept', 'Finance::bankPosSettlementAccept');
 
 service('auth')->routes($routes);
+$routes->get('captcha', 'Captcha::generate');
 $routes->get('auth/session-status', 'AuthSession::status');
 
 // Hospital Stock Management (Storestock)

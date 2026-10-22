@@ -92,6 +92,45 @@
                                             <div class="invalid-feedback">Please enter your password!</div>
                                         </div>
 
+                                        <!-- Security Verification CAPTCHA (WASA Brute-Force & Bot Defense) -->
+                                        <div class="col-12">
+                                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                                <label for="captchaInput" class="form-label mb-0 small fw-semibold text-secondary">
+                                                    <i class="bi bi-shield-check text-primary me-1"></i> Security Code
+                                                </label>
+                                                <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none" id="btnRefreshCaptcha" style="font-size: 11px;">
+                                                    <i class="bi bi-arrow-clockwise"></i> Change Code
+                                                </button>
+                                            </div>
+                                            <div class="input-group has-validation">
+                                                <span class="input-group-text p-1 bg-white border-end-0" style="cursor: pointer;" title="Click to change image code" onclick="refreshLoginCaptcha();">
+                                                    <img src="<?= base_url('captcha') ?>" id="captchaImage" alt="Security CAPTCHA" style="height: 36px; border-radius: 4px;">
+                                                </span>
+                                                <input type="text" name="captcha" id="captchaInput" class="form-control form-control-lg text-uppercase fw-bold text-center border-start-0 fs-5" placeholder="Enter Code" maxlength="6" autocomplete="off" required style="letter-spacing: 2px;">
+                                                <div class="invalid-feedback">Please enter the security verification characters.</div>
+                                            </div>
+                                        </div>
+
+                                        <script>
+                                        function refreshLoginCaptcha() {
+                                            var img = document.getElementById('captchaImage');
+                                            if (img) {
+                                                img.src = '<?= base_url('captcha') ?>?' + Date.now();
+                                            }
+                                            var inp = document.getElementById('captchaInput');
+                                            if (inp) {
+                                                inp.value = '';
+                                                inp.focus();
+                                            }
+                                        }
+                                        document.addEventListener('DOMContentLoaded', function() {
+                                            var btn = document.getElementById('btnRefreshCaptcha');
+                                            if (btn) {
+                                                btn.addEventListener('click', refreshLoginCaptcha);
+                                            }
+                                        });
+                                        </script>
+
                                         <?php if (setting('Auth.sessionConfig')['allowRemembering']) : ?>
                                             <div class="col-12">
                                                 <div class="form-check">
