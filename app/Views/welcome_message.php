@@ -482,10 +482,13 @@
                 })
                     .done(function(html) {
                         var targetEl = document.getElementById(String(xdiv));
+                        if (!targetEl && (xdiv === 'searchresult' || xdiv === 'test_div')) {
+                            targetEl = document.getElementById('medical-main') || document.getElementById('main');
+                        }
                         if (targetEl) {
                             targetEl.innerHTML = html;
                         }
-                        executeInjectedScripts(xdiv);
+                        executeInjectedScripts(targetEl ? targetEl.id : xdiv);
                         if (typeof window.showPageNotifications === 'function') {
                             window.showPageNotifications(targetEl);
                         }

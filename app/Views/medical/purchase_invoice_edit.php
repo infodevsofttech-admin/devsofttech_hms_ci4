@@ -6,14 +6,29 @@
 <?php else: ?>
 <div class="card">
     <div class="card-header">
-        <h5 class="mb-0">Purchase Invoice Information</h5>
-        <small>
-            <i>Supplier</i>: <?= esc($invoice->name_supplier ?? '-') ?> |
-            <?= ((int) ($invoice->ischallan ?? 0) === 1) ? '<i>Challan No.</i>' : '<i>Invoice No.</i>' ?>: <?= esc((string) ($invoice->Invoice_no ?? '')) ?> |
-            <i>Invoice Date</i>: <?= esc((string) ($invoice->str_date_of_invoice ?? '')) ?>
-            <button onclick="load_form_div('<?= base_url('Medical/PurchaseMasterEdit/' . (int) ($invoice->id ?? 0)) ?>','searchresult','Purchase Master Edit');" type="button" class="btn btn-warning btn-sm ms-2">Edit Invoice</button>
-            <button onclick="load_form_div('<?= base_url('Medical/Purchase') ?>','medical-main','Purchase :Pharmacy');" type="button" class="btn btn-secondary btn-sm ms-1">Back to Purchase</button>
-        </small>
+        <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
+            <div>
+                <h5 class="mb-0">Purchase Invoice Information</h5>
+                <small class="text-muted">
+                    <strong>Supplier:</strong> <?= esc($invoice->name_supplier ?? '-') ?> |
+                    <strong><?= ((int) ($invoice->ischallan ?? 0) === 1) ? 'Challan No.' : 'Invoice No.' ?>:</strong> <?= esc((string) ($invoice->Invoice_no ?? '')) ?> |
+                    <strong>Invoice Date:</strong> <?= esc((string) ($invoice->str_date_of_invoice ?? '')) ?>
+                </small>
+            </div>
+            <div>
+                <button onclick="var t = document.getElementById('searchresult') ? 'searchresult' : 'medical-main'; load_form_div('<?= base_url('Medical/PurchaseMasterEdit/' . (int) ($invoice->id ?? 0)) ?>', t, 'Purchase Master Edit');" type="button" class="btn btn-warning btn-sm ms-2">
+                    <i class="bi bi-pencil-square"></i> Edit Invoice
+                </button>
+                <?php if (!empty($linked_grn)): ?>
+                    <button onclick="load_form_div('<?= base_url('Medical/grn_edit/' . (int) $linked_grn['grn_id']) ?>','medical-main','GRN Detail');" type="button" class="btn btn-outline-info btn-sm ms-1">
+                        <i class="bi bi-box-arrow-left"></i> Back to GRN #<?= esc($linked_grn['grn_number'] ?? $linked_grn['grn_id']) ?>
+                    </button>
+                <?php endif; ?>
+                <button onclick="load_form_div('<?= base_url('Medical/Purchase') ?>','medical-main','Purchase :Pharmacy');" type="button" class="btn btn-secondary btn-sm ms-1">
+                    <i class="bi bi-list"></i> Back to Purchase
+                </button>
+            </div>
+        </div>
     </div>
     <div class="card-body">
         <form id="purchase-form" class="form1" method="post" action="javascript:void(0)">

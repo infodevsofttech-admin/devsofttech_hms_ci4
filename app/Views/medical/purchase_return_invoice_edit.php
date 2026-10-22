@@ -9,7 +9,7 @@
         <small>
             <i>Invoice No.</i>: <?= esc((string) ($invoice->Invoice_no ?? '')) ?> |
             <i>Invoice Date</i>: <?= esc((string) ($invoice->str_date_of_invoice ?? '')) ?>
-            <button onclick="load_form_div('<?= base_url('Medical_backpanel/PurchaseReturnInvoiceEdit/' . (int) ($invoice->id ?? 0)) ?>','searchresult','Purchase Return Invoice Edit');" type="button" class="btn btn-warning btn-sm ms-2">Reload Invoice</button>
+            <button onclick="var t = document.getElementById('searchresult') ? 'searchresult' : 'medical-main'; load_form_div('<?= base_url('Medical_backpanel/PurchaseReturnInvoiceEdit/' . (int) ($invoice->id ?? 0)) ?>', t, 'Purchase Return Invoice Edit');" type="button" class="btn btn-warning btn-sm ms-2">Reload Invoice</button>
             <a href="<?= base_url('Medical_Print/print_purchase_return/' . (int) ($invoice->id ?? 0)) ?>" target="_blank" class="btn btn-secondary btn-sm ms-1"><i class="fa fa-print"></i> Print</a>
         </small>
     </div>

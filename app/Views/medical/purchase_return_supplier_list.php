@@ -15,7 +15,7 @@
                 <td><?= esc((string) ($row->name_supplier ?? '')) ?></td>
                 <td><?= esc((string) ($row->str_date_of_invoice ?? $row->date_of_invoice ?? '')) ?></td>
                 <td>
-                    <button onclick="load_form_div('<?= base_url('Medical_backpanel/PurchaseReturnInvoiceEdit/' . (int) ($row->id ?? 0)) ?>','searchresult','Purchase Return Invoice Edit');" type="button" class="btn btn-warning btn-sm">View & Edit</button>
+                    <button onclick="var t = document.getElementById('searchresult') ? 'searchresult' : 'medical-main'; load_form_div('<?= base_url('Medical_backpanel/PurchaseReturnInvoiceEdit/' . (int) ($row->id ?? 0)) ?>', t, 'Purchase Return Invoice Edit');" type="button" class="btn btn-warning btn-sm">View & Edit</button>
                     <a href="<?= base_url('Medical_Print/print_purchase_return/' . (int) ($row->id ?? 0)) ?>" target="_blank" class="btn btn-secondary btn-sm"><i class="fa fa-print"></i> Print</a>
                 </td>
             </tr>

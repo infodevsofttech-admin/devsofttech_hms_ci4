@@ -7697,9 +7697,15 @@ class Medical extends BaseController
                 ->getResult();
         }
 
+        $linkedGrn = null;
+        if ($this->db->tableExists('mst_grns')) {
+            $linkedGrn = $this->db->table('mst_grns')->where('purchase_id', $invId)->get()->getRowArray();
+        }
+
         return view('medical/purchase_invoice_edit', [
             'purchase_invoice' => [$invoice],
             'med_gst_per' => $medGstPer,
+            'linked_grn' => $linkedGrn,
         ]);
     }
 
@@ -7739,10 +7745,16 @@ class Medical extends BaseController
                 ->getResult();
         }
 
+        $linkedGrn = null;
+        if ($this->db->tableExists('mst_grns')) {
+            $linkedGrn = $this->db->table('mst_grns')->where('purchase_id', $invId)->get()->getRowArray();
+        }
+
         return view('medical/purchase_invoice_master_edit', [
             'supplier_data' => $supplierData,
             'inv_master_data' => [$invMasterRow],
             'purchase_item' => $purchaseItems,
+            'linked_grn' => $linkedGrn,
             'can_update_purchase_status' => $this->canPharmacyPermission('pharmacy.purchase.status-update'),
         ]);
     }
@@ -7840,7 +7852,7 @@ class Medical extends BaseController
             $update['inv_status'] = $invStatus;
         }
         if (in_array('inv_status_update_by', $fields, true)) {
-            $update['inv_status_update_by'] = $userInfo;
+            $update['inv_status_update_by'] = $userId;
         }
 
         if ($update !== []) {

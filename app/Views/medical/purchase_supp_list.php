@@ -17,7 +17,7 @@
                 <td><?= esc((string) ($row->str_date_of_invoice ?? $row->date_of_invoice ?? '')) ?></td>
                 <td><?= esc((string) ($row->tamount ?? 0)) ?></td>
                 <td>
-                    <button onclick="load_form_div('<?= base_url('Medical/PurchaseMasterEdit/' . (int) ($row->id ?? 0)) ?>','searchresult','Purchase Master Edit');" type="button" class="btn btn-warning btn-sm">View & Edit</button>
+                    <button onclick="var t = document.getElementById('searchresult') ? 'searchresult' : 'medical-main'; load_form_div('<?= base_url('Medical/PurchaseMasterEdit/' . (int) ($row->id ?? 0)) ?>', t, 'Purchase Master Edit');" type="button" class="btn btn-warning btn-sm">View & Edit</button>
                     <?php if ((float) ($row->tamount ?? 0) == 0.0): ?>
                         <button onclick="delete_invoice(<?= (int) ($row->id ?? 0) ?>)" type="button" class="btn btn-danger btn-sm">Delete</button>
                     <?php endif; ?>

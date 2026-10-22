@@ -51,7 +51,8 @@
                 return;
             }
             notify('success', 'Please Attention', 'Invoice Added : ID->' + data.insertid);
-            load_form_div('<?= base_url('Medical/PurchaseInvoiceEdit') ?>/' + data.insertid, 'searchresult', 'Purchase Invoice Edit');
+            var t = document.getElementById('searchresult') ? 'searchresult' : 'medical-main';
+            load_form_div('<?= base_url('Medical/PurchaseInvoiceEdit') ?>/' + data.insertid, t, 'Purchase Invoice Edit');
         }, 'json').fail(function () {
             notify('error', 'Please Attention', 'Unable to create purchase invoice');
         });
