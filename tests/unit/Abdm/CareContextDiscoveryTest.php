@@ -129,6 +129,19 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
             net_amount REAL
         )");
 
+        $db->query("CREATE TABLE IF NOT EXISTS " . $db->prefixTable('record_links') . " (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            health_record_id INTEGER,
+            abdm_txn_id TEXT,
+            care_context_reference TEXT,
+            abha_id TEXT,
+            link_status TEXT,
+            response_json TEXT,
+            linked_at TEXT,
+            created_at TEXT,
+            updated_at TEXT
+        )");
+
         $db->resetDataCache();
 
         $db->table('charge_master')->emptyTable();
@@ -138,6 +151,7 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
         $db->table('health_records')->emptyTable();
         $db->table('patient_master')->emptyTable();
         $db->table('ipd_master')->emptyTable();
+        $db->table('record_links')->emptyTable();
         $db->table('immunization_records')->emptyTable();
         $db->table('invoice_master')->emptyTable();
 
@@ -610,6 +624,75 @@ final class CareContextDiscoveryTest extends CIUnitTestCase
         $opdConsults = array_values(array_filter($full, fn ($c) => ($c['record_type'] ?? '') === 'OPConsultRecord' && str_contains($c['careContextId'], '33728')));
         $this->assertCount(1, $opdConsults);
         $this->assertTrue($opdConsults[0]['is_fhir_ready'], 'Completed consultation with findings must be marked FHIR ready');
+    }
+
+    public function testCareContextsPartitioningByAbhaAddress(): void
+    {
+        $db = \Config\Database::connect();
+
+        // Setup patient 999
+        $db->table('patient_master')->insert([
+            'id'           => 999,
+            'p_code'       => 'P-999',
+            'p_fname'      => 'PARTITION TEST',
+            'dob'          => '1985-01-01',
+            'gender'       => 1,
+            'abha_id'      => '91999999999999',
+            'abha_address' => 'newuser@sbx',
+            'mphone1'      => '9999999999',
+        ]);
+
+        // Insert 2 prescriptions for patient 999
+        $db->table('opd_prescription')->insert([
+            'id'             => 701,
+            'opd_id'         => 701,
+            'p_id'           => 999,
+            'session_id'     => 701,
+            'date_opd_visit' => '2026-08-01',
+            'complaints'     => 'Old visit complaints',
+        ]);
+        $db->table('opd_prescription')->insert([
+            'id'             => 702,
+            'opd_id'         => 702,
+            'p_id'           => 999,
+            'session_id'     => 702,
+            'date_opd_visit' => '2026-10-22',
+            'complaints'     => 'New visit complaints',
+        ]);
+
+        // Link old prescription #701 to 'olduser@sbx'
+        $oldRef = 'OPD-999-S701-20260801';
+        $db->table('record_links')->insert([
+            'care_context_reference' => $oldRef,
+            'abha_id'                => 'olduser@sbx',
+            'link_status'            => 'linked',
+            'created_at'             => '2026-08-01 10:00:00',
+        ]);
+
+        // Link new prescription #702 to 'newuser@sbx'
+        $newRef = 'OPD-999-S702-20261022';
+        $db->table('record_links')->insert([
+            'care_context_reference' => $newRef,
+            'abha_id'                => 'newuser@sbx',
+            'link_status'            => 'linked',
+            'created_at'             => '2026-10-22 10:00:00',
+        ]);
+
+        $refGateway = new ReflectionClass($this->gateway);
+        $method = $refGateway->getMethod('findCareContextsForPatient');
+        $method->setAccessible(true);
+
+        // Discovery for 'newuser@sbx': MUST contain $newRef and MUST NOT contain $oldRef
+        [$v3New, $fullNew] = $method->invoke($this->gateway, 999, 'P-999', 'PARTITION TEST', '', '', 0, '', false, 'newuser@sbx');
+        $newRefs = array_column($v3New, 'referenceNumber');
+        $this->assertContains($newRef, $newRefs, 'New ABHA address should discover its own linked record');
+        $this->assertNotContains($oldRef, $newRefs, 'New ABHA address MUST NOT discover records linked to olduser@sbx');
+
+        // Discovery for 'olduser@sbx': MUST contain $oldRef and MUST NOT contain $newRef
+        [$v3Old, $fullOld] = $method->invoke($this->gateway, 999, 'P-999', 'PARTITION TEST', '', '', 0, '', false, 'olduser@sbx');
+        $oldRefs = array_column($v3Old, 'referenceNumber');
+        $this->assertContains($oldRef, $oldRefs, 'Old ABHA address should discover its own linked record');
+        $this->assertNotContains($newRef, $oldRefs, 'Old ABHA address MUST NOT discover records linked to newuser@sbx');
     }
 }
 

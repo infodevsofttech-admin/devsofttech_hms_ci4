@@ -190,7 +190,7 @@ class AbdmGateway extends BaseController
                 }
             }
 
-            [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientDisplay, '', '', 0, '', true);
+            [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientDisplay, '', '', 0, '', true, $discoveredAbha);
 
             $this->getAuditService()->log([
                 'action' => 'discovery_records',
@@ -5494,7 +5494,7 @@ class AbdmGateway extends BaseController
                 }
             }
 
-            [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientDisplay, '', '', 0, '', true);
+            [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientDisplay, '', '', 0, '', true, $discoveredAbha);
 
             $this->getAuditService()->log([
                 'action' => 'discovery_records',
@@ -7589,7 +7589,8 @@ class AbdmGateway extends BaseController
         string $entityId = '',
         int $taskId = 0,
         string $source = '',
-        bool $readyOnly = false
+        bool $readyOnly = false,
+        string $filterAbhaAddress = ''
     ): array {
         $this->db = $this->db ?? \Config\Database::connect();
         $careContextsV3 = [];
@@ -7597,7 +7598,85 @@ class AbdmGateway extends BaseController
         $seenRefs = [];
         $seenOpdSessions = [];
 
-        $addContext = function (array $item) use (&$careContextsV3, &$careContextsFull, &$seenRefs, &$seenOpdSessions, $readyOnly) {
+        // ABHA Address Partitioning:
+        // When discovering or linking for a specific ABHA address, care contexts linked to OTHER
+        // (older/different) ABHA addresses must be excluded, so old data remains with the old ABHA address
+        // and only records relevant to the active ABHA address (or unlinked records) are returned.
+        $targetAbha = strtolower(trim($filterAbhaAddress));
+        if ($targetAbha === '' && $patientId > 0 && $this->db->tableExists('patient_master')) {
+            $pmRow = $this->db->table('patient_master')->select('abha_address')->where('id', $patientId)->get(1)->getRowArray();
+            if (! empty($pmRow['abha_address'])) {
+                $targetAbha = strtolower(trim((string) $pmRow['abha_address']));
+            }
+        }
+        $otherLinkedRefs = [];
+        $thisAbhaLinkedRefs = [];
+
+        if ($targetAbha !== '') {
+            $allowedAbhaSet = [$targetAbha => true];
+
+            // 1. Check record_links
+            if ($this->db->tableExists('record_links')) {
+                $rlRows = $this->db->table('record_links')
+                    ->select('care_context_reference, abha_id, link_status')
+                    ->where('link_status', 'linked')
+                    ->where('care_context_reference IS NOT NULL')
+                    ->where('care_context_reference !=', '')
+                    ->get()
+                    ->getResultArray();
+
+                foreach ($rlRows as $rl) {
+                    $ref = trim((string) ($rl['care_context_reference'] ?? ''));
+                    $rAbha = strtolower(trim((string) ($rl['abha_id'] ?? '')));
+                    if ($ref === '' || $rAbha === '') {
+                        continue;
+                    }
+                    if (isset($allowedAbhaSet[$rAbha])) {
+                        $thisAbhaLinkedRefs[$ref] = true;
+                        unset($otherLinkedRefs[$ref]);
+                    } elseif (! isset($thisAbhaLinkedRefs[$ref])) {
+                        $otherLinkedRefs[$ref] = $rAbha;
+                    }
+                }
+            }
+
+            // 2. Check health_records
+            if ($this->db->tableExists('health_records')) {
+                $hrRows = $this->db->table('health_records')
+                    ->select('care_context_reference, abha_id, push_status')
+                    ->where('patient_id', $patientId)
+                    ->whereIn('push_status', ['linked', 'pushed'])
+                    ->where('care_context_reference IS NOT NULL')
+                    ->where('care_context_reference !=', '')
+                    ->get()
+                    ->getResultArray();
+
+                foreach ($hrRows as $hr) {
+                    $ref = trim((string) ($hr['care_context_reference'] ?? ''));
+                    $hAbha = strtolower(trim((string) ($hr['abha_id'] ?? '')));
+                    if ($ref === '' || $hAbha === '') {
+                        continue;
+                    }
+                    if (isset($allowedAbhaSet[$hAbha])) {
+                        $thisAbhaLinkedRefs[$ref] = true;
+                        unset($otherLinkedRefs[$ref]);
+                    } elseif (! isset($thisAbhaLinkedRefs[$ref])) {
+                        $otherLinkedRefs[$ref] = $hAbha;
+                    }
+                }
+            }
+        }
+
+        $addContext = function (array $item) use (
+            &$careContextsV3,
+            &$careContextsFull,
+            &$seenRefs,
+            &$seenOpdSessions,
+            $readyOnly,
+            $targetAbha,
+            &$otherLinkedRefs,
+            &$thisAbhaLinkedRefs
+        ) {
             $ref = trim((string) ($item['referenceNumber'] ?? $item['careContextId'] ?? ''));
             if ($ref === '' || isset($seenRefs[$ref])) {
                 return;
@@ -7605,6 +7684,20 @@ class AbdmGateway extends BaseController
             if ($readyOnly && empty($item['is_fhir_ready'])) {
                 return;
             }
+
+            // ABHA Address Partitioning filter:
+            // If this care context is linked to ANOTHER ABHA address and NOT linked to this target ABHA address, skip it.
+            if ($targetAbha !== '') {
+                $alias = trim((string) ($item['alias_reference'] ?? ''));
+                $isLinkedToThis = isset($thisAbhaLinkedRefs[$ref]) || ($alias !== '' && isset($thisAbhaLinkedRefs[$alias]));
+                $isLinkedToOther = (isset($otherLinkedRefs[$ref]) && ! isset($thisAbhaLinkedRefs[$ref]))
+                    || ($alias !== '' && isset($otherLinkedRefs[$alias]) && ! isset($thisAbhaLinkedRefs[$alias]));
+
+                if ($isLinkedToOther && ! $isLinkedToThis) {
+                    return;
+                }
+            }
+
             $seenRefs[$ref] = true;
             if (! empty($item['alias_reference'])) {
                 $seenRefs[trim((string) $item['alias_reference'])] = true;
@@ -14120,7 +14213,7 @@ class AbdmGateway extends BaseController
         $rawPhone   = trim((string) ($patient['mphone1'] ?? $patient['mphone2'] ?? ''));
         $cleanPhone = substr(preg_replace('/\D/', '', $rawPhone), -10);
 
-        [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientName, $taskType, $entityId, $taskId, $source);
+        [$careContextsV3, $careContextsFull] = $this->findCareContextsForPatient($patientId, $patientRef, $patientName, $taskType, $entityId, $taskId, $source, false, $effAbhaAddress);
 
         // Fetch already-linked care contexts from Bridge and Local DB (record_links & health_records)
         $linkedRefs = [];
@@ -14148,10 +14241,9 @@ class AbdmGateway extends BaseController
                 ->select('care_context_reference')
                 ->where('link_status', 'linked');
             if ($effAbhaAddress !== '') {
-                $rlQuery->groupStart()
-                    ->where('abha_id', $effAbhaAddress)
-                    ->orWhere('care_context_reference LIKE', '%' . $patientId . '%')
-                ->groupEnd();
+                $rlQuery->where('abha_id', $effAbhaAddress);
+            } else {
+                $rlQuery->where('care_context_reference LIKE', '%' . $patientId . '%');
             }
             $rlRows = $rlQuery->get()->getResultArray();
             foreach ($rlRows as $rl) {
@@ -14166,14 +14258,11 @@ class AbdmGateway extends BaseController
         if ($this->db->tableExists('health_records') && $patientId > 0) {
             $hrQuery = $this->db->table('health_records')
                 ->select('care_context_reference')
-                ->groupStart()
-                    ->where('patient_id', $patientId)
-                    ->orWhere('care_context_reference LIKE', '%-' . $patientId . '-%');
+                ->where('patient_id', $patientId);
             if ($effAbhaAddress !== '') {
-                $hrQuery->orWhere('abha_id', $effAbhaAddress);
+                $hrQuery->where('abha_id', $effAbhaAddress);
             }
-            $hrRows = $hrQuery->groupEnd()
-                ->whereIn('push_status', ['linked', 'pushed'])
+            $hrRows = $hrQuery->whereIn('push_status', ['linked', 'pushed'])
                 ->get()
                 ->getResultArray();
             foreach ($hrRows as $hr) {
