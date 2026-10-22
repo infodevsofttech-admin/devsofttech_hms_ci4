@@ -6754,31 +6754,66 @@ class AbdmGateway extends BaseController
         $requestId = trim((string) ($payload['requestId'] ?? $payload['request_id'] ?? $this->request->getHeaderLine('X-Request-Id')));
         $transactionId = trim((string) ($payload['transactionId'] ?? $payload['transaction_id'] ?? ('tx-' . bin2hex(random_bytes(8)))));
 
-        $patientRef = trim((string) (
-            $payload['patient']['referenceNumber']
-            ?? $payload['patientRef']
-            ?? $payload['patient_ref']
-            ?? $payload['referenceNumber']
-            ?? $payload['patient_id']
-            ?? $payload['patient']['patient_id']
-            ?? ''
-        ));
+        $rawPatient = $payload['patient'] ?? [];
+        $patientRef = '';
+        $abhaAddress = '';
+        $careContexts = [];
 
-        $abhaAddress = trim((string) (
-            $payload['patient']['id']
-            ?? $payload['patient']['abhaAddress']
-            ?? $payload['patient']['abha_address']
-            ?? $payload['abhaAddress']
-            ?? $payload['abha_address']
-            ?? ''
-        ));
+        if (is_array($rawPatient)) {
+            if (isset($rawPatient[0]) && is_array($rawPatient[0])) {
+                foreach ($rawPatient as $pItem) {
+                    if (is_array($pItem)) {
+                        if ($patientRef === '' && ! empty($pItem['referenceNumber'])) {
+                            $patientRef = trim((string) $pItem['referenceNumber']);
+                        }
+                        if ($abhaAddress === '' && ! empty($pItem['id'])) {
+                            $abhaAddress = trim((string) $pItem['id']);
+                        }
+                        if (! empty($pItem['careContexts']) && is_array($pItem['careContexts'])) {
+                            foreach ($pItem['careContexts'] as $cc) {
+                                if (is_array($cc) && ! empty($cc['referenceNumber'])) {
+                                    $careContexts[] = $cc;
+                                }
+                            }
+                        }
+                    }
+                }
+            } else {
+                $patientRef = trim((string) ($rawPatient['referenceNumber'] ?? $rawPatient['id'] ?? ''));
+                $abhaAddress = trim((string) ($rawPatient['id'] ?? $rawPatient['abhaAddress'] ?? $rawPatient['abha_address'] ?? ''));
+                if (! empty($rawPatient['careContexts']) && is_array($rawPatient['careContexts'])) {
+                    $careContexts = $rawPatient['careContexts'];
+                }
+            }
+        }
 
-        $careContexts = $payload['patient']['careContexts']
-            ?? $payload['careContexts']
-            ?? $payload['care_contexts']
-            ?? [];
-        if (! is_array($careContexts)) {
-            $careContexts = [];
+        if ($patientRef === '') {
+            $patientRef = trim((string) (
+                $payload['patientRef']
+                ?? $payload['patient_ref']
+                ?? $payload['referenceNumber']
+                ?? $payload['patient_id']
+                ?? ''
+            ));
+        }
+
+        if ($abhaAddress === '') {
+            $abhaAddress = trim((string) (
+                $payload['abhaAddress']
+                ?? $payload['abha_address']
+                ?? $payload['abhaId']
+                ?? $payload['abha_id']
+                ?? ''
+            ));
+        }
+
+        if (empty($careContexts)) {
+            $careContexts = $payload['careContexts']
+                ?? $payload['care_contexts']
+                ?? [];
+            if (! is_array($careContexts)) {
+                $careContexts = [];
+            }
         }
 
         if ($patientRef === '') {
