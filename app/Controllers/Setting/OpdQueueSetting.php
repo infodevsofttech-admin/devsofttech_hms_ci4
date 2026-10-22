@@ -28,12 +28,20 @@ class OpdQueueSetting extends BaseController
             $customAds = json_decode($adsJson, true) ?: [];
         }
 
+        $ipRestrictionEnabled = $this->getSetting('TV_QUEUE_IP_RESTRICTION_ENABLED', '1');
+        $defaultAllowedIps = "127.0.0.1\n::1\n10.*\n192.168.*\n172.16.*\n103.251.140.182";
+        $allowedIps = $this->getSetting('TV_QUEUE_ALLOWED_IPS', $defaultAllowedIps);
+        $currentClientIp = (string) $this->request->getIPAddress();
+
         return view('Setting/Admin/opd_queue_setting', [
             'footer_ticker' => $tickerText,
             'left_ad_text' => $leftAdText,
             'left_ad_image' => $leftAdImage,
             'left_ad_enabled' => $leftAdEnabled,
-            'custom_ads' => $customAds
+            'custom_ads' => $customAds,
+            'ip_restriction_enabled' => $ipRestrictionEnabled,
+            'allowed_ips' => $allowedIps,
+            'current_client_ip' => $currentClientIp,
         ]);
     }
 
@@ -145,6 +153,21 @@ class OpdQueueSetting extends BaseController
         return $this->response->setJSON([
             'status' => 1,
             'message' => 'Advertisement slide removed successfully!'
+        ]);
+    }
+
+    public function saveIpSecurity()
+    {
+        $post = $this->request->getPost();
+        $enabled = isset($post['ip_restriction_enabled']) && $post['ip_restriction_enabled'] === '1' ? '1' : '0';
+        $allowedIps = trim((string) ($post['allowed_ips'] ?? ''));
+
+        $this->setSetting('TV_QUEUE_IP_RESTRICTION_ENABLED', $enabled);
+        $this->setSetting('TV_QUEUE_ALLOWED_IPS', $allowedIps);
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'message' => 'OPD Queue TV IP restriction settings updated successfully!'
         ]);
     }
 

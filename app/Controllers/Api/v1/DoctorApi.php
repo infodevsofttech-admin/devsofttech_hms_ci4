@@ -872,6 +872,12 @@ class DoctorApi extends BaseController
      */
     public function queueIndex()
     {
+        if (! $this->isQueueAccessAllowed()) {
+            return $this->response
+                ->setStatusCode(403)
+                ->setBody($this->renderQueueAccessDeniedHtml());
+        }
+
         $pwaPath = FCPATH . 'App/Queue/index.html';
         if (file_exists($pwaPath)) {
             return $this->response->setBody(file_get_contents($pwaPath));
@@ -908,11 +914,245 @@ class DoctorApi extends BaseController
     }
 
     /**
+     * Verifies if the incoming request is authorized to access the OPD TV Queue Display / API.
+     * Access is allowed if:
+     * 1. User has an active authenticated HMS session (CodeIgniter Shield / user_id)
+     * 2. TV_QUEUE_IP_RESTRICTION_ENABLED setting is set to '0' (disabled)
+     * 3. Request origin matches allowed IPs/subnets (TV_QUEUE_ALLOWED_IPS)
+     */
+    private function isQueueAccessAllowed(): bool
+    {
+        // 1. Logged in staff / administrator can always view
+        if ((function_exists('auth') && auth()->loggedIn()) || (session()->has('user_id') && (int) session()->get('user_id') > 0)) {
+            return true;
+        }
+
+        $db = db_connect();
+        $enabledRow = $db->table('hospital_setting')
+            ->select('s_value')
+            ->where('s_name', 'TV_QUEUE_IP_RESTRICTION_ENABLED')
+            ->get(1)
+            ->getRowArray();
+
+        $restrictionEnabled = ($enabledRow['s_value'] ?? '1') === '1';
+        if (! $restrictionEnabled) {
+            return true;
+        }
+
+        // 2. Resolve client IP
+        $clientIp = trim((string) $this->request->getIPAddress());
+        if ($clientIp === '' || $clientIp === '0.0.0.0') {
+            $clientIp = trim((string) ($_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'));
+        }
+
+        // 3. Fetch allowed IP rules
+        $allowedRow = $db->table('hospital_setting')
+            ->select('s_value')
+            ->where('s_name', 'TV_QUEUE_ALLOWED_IPS')
+            ->get(1)
+            ->getRowArray();
+
+        $defaultAllowed = "127.0.0.1\n::1\n10.*\n192.168.*\n172.16.*\n103.251.140.182";
+        $allowedIpsRaw = !empty($allowedRow['s_value']) ? (string) $allowedRow['s_value'] : $defaultAllowed;
+
+        $rules = preg_split('/[\r\n,]+/', $allowedIpsRaw, -1, PREG_SPLIT_NO_EMPTY);
+        foreach ($rules as $rule) {
+            $rule = trim($rule);
+            if ($rule === '') continue;
+
+            if ($this->matchIpRule($clientIp, $rule)) {
+                return true;
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Checks if a client IP matches an individual IP rule (exact, wildcard, or CIDR).
+     */
+    private function matchIpRule(string $clientIp, string $rule): bool
+    {
+        if ($clientIp === $rule) {
+            return true;
+        }
+
+        if ($rule === 'localhost' && in_array($clientIp, ['127.0.0.1', '::1'], true)) {
+            return true;
+        }
+
+        if (in_array(strtolower($rule), ['intranet', 'private', 'lan'], true)) {
+            return $this->isHospitalIntranet($clientIp);
+        }
+
+        // Check wildcard (e.g. 192.168.*, 10.*, 103.251.*)
+        if (strpos($rule, '*') !== false) {
+            if (fnmatch($rule, $clientIp)) {
+                return true;
+            }
+        }
+
+        // Check CIDR (e.g. 192.168.0.0/16 or 10.0.0.0/8)
+        if (strpos($rule, '/') !== false) {
+            [$subnet, $bits] = explode('/', $rule, 2);
+            $bits = (int) $bits;
+            $ipLong = ip2long($clientIp);
+            $subnetLong = ip2long(trim($subnet));
+            if ($ipLong !== false && $subnetLong !== false && $bits >= 0 && $bits <= 32) {
+                $mask = $bits === 0 ? 0 : (~0 << (32 - $bits));
+                if (($ipLong & $mask) === ($subnetLong & $mask)) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
+    }
+
+    /**
+     * Renders a branded 403 Forbidden screen when /app/queue is accessed externally.
+     */
+    private function renderQueueAccessDeniedHtml(): string
+    {
+        $clientIp = esc((string) $this->request->getIPAddress());
+        $loginUrl = base_url('login');
+
+        return <<<HTML
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>403 Forbidden • OPD Queue TV Display</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.3/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css">
+    <style>
+        body {
+            background: linear-gradient(135deg, #0b132b 0%, #1c2541 50%, #1e293b 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+            color: #f8fafc;
+            padding: 1.5rem;
+        }
+        .security-card {
+            max-width: 580px;
+            width: 100%;
+            background: rgba(15, 23, 42, 0.85);
+            backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.1);
+            border-radius: 1.25rem;
+            padding: 2.5rem 2rem;
+            box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.5);
+            text-align: center;
+        }
+        .badge-terminal {
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            background: rgba(239, 68, 68, 0.15);
+            color: #f87171;
+            border: 1px solid rgba(239, 68, 68, 0.3);
+            border-radius: 9999px;
+            padding: 0.35rem 1rem;
+            font-size: 0.85rem;
+            font-weight: 600;
+            margin-bottom: 1.5rem;
+        }
+        .icon-circle {
+            width: 72px;
+            height: 72px;
+            border-radius: 50%;
+            background: rgba(239, 68, 68, 0.15);
+            border: 2px solid rgba(239, 68, 68, 0.4);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            margin: 0 auto 1.5rem;
+            color: #ef4444;
+            font-size: 2rem;
+        }
+        .ip-box {
+            background: rgba(0, 0, 0, 0.4);
+            border: 1px dashed rgba(255, 255, 255, 0.2);
+            border-radius: 0.5rem;
+            padding: 0.75rem 1rem;
+            font-family: monospace;
+            font-size: 0.95rem;
+            color: #cbd5e1;
+            margin: 1.5rem 0;
+            display: inline-block;
+        }
+        .btn-login {
+            background: linear-gradient(135deg, #2563eb 0%, #1d4ed8 100%);
+            border: none;
+            color: white;
+            font-weight: 600;
+            padding: 0.7rem 1.75rem;
+            border-radius: 0.5rem;
+            text-decoration: none;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.5rem;
+            transition: transform 0.15s ease;
+        }
+        .btn-login:hover {
+            transform: translateY(-2px);
+            color: white;
+        }
+    </style>
+</head>
+<body>
+    <div class="security-card">
+        <div class="badge-terminal">
+            <i class="bi bi-shield-lock-fill"></i> Restricted Hospital Terminal (CWE-200)
+        </div>
+        <div class="icon-circle">
+            <i class="bi bi-display"></i>
+        </div>
+        <h3 class="fw-bold mb-2">OPD TV Display Access Restricted</h3>
+        <p class="text-secondary small mb-3">
+            This live queue &amp; token tracker display is restricted to authorized hospital waiting rooms, local intranet (LAN), and secure VPN terminals.
+        </p>
+
+        <div class="ip-box">
+            Client IP: <span class="text-warning">{$clientIp}</span> &bull; Status: <span class="text-danger fw-bold">Unauthorized</span>
+        </div>
+
+        <p class="text-muted small" style="font-size: 13px;">
+            If you are hospital staff setting up a waiting room display, please add this IP to the whitelist in <strong>Admin Panel &gt; OPD Queue TV Settings</strong> or log in using your staff credentials.
+        </p>
+
+        <div class="d-flex justify-content-center gap-2 mt-4">
+            <a href="{$loginUrl}" class="btn-login">
+                <i class="bi bi-box-arrow-in-right"></i> Staff HMS Login
+            </a>
+        </div>
+    </div>
+</body>
+</html>
+HTML;
+    }
+
+    /**
      * GET api/v1/opd/queue/live
      * Returns real-time OPD Tokens & Hospital Showcase Ads for TV Queue Display
      */
     public function liveQueueDisplay()
     {
+        if (! $this->isQueueAccessAllowed()) {
+            return $this->response
+                ->setStatusCode(403)
+                ->setJSON([
+                    'status' => 0,
+                    'error' => 'Forbidden',
+                    'message' => 'Access Restricted: OPD Live Queue feed is only accessible from authorized hospital terminals and networks (WASA CWE-200 Remediation).',
+                    'client_ip' => (string) $this->request->getIPAddress(),
+                ]);
+        }
+
         $db = db_connect();
         $todayStart = date('Y-m-d') . ' 00:00:00';
         $tomorrowStart = date('Y-m-d', strtotime('+1 day')) . ' 00:00:00';

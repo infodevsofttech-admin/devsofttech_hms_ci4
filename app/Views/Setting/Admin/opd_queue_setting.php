@@ -57,6 +57,64 @@
                     </form>
                 </div>
             </div>
+
+            <!-- TV Display Network & IP Security (WASA Compliance) -->
+            <div class="card shadow-sm border-0 mb-3">
+                <div class="card-header bg-dark text-white fw-bold d-flex justify-content-between align-items-center">
+                    <span><i class="bi bi-shield-lock-fill me-2 text-warning"></i> TV Display Network &amp; IP Security</span>
+                    <span class="badge bg-warning text-dark"><i class="bi bi-shield-check me-1"></i>WASA Security</span>
+                </div>
+                <div class="card-body mt-3">
+                    <form id="form_ip_security_settings" action="javascript:void(0)" onsubmit="saveIpSecuritySettings(event)">
+                        <div class="alert alert-light border d-flex align-items-start gap-2 py-2 mb-3">
+                            <i class="bi bi-info-circle-fill text-primary mt-1 fs-5"></i>
+                            <div class="small text-muted">
+                                <strong>Protection for <code>/app/queue</code> &amp; live token feeds:</strong> Only whitelisted hospital local IPs (LAN), VPN addresses, or authorized static IPs can open the TV Display. All unauthorized public internet requests receive <strong>HTTP 403 Forbidden</strong> with zero doctor/queue data exposed.
+                            </div>
+                        </div>
+
+                        <div class="form-check form-switch mb-3">
+                            <input class="form-check-input" type="checkbox" name="ip_restriction_enabled" id="ip_restriction_enabled" value="1" <?= $ip_restriction_enabled === '1' ? 'checked' : '' ?>>
+                            <label class="form-check-label fw-bold" for="ip_restriction_enabled">
+                                Enforce IP / VPN Restriction for TV Display
+                            </label>
+                            <small class="d-block text-muted">When enabled, only allowed IPs or logged-in staff can access <code>/app/queue</code> and live OPD data.</small>
+                        </div>
+
+                        <div class="mb-3">
+                            <div class="d-flex justify-content-between align-items-center mb-1">
+                                <label class="form-label fw-bold mb-0">Allowed IP Addresses &amp; Subnets</label>
+                                <button type="button" class="btn btn-outline-primary btn-sm py-0 px-2" style="font-size: 12px;" onclick="addCurrentClientIp()">
+                                    <i class="bi bi-plus-circle me-1"></i> Add My IP (<?= esc($current_client_ip) ?>)
+                                </button>
+                            </div>
+                            <textarea class="form-control font-monospace" name="allowed_ips" id="allowed_ips_textarea" rows="4" placeholder="127.0.0.1&#10;192.168.*&#10;10.*&#10;103.251.140.182" style="font-size: 13px;"><?= esc($allowed_ips) ?></textarea>
+                            <div class="form-text small mt-1">
+                                Enter one IP or subnet per line or separated by commas.<br>
+                                • Exact: <code>103.251.140.182</code>, <code>127.0.0.1</code><br>
+                                • Wildcards: <code>192.168.*</code>, <code>10.*</code>, <code>172.16.*</code><br>
+                                • Subnet CIDR: <code>10.8.0.0/24</code>, <code>192.168.1.0/24</code>
+                            </div>
+                        </div>
+
+                        <div class="d-flex flex-wrap gap-2 mb-3">
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="insertIpRule('192.168.*')">
+                                + Hospital LAN (192.168.*)
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="insertIpRule('10.*')">
+                                + Hospital VPN / Intranet (10.*)
+                            </button>
+                            <button type="button" class="btn btn-sm btn-outline-secondary" onclick="insertIpRule('127.0.0.1\n::1')">
+                                + Localhost Only
+                            </button>
+                        </div>
+
+                        <button type="button" onclick="saveIpSecuritySettings(event)" class="btn btn-dark fw-bold px-4">
+                            <i class="bi bi-shield-check text-warning me-1"></i> Save IP Security Settings
+                        </button>
+                    </form>
+                </div>
+            </div>
         </div>
 
         <!-- Right Side: Showcase & Ad Banners Management -->
@@ -231,5 +289,54 @@
                 alert('Error deleting banner');
             }
         });
+    }
+
+    var myCurrentIp = '<?= esc($current_client_ip) ?>';
+
+    function addCurrentClientIp() {
+        if (!myCurrentIp) return;
+        insertIpRule(myCurrentIp);
+    }
+
+    function insertIpRule(rule) {
+        var el = document.getElementById('allowed_ips_textarea');
+        if (!el) return;
+        var cur = el.value.trim();
+        var rules = rule.split('\n');
+        rules.forEach(function(r) {
+            r = r.trim();
+            if (r !== '' && cur.indexOf(r) === -1) {
+                cur = cur === '' ? r : cur + '\n' + r;
+            }
+        });
+        el.value = cur;
+    }
+
+    function saveIpSecuritySettings(e) {
+        if (e && e.preventDefault) e.preventDefault();
+        var form = document.getElementById('form_ip_security_settings');
+        if (!form) return false;
+        var formData = new FormData(form);
+
+        $.ajax({
+            url: '<?= base_url('setting/admin/opd-queue-tv/save-ip-security') ?>',
+            type: 'POST',
+            data: formData,
+            contentType: false,
+            processData: false,
+            dataType: 'json',
+            success: function(res) {
+                if (res.status === 1) {
+                    alert(res.message);
+                    refreshAdminSubPage();
+                } else {
+                    alert(res.message || 'Error saving IP security settings');
+                }
+            },
+            error: function() {
+                alert('Error saving IP security settings');
+            }
+        });
+        return false;
     }
 </script>

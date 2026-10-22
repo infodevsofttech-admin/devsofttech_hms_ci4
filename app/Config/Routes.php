@@ -1467,6 +1467,7 @@ $routes->group('setting', static function($routes) {
     $routes->post('admin/opd-queue-tv/save', 'Setting\\OpdQueueSetting::save');
     $routes->post('admin/opd-queue-tv/upload-banner', 'Setting\\OpdQueueSetting::uploadBanner');
     $routes->post('admin/opd-queue-tv/delete-banner', 'Setting\\OpdQueueSetting::deleteBanner');
+    $routes->post('admin/opd-queue-tv/save-ip-security', 'Setting\\OpdQueueSetting::saveIpSecurity');
     $routes->get('admin/medical-store', 'Setting\\MedicalStoreAdmin::index');
     $routes->post('admin/medical-store/save', 'Setting\\MedicalStoreAdmin::save');
     $routes->post('admin/medical-store/delete', 'Setting\\MedicalStoreAdmin::delete');
