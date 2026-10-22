@@ -1,7 +1,5 @@
-const CACHE_NAME = 'hms-opd-queue-v1';
+const CACHE_NAME = 'hms-opd-queue-v2';
 const ASSETS_TO_CACHE = [
-    '/app/queue',
-    '/App/Queue/index.html',
     '/App/Queue/manifest.json',
     '/assets/img/logo.png',
     '/assets/img/pwa-icon-512.png',
@@ -35,8 +33,8 @@ self.addEventListener('activate', (event) => {
 });
 
 self.addEventListener('fetch', (event) => {
-    // API endpoints always fetch fresh network data
-    if (event.request.url.includes('/api/v1/')) {
+    // Navigation requests (HTML documents) and API endpoints must always go straight to network
+    if (event.request.mode === 'navigate' || event.request.url.includes('/api/v1/') || event.request.url.includes('/app/queue')) {
         event.respondWith(fetch(event.request));
         return;
     }

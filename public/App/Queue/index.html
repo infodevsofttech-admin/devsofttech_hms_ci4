@@ -509,41 +509,48 @@
             var xhr = new XMLHttpRequest();
             xhr.open('GET', '/api/v1/opd/queue/live', true);
             xhr.onreadystatechange = function() {
-                if (xhr.readyState === 4 && xhr.status === 200) {
-                    try {
-                        var json = JSON.parse(xhr.responseText);
-                        if (json.status === 1) {
-                            if (json.trackers) trackersData = json.trackers;
-                            if (json.ads) adsData = json.ads;
-                            if (json.hospital_name) {
-                                var hospEl = document.getElementById('hdr_hosp_name');
-                                if (hospEl) hospEl.textContent = json.hospital_name;
-                            }
-                            if (json.footer_ticker) {
-                                var tickerEl = document.getElementById('ticker_text');
-                                if (tickerEl) {
-                                    tickerEl.innerHTML = '<i class="bi bi-info-circle-fill text-warning me-2"></i> ' + json.footer_ticker;
+                if (xhr.readyState === 4) {
+                    if (xhr.status === 200) {
+                        try {
+                            var json = JSON.parse(xhr.responseText);
+                            if (json.status === 1) {
+                                if (json.trackers) trackersData = json.trackers;
+                                if (json.ads) adsData = json.ads;
+                                if (json.hospital_name) {
+                                    var hospEl = document.getElementById('hdr_hosp_name');
+                                    if (hospEl) hospEl.textContent = json.hospital_name;
                                 }
-                            }
-                            if (json.left_ad) {
-                                var leftAdContainer = document.getElementById('tracker_left_ad_container');
-                                var leftAdContent = document.getElementById('tracker_left_ad_content');
-                                if (leftAdContainer && leftAdContent && json.left_ad.enabled) {
-                                    leftAdContainer.style.display = 'block';
-                                    if (json.left_ad.image_url) {
-                                        leftAdContent.innerHTML = '<img src="' + json.left_ad.image_url + '" style="max-height: 48px; width: 100%; object-fit: contain; border-radius: 6px;" />';
-                                    } else {
-                                        leftAdContent.innerHTML = '<div class="d-flex align-items-center gap-2 text-warning fw-bold small"><i class="bi bi-megaphone-fill fs-5"></i> <span>' + (json.left_ad.text || '24x7 Emergency Services Available') + '</span></div>';
+                                if (json.footer_ticker) {
+                                    var tickerEl = document.getElementById('ticker_text');
+                                    if (tickerEl) {
+                                        tickerEl.innerHTML = '<i class="bi bi-info-circle-fill text-warning me-2"></i> ' + json.footer_ticker;
                                     }
-                                } else if (leftAdContainer) {
-                                    leftAdContainer.style.display = 'none';
                                 }
+                                if (json.left_ad) {
+                                    var leftAdContainer = document.getElementById('tracker_left_ad_container');
+                                    var leftAdContent = document.getElementById('tracker_left_ad_content');
+                                    if (leftAdContainer && leftAdContent && json.left_ad.enabled) {
+                                        leftAdContainer.style.display = 'block';
+                                        if (json.left_ad.image_url) {
+                                            leftAdContent.innerHTML = '<img src="' + json.left_ad.image_url + '" style="max-height: 48px; width: 100%; object-fit: contain; border-radius: 6px;" />';
+                                        } else {
+                                            leftAdContent.innerHTML = '<div class="d-flex align-items-center gap-2 text-warning fw-bold small"><i class="bi bi-megaphone-fill fs-5"></i> <span>' + (json.left_ad.text || '24x7 Emergency Services Available') + '</span></div>';
+                                        }
+                                    } else if (leftAdContainer) {
+                                        leftAdContainer.style.display = 'none';
+                                    }
+                                }
+                                renderTrackers();
+                                renderShowcase();
                             }
-                            renderTrackers();
-                            renderShowcase();
+                        } catch (e) {
+                            console.log('JSON parse error');
                         }
-                    } catch (e) {
-                        console.log('JSON parse error');
+                    } else if (xhr.status === 403) {
+                        // Access forbidden: wipe sensitive data and reload to show 403 screen
+                        trackersData = [];
+                        adsData = [];
+                        window.location.reload();
                     }
                 }
             };

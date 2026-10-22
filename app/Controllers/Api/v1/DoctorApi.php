@@ -875,12 +875,17 @@ class DoctorApi extends BaseController
         if (! $this->isQueueAccessAllowed()) {
             return $this->response
                 ->setStatusCode(403)
+                ->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+                ->setHeader('Pragma', 'no-cache')
                 ->setBody($this->renderQueueAccessDeniedHtml());
         }
 
         $pwaPath = FCPATH . 'App/Queue/index.html';
         if (file_exists($pwaPath)) {
-            return $this->response->setBody(file_get_contents($pwaPath));
+            return $this->response
+                ->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
+                ->setHeader('Pragma', 'no-cache')
+                ->setBody(file_get_contents($pwaPath));
         }
 
         return redirect()->to(base_url('app'));
@@ -894,6 +899,7 @@ class DoctorApi extends BaseController
         $swPath = FCPATH . 'App/Queue/sw.js';
         if (file_exists($swPath)) {
             return $this->response->setHeader('Content-Type', 'application/javascript')
+                                  ->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
                                   ->setHeader('Service-Worker-Allowed', '/')
                                   ->setBody(file_get_contents($swPath));
         }
@@ -908,6 +914,7 @@ class DoctorApi extends BaseController
         $manifestPath = FCPATH . 'App/Queue/manifest.json';
         if (file_exists($manifestPath)) {
             return $this->response->setHeader('Content-Type', 'application/json')
+                                  ->setHeader('Cache-Control', 'no-store, no-cache, must-revalidate, max-age=0')
                                   ->setBody(file_get_contents($manifestPath));
         }
         return $this->response->setStatusCode(404);
@@ -915,18 +922,10 @@ class DoctorApi extends BaseController
 
     /**
      * Verifies if the incoming request is authorized to access the OPD TV Queue Display / API.
-     * Access is allowed if:
-     * 1. User has an active authenticated HMS session (CodeIgniter Shield / user_id)
-     * 2. TV_QUEUE_IP_RESTRICTION_ENABLED setting is set to '0' (disabled)
-     * 3. Request origin matches allowed IPs/subnets (TV_QUEUE_ALLOWED_IPS)
+     * When TV_QUEUE_IP_RESTRICTION_ENABLED is '1', only allowed IPs/subnets can access.
      */
     private function isQueueAccessAllowed(): bool
     {
-        // 1. Logged in staff / administrator can always view
-        if ((function_exists('auth') && auth()->loggedIn()) || (session()->has('user_id') && (int) session()->get('user_id') > 0)) {
-            return true;
-        }
-
         $db = db_connect();
         $enabledRow = $db->table('hospital_setting')
             ->select('s_value')
@@ -939,21 +938,26 @@ class DoctorApi extends BaseController
             return true;
         }
 
-        // 2. Resolve client IP
+        // 1. Resolve client IP
         $clientIp = trim((string) $this->request->getIPAddress());
         if ($clientIp === '' || $clientIp === '0.0.0.0') {
             $clientIp = trim((string) ($_SERVER['REMOTE_ADDR'] ?? '127.0.0.1'));
         }
 
-        // 3. Fetch allowed IP rules
+        // 2. Fetch allowed IP rules
         $allowedRow = $db->table('hospital_setting')
             ->select('s_value')
             ->where('s_name', 'TV_QUEUE_ALLOWED_IPS')
             ->get(1)
             ->getRowArray();
 
-        $defaultAllowed = "127.0.0.1\n::1\n10.*\n192.168.*\n172.16.*\n103.251.140.182";
-        $allowedIpsRaw = !empty($allowedRow['s_value']) ? (string) $allowedRow['s_value'] : $defaultAllowed;
+        // If setting exists in DB (even if empty because user deleted all IPs), respect it!
+        // Only if setting was never saved in DB, use default list.
+        if ($allowedRow !== null) {
+            $allowedIpsRaw = (string) $allowedRow['s_value'];
+        } else {
+            $allowedIpsRaw = "127.0.0.1\n::1\n10.*\n192.168.*\n172.16.*\n103.251.140.182";
+        }
 
         $rules = preg_split('/[\r\n,]+/', $allowedIpsRaw, -1, PREG_SPLIT_NO_EMPTY);
         foreach ($rules as $rule) {
