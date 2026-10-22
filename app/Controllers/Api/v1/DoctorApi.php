@@ -1343,7 +1343,7 @@ HTML;
 
         $hospNameRow = $db->table('hospital_setting')->select('s_value')->where('s_name', 'H_Name')->get(1)->getRowArray();
 
-        return $this->response->setJSON([
+        return $this->response->setStatusCode(200)->setJSON([
             'status' => 1,
             'hospital_name' => !empty($hospNameRow['s_value']) ? $hospNameRow['s_value'] : 'E-Atria Multispeciality Hospital',
             'server_time' => date('d-m-Y h:i:s A'),
