@@ -62,45 +62,73 @@
     </div>
     <div class="card-body p-0">
         <div class="table-responsive">
-            <table class="table table-sm table-striped align-middle mb-0">
+            <table class="table table-sm table-striped align-middle mb-0" style="font-size: 13px;">
                 <thead class="table-light">
                     <tr>
-                        <th style="width: 40px;">#</th>
-                        <th>Product Name</th>
-                        <th>Batch No</th>
-                        <th>Expiry Date</th>
-                        <th class="text-center">Pack</th>
-                        <th class="text-center">Rec. Packs</th>
-                        <th class="text-center">Free</th>
-                        <th class="text-center">Rejected</th>
-                        <th class="text-end">Rate/Pack</th>
-                        <th class="text-end">MRP</th>
-                        <th class="text-center">GST %</th>
-                        <th class="text-end">Line Total</th>
-                        <th class="text-center">Live Stock ID</th>
+                        <th style="width: 30px;">#</th>
+                        <th>Medicine Name</th>
+                        <th style="width: 90px;">Batch No</th>
+                        <th style="width: 95px;">Expiry</th>
+                        <th class="text-center" style="width: 50px;">Pack</th>
+                        <th class="text-center" style="width: 65px;">Rec. Qty</th>
+                        <th class="text-center" style="width: 50px;">Free</th>
+                        <th class="text-end" style="width: 75px;">Rate/Pack</th>
+                        <th class="text-end" style="width: 70px;">MRP</th>
+                        <th class="text-end" style="width: 80px;">Gross Amt</th>
+                        <th class="text-center" style="width: 55px;">Disc %</th>
+                        <th class="text-end" style="width: 75px;">Sch Disc</th>
+                        <th class="text-end" style="width: 85px;">Taxable Amt</th>
+                        <th class="text-center" style="width: 90px;">GST</th>
+                        <th class="text-end" style="width: 90px;">Line Total</th>
+                        <th class="text-center" style="width: 85px;">Live Stock ID</th>
                     </tr>
                 </thead>
                 <tbody>
+                    <?php 
+                        $totalGross = 0.0;
+                        $totalDiscount = 0.0;
+                    ?>
                     <?php if (!empty($grnItems)): ?>
                         <?php foreach ($grnItems as $idx => $it): ?>
+                            <?php 
+                                $gross = (float)($it['gross_amount'] ?: ((float)$it['received_packs'] * (float)$it['unit_purchase_rate']));
+                                $schPer = (float)($it['sch_disc_per'] ?? 0);
+                                $schAmt = (float)($it['sch_disc_amt'] ?? 0);
+                                $schTotal = ($schPer > 0 ? ($gross * $schPer / 100) : 0) + $schAmt;
+                                $tradeDisc = (float)$it['discount_percent'];
+                                $afterSch = max(0, $gross - $schTotal);
+                                $tradeDiscAmt = ($tradeDisc > 0) ? ($afterSch * $tradeDisc / 100) : 0;
+                                $rowDisc = $schTotal + $tradeDiscAmt;
+
+                                $totalGross += $gross;
+                                $totalDiscount += $rowDisc;
+
+                                $isInter = (!empty($grn['gst_type']) && $grn['gst_type'] === 'inter_state') || ((float)$it['igst_percent'] > 0);
+                                $gstLabel = $isInter 
+                                    ? number_format((float)$it['igst_percent'], 1) . '% IGST'
+                                    : number_format((float)$it['cgst_percent'] + (float)$it['sgst_percent'], 0) . '% (' . number_format((float)$it['cgst_percent'], 1) . '+' . number_format((float)$it['sgst_percent'], 1) . '%)';
+                            ?>
                             <tr>
                                 <td><?= $idx + 1 ?></td>
-                                <td><strong><?= esc($it['item_name']) ?></strong></td>
+                                <td>
+                                    <strong><?= esc($it['item_name']) ?></strong>
+                                    <?php if (!empty($it['rejected_packs']) && (float)$it['rejected_packs'] > 0): ?>
+                                        <small class="d-block text-danger">Damaged: <?= (float)$it['rejected_packs'] ?> (<?= esc($it['rejection_reason'] ?: 'Damaged') ?>)</small>
+                                    <?php endif; ?>
+                                </td>
                                 <td><span class="badge bg-light text-dark font-monospace border"><?= esc($it['batch_no']) ?></span></td>
                                 <td><?= date('d-M-Y', strtotime($it['expiry_date'])) ?></td>
                                 <td class="text-center"><?= (int)$it['packing'] ?>s</td>
                                 <td class="text-center fw-bold"><?= (float)$it['received_packs'] ?></td>
                                 <td class="text-center text-success"><?= (float)$it['free_packs'] ?></td>
-                                <td class="text-center <?= ((float)$it['rejected_packs'] > 0) ? 'text-danger fw-bold' : 'text-muted' ?>">
-                                    <?= (float)$it['rejected_packs'] ?>
-                                    <?php if (!empty($it['rejection_reason'])): ?>
-                                        <small class="d-block text-danger">(<?= esc($it['rejection_reason']) ?>)</small>
-                                    <?php endif; ?>
-                                </td>
                                 <td class="text-end">₹<?= number_format((float)$it['unit_purchase_rate'], 2) ?></td>
                                 <td class="text-end">₹<?= number_format((float)$it['mrp'], 2) ?></td>
-                                <td class="text-center"><?= number_format((float)$it['cgst_percent'] * 2, 0) ?>%</td>
-                                <td class="text-end fw-semibold">₹<?= number_format((float)$it['total_amount'], 2) ?></td>
+                                <td class="text-end font-monospace">₹<?= number_format($gross, 2) ?></td>
+                                <td class="text-center"><?= number_format($tradeDisc, 1) ?>%</td>
+                                <td class="text-end text-muted font-monospace">₹<?= number_format($schTotal, 2) ?></td>
+                                <td class="text-end font-monospace fw-semibold">₹<?= number_format((float)$it['taxable_amount'], 2) ?></td>
+                                <td class="text-center small"><?= esc($gstLabel) ?></td>
+                                <td class="text-end font-monospace fw-semibold">₹<?= number_format((float)$it['total_amount'], 2) ?></td>
                                 <td class="text-center">
                                     <?php if (!empty($it['purchase_item_id'])): ?>
                                         <span class="badge bg-success font-monospace">Item #<?= (int)$it['purchase_item_id'] ?></span>
@@ -114,18 +142,53 @@
                 </tbody>
                 <tfoot class="table-light">
                     <tr>
-                        <th colspan="11" class="text-end">Taxable Amount:</th>
-                        <th class="text-end">₹<?= number_format((float)$grn['total_received_amount'], 2) ?></th>
+                        <th colspan="12" class="text-end text-muted">Sub Total (Gross Amount):</th>
+                        <th colspan="3" class="text-end font-monospace">₹<?= number_format($totalGross, 2) ?></th>
                         <th></th>
                     </tr>
                     <tr>
-                        <th colspan="11" class="text-end">Total GST:</th>
-                        <th class="text-end">₹<?= number_format((float)$grn['total_tax_amount'], 2) ?></th>
+                        <th colspan="12" class="text-end text-muted">Total Discount (Trade &amp; Scheme):</th>
+                        <th colspan="3" class="text-end font-monospace text-danger">₹<?= number_format($totalDiscount, 2) ?></th>
                         <th></th>
                     </tr>
+                    <tr>
+                        <th colspan="12" class="text-end text-dark">Taxable Amount:</th>
+                        <th colspan="3" class="text-end font-monospace fw-bold">₹<?= number_format((float)$grn['total_received_amount'], 2) ?></th>
+                        <th></th>
+                    </tr>
+                    <?php if (!empty($grn['gst_type']) && $grn['gst_type'] === 'inter_state'): ?>
+                        <tr>
+                            <th colspan="12" class="text-end text-muted">IGST Amount:</th>
+                            <th colspan="3" class="text-end font-monospace text-primary">₹<?= number_format((float)($grn['igst_amount'] ?? $grn['total_tax_amount']), 2) ?></th>
+                            <th></th>
+                        </tr>
+                    <?php else: ?>
+                        <tr>
+                            <th colspan="12" class="text-end text-muted">CGST Amount:</th>
+                            <th colspan="3" class="text-end font-monospace text-primary">₹<?= number_format((float)($grn['cgst_amount'] ?? ((float)$grn['total_tax_amount'] / 2)), 2) ?></th>
+                            <th></th>
+                        </tr>
+                        <tr>
+                            <th colspan="12" class="text-end text-muted">SGST Amount:</th>
+                            <th colspan="3" class="text-end font-monospace text-primary">₹<?= number_format((float)($grn['sgst_amount'] ?? ((float)$grn['total_tax_amount'] / 2)), 2) ?></th>
+                            <th></th>
+                        </tr>
+                    <?php endif; ?>
+                    <tr>
+                        <th colspan="12" class="text-end text-dark">Total GST:</th>
+                        <th colspan="3" class="text-end font-monospace fw-bold">₹<?= number_format((float)$grn['total_tax_amount'], 2) ?></th>
+                        <th></th>
+                    </tr>
+                    <?php if (isset($grn['round_off']) && (float)$grn['round_off'] != 0): ?>
+                        <tr>
+                            <th colspan="12" class="text-end text-muted">Round Off:</th>
+                            <th colspan="3" class="text-end font-monospace"><?= ((float)$grn['round_off'] > 0 ? '+' : '') . number_format((float)$grn['round_off'], 2) ?></th>
+                            <th></th>
+                        </tr>
+                    <?php endif; ?>
                     <tr class="table-success">
-                        <th colspan="11" class="text-end fs-6">Net Inward Bill Total:</th>
-                        <th class="text-end fs-6 text-success fw-bold">₹<?= number_format((float)$grn['net_amount'], 2) ?></th>
+                        <th colspan="12" class="text-end fs-6">Net Inward Bill Total (Grand Total):</th>
+                        <th colspan="3" class="text-end fs-6 font-monospace text-success fw-bold">₹<?= number_format((float)$grn['net_amount'], 2) ?></th>
                         <th></th>
                     </tr>
                 </tfoot>

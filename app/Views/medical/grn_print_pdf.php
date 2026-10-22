@@ -62,37 +62,61 @@
     <table class="items-table">
         <thead>
             <tr>
-                <th style="width: 25px;">#</th>
+                <th style="width: 20px;">#</th>
                 <th>Item Name</th>
-                <th style="width: 75px;">Batch No</th>
-                <th style="width: 65px;">Expiry</th>
-                <th class="text-center" style="width: 45px;">Pack</th>
-                <th class="text-center" style="width: 50px;">Ordered</th>
-                <th class="text-center" style="width: 50px;">Received</th>
-                <th class="text-center" style="width: 40px;">Free</th>
-                <th class="text-center" style="width: 45px;">Damaged</th>
-                <th class="text-end" style="width: 65px;">Rate/Pack</th>
-                <th class="text-end" style="width: 60px;">MRP</th>
-                <th class="text-end" style="width: 75px;">Line Total</th>
+                <th style="width: 65px;">Batch No</th>
+                <th style="width: 55px;">Expiry</th>
+                <th class="text-center" style="width: 35px;">Pack</th>
+                <th class="text-center" style="width: 45px;">Rec. Qty</th>
+                <th class="text-center" style="width: 35px;">Free</th>
+                <th class="text-end" style="width: 55px;">Rate</th>
+                <th class="text-end" style="width: 50px;">MRP</th>
+                <th class="text-end" style="width: 55px;">Gross</th>
+                <th class="text-center" style="width: 40px;">Disc%</th>
+                <th class="text-end" style="width: 55px;">Taxable</th>
+                <th class="text-center" style="width: 50px;">GST</th>
+                <th class="text-end" style="width: 65px;">Line Total</th>
             </tr>
         </thead>
         <tbody>
+            <?php 
+                $pdfGross = 0.0;
+                $pdfDisc = 0.0;
+            ?>
             <?php if (!empty($items)): ?>
                 <?php foreach ($items as $idx => $it): ?>
+                    <?php 
+                        $gross = (float)($it['gross_amount'] ?: ((float)$it['received_packs'] * (float)$it['unit_purchase_rate']));
+                        $schPer = (float)($it['sch_disc_per'] ?? 0);
+                        $schAmt = (float)($it['sch_disc_amt'] ?? 0);
+                        $schTotal = ($schPer > 0 ? ($gross * $schPer / 100) : 0) + $schAmt;
+                        $tradeDisc = (float)$it['discount_percent'];
+                        $afterSch = max(0, $gross - $schTotal);
+                        $tradeDiscAmt = ($tradeDisc > 0) ? ($afterSch * $tradeDisc / 100) : 0;
+                        $rowDisc = $schTotal + $tradeDiscAmt;
+
+                        $pdfGross += $gross;
+                        $pdfDisc += $rowDisc;
+
+                        $isInter = (!empty($grn['gst_type']) && $grn['gst_type'] === 'inter_state') || ((float)($it['igst_percent'] ?? 0) > 0);
+                        $gstStr = $isInter
+                            ? number_format((float)($it['igst_percent'] ?? 0), 0) . '% IGST'
+                            : number_format((float)$it['cgst_percent'] + (float)$it['sgst_percent'], 0) . '%';
+                    ?>
                     <tr>
                         <td class="text-center"><?= $idx + 1 ?></td>
                         <td><strong><?= esc($it['item_name']) ?></strong></td>
                         <td><?= esc($it['batch_no']) ?></td>
                         <td><?= date('d-M-Y', strtotime($it['expiry_date'])) ?></td>
                         <td class="text-center"><?= (int)$it['packing'] ?>s</td>
-                        <td class="text-center"><?= (float)$it['order_packs'] ?></td>
                         <td class="text-center"><strong><?= (float)$it['received_packs'] ?></strong></td>
                         <td class="text-center"><?= (float)$it['free_packs'] ?></td>
-                        <td class="text-center <?= ((float)$it['rejected_packs'] > 0) ? 'style=\"color:red;\"' : '' ?>">
-                            <?= (float)$it['rejected_packs'] ?>
-                        </td>
                         <td class="text-end">₹<?= number_format((float)$it['unit_purchase_rate'], 2) ?></td>
                         <td class="text-end">₹<?= number_format((float)$it['mrp'], 2) ?></td>
+                        <td class="text-end">₹<?= number_format($gross, 2) ?></td>
+                        <td class="text-center"><?= number_format($tradeDisc, 0) ?>%</td>
+                        <td class="text-end">₹<?= number_format((float)$it['taxable_amount'], 2) ?></td>
+                        <td class="text-center"><?= esc($gstStr) ?></td>
                         <td class="text-end">₹<?= number_format((float)$it['total_amount'], 2) ?></td>
                     </tr>
                 <?php endforeach; ?>
@@ -102,15 +126,44 @@
 
     <table class="totals-table">
         <tr>
+            <td>Subtotal (Gross Amount):</td>
+            <td class="text-end">₹<?= number_format($pdfGross, 2) ?></td>
+        </tr>
+        <tr>
+            <td>Total Discount:</td>
+            <td class="text-end">₹<?= number_format($pdfDisc, 2) ?></td>
+        </tr>
+        <tr>
             <td>Taxable Amount:</td>
             <td class="text-end">₹<?= number_format((float)$grn['total_received_amount'], 2) ?></td>
         </tr>
+        <?php if (!empty($grn['gst_type']) && $grn['gst_type'] === 'inter_state'): ?>
+            <tr>
+                <td>IGST Amount:</td>
+                <td class="text-end">₹<?= number_format((float)($grn['igst_amount'] ?? $grn['total_tax_amount']), 2) ?></td>
+            </tr>
+        <?php else: ?>
+            <tr>
+                <td>CGST Amount:</td>
+                <td class="text-end">₹<?= number_format((float)($grn['cgst_amount'] ?? ((float)$grn['total_tax_amount'] / 2)), 2) ?></td>
+            </tr>
+            <tr>
+                <td>SGST Amount:</td>
+                <td class="text-end">₹<?= number_format((float)($grn['sgst_amount'] ?? ((float)$grn['total_tax_amount'] / 2)), 2) ?></td>
+            </tr>
+        <?php endif; ?>
         <tr>
-            <td>GST Tax:</td>
+            <td>Total GST:</td>
             <td class="text-end">₹<?= number_format((float)$grn['total_tax_amount'], 2) ?></td>
         </tr>
+        <?php if (isset($grn['round_off']) && (float)$grn['round_off'] != 0): ?>
+            <tr>
+                <td>Round Off:</td>
+                <td class="text-end"><?= ((float)$grn['round_off'] > 0 ? '+' : '') . number_format((float)$grn['round_off'], 2) ?></td>
+            </tr>
+        <?php endif; ?>
         <tr class="grand-total">
-            <td>Net Payable Total:</td>
+            <td>Net Inward Bill Total:</td>
             <td class="text-end">₹<?= number_format((float)$grn['net_amount'], 2) ?></td>
         </tr>
     </table>

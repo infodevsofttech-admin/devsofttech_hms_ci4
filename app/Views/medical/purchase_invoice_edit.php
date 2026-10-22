@@ -102,25 +102,20 @@
                     </div>
                     <div class="col-md-2">
                         <label class="form-label">CGST</label>
-                        <select class="form-select form-select-sm" name="input_CGST" id="input_CGST" onchange="calculate()">
+                        <select class="form-select form-select-sm" name="input_CGST" id="input_CGST" onchange="onCgstChange()">
                             <?php 
                             $formatGstLabel = static function($val) {
                                 $f = (float)$val;
                                 if ($f == 0.0) return '0% (Exempt)';
                                 if ($f == 2.5) return '2.5% (5% GST)';
+                                if ($f == 6.0) return '6.0% (12% GST)';
                                 if ($f == 9.0) return '9.0% (18% GST)';
-                                if ($f == 20.0) return '20% (40% GST)';
-                                if ($f == 6.0) return '6.0% (12% Legacy)';
-                                if ($f == 14.0) return '14% (28% Legacy)';
+                                if ($f == 14.0) return '14.0% (28% GST)';
                                 return $val . '%';
                             };
-                            $stdRates = ['0', '2.5', '9', '20', '6', '14'];
-                            $pRates = !empty($gstRates) ? array_map(static fn($r) => trim((string)($r->gst_per ?? '0')), $gstRates) : $stdRates;
-                            foreach ($stdRates as $sr) {
-                                if (!in_array($sr, $pRates, true)) $pRates[] = $sr;
-                            }
+                            $stdRates = ['0', '2.5', '6', '9', '14'];
                             ?>
-                            <?php foreach ($pRates as $gstValue): ?>
+                            <?php foreach ($stdRates as $gstValue): ?>
                                 <option value="<?= esc($gstValue) ?>" <?= ((float) $gstValue === 2.5) ? 'selected' : '' ?>><?= esc($formatGstLabel($gstValue)) ?></option>
                             <?php endforeach; ?>
                         </select>
@@ -128,7 +123,7 @@
                     <div class="col-md-2">
                         <label class="form-label">SGST / IGST</label>
                         <select class="form-select form-select-sm" name="input_SGST" id="input_SGST" onchange="calculate()">
-                            <?php foreach ($pRates as $gstValue): ?>
+                            <?php foreach ($stdRates as $gstValue): ?>
                                 <option value="<?= esc($gstValue) ?>" <?= ((float) $gstValue === 2.5) ? 'selected' : '' ?>><?= esc($formatGstLabel($gstValue)) ?></option>
                             <?php endforeach; ?>
                         </select>
@@ -179,6 +174,12 @@
 </div>
 
 <script>
+function onCgstChange() {
+    var cgst = $('#input_CGST').val();
+    $('#input_SGST').val(cgst);
+    calculate();
+}
+
 function calculate() {
     var pp = parseFloat($('#input_purchase_price').val() || 0);
     var qty = parseFloat($('#input_Qty').val() || 0);
@@ -186,23 +187,26 @@ function calculate() {
     var schamt = parseFloat($('#input_sch_amount').val() || 0);
     var schdisc = parseFloat($('#input_sch_disc').val() || 0);
 
+    var gross = pp * qty;
+    var sch_per_amt = 0;
     if (schdisc > 0) {
-        pp = pp - (pp * schdisc / 100);
+        sch_per_amt = gross * (schdisc / 100);
     }
+    var after_sch = Math.max(0, gross - sch_per_amt - schamt);
 
-    var amount = pp * qty;
-    if (schamt > 0) {
-        amount = amount - schamt;
+    var trade_disc_amt = 0;
+    if (disc > 0) {
+        trade_disc_amt = after_sch * (disc / 100);
     }
+    var taxamount = Math.max(0, after_sch - trade_disc_amt);
 
-    var taxamount = (amount - (amount * disc / 100));
     var cgst = parseFloat($('#input_CGST').val() || 0);
     var sgst = parseFloat($('#input_SGST').val() || 0);
     var cgst_amt = taxamount * cgst / 100;
     var sgst_amt = taxamount * sgst / 100;
     var net_amount = taxamount + cgst_amt + sgst_amt;
 
-    $('#amount_price').val(amount.toFixed(2));
+    $('#amount_price').val(gross.toFixed(2));
     $('#Tamount_price').val(taxamount.toFixed(2));
     $('#Net_amount').val(net_amount.toFixed(2));
 
@@ -332,14 +336,28 @@ function edit_item_invoice(inv_item_id) {
         $('#input_storage').val(data.cold_storage || '');
         $('#input_shelf_no').val(data.shelf_no || '');
         $('#input_rack_no').val(data.rack_no || '');
-        $('#input_HSNCODE').val(data.HSNCODE || '');
-        $('#input_CGST').val(data.CGST_per || '0');
-        $('#input_SGST').val(data.SGST_per || '0');
+        setSelectByNumericValue('input_CGST', data.CGST_per || '0');
+        setSelectByNumericValue('input_SGST', data.SGST_per || '0');
         $('#invoice_item_id').val(data.item_id || 0);
 
         calculate();
         load_form_div('<?= base_url('Medical/purchase_invoice_item_list_old') ?>/' + data.product_code, 'purchase_items_old_history');
     }, 'json');
+}
+
+function setSelectByNumericValue(selectId, val) {
+    var fVal = parseFloat(val || 0);
+    var matched = false;
+    $('#' + selectId + ' option').each(function() {
+        if (Math.abs(parseFloat($(this).val()) - fVal) < 0.01) {
+            $('#' + selectId).val($(this).val());
+            matched = true;
+            return false;
+        }
+    });
+    if (!matched) {
+        $('#' + selectId).val(val);
+    }
 }
 
 $(document).ready(function () {

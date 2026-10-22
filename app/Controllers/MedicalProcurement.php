@@ -569,6 +569,8 @@ class MedicalProcurement extends BaseController
         $grnDate = trim((string)$this->request->getPost('grn_date') ?: date('Y-m-d'));
         $remarks = trim((string)$this->request->getPost('remarks') ?: '');
         $postToInventory = (int)($this->request->getPost('post_to_inventory') ?: 0);
+        $gstType = trim((string)$this->request->getPost('gst_type') ?: 'intra_state');
+        $roundOff = (float)($this->request->getPost('round_off') ?: 0.0);
 
         $itemsRaw = $this->request->getPost('items');
         $items = is_array($itemsRaw) ? $itemsRaw : [];
@@ -586,9 +588,13 @@ class MedicalProcurement extends BaseController
         $grnNumber = $this->grnModel->generateGrnNumber();
         $userId = $this->getCurrentUserId();
 
+        $totalGross = 0.0;
+        $totalDisc = 0.0;
         $totalTaxable = 0.0;
+        $totalCgst = 0.0;
+        $totalSgst = 0.0;
+        $totalIgst = 0.0;
         $totalTax = 0.0;
-        $netTotal = 0.0;
         $validItems = [];
 
         foreach ($items as $row) {
@@ -615,9 +621,12 @@ class MedicalProcurement extends BaseController
             }
 
             $discPercent = (float)($row['discount_percent'] ?? 0);
-            $cgstPer = (float)($row['cgst_percent'] ?? 6.0);
-            $sgstPer = (float)($row['sgst_percent'] ?? 6.0);
-            $igstPer = (float)($row['igst_percent'] ?? 0.0);
+            $schDiscPer = (float)($row['sch_disc_per'] ?? 0);
+            $schDiscAmt = (float)($row['sch_disc_amt'] ?? 0);
+
+            // Determine GST total rate: check gst_rate, then fallback to cgst_percent * 2
+            $gstRate = isset($row['gst_rate']) ? (float)$row['gst_rate'] : ((float)($row['cgst_percent'] ?? 2.5) * 2);
+
             $hsnCode = trim((string)($row['hsn_code'] ?? ''));
             $rackNo = trim((string)($row['rack_no'] ?? ''));
             $shelfNo = trim((string)($row['shelf_no'] ?? ''));
@@ -631,20 +640,46 @@ class MedicalProcurement extends BaseController
                 continue;
             }
 
-            // Calculations
+            // Calculations strictly aligned with Indian Pharma Invoicing:
             $grossAmount = round($receivedPacks * $unitPurchaseRate, 2);
-            $discountAmt = round($grossAmount * ($discPercent / 100), 2);
-            $lineTaxable = $grossAmount - $discountAmt;
 
-            $cgstAmt = round($lineTaxable * ($cgstPer / 100), 2);
-            $sgstAmt = round($lineTaxable * ($sgstPer / 100), 2);
-            $igstAmt = round($lineTaxable * ($igstPer / 100), 2);
-            $lineTax = $cgstAmt + $sgstAmt + $igstAmt;
-            $lineTotal = $lineTaxable + $lineTax;
+            // 1. Scheme discount (percent or amount)
+            $schPerAmt = ($schDiscPer > 0) ? round($grossAmount * ($schDiscPer / 100), 2) : 0.0;
+            $lineSchDisc = $schPerAmt + $schDiscAmt;
+            $afterSch = max(0.0, $grossAmount - $lineSchDisc);
 
+            // 2. Trade discount
+            $tradeDiscAmt = ($discPercent > 0) ? round($afterSch * ($discPercent / 100), 2) : 0.0;
+            $lineTaxable = max(0.0, $afterSch - $tradeDiscAmt);
+
+            // 3. GST Calculation (Equal CGST/SGST split or 100% IGST)
+            if ($gstType === 'inter_state') {
+                $cgstPer = 0.0;
+                $sgstPer = 0.0;
+                $igstPer = $gstRate;
+                $cgstAmt = 0.0;
+                $sgstAmt = 0.0;
+                $igstAmt = round($lineTaxable * ($igstPer / 100), 2);
+                $lineTax = $igstAmt;
+            } else {
+                $cgstPer = round($gstRate / 2, 2);
+                $sgstPer = round($gstRate / 2, 2);
+                $igstPer = 0.0;
+                $cgstAmt = round($lineTaxable * ($cgstPer / 100), 2);
+                $sgstAmt = round($lineTaxable * ($sgstPer / 100), 2);
+                $igstAmt = 0.0;
+                $lineTax = $cgstAmt + $sgstAmt;
+            }
+
+            $lineTotal = round($lineTaxable + $lineTax, 2);
+
+            $totalGross += $grossAmount;
+            $totalDisc += ($lineSchDisc + $tradeDiscAmt);
             $totalTaxable += $lineTaxable;
+            $totalCgst += $cgstAmt;
+            $totalSgst += $sgstAmt;
+            $totalIgst += $igstAmt;
             $totalTax += $lineTax;
-            $netTotal += $lineTotal;
 
             $validItems[] = [
                 'po_item_id'         => $poItemId > 0 ? $poItemId : null,
@@ -659,9 +694,12 @@ class MedicalProcurement extends BaseController
                 'rejected_packs'     => $rejectedPacks,
                 'rejection_reason'   => $rejectionReason ?: null,
                 'unit_purchase_rate' => $unitPurchaseRate,
+                'gross_amount'       => $grossAmount,
                 'mrp'                => $mrp,
                 'selling_unit_rate'  => $sellingUnitRate,
                 'discount_percent'   => $discPercent,
+                'sch_disc_per'       => $schDiscPer,
+                'sch_disc_amt'       => $schDiscAmt,
                 'taxable_amount'     => $lineTaxable,
                 'cgst_percent'       => $cgstPer,
                 'cgst_amount'        => $cgstAmt,
@@ -681,6 +719,8 @@ class MedicalProcurement extends BaseController
             return $this->response->setJSON(['status' => 0, 'message' => 'No valid item rows with batch and expiry were found.']);
         }
 
+        $netTotal = round($totalTaxable + $totalTax + $roundOff, 2);
+
         $this->db->transStart();
 
         $grnHeader = [
@@ -694,6 +734,11 @@ class MedicalProcurement extends BaseController
             'grn_date'              => $grnDate,
             'total_received_amount' => $totalTaxable,
             'total_tax_amount'      => $totalTax,
+            'cgst_amount'           => $totalCgst,
+            'sgst_amount'           => $totalSgst,
+            'igst_amount'           => $totalIgst,
+            'round_off'             => $roundOff,
+            'gst_type'              => $gstType,
             'net_amount'            => $netTotal,
             'status'                => 'verified',
             'received_by'           => $userId,
@@ -701,7 +746,6 @@ class MedicalProcurement extends BaseController
             'verified_at'           => date('Y-m-d H:i:s'),
             'remarks'               => $remarks,
             'created_at'            => date('Y-m-d H:i:s'),
-            'updated_at'            => date('Y-m-d H:i:s'),
         ];
 
         $this->grnModel->insert($grnHeader);
@@ -812,8 +856,8 @@ class MedicalProcurement extends BaseController
             'date_of_invoice'      => $grn['invoice_date'],
             'Invoice_no'           => $grn['supplier_invoice_no'],
             'Taxable_Amt'          => $grn['total_received_amount'],
-            'CGST_Amt'             => round($grn['total_tax_amount'] / 2, 2),
-            'SGST_Amt'             => round($grn['total_tax_amount'] / 2, 2),
+            'CGST_Amt'             => (float)($grn['cgst_amount'] ?? round($grn['total_tax_amount'] / 2, 2)),
+            'SGST_Amt'             => (float)($grn['sgst_amount'] ?? round($grn['total_tax_amount'] / 2, 2)),
             'T_Net_Amount'         => $grn['net_amount'],
             'inv_status'           => 1,
             'inv_status_update_by' => $userId,
@@ -851,14 +895,16 @@ class MedicalProcurement extends BaseController
                 'qty'                => $receivedPacks,
                 'qty_free'           => $freePacks,
                 'tqty'               => $receivedPacks + $freePacks,
-                'amount'             => round($receivedPacks * $purchasePricePerPack, 2),
-                'discount'           => $gItem['discount_percent'],
-                'taxable_amount'     => $gItem['taxable_amount'],
-                'CGST_per'           => $gItem['cgst_percent'],
-                'CGST'               => $gItem['cgst_amount'],
-                'SGST_per'           => $gItem['sgst_percent'],
-                'SGST'               => $gItem['sgst_amount'],
-                'net_amount'         => $gItem['total_amount'],
+                'amount'             => (float)($gItem['gross_amount'] ?: round($receivedPacks * $purchasePricePerPack, 2)),
+                'discount'           => (float)($gItem['discount_percent'] ?? 0),
+                'sch_disc_amt'       => (float)($gItem['sch_disc_amt'] ?? 0),
+                'sch_disc_per'       => (float)($gItem['sch_disc_per'] ?? 0),
+                'taxable_amount'     => (float)$gItem['taxable_amount'],
+                'CGST_per'           => (float)$gItem['cgst_percent'],
+                'CGST'               => (float)$gItem['cgst_amount'],
+                'SGST_per'           => (float)$gItem['sgst_percent'],
+                'SGST'               => (float)$gItem['sgst_amount'],
+                'net_amount'         => (float)$gItem['total_amount'],
                 'HSNCODE'            => $gItem['hsn_code'] ?: '',
                 'selling_price'      => $gItem['selling_unit_rate'] * $packing,
                 'total_unit'         => $totalUnits,
