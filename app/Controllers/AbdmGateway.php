@@ -7610,7 +7610,9 @@ class AbdmGateway extends BaseController
             }
         }
         $otherLinkedRefs = [];
+        $otherSessionMap = [];
         $thisAbhaLinkedRefs = [];
+        $targetStartDate = null;
 
         if ($targetAbha !== '') {
             $allowedAbhaSet = [$targetAbha => true];
@@ -7618,8 +7620,7 @@ class AbdmGateway extends BaseController
             // 1. Check record_links
             if ($this->db->tableExists('record_links')) {
                 $rlRows = $this->db->table('record_links')
-                    ->select('care_context_reference, abha_id, link_status')
-                    ->where('link_status', 'linked')
+                    ->select('care_context_reference, abha_id, created_at')
                     ->where('care_context_reference IS NOT NULL')
                     ->where('care_context_reference !=', '')
                     ->get()
@@ -7634,8 +7635,20 @@ class AbdmGateway extends BaseController
                     if (isset($allowedAbhaSet[$rAbha])) {
                         $thisAbhaLinkedRefs[$ref] = true;
                         unset($otherLinkedRefs[$ref]);
+                        $cDate = ! empty($rl['created_at']) ? date('Y-m-d', strtotime((string) $rl['created_at'])) : null;
+                        if ($cDate && ($targetStartDate === null || $cDate < $targetStartDate)) {
+                            $targetStartDate = $cDate;
+                        }
                     } elseif (! isset($thisAbhaLinkedRefs[$ref])) {
                         $otherLinkedRefs[$ref] = $rAbha;
+                    }
+                    if (preg_match('/-S(\d+)-/', $ref, $sm)) {
+                        $sessId = $sm[1];
+                        if (isset($allowedAbhaSet[$rAbha])) {
+                            $thisAbhaLinkedRefs['SESS-' . $sessId] = true;
+                        } elseif (! isset($thisAbhaLinkedRefs['SESS-' . $sessId])) {
+                            $otherSessionMap[$sessId] = $rAbha;
+                        }
                     }
                 }
             }
@@ -7643,9 +7656,8 @@ class AbdmGateway extends BaseController
             // 2. Check health_records
             if ($this->db->tableExists('health_records')) {
                 $hrRows = $this->db->table('health_records')
-                    ->select('care_context_reference, abha_id, push_status')
+                    ->select('care_context_reference, abha_id, created_at')
                     ->where('patient_id', $patientId)
-                    ->whereIn('push_status', ['linked', 'pushed'])
                     ->where('care_context_reference IS NOT NULL')
                     ->where('care_context_reference !=', '')
                     ->get()
@@ -7660,8 +7672,20 @@ class AbdmGateway extends BaseController
                     if (isset($allowedAbhaSet[$hAbha])) {
                         $thisAbhaLinkedRefs[$ref] = true;
                         unset($otherLinkedRefs[$ref]);
+                        $cDate = ! empty($hr['created_at']) ? date('Y-m-d', strtotime((string) $hr['created_at'])) : null;
+                        if ($cDate && ($targetStartDate === null || $cDate < $targetStartDate)) {
+                            $targetStartDate = $cDate;
+                        }
                     } elseif (! isset($thisAbhaLinkedRefs[$ref])) {
                         $otherLinkedRefs[$ref] = $hAbha;
+                    }
+                    if (preg_match('/-S(\d+)-/', $ref, $sm)) {
+                        $sessId = $sm[1];
+                        if (isset($allowedAbhaSet[$hAbha])) {
+                            $thisAbhaLinkedRefs['SESS-' . $sessId] = true;
+                        } elseif (! isset($thisAbhaLinkedRefs['SESS-' . $sessId])) {
+                            $otherSessionMap[$sessId] = $hAbha;
+                        }
                     }
                 }
             }
@@ -7675,7 +7699,9 @@ class AbdmGateway extends BaseController
             $readyOnly,
             $targetAbha,
             &$otherLinkedRefs,
-            &$thisAbhaLinkedRefs
+            &$otherSessionMap,
+            &$thisAbhaLinkedRefs,
+            $targetStartDate
         ) {
             $ref = trim((string) ($item['referenceNumber'] ?? $item['careContextId'] ?? ''));
             if ($ref === '' || isset($seenRefs[$ref])) {
@@ -7693,8 +7719,28 @@ class AbdmGateway extends BaseController
                 $isLinkedToOther = (isset($otherLinkedRefs[$ref]) && ! isset($thisAbhaLinkedRefs[$ref]))
                     || ($alias !== '' && isset($otherLinkedRefs[$alias]) && ! isset($thisAbhaLinkedRefs[$alias]));
 
+                // Also check session linkage (e.g. prescription for this session linked to another ABHA)
+                if (! $isLinkedToThis && preg_match('/-S(\d+)-/', $ref, $sm)) {
+                    if (isset($otherSessionMap[$sm[1]]) && ! isset($thisAbhaLinkedRefs['SESS-' . $sm[1]])) {
+                        $isLinkedToOther = true;
+                    }
+                }
+
                 if ($isLinkedToOther && ! $isLinkedToThis) {
                     return;
+                }
+
+                // If not linked to this ABHA, check if item is from a historical era before target ABHA was active
+                if (! $isLinkedToThis && $targetStartDate !== null && ! empty($otherLinkedRefs)) {
+                    $itemDate = null;
+                    if (preg_match('/-(\d{8})$/', $ref, $dm)) {
+                        $itemDate = date('Y-m-d', strtotime($dm[1]));
+                    } elseif (preg_match('/-(\d{4}-\d{2}-\d{2})/', $ref, $dm)) {
+                        $itemDate = $dm[1];
+                    }
+                    if ($itemDate && $itemDate < $targetStartDate) {
+                        return;
+                    }
                 }
             }
 
