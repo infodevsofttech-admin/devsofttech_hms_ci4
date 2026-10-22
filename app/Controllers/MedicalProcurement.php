@@ -25,6 +25,46 @@ class MedicalProcurement extends BaseController
         $this->poItemModel = new PharmacyPurchaseOrderItemModel();
         $this->grnModel = new PharmacyGrnModel();
         $this->grnItemModel = new PharmacyGrnItemModel();
+        $this->ensureGrnSchema();
+    }
+
+    private function ensureGrnSchema(): void
+    {
+        try {
+            if (!$this->db->tableExists('mst_grns')) {
+                return;
+            }
+
+            if (!$this->db->fieldExists('cgst_amount', 'mst_grns')) {
+                $this->db->query("ALTER TABLE `mst_grns` ADD COLUMN `cgst_amount` DECIMAL(10,2) DEFAULT 0.00 AFTER `total_tax_amount`");
+            }
+            if (!$this->db->fieldExists('sgst_amount', 'mst_grns')) {
+                $this->db->query("ALTER TABLE `mst_grns` ADD COLUMN `sgst_amount` DECIMAL(10,2) DEFAULT 0.00 AFTER `cgst_amount`");
+            }
+            if (!$this->db->fieldExists('igst_amount', 'mst_grns')) {
+                $this->db->query("ALTER TABLE `mst_grns` ADD COLUMN `igst_amount` DECIMAL(10,2) DEFAULT 0.00 AFTER `sgst_amount`");
+            }
+            if (!$this->db->fieldExists('round_off', 'mst_grns')) {
+                $this->db->query("ALTER TABLE `mst_grns` ADD COLUMN `round_off` DECIMAL(6,2) DEFAULT 0.00 AFTER `igst_amount`");
+            }
+            if (!$this->db->fieldExists('gst_type', 'mst_grns')) {
+                $this->db->query("ALTER TABLE `mst_grns` ADD COLUMN `gst_type` VARCHAR(20) DEFAULT 'intra_state' AFTER `round_off`");
+            }
+
+            if ($this->db->tableExists('mst_grn_items')) {
+                if (!$this->db->fieldExists('gross_amount', 'mst_grn_items')) {
+                    $this->db->query("ALTER TABLE `mst_grn_items` ADD COLUMN `gross_amount` DECIMAL(12,2) DEFAULT 0.00 AFTER `unit_purchase_rate`");
+                }
+                if (!$this->db->fieldExists('sch_disc_per', 'mst_grn_items')) {
+                    $this->db->query("ALTER TABLE `mst_grn_items` ADD COLUMN `sch_disc_per` DECIMAL(5,2) DEFAULT 0.00 AFTER `discount_percent`");
+                }
+                if (!$this->db->fieldExists('sch_disc_amt', 'mst_grn_items')) {
+                    $this->db->query("ALTER TABLE `mst_grn_items` ADD COLUMN `sch_disc_amt` DECIMAL(10,2) DEFAULT 0.00 AFTER `sch_disc_per`");
+                }
+            }
+        } catch (\Throwable $e) {
+            log_message('error', 'ensureGrnSchema: ' . $e->getMessage());
+        }
     }
 
     private function ensurePharmacyAccess()

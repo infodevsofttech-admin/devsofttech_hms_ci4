@@ -86,38 +86,50 @@
             <?php if (!empty($items)): ?>
                 <?php foreach ($items as $idx => $it): ?>
                     <?php 
-                        $gross = (float)($it['gross_amount'] ?: ((float)$it['received_packs'] * (float)$it['unit_purchase_rate']));
+                        $recPacks = (float)($it['received_packs'] ?? 0);
+                        $rate = (float)($it['unit_purchase_rate'] ?? 0);
+                        $gross = isset($it['gross_amount']) && (float)$it['gross_amount'] > 0 
+                            ? (float)$it['gross_amount'] 
+                            : round($recPacks * $rate, 2);
+
                         $schPer = (float)($it['sch_disc_per'] ?? 0);
                         $schAmt = (float)($it['sch_disc_amt'] ?? 0);
-                        $schTotal = ($schPer > 0 ? ($gross * $schPer / 100) : 0) + $schAmt;
-                        $tradeDisc = (float)$it['discount_percent'];
+                        $schTotal = ($schPer > 0 ? round($gross * $schPer / 100, 2) : 0) + $schAmt;
+                        $tradeDisc = (float)($it['discount_percent'] ?? 0);
                         $afterSch = max(0, $gross - $schTotal);
-                        $tradeDiscAmt = ($tradeDisc > 0) ? ($afterSch * $tradeDisc / 100) : 0;
+                        $tradeDiscAmt = ($tradeDisc > 0) ? round($afterSch * $tradeDisc / 100, 2) : 0;
                         $rowDisc = $schTotal + $tradeDiscAmt;
 
                         $pdfGross += $gross;
                         $pdfDisc += $rowDisc;
 
-                        $isInter = (!empty($grn['gst_type']) && $grn['gst_type'] === 'inter_state') || ((float)($it['igst_percent'] ?? 0) > 0);
+                        $cgstPer = (float)($it['cgst_percent'] ?? 0);
+                        $sgstPer = (float)($it['sgst_percent'] ?? 0);
+                        $igstPer = (float)($it['igst_percent'] ?? 0);
+
+                        $isInter = (!empty($grn['gst_type']) && $grn['gst_type'] === 'inter_state') || ($igstPer > 0);
                         $gstStr = $isInter
-                            ? number_format((float)($it['igst_percent'] ?? 0), 0) . '% IGST'
-                            : number_format((float)$it['cgst_percent'] + (float)$it['sgst_percent'], 0) . '%';
+                            ? number_format($igstPer, 0) . '% IGST'
+                            : number_format($cgstPer + $sgstPer, 0) . '%';
+
+                        $taxableAmt = isset($it['taxable_amount']) ? (float)$it['taxable_amount'] : ($gross - $rowDisc);
+                        $totalAmt = isset($it['total_amount']) ? (float)$it['total_amount'] : ($taxableAmt + ($taxableAmt * ($cgstPer + $sgstPer + $igstPer) / 100));
                     ?>
                     <tr>
                         <td class="text-center"><?= $idx + 1 ?></td>
-                        <td><strong><?= esc($it['item_name']) ?></strong></td>
-                        <td><?= esc($it['batch_no']) ?></td>
-                        <td><?= date('d-M-Y', strtotime($it['expiry_date'])) ?></td>
-                        <td class="text-center"><?= (int)$it['packing'] ?>s</td>
-                        <td class="text-center"><strong><?= (float)$it['received_packs'] ?></strong></td>
-                        <td class="text-center"><?= (float)$it['free_packs'] ?></td>
-                        <td class="text-end">₹<?= number_format((float)$it['unit_purchase_rate'], 2) ?></td>
-                        <td class="text-end">₹<?= number_format((float)$it['mrp'], 2) ?></td>
+                        <td><strong><?= esc($it['item_name'] ?? 'Item') ?></strong></td>
+                        <td><?= esc($it['batch_no'] ?? '-') ?></td>
+                        <td><?= !empty($it['expiry_date']) ? date('d-M-Y', strtotime($it['expiry_date'])) : '-' ?></td>
+                        <td class="text-center"><?= (int)($it['packing'] ?? 1) ?>s</td>
+                        <td class="text-center"><strong><?= $recPacks ?></strong></td>
+                        <td class="text-center"><?= (float)($it['free_packs'] ?? 0) ?></td>
+                        <td class="text-end">₹<?= number_format($rate, 2) ?></td>
+                        <td class="text-end">₹<?= number_format((float)($it['mrp'] ?? 0), 2) ?></td>
                         <td class="text-end">₹<?= number_format($gross, 2) ?></td>
                         <td class="text-center"><?= number_format($tradeDisc, 0) ?>%</td>
-                        <td class="text-end">₹<?= number_format((float)$it['taxable_amount'], 2) ?></td>
+                        <td class="text-end">₹<?= number_format($taxableAmt, 2) ?></td>
                         <td class="text-center"><?= esc($gstStr) ?></td>
-                        <td class="text-end">₹<?= number_format((float)$it['total_amount'], 2) ?></td>
+                        <td class="text-end">₹<?= number_format($totalAmt, 2) ?></td>
                     </tr>
                 <?php endforeach; ?>
             <?php endif; ?>
@@ -135,7 +147,7 @@
         </tr>
         <tr>
             <td>Taxable Amount:</td>
-            <td class="text-end">₹<?= number_format((float)$grn['total_received_amount'], 2) ?></td>
+            <td class="text-end">₹<?= number_format((float)($grn['total_received_amount'] ?? $pdfGross), 2) ?></td>
         </tr>
         <?php if (!empty($grn['gst_type']) && $grn['gst_type'] === 'inter_state'): ?>
             <tr>
