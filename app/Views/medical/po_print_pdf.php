@@ -27,9 +27,48 @@
 </head>
 <body>
 
+<?php
+if (!isset($branding) || !is_array($branding)) {
+    $pName = defined('M_store') && trim((string) constant('M_store')) !== ''
+        ? trim((string) constant('M_store'))
+        : (defined('H_Med_Name') && trim((string) constant('H_Med_Name')) !== ''
+            ? trim((string) constant('H_Med_Name'))
+            : (defined('H_Name') ? trim((string) constant('H_Name')) : 'Hospital Pharmacy Services'));
+    $branding = [
+        'pharmacy_name' => $pName,
+        'hospital_name' => defined('H_Name') ? trim((string) constant('H_Name')) : '',
+        'address'       => defined('H_address_1') ? trim((string) constant('H_address_1')) : '',
+        'phone'         => defined('M_Phone_Number') ? trim((string) constant('M_Phone_Number')) : (defined('H_phone_No') ? trim((string) constant('H_phone_No')) : ''),
+        'gst_no'        => defined('H_Med_GST') ? trim((string) constant('H_Med_GST')) : '',
+        'dl_20b'        => defined('M_DL_NO') ? (string) constant('M_DL_NO') : '',
+        'dl_21b'        => '',
+    ];
+}
+?>
     <div class="header">
-        <h2>Hospital Pharmacy Services</h2>
-        <p>Central Medical Store &amp; Drug Supply Division | Drug Lic. 20B/21B</p>
+        <h2><?= esc($branding['pharmacy_name'] ?? 'Hospital Pharmacy Services') ?></h2>
+        <?php if (!empty($branding['hospital_name']) && strcasecmp(trim($branding['hospital_name']), trim($branding['pharmacy_name'] ?? '')) !== 0): ?>
+            <p style="font-weight: 600; font-size: 11px; margin-top: 1px; color: #334155;"><?= esc($branding['hospital_name']) ?></p>
+        <?php endif; ?>
+        <?php
+        $subMeta = [];
+        if (!empty($branding['address'])) {
+            $subMeta[] = esc($branding['address']);
+        }
+        if (!empty($branding['phone'])) {
+            $subMeta[] = 'Phone: ' . esc($branding['phone']);
+        }
+        if (!empty($branding['gst_no'])) {
+            $subMeta[] = 'GSTIN: ' . esc($branding['gst_no']);
+        }
+        if (!empty($branding['dl_20b'])) {
+            $subMeta[] = 'D.L.: ' . esc($branding['dl_20b']) . (!empty($branding['dl_21b']) ? (' / ' . esc($branding['dl_21b'])) : '');
+        }
+        if ($subMeta !== []):
+        ?>
+            <p style="font-size: 9px; color: #475569; margin-top: 2px;"><?= implode(' | ', $subMeta) ?></p>
+        <?php endif; ?>
+        <p style="margin-top: 3px; font-weight: bold; color: #1a365d; font-size: 10px;">Purchase Order &bull; Central Medical Store</p>
     </div>
 
     <div class="title-bar">

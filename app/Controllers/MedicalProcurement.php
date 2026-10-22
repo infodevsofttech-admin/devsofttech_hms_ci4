@@ -424,8 +424,9 @@ class MedicalProcurement extends BaseController
         $items = $this->poItemModel->where('po_id', $poId)->findAll();
 
         $html = view('medical/po_print_pdf', [
-            'po'    => $po,
-            'items' => $items,
+            'po'       => $po,
+            'items'    => $items,
+            'branding' => $this->getPharmacyBranding(isset($po['store_id']) ? (int)$po['store_id'] : null),
         ]);
 
         $mpdf = new Mpdf([
@@ -1034,8 +1035,9 @@ class MedicalProcurement extends BaseController
         $items = $this->grnItemModel->where('grn_id', $grnId)->findAll();
 
         $html = view('medical/grn_print_pdf', [
-            'grn'   => $grn,
-            'items' => $items,
+            'grn'      => $grn,
+            'items'    => $items,
+            'branding' => $this->getPharmacyBranding(isset($grn['store_id']) ? (int)$grn['store_id'] : null),
         ]);
 
         $mpdf = new Mpdf([
@@ -1055,5 +1057,61 @@ class MedicalProcurement extends BaseController
         return $this->response
             ->setHeader('Content-Type', 'application/pdf')
             ->setBody($mpdf->Output('GRN_' . $grn['grn_number'] . '.pdf', 'S'));
+    }
+
+    private function getPharmacyBranding(?int $storeId = null): array
+    {
+        $pharmacyName = '';
+        if (defined('M_store') && trim((string) constant('M_store')) !== '') {
+            $pharmacyName = trim((string) constant('M_store'));
+        } elseif (function_exists('hospital_setting_value')) {
+            $pharmacyName = trim(hospital_setting_value('M_store', ''));
+        }
+
+        $store = null;
+        if ($storeId && $this->db->tableExists('mst_stores')) {
+            $store = $this->db->table('mst_stores')->where('store_id', $storeId)->get()->getRowArray();
+            if (empty($pharmacyName) && !empty($store['store_name'])) {
+                $pharmacyName = trim($store['store_name']);
+            }
+        }
+
+        if (empty($pharmacyName)) {
+            if (defined('H_Med_Name') && trim((string) constant('H_Med_Name')) !== '') {
+                $pharmacyName = trim((string) constant('H_Med_Name'));
+            } elseif (defined('H_Name') && trim((string) constant('H_Name')) !== '') {
+                $pharmacyName = trim((string) constant('H_Name')) . ' Pharmacy';
+            } elseif (function_exists('hospital_setting_value')) {
+                $hName = trim(hospital_setting_value('H_Name', ''));
+                $pharmacyName = $hName !== '' ? $hName . ' Pharmacy' : 'Hospital Pharmacy Services';
+            } else {
+                $pharmacyName = 'Hospital Pharmacy Services';
+            }
+        }
+
+        $hospitalName = defined('H_Name') ? trim((string) constant('H_Name')) : (function_exists('hospital_setting_value') ? trim(hospital_setting_value('H_Name', '')) : '');
+        $address = defined('H_address_1') ? trim((string) constant('H_address_1')) : '';
+        $address2 = defined('H_address_2') ? trim((string) constant('H_address_2')) : '';
+        if ($address2 !== '') {
+            $address = $address !== '' ? ($address . ', ' . $address2) : $address2;
+        }
+        $phone = defined('M_Phone_Number') && trim((string) constant('M_Phone_Number')) !== ''
+            ? trim((string) constant('M_Phone_Number'))
+            : (defined('H_phone_No') ? trim((string) constant('H_phone_No')) : '');
+        $gstNo = defined('H_Med_GST') && trim((string) constant('H_Med_GST')) !== ''
+            ? trim((string) constant('H_Med_GST'))
+            : (!empty($store['gstin']) ? $store['gstin'] : '');
+        $dl20b = !empty($store['drug_license_no_20b']) ? $store['drug_license_no_20b'] : (defined('M_DL_NO') ? (string) constant('M_DL_NO') : '');
+        $dl21b = !empty($store['drug_license_no_21b']) ? $store['drug_license_no_21b'] : '';
+
+        return [
+            'pharmacy_name' => $pharmacyName,
+            'hospital_name' => $hospitalName,
+            'address'       => $address,
+            'phone'         => $phone,
+            'gst_no'        => $gstNo,
+            'dl_20b'        => $dl20b,
+            'dl_21b'        => $dl21b,
+        ];
     }
 }
