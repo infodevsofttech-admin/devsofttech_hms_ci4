@@ -20,7 +20,7 @@
                     <i class="bi bi-pencil-square"></i> Edit Invoice
                 </button>
                 <?php if (!empty($linked_grn)): ?>
-                    <button onclick="load_form_div('<?= base_url('Medical/grn_edit/' . (int) $linked_grn['grn_id']) ?>','medical-main','GRN Detail');" type="button" class="btn btn-outline-info btn-sm ms-1">
+                    <button onclick="load_form_div('<?= base_url('Medical/grn_detail/' . (int) $linked_grn['grn_id']) ?>','medical-main','GRN Detail');" type="button" class="btn btn-outline-info btn-sm ms-1">
                         <i class="bi bi-box-arrow-left"></i> Back to GRN #<?= esc($linked_grn['grn_number'] ?? $linked_grn['grn_id']) ?>
                     </button>
                 <?php endif; ?>

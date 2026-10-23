@@ -11,6 +11,9 @@
             <i class="bi bi-arrow-left"></i> Back to GRN List
         </a>
         <?php if (!empty($grn['grn_id'])): ?>
+            <button type="button" class="btn btn-warning btn-sm" onclick="load_form_div('<?= base_url('Medical/grn_edit/' . (int)$grn['grn_id']) ?>','medical-main','Edit GRN Inspection');">
+                <i class="bi bi-pencil-square"></i> Edit GRN Details
+            </button>
             <a href="<?= base_url('Medical/grn_print/' . (int)$grn['grn_id']) ?>" target="_blank" class="btn btn-outline-secondary btn-sm">
                 <i class="bi bi-printer"></i> Print Slip
             </a>
@@ -225,6 +228,11 @@
             <?php endif; ?>
         </div>
         <div class="d-flex gap-2">
+            <?php if (!empty($grn['grn_id'])): ?>
+                <button type="button" class="btn btn-warning" onclick="load_form_div('<?= base_url('Medical/grn_edit/' . (int)$grn['grn_id']) ?>','medical-main','Edit GRN Inspection');">
+                    <i class="bi bi-pencil-square"></i> Edit GRN
+                </button>
+            <?php endif; ?>
             <?php if (($grn['status'] ?? '') !== 'posted_to_inventory' && !empty($grn['grn_id'])): ?>
                 <button type="button" class="btn btn-success px-4" onclick="postGrnToLiveInventory(<?= (int)$grn['grn_id'] ?>)">
                     <i class="bi bi-box-arrow-in-down"></i> Post to Live Inventory
@@ -245,7 +253,7 @@ function postGrnToLiveInventory(grnId) {
     $.post('<?= base_url('Medical/grn_post_inventory/') ?>' + grnId, {}, function(data) {
         alert(data.message || 'Done');
         if (data.status) {
-            load_form_div('<?= base_url('Medical/grn_edit/') ?>' + grnId, 'medical-main', 'GRN Inspection Detail');
+            load_form_div('<?= base_url('Medical/grn_detail/') ?>' + grnId, 'medical-main', 'GRN Inspection Detail');
         }
     }, 'json').fail(function() {
         alert('Error posting GRN.');

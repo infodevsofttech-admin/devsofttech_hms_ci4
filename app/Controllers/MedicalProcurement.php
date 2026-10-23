@@ -819,7 +819,7 @@ class MedicalProcurement extends BaseController
         ]);
     }
 
-    public function grn_edit(int $grnId)
+    public function grn_detail(int $grnId)
     {
         if ($deny = $this->ensurePharmacyAccess()) {
             return $deny;
@@ -842,6 +842,402 @@ class MedicalProcurement extends BaseController
         return view('medical/grn_detail', [
             'grn'      => $grn,
             'grnItems' => $items,
+        ]);
+    }
+
+    public function grn_edit(int $grnId)
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        if ($this->request->getGet('mode') === 'view') {
+            return $this->grn_detail($grnId);
+        }
+
+        $grn = $this->db->table('mst_grns grn')
+            ->select('grn.*, s.name_supplier, po.po_number')
+            ->join('med_supplier s', 's.sid = grn.supplier_id', 'left')
+            ->join('mst_purchase_orders po', 'po.po_id = grn.po_id', 'left')
+            ->where('grn.grn_id', $grnId)
+            ->get()
+            ->getRowArray();
+
+        if (!$grn) {
+            return view('medical/placeholder', ['title' => 'Goods Received Note Not Found']);
+        }
+
+        $items = $this->grnItemModel->where('grn_id', $grnId)->findAll();
+        $suppliers = $this->db->table('med_supplier')->orderBy('name_supplier', 'ASC')->get()->getResultArray();
+        $approvedPos = $this->poModel->orderBy('po_id', 'DESC')->findAll();
+
+        return view('medical/grn_form', [
+            'isEdit'        => true,
+            'grn'           => $grn,
+            'grnItems'      => $items,
+            'suppliers'     => $suppliers,
+            'approvedPos'   => $approvedPos,
+            'selectedPo'    => !empty($grn['po_id']) ? $this->poModel->find($grn['po_id']) : null,
+            'poItems'       => [],
+            'nextGrnNumber' => $grn['grn_number'],
+        ]);
+    }
+
+    public function grn_update(int $grnId)
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $grn = $this->grnModel->find($grnId);
+        if (!$grn) {
+            return $this->response->setJSON(['status' => 0, 'message' => 'Goods Received Note not found.']);
+        }
+
+        $supplierId = (int)$this->request->getPost('supplier_id');
+        $poId = (int)$this->request->getPost('po_id');
+        $supplierInvoiceNo = trim((string)$this->request->getPost('supplier_invoice_no'));
+        $invoiceDate = $this->request->getPost('invoice_date');
+        $grnDate = $this->request->getPost('grn_date');
+        $gstType = $this->request->getPost('gst_type') === 'inter_state' ? 'inter_state' : 'intra_state';
+        $challanNo = trim((string)$this->request->getPost('challan_no'));
+        $remarks = trim((string)$this->request->getPost('remarks'));
+        $roundOff = (float)$this->request->getPost('round_off');
+        $syncInventory = (int)($this->request->getPost('sync_inventory') ?? $this->request->getPost('post_to_inventory') ?? 0);
+        $items = $this->request->getPost('items') ?? [];
+
+        if ($supplierId <= 0) {
+            return $this->response->setJSON(['status' => 0, 'message' => 'Please select a valid supplier/vendor.']);
+        }
+        if (empty($supplierInvoiceNo)) {
+            return $this->response->setJSON(['status' => 0, 'message' => 'Vendor invoice number is required.']);
+        }
+        if (empty($invoiceDate) || empty($grnDate)) {
+            return $this->response->setJSON(['status' => 0, 'message' => 'Please provide valid invoice and received dates.']);
+        }
+        if (empty($items) || !is_array($items)) {
+            return $this->response->setJSON(['status' => 0, 'message' => 'GRN must contain at least one medicine item.']);
+        }
+
+        $totalGross = 0.0;
+        $totalDisc = 0.0;
+        $totalTaxable = 0.0;
+        $totalCgst = 0.0;
+        $totalSgst = 0.0;
+        $totalIgst = 0.0;
+        $totalTax = 0.0;
+
+        $validItems = [];
+        foreach ($items as $idx => $it) {
+            $itemCode = !empty($it['item_code']) ? (int)$it['item_code'] : null;
+            $itemName = trim((string)($it['item_name'] ?? ''));
+            $batchNo = trim((string)($it['batch_no'] ?? ''));
+            $expiryDate = !empty($it['expiry_date']) ? date('Y-m-d', strtotime($it['expiry_date'])) : null;
+            $packing = max(1, (int)($it['packing'] ?? 1));
+            $receivedPacks = (float)($it['received_packs'] ?? 0);
+            $freePacks = (float)($it['free_packs'] ?? 0);
+            $unitPurchaseRate = (float)($it['unit_purchase_rate'] ?? 0);
+            $mrp = (float)($it['mrp'] ?? ($unitPurchaseRate * 1.3));
+            $sellingUnitRate = $packing > 0 ? round($mrp / $packing, 4) : $mrp;
+
+            if (empty($itemCode) || empty($itemName) || empty($batchNo) || empty($expiryDate)) {
+                continue;
+            }
+
+            $grossAmount = round($receivedPacks * $unitPurchaseRate, 2);
+            $discPercent = (float)($it['discount_percent'] ?? 0);
+            $schDiscPer = (float)($it['sch_disc_per'] ?? 0);
+            $schDiscAmt = (float)($it['sch_disc_amt'] ?? 0);
+
+            // Scheme discount
+            $schPerAmt = ($schDiscPer > 0) ? round($grossAmount * ($schDiscPer / 100), 2) : 0.0;
+            $lineSchDisc = $schPerAmt + $schDiscAmt;
+            $afterSch = max(0.0, $grossAmount - $lineSchDisc);
+
+            // Trade discount
+            $tradeDiscAmt = ($discPercent > 0) ? round($afterSch * ($discPercent / 100), 2) : 0.0;
+            $lineTaxable = max(0.0, round($afterSch - $tradeDiscAmt, 2));
+
+            $gstRate = (float)($it['gst_rate'] ?? 5);
+            if ($gstType === 'inter_state') {
+                $igstPer = $gstRate;
+                $cgstAmt = 0.0;
+                $sgstAmt = 0.0;
+                $igstAmt = round($lineTaxable * ($igstPer / 100), 2);
+                $lineTax = $igstAmt;
+                $cgstPer = 0.0;
+                $sgstPer = 0.0;
+            } else {
+                $cgstPer = round($gstRate / 2, 2);
+                $sgstPer = round($gstRate / 2, 2);
+                $igstPer = 0.0;
+                $cgstAmt = round($lineTaxable * ($cgstPer / 100), 2);
+                $sgstAmt = round($lineTaxable * ($sgstPer / 100), 2);
+                $igstAmt = 0.0;
+                $lineTax = $cgstAmt + $sgstAmt;
+            }
+
+            $lineTotal = round($lineTaxable + $lineTax, 2);
+
+            $totalGross += $grossAmount;
+            $totalDisc += ($lineSchDisc + $tradeDiscAmt);
+            $totalTaxable += $lineTaxable;
+            $totalCgst += $cgstAmt;
+            $totalSgst += $sgstAmt;
+            $totalIgst += $igstAmt;
+            $totalTax += $lineTax;
+
+            $validItems[] = [
+                'grn_item_id'        => !empty($it['grn_item_id']) ? (int)$it['grn_item_id'] : 0,
+                'purchase_item_id'   => !empty($it['purchase_item_id']) ? (int)$it['purchase_item_id'] : 0,
+                'po_item_id'         => !empty($it['po_item_id']) ? (int)$it['po_item_id'] : null,
+                'item_code'          => $itemCode,
+                'item_name'          => $itemName,
+                'batch_no'           => $batchNo,
+                'expiry_date'        => $expiryDate,
+                'packing'            => $packing,
+                'order_packs'        => (float)($it['order_packs'] ?? 0),
+                'received_packs'     => $receivedPacks,
+                'free_packs'         => $freePacks,
+                'rejected_packs'     => (float)($it['rejected_packs'] ?? 0),
+                'rejection_reason'   => $it['rejection_reason'] ?? null,
+                'unit_purchase_rate' => $unitPurchaseRate,
+                'gross_amount'       => $grossAmount,
+                'mrp'                => $mrp,
+                'selling_unit_rate'  => $sellingUnitRate,
+                'discount_percent'   => $discPercent,
+                'sch_disc_per'       => $schDiscPer,
+                'sch_disc_amt'       => $schDiscAmt,
+                'taxable_amount'     => $lineTaxable,
+                'cgst_percent'       => $cgstPer,
+                'cgst_amount'        => $cgstAmt,
+                'sgst_percent'       => $sgstPer,
+                'sgst_amount'        => $sgstAmt,
+                'igst_percent'       => $igstPer,
+                'igst_amount'        => $igstAmt,
+                'hsn_code'           => !empty($it['hsn_code']) ? $it['hsn_code'] : '3004',
+                'total_amount'       => $lineTotal,
+                'rack_no'            => $it['rack_no'] ?? null,
+                'shelf_no'           => $it['shelf_no'] ?? null,
+                'cold_storage'       => $it['cold_storage'] ?? null,
+            ];
+        }
+
+        if (empty($validItems)) {
+            return $this->response->setJSON(['status' => 0, 'message' => 'No valid item rows with batch and expiry were found.']);
+        }
+
+        $netTotal = round($totalTaxable + $totalTax + $roundOff, 2);
+
+        $this->db->transStart();
+
+        $grnHeaderUpdate = [
+            'po_id'                 => $poId > 0 ? $poId : null,
+            'supplier_id'           => $supplierId,
+            'challan_no'            => $challanNo ?: null,
+            'supplier_invoice_no'   => $supplierInvoiceNo,
+            'invoice_date'          => $invoiceDate,
+            'grn_date'              => $grnDate,
+            'total_received_amount' => $totalTaxable,
+            'total_tax_amount'      => $totalTax,
+            'cgst_amount'           => $totalCgst,
+            'sgst_amount'           => $totalSgst,
+            'igst_amount'           => $totalIgst,
+            'round_off'             => $roundOff,
+            'gst_type'              => $gstType,
+            'net_amount'            => $netTotal,
+            'remarks'               => $remarks,
+            'updated_at'            => date('Y-m-d H:i:s'),
+        ];
+
+        $this->grnModel->update($grnId, $grnHeaderUpdate);
+
+        $existingGrnItems = $this->grnItemModel->where('grn_id', $grnId)->findAll();
+        $existingItemsById = [];
+        foreach ($existingGrnItems as $ei) {
+            $existingItemsById[(int)$ei['grn_item_id']] = $ei;
+        }
+
+        $isPosted = ($grn['status'] === 'posted_to_inventory') && !empty($grn['purchase_id']);
+        $purchaseId = $isPosted ? (int)$grn['purchase_id'] : 0;
+        $medModel = new MedicalModel();
+        $userLabel = $this->getCurrentUserLabel();
+        $processedGrnItemIds = [];
+
+        foreach ($validItems as $vItem) {
+            $grnItemId = $vItem['grn_item_id'];
+            $vItem['grn_id'] = $grnId;
+            $purchaseItemId = $vItem['purchase_item_id'];
+            unset($vItem['grn_item_id']);
+
+            if ($grnItemId > 0 && isset($existingItemsById[$grnItemId])) {
+                // Update existing GRN item
+                $this->grnItemModel->update($grnItemId, $vItem);
+                $processedGrnItemIds[] = $grnItemId;
+
+                // If posted, update linked purchase_invoice_item
+                if ($isPosted && $purchaseItemId > 0) {
+                    $packing = (int)($vItem['packing'] ?: 1);
+                    $recPacks = (float)$vItem['received_packs'];
+                    $freePacks = (float)$vItem['free_packs'];
+                    $totalUnits = (int)round(($recPacks + $freePacks) * $packing);
+                    $purchasePricePerPack = (float)$vItem['unit_purchase_rate'];
+                    $purchaseUnitRate = $packing > 0 ? round($purchasePricePerPack / $packing, 4) : $purchasePricePerPack;
+
+                    $piItemUpdate = [
+                        'item_code'          => $vItem['item_code'],
+                        'Item_name'          => $vItem['item_name'],
+                        'packing'            => $packing,
+                        'batch_no'           => $vItem['batch_no'],
+                        'purchase_price'     => $purchasePricePerPack,
+                        'expiry_date'        => $vItem['expiry_date'],
+                        'mrp'                => $vItem['mrp'],
+                        'qty'                => $recPacks,
+                        'qty_free'           => $freePacks,
+                        'tqty'               => $recPacks + $freePacks,
+                        'amount'             => $vItem['gross_amount'],
+                        'discount'           => $vItem['discount_percent'],
+                        'sch_disc_amt'       => $vItem['sch_disc_amt'],
+                        'sch_disc_per'       => $vItem['sch_disc_per'],
+                        'taxable_amount'     => $vItem['taxable_amount'],
+                        'CGST_per'           => $vItem['cgst_percent'],
+                        'CGST'               => $vItem['cgst_amount'],
+                        'SGST_per'           => $vItem['sgst_percent'],
+                        'SGST'               => $vItem['sgst_amount'],
+                        'net_amount'         => $vItem['total_amount'],
+                        'HSNCODE'            => $vItem['hsn_code'],
+                        'selling_price'      => $vItem['selling_unit_rate'] * $packing,
+                        'total_unit'         => $totalUnits,
+                        'selling_unit_rate'  => $vItem['selling_unit_rate'],
+                        'purchase_unit_rate' => $purchaseUnitRate,
+                        'stock_date'         => $invoiceDate,
+                        'rack_no'            => $vItem['rack_no'] ?: '',
+                        'shelf_no'           => $vItem['shelf_no'] ?: '',
+                        'cold_storage'       => $vItem['cold_storage'] ?: 'No',
+                    ];
+
+                    $this->db->table('purchase_invoice_item')->where('id', $purchaseItemId)->update($piItemUpdate);
+                    $medModel->updatePurchaseStockById($purchaseItemId);
+                }
+            } else {
+                // Insert new GRN item
+                $this->grnItemModel->insert($vItem);
+                $newGrnItemId = (int)$this->db->insertID();
+                $processedGrnItemIds[] = $newGrnItemId;
+
+                // If posted, also insert new purchase_invoice_item
+                if ($isPosted && $purchaseId > 0) {
+                    $packing = (int)($vItem['packing'] ?: 1);
+                    $recPacks = (float)$vItem['received_packs'];
+                    $freePacks = (float)$vItem['free_packs'];
+                    $totalUnits = (int)round(($recPacks + $freePacks) * $packing);
+                    $purchasePricePerPack = (float)$vItem['unit_purchase_rate'];
+                    $purchaseUnitRate = $packing > 0 ? round($purchasePricePerPack / $packing, 4) : $purchasePricePerPack;
+
+                    $piItemData = [
+                        'purchase_id'        => $purchaseId,
+                        'item_code'          => $vItem['item_code'],
+                        'Item_name'          => $vItem['item_name'],
+                        'packing'            => $packing,
+                        'batch_no'           => $vItem['batch_no'],
+                        'purchase_price'     => $purchasePricePerPack,
+                        'expiry_date'        => $vItem['expiry_date'],
+                        'mrp'                => $vItem['mrp'],
+                        'qty'                => $recPacks,
+                        'qty_free'           => $freePacks,
+                        'tqty'               => $recPacks + $freePacks,
+                        'amount'             => $vItem['gross_amount'],
+                        'discount'           => $vItem['discount_percent'],
+                        'sch_disc_amt'       => $vItem['sch_disc_amt'],
+                        'sch_disc_per'       => $vItem['sch_disc_per'],
+                        'taxable_amount'     => $vItem['taxable_amount'],
+                        'CGST_per'           => $vItem['cgst_percent'],
+                        'CGST'               => $vItem['cgst_amount'],
+                        'SGST_per'           => $vItem['sgst_percent'],
+                        'SGST'               => $vItem['sgst_amount'],
+                        'net_amount'         => $vItem['total_amount'],
+                        'HSNCODE'            => $vItem['hsn_code'],
+                        'selling_price'      => $vItem['selling_unit_rate'] * $packing,
+                        'total_unit'         => $totalUnits,
+                        'total_sale_unit'    => 0,
+                        'total_return_unit'  => 0,
+                        'total_lost_unit'    => 0,
+                        'selling_unit_rate'  => $vItem['selling_unit_rate'],
+                        'purchase_unit_rate' => $purchaseUnitRate,
+                        'item_return'        => 0,
+                        'remove_item'        => 0,
+                        'stock_date'         => $invoiceDate,
+                        'rack_no'            => $vItem['rack_no'] ?: '',
+                        'shelf_no'           => $vItem['shelf_no'] ?: '',
+                        'cold_storage'       => $vItem['cold_storage'] ?: 'No',
+                        'insert_by'          => $userLabel,
+                    ];
+
+                    $this->db->table('purchase_invoice_item')->insert($piItemData);
+                    $newPiItemId = (int)$this->db->insertID();
+                    $this->grnItemModel->update($newGrnItemId, ['purchase_item_id' => $newPiItemId]);
+                    $medModel->updatePurchaseStockById($newPiItemId);
+                }
+            }
+        }
+
+        // Delete any items that were removed
+        foreach ($existingItemsById as $oldId => $oldItem) {
+            if (!in_array($oldId, $processedGrnItemIds, true)) {
+                if ($isPosted && !empty($oldItem['purchase_item_id'])) {
+                    $piId = (int)$oldItem['purchase_item_id'];
+                    $piRow = $this->db->table('purchase_invoice_item')->where('id', $piId)->get()->getRowArray();
+                    $soldUnits = (float)($piRow['total_sale_unit'] ?? 0);
+                    if ($soldUnits <= 0) {
+                        $this->db->table('purchase_invoice_item')->where('id', $piId)->delete();
+                        $this->grnItemModel->delete($oldId);
+                    } else {
+                        // Mark removed instead of hard delete to preserve sales audit
+                        $this->db->table('purchase_invoice_item')->where('id', $piId)->update(['remove_item' => 1]);
+                        $this->grnItemModel->delete($oldId);
+                    }
+                } else {
+                    $this->grnItemModel->delete($oldId);
+                }
+            }
+        }
+
+        // Update purchase_invoice header if already posted
+        if ($isPosted && $purchaseId > 0) {
+            $supplier = $this->db->table('med_supplier')->where('sid', $supplierId)->get()->getRowArray();
+            $suppName = $supplier['name_supplier'] ?? 'Supplier';
+
+            $this->db->table('purchase_invoice')->where('id', $purchaseId)->update([
+                'sid'             => $supplierId,
+                'ischallan'       => !empty($challanNo) ? 1 : 0,
+                'monthyear'       => date('m/Y', strtotime($invoiceDate)),
+                'supp_name'       => $suppName,
+                'date_of_invoice' => $invoiceDate,
+                'Invoice_no'      => $supplierInvoiceNo,
+                'Taxable_Amt'     => $totalTaxable,
+                'CGST_Amt'        => $totalCgst,
+                'SGST_Amt'        => $totalSgst,
+                'T_Net_Amount'    => $netTotal,
+            ]);
+        } elseif (!$isPosted && $syncInventory === 1) {
+            // If was not posted before, but user checked "Post to live inventory"
+            $this->executeGrnStockPosting($grnId);
+        }
+
+        $this->db->transComplete();
+
+        if ($this->db->transStatus() === false) {
+            $err = $this->db->error();
+            $errMsg = !empty($err['message']) ? ': ' . $err['message'] : '.';
+            log_message('error', 'grn_update transaction failed' . $errMsg);
+            return $this->response->setJSON(['status' => 0, 'message' => 'Failed to update Goods Received Note' . $errMsg]);
+        }
+
+        return $this->response->setJSON([
+            'status'     => 1,
+            'message'    => "GRN {$grn['grn_number']} updated successfully!",
+            'grn_id'     => $grnId,
+            'grn_number' => $grn['grn_number'],
         ]);
     }
 

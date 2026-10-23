@@ -114,8 +114,11 @@
                                         <a href="<?= base_url('Medical/grn_print/' . $row['grn_id']) ?>" target="_blank" class="btn btn-outline-secondary" title="Print GRN Slip">
                                             <i class="bi bi-printer"></i>
                                         </a>
-                                        <button type="button" class="btn btn-outline-primary" onclick="load_form_div('<?= base_url('Medical/grn_edit/' . $row['grn_id']) ?>','medical-main','GRN Inspection Detail');" title="View Inspection Details">
+                                        <button type="button" class="btn btn-outline-primary" onclick="load_form_div('<?= base_url('Medical/grn_detail/' . $row['grn_id']) ?>','medical-main','GRN Inspection Detail');" title="View Inspection Details">
                                             <i class="bi bi-eye"></i> View
+                                        </button>
+                                        <button type="button" class="btn btn-outline-warning" onclick="load_form_div('<?= base_url('Medical/grn_edit/' . $row['grn_id']) ?>','medical-main','Edit GRN Inspection');" title="Edit Inspection Details">
+                                            <i class="bi bi-pencil-square"></i> Edit
                                         </button>
                                         <?php if ($row['status'] === 'verified'): ?>
                                             <button type="button" class="btn btn-success" onclick="postGrnToStock(<?= (int)$row['grn_id'] ?>)" title="Post to Live Hospital Stock">

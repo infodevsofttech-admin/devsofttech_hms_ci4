@@ -138,7 +138,10 @@ $routes->get('Medical/grn_list', 'MedicalProcurement::grn_list');
 $routes->get('Medical/grn_new', 'MedicalProcurement::grn_new');
 $routes->get('Medical/grn_new/(:num)', 'MedicalProcurement::grn_new/$1');
 $routes->post('Medical/grn_create', 'MedicalProcurement::grn_create');
+$routes->get('Medical/grn_detail/(:num)', 'MedicalProcurement::grn_detail/$1');
 $routes->get('Medical/grn_edit/(:num)', 'MedicalProcurement::grn_edit/$1');
+$routes->get('Medical/grn_modify/(:num)', 'MedicalProcurement::grn_edit/$1');
+$routes->post('Medical/grn_update/(:num)', 'MedicalProcurement::grn_update/$1');
 $routes->post('Medical/grn_post_inventory/(:num)', 'MedicalProcurement::grn_post_inventory/$1');
 $routes->get('Medical/grn_print/(:num)', 'MedicalProcurement::grn_print/$1');
 

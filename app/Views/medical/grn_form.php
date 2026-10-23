@@ -1,18 +1,34 @@
 <?php
-    $poId = !empty($selectedPo) ? (int)$selectedPo['po_id'] : 0;
-    $supplierId = !empty($selectedPo) ? (int)$selectedPo['supplier_id'] : 0;
-    $nextGrnNumber = $nextGrnNumber ?? 'GRN-NEW';
+    $isEdit = !empty($isEdit);
+    $poId = !empty($grn['po_id']) ? (int)$grn['po_id'] : (!empty($selectedPo) ? (int)$selectedPo['po_id'] : 0);
+    $supplierId = !empty($grn['supplier_id']) ? (int)$grn['supplier_id'] : (!empty($selectedPo) ? (int)$selectedPo['supplier_id'] : 0);
+    $displayGrnNumber = !empty($grn['grn_number']) ? $grn['grn_number'] : ($nextGrnNumber ?? 'GRN-NEW');
+    $isPosted = !empty($grn['status']) && $grn['status'] === 'posted_to_inventory';
 ?>
 
 <div class="pagetitle d-flex justify-content-between align-items-center mb-3">
     <div>
         <h4 class="mb-0 text-success">
-            <i class="bi bi-box-arrow-in-down"></i> Create Goods Received Note (GRN)
-            <span class="badge bg-light text-dark border ms-2 font-monospace"><?= esc($nextGrnNumber) ?></span>
+            <i class="bi <?= $isEdit ? 'bi-pencil-square' : 'bi-box-arrow-in-down' ?>"></i> 
+            <?= $isEdit ? 'Edit Goods Received Note (GRN)' : 'Create Goods Received Note (GRN)' ?>
+            <span class="badge bg-light text-dark border ms-2 font-monospace"><?= esc($displayGrnNumber) ?></span>
+            <?php if ($isEdit && $isPosted): ?>
+                <span class="badge bg-success ms-1">POSTED TO STOCK (REF #<?= (int)($grn['purchase_id'] ?? 0) ?>)</span>
+            <?php elseif ($isEdit): ?>
+                <span class="badge bg-info text-dark ms-1">INSPECTION DRAFT / VERIFIED</span>
+            <?php endif; ?>
         </h4>
         <small class="text-muted">Inward Stock Physical Inspection &amp; Vendor Invoice Reconciliation</small>
     </div>
-    <div>
+    <div class="d-flex gap-2">
+        <?php if ($isEdit && !empty($grn['grn_id'])): ?>
+            <a href="javascript:load_form_div('<?= base_url('Medical/grn_detail/' . (int)$grn['grn_id']) ?>','medical-main','GRN Inspection Detail');" class="btn btn-outline-info btn-sm">
+                <i class="bi bi-eye"></i> View Inspection Detail
+            </a>
+            <a href="<?= base_url('Medical/grn_print/' . (int)$grn['grn_id']) ?>" target="_blank" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-printer"></i> Print Slip
+            </a>
+        <?php endif; ?>
         <a href="javascript:load_form_div('<?= base_url('Medical/grn_list') ?>','medical-main','GRN Register :Pharmacy');" class="btn btn-outline-secondary btn-sm">
             <i class="bi bi-arrow-left"></i> Back to GRN List
         </a>
@@ -26,6 +42,9 @@
     <div class="card-body p-3">
         <form id="grn-create-form" onsubmit="event.preventDefault(); submitGrnForm();">
             <?= csrf_field() ?>
+            <?php if ($isEdit && !empty($grn['grn_id'])): ?>
+                <input type="hidden" name="grn_id" id="grn_id" value="<?= (int)$grn['grn_id'] ?>">
+            <?php endif; ?>
             <div class="row g-2 mb-2">
                 <div class="col-md-3">
                     <label class="form-label form-label-sm fw-semibold mb-1">Linked Purchase Order (PO)</label>
@@ -55,33 +74,34 @@
                 </div>
                 <div class="col-md-2">
                     <label class="form-label form-label-sm fw-semibold mb-1">Vendor Invoice / Bill # <span class="text-danger">*</span></label>
-                    <input type="text" name="supplier_invoice_no" id="supplier_invoice_no" class="form-control form-control-sm" placeholder="e.g. INV-88421" required>
+                    <input type="text" name="supplier_invoice_no" id="supplier_invoice_no" class="form-control form-control-sm" placeholder="e.g. INV-88421" value="<?= esc($grn['supplier_invoice_no'] ?? '') ?>" required>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label form-label-sm fw-semibold mb-1">Invoice Date <span class="text-danger">*</span></label>
-                    <input type="date" name="invoice_date" id="invoice_date" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" required>
+                    <input type="date" name="invoice_date" id="invoice_date" class="form-control form-control-sm" value="<?= !empty($grn['invoice_date']) ? esc($grn['invoice_date']) : date('Y-m-d') ?>" required>
                 </div>
                 <div class="col-md-2">
                     <label class="form-label form-label-sm fw-semibold mb-1">GRN Received Date <span class="text-danger">*</span></label>
-                    <input type="date" name="grn_date" id="grn_date" class="form-control form-control-sm" value="<?= date('Y-m-d') ?>" required>
+                    <input type="date" name="grn_date" id="grn_date" class="form-control form-control-sm" value="<?= !empty($grn['grn_date']) ? esc($grn['grn_date']) : date('Y-m-d') ?>" required>
                 </div>
             </div>
 
             <div class="row g-2 mb-3">
                 <div class="col-md-3">
                     <label class="form-label form-label-sm fw-semibold mb-1">GST Supply Type</label>
+                    <?php $gstType = $grn['gst_type'] ?? 'intra_state'; ?>
                     <select name="gst_type" id="grn_gst_type" class="form-select form-select-sm" onchange="recalculateGrnTotals();">
-                        <option value="intra_state" selected>Intra-State (CGST + SGST)</option>
-                        <option value="inter_state">Inter-State (IGST)</option>
+                        <option value="intra_state" <?= ($gstType === 'intra_state') ? 'selected' : '' ?>>Intra-State (CGST + SGST)</option>
+                        <option value="inter_state" <?= ($gstType === 'inter_state') ? 'selected' : '' ?>>Inter-State (IGST)</option>
                     </select>
                 </div>
                 <div class="col-md-3">
                     <label class="form-label form-label-sm fw-semibold mb-1">Delivery Challan / Gate Pass #</label>
-                    <input type="text" name="challan_no" id="challan_no" class="form-control form-control-sm" placeholder="Optional Challan No.">
+                    <input type="text" name="challan_no" id="challan_no" class="form-control form-control-sm" placeholder="Optional Challan No." value="<?= esc($grn['challan_no'] ?? '') ?>">
                 </div>
                 <div class="col-md-6">
                     <label class="form-label form-label-sm fw-semibold mb-1">Receiving Inspection Remarks</label>
-                    <input type="text" name="remarks" id="grn_remarks" class="form-control form-control-sm" placeholder="Package integrity verified, cold chain maintained, etc.">
+                    <input type="text" name="remarks" id="grn_remarks" class="form-control form-control-sm" placeholder="Package integrity verified, cold chain maintained, etc." value="<?= esc($grn['remarks'] ?? '') ?>">
                 </div>
             </div>
 
@@ -155,7 +175,93 @@
                                 </tr>
                             </thead>
                             <tbody id="grn-items-body">
-                                <?php if (!empty($poItems)): ?>
+                                <?php if (!empty($grnItems)): ?>
+                                    <?php foreach ($grnItems as $idx => $it): ?>
+                                        <?php 
+                                            $gstRate = (float)($it['igst_percent'] > 0 ? $it['igst_percent'] : ((float)($it['cgst_percent'] ?? 0) + (float)($it['sgst_percent'] ?? 0)));
+                                            if ($gstRate <= 0 && isset($it['cgst_percent']) && (float)$it['cgst_percent'] == 0 && (float)$it['sgst_percent'] == 0 && (float)$it['igst_percent'] == 0) {
+                                                $gstRate = 0;
+                                            } elseif ($gstRate <= 0) {
+                                                $gstRate = 5;
+                                            }
+                                            $recQty = (float)($it['received_packs'] ?? 0);
+                                            $freeQty = (float)($it['free_packs'] ?? 0);
+                                            $rate = (float)($it['unit_purchase_rate'] ?? 0);
+                                            $gross = isset($it['gross_amount']) && (float)$it['gross_amount'] > 0 ? (float)$it['gross_amount'] : ($recQty * $rate);
+                                            $mrp = (float)($it['mrp'] ?? ($rate * 1.3));
+                                            $tradeDisc = (float)($it['discount_percent'] ?? 0);
+                                            $schPer = (float)($it['sch_disc_per'] ?? 0);
+                                            $schAmt = (float)($it['sch_disc_amt'] ?? 0);
+                                            $taxable = isset($it['taxable_amount']) ? (float)$it['taxable_amount'] : $gross;
+                                            $lineTotal = isset($it['total_amount']) ? (float)$it['total_amount'] : $taxable;
+                                            $expDate = !empty($it['expiry_date']) ? date('Y-m-d', strtotime($it['expiry_date'])) : '';
+                                        ?>
+                                        <tr>
+                                            <td class="row-num text-center"><?= $idx + 1 ?></td>
+                                            <td>
+                                                <strong class="text-dark"><?= esc($it['item_name']) ?></strong>
+                                                <input type="hidden" name="items[<?= $idx ?>][grn_item_id]" value="<?= (int)($it['grn_item_id'] ?? 0) ?>">
+                                                <input type="hidden" name="items[<?= $idx ?>][purchase_item_id]" value="<?= (int)($it['purchase_item_id'] ?? 0) ?>">
+                                                <input type="hidden" name="items[<?= $idx ?>][item_code]" value="<?= esc($it['item_code']) ?>">
+                                                <input type="hidden" name="items[<?= $idx ?>][item_name]" value="<?= esc($it['item_name']) ?>">
+                                                <input type="hidden" name="items[<?= $idx ?>][po_item_id]" value="<?= (int)($it['po_item_id'] ?? 0) ?>">
+                                                <input type="hidden" name="items[<?= $idx ?>][order_packs]" value="<?= (float)($it['order_packs'] ?? 0) ?>">
+                                                <input type="hidden" name="items[<?= $idx ?>][rejected_packs]" value="<?= (float)($it['rejected_packs'] ?? 0) ?>">
+                                                <input type="hidden" name="items[<?= $idx ?>][hsn_code]" value="<?= esc($it['hsn_code'] ?? '3004') ?>">
+                                                <input type="hidden" name="items[<?= $idx ?>][cgst_percent]" class="line-cgst" value="<?= (float)($it['cgst_percent'] ?? 0) ?>">
+                                                <input type="hidden" name="items[<?= $idx ?>][sgst_percent]" class="line-sgst" value="<?= (float)($it['sgst_percent'] ?? 0) ?>">
+                                                <input type="hidden" name="items[<?= $idx ?>][igst_percent]" class="line-igst" value="<?= (float)($it['igst_percent'] ?? 0) ?>">
+                                                <input type="hidden" name="items[<?= $idx ?>][gross_amount]" class="line-gross-hid" value="<?= number_format($gross, 2, '.', '') ?>">
+                                                <input type="hidden" name="items[<?= $idx ?>][taxable_amount]" class="line-taxable-hid" value="<?= number_format($taxable, 2, '.', '') ?>">
+                                            </td>
+                                            <td>
+                                                <input type="text" name="items[<?= $idx ?>][batch_no]" class="form-control form-control-sm font-monospace line-batch" value="<?= esc($it['batch_no'] ?? '') ?>" placeholder="Batch #" required>
+                                            </td>
+                                            <td>
+                                                <input type="date" name="items[<?= $idx ?>][expiry_date]" class="form-control form-control-sm line-expiry" value="<?= esc($expDate) ?>" required>
+                                            </td>
+                                            <td class="text-center">
+                                                <input type="number" name="items[<?= $idx ?>][packing]" class="form-control form-control-sm text-center line-pack px-1" value="<?= (int)($it['packing'] ?? 10) ?>" min="1">
+                                            </td>
+                                            <td class="text-center">
+                                                <input type="number" name="items[<?= $idx ?>][received_packs]" class="form-control form-control-sm text-center fw-bold line-rec px-1" value="<?= $recQty ?>" min="0" step="1" oninput="recalculateGrnTotals();" required>
+                                            </td>
+                                            <td class="text-center">
+                                                <input type="number" name="items[<?= $idx ?>][free_packs]" class="form-control form-control-sm text-center text-success line-free px-1" value="<?= $freeQty ?>" min="0" step="1" oninput="recalculateGrnTotals();">
+                                            </td>
+                                            <td class="text-end">
+                                                <input type="number" name="items[<?= $idx ?>][unit_purchase_rate]" class="form-control form-control-sm text-end line-rate px-1" value="<?= number_format($rate, 2, '.', '') ?>" min="0" step="0.01" oninput="recalculateGrnTotals();">
+                                            </td>
+                                            <td class="text-end">
+                                                <input type="number" name="items[<?= $idx ?>][mrp]" class="form-control form-control-sm text-end line-mrp px-1" value="<?= number_format($mrp, 2, '.', '') ?>" min="0" step="0.01">
+                                            </td>
+                                            <td class="text-end font-monospace line-gross-disp bg-light">₹<?= number_format($gross, 2) ?></td>
+                                            <td class="text-center">
+                                                <input type="number" name="items[<?= $idx ?>][discount_percent]" class="form-control form-control-sm text-center line-disc px-1" value="<?= number_format($tradeDisc, 2, '.', '') ?>" min="0" max="100" step="0.01" oninput="recalculateGrnTotals();">
+                                            </td>
+                                            <td class="text-center">
+                                                <input type="number" name="items[<?= $idx ?>][sch_disc_per]" class="form-control form-control-sm text-center line-sch-per px-1" value="<?= number_format($schPer, 2, '.', '') ?>" min="0" max="100" step="0.01" oninput="recalculateGrnTotals();">
+                                            </td>
+                                            <td class="text-center">
+                                                <input type="number" name="items[<?= $idx ?>][sch_disc_amt]" class="form-control form-control-sm text-center line-sch-amt px-1" value="<?= number_format($schAmt, 2, '.', '') ?>" min="0" step="0.01" oninput="recalculateGrnTotals();">
+                                            </td>
+                                            <td class="text-end font-monospace line-taxable-disp bg-light">₹<?= number_format($taxable, 2) ?></td>
+                                            <td class="text-center">
+                                                <select name="items[<?= $idx ?>][gst_rate]" class="form-select form-select-sm text-center line-gst px-1" onchange="recalculateGrnTotals();">
+                                                    <option value="5" <?= (abs($gstRate - 5) < 0.1) ? 'selected' : '' ?>>5%</option>
+                                                    <option value="12" <?= (abs($gstRate - 12) < 0.1) ? 'selected' : '' ?>>12%</option>
+                                                    <option value="18" <?= (abs($gstRate - 18) < 0.1) ? 'selected' : '' ?>>18%</option>
+                                                    <option value="28" <?= (abs($gstRate - 28) < 0.1) ? 'selected' : '' ?>>28%</option>
+                                                    <option value="0" <?= (abs($gstRate - 0) < 0.1) ? 'selected' : '' ?>>0%</option>
+                                                </select>
+                                            </td>
+                                            <td class="text-end font-monospace fw-semibold line-total-disp bg-light">₹<?= number_format($lineTotal, 2) ?></td>
+                                            <td class="text-center">
+                                                <button type="button" class="btn btn-outline-danger btn-sm py-0 px-1" onclick="removeGrnRow(this);">✖</button>
+                                            </td>
+                                        </tr>
+                                    <?php endforeach; ?>
+                                <?php elseif (!empty($poItems)): ?>
                                     <?php foreach ($poItems as $idx => $it): ?>
                                         <?php 
                                             $defGst = (float)($it['gst_rate'] ?? 5);
@@ -170,6 +276,8 @@
                                             <td class="row-num text-center"><?= $idx + 1 ?></td>
                                             <td>
                                                 <strong class="text-dark"><?= esc($it['item_name']) ?></strong>
+                                                <input type="hidden" name="items[<?= $idx ?>][grn_item_id]" value="0">
+                                                <input type="hidden" name="items[<?= $idx ?>][purchase_item_id]" value="0">
                                                 <input type="hidden" name="items[<?= $idx ?>][item_code]" value="<?= (int)$it['item_id'] ?>">
                                                 <input type="hidden" name="items[<?= $idx ?>][item_name]" value="<?= esc($it['item_name']) ?>">
                                                 <input type="hidden" name="items[<?= $idx ?>][po_item_id]" value="<?= (int)$it['po_item_id'] ?>">
@@ -276,7 +384,7 @@
                                 <tr>
                                     <th colspan="13" class="text-end text-muted">Round Off (+ / -):</th>
                                     <th colspan="3" class="text-end">
-                                        <input type="number" step="0.01" name="round_off" id="grn_round_off" class="form-control form-control-sm text-end font-monospace d-inline-block" style="width: 105px;" value="0.00" oninput="recalculateGrnTotals();">
+                                        <input type="number" step="0.01" name="round_off" id="grn_round_off" class="form-control form-control-sm text-end font-monospace d-inline-block" style="width: 105px;" value="<?= isset($grn['round_off']) ? number_format((float)$grn['round_off'], 2, '.', '') : '0.00' ?>" oninput="recalculateGrnTotals();">
                                     </th>
                                     <th></th>
                                 </tr>
@@ -293,17 +401,29 @@
 
             <div class="card p-3 mt-3 bg-light border-0">
                 <div class="d-flex justify-content-between align-items-center flex-wrap gap-2">
-                    <div class="form-check">
-                        <input class="form-check-input" type="checkbox" name="post_to_inventory" id="post_to_inventory" value="1" checked>
-                        <label class="form-check-label fw-bold text-dark" for="post_to_inventory">
-                            Immediately Post Verified Quantities to Live Pharmacy Store Stock &amp; Purchase Ledgers
-                        </label>
-                        <small class="d-block text-muted">Creates verified purchase invoice records and updates stock ledgers.</small>
+                    <div>
+                        <?php if ($isEdit && $isPosted): ?>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="sync_inventory" id="sync_inventory" value="1" checked>
+                                <label class="form-check-label fw-bold text-success" for="sync_inventory">
+                                    <i class="bi bi-arrow-repeat"></i> Synchronize Changes to Live Store Inventory &amp; Purchase Invoice (Ref #<?= (int)($grn['purchase_id'] ?? 0) ?>)
+                                </label>
+                                <small class="d-block text-muted">Automatically updates linked purchase bill line items and live stock batches.</small>
+                            </div>
+                        <?php else: ?>
+                            <div class="form-check">
+                                <input class="form-check-input" type="checkbox" name="post_to_inventory" id="post_to_inventory" value="1" checked>
+                                <label class="form-check-label fw-bold text-dark" for="post_to_inventory">
+                                    Immediately Post Verified Quantities to Live Pharmacy Store Stock &amp; Purchase Ledgers
+                                </label>
+                                <small class="d-block text-muted">Creates verified purchase invoice records and updates stock ledgers.</small>
+                            </div>
+                        <?php endif; ?>
                     </div>
                     <div class="d-flex gap-2">
-                        <button type="button" class="btn btn-outline-secondary" onclick="load_form_div('<?= base_url('Medical/grn_list') ?>','medical-main');">Cancel</button>
+                        <button type="button" class="btn btn-outline-secondary" onclick="load_form_div('<?= $isEdit ? base_url('Medical/grn_detail/' . (int)$grn['grn_id']) : base_url('Medical/grn_list') ?>','medical-main');">Cancel</button>
                         <button type="submit" class="btn btn-success px-4" id="btn-save-grn">
-                            <i class="bi bi-check-all"></i> Save &amp; Complete Inward GRN
+                            <i class="bi bi-check-all"></i> <?= $isEdit ? 'Update GRN Inspection' : 'Save & Complete Inward GRN' ?>
                         </button>
                     </div>
                 </div>
@@ -350,6 +470,11 @@ function initGrnDrugAutocomplete() {
 }
 
 function handlePoSelection(poId) {
+    <?php if ($isEdit): ?>
+    if (!confirm('Selecting another PO will switch to creating a new GRN. Continue?')) {
+        return;
+    }
+    <?php endif; ?>
     if (poId && parseInt(poId) > 0) {
         load_form_div('<?= base_url('Medical/grn_new/') ?>' + poId, 'medical-main', 'Create GRN for PO');
     }
@@ -394,6 +519,8 @@ function addCustomItemToGrn() {
         <td class="row-num text-center">${rowIdx + 1}</td>
         <td>
             <strong class="text-dark">${escapeHtml(name)}</strong>
+            <input type="hidden" name="items[${rowIdx}][grn_item_id]" value="0">
+            <input type="hidden" name="items[${rowIdx}][purchase_item_id]" value="0">
             <input type="hidden" name="items[${rowIdx}][item_code]" value="${code}">
             <input type="hidden" name="items[${rowIdx}][item_name]" value="${escapeHtml(name)}">
             <input type="hidden" name="items[${rowIdx}][po_item_id]" value="">
@@ -614,10 +741,13 @@ function submitGrnForm() {
     var formData = new FormData(form);
 
     var saveBtn = document.getElementById('btn-save-grn');
+    var btnDefaultHtml = '<?= $isEdit ? '<i class="bi bi-check-all"></i> Update GRN Inspection' : '<i class="bi bi-check-all"></i> Save &amp; Complete Inward GRN' ?>';
     saveBtn.disabled = true;
     saveBtn.innerHTML = '<span class="spinner-border spinner-border-sm"></span> Processing Inward Stock...';
 
-    fetch('<?= base_url('Medical/grn_create') ?>', {
+    var submitUrl = '<?= $isEdit ? base_url('Medical/grn_update/' . (int)($grn['grn_id'] ?? 0)) : base_url('Medical/grn_create') ?>';
+
+    fetch(submitUrl, {
         method: 'POST',
         headers: { 'X-Requested-With': 'XMLHttpRequest' },
         body: formData
@@ -625,18 +755,19 @@ function submitGrnForm() {
     .then(r => r.json())
     .then(data => {
         saveBtn.disabled = false;
-        saveBtn.innerHTML = '<i class="bi bi-check-all"></i> Save &amp; Complete Inward GRN';
+        saveBtn.innerHTML = btnDefaultHtml;
 
         if (data.status) {
             alert(data.message);
-            load_form_div('<?= base_url('Medical/grn_list') ?>', 'medical-main', 'GRN Register :Pharmacy');
+            var targetGrnId = data.grn_id || '<?= (int)($grn['grn_id'] ?? 0) ?>';
+            load_form_div('<?= base_url('Medical/grn_detail/') ?>' + targetGrnId, 'medical-main', 'GRN Inspection Detail');
         } else {
             alert('Error: ' + (data.message || 'Failed to save GRN.'));
         }
     })
     .catch(e => {
         saveBtn.disabled = false;
-        saveBtn.innerHTML = '<i class="bi bi-check-all"></i> Save &amp; Complete Inward GRN';
+        saveBtn.innerHTML = btnDefaultHtml;
         alert('Server communication error.');
     });
 }
