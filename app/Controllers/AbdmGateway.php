@@ -7186,11 +7186,13 @@ class AbdmGateway extends BaseController
             'transaction_id' => (string) ($txn['txn_id'] ?? ''),
         ]);
 
+        $confirmedPatientRef = (! empty($confirmedContexts[0]['referenceNumber'])) ? (string) $confirmedContexts[0]['referenceNumber'] : $patientRef;
+
         return $this->response->setJSON([
             'ok' => 1,
             'message' => 'Care contexts linked successfully',
             'patient' => [
-                'referenceNumber' => $patientRef,
+                'referenceNumber' => $confirmedPatientRef,
                 'display' => $patientDisplay,
                 'careContexts' => $confirmedContexts,
             ],
@@ -13889,8 +13891,14 @@ class AbdmGateway extends BaseController
             }
         }
 
-        if (empty($body['patient_ref']) || $body['patient_ref'] === $body['abha_address'] || preg_match('/^(OPD|PRESC|INVOICE|LAB|RAD|WELLNESS)-/i', (string) $body['patient_ref'])) {
-            if (! empty($patientRow['p_code'])) {
+        if (empty($body['patient_ref']) || $body['patient_ref'] === $body['abha_address']) {
+            $firstContextRef = '';
+            if (! empty($body['care_contexts']) && is_array($body['care_contexts'])) {
+                $firstContextRef = (string) ($body['care_contexts'][0]['ref'] ?? $body['care_contexts'][0]['referenceNumber'] ?? $body['care_contexts'][0]['reference_number'] ?? '');
+            }
+            if ($firstContextRef !== '') {
+                $body['patient_ref'] = $firstContextRef;
+            } elseif (! empty($patientRow['p_code'])) {
                 $body['patient_ref'] = (string) $patientRow['p_code'];
             } elseif ($patientId > 0) {
                 $body['patient_ref'] = 'P-' . $patientId;
