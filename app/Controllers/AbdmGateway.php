@@ -6759,6 +6759,17 @@ class AbdmGateway extends BaseController
         $abhaAddress = '';
         $careContexts = [];
 
+        // 1. First, check careContexts or care_contexts directly passed in payload
+        $passedContexts = $payload['careContexts'] ?? $payload['care_contexts'] ?? [];
+        if (is_array($passedContexts) && ! empty($passedContexts)) {
+            foreach ($passedContexts as $cc) {
+                if (is_array($cc) && ! empty($cc['referenceNumber'])) {
+                    $careContexts[] = $cc;
+                }
+            }
+        }
+
+        // 2. Also extract from rawPatient (can be array of patient objects or single patient object)
         if (is_array($rawPatient)) {
             if (isset($rawPatient[0]) && is_array($rawPatient[0])) {
                 foreach ($rawPatient as $pItem) {
@@ -6782,39 +6793,26 @@ class AbdmGateway extends BaseController
                 $patientRef = trim((string) ($rawPatient['referenceNumber'] ?? $rawPatient['id'] ?? ''));
                 $abhaAddress = trim((string) ($rawPatient['id'] ?? $rawPatient['abhaAddress'] ?? $rawPatient['abha_address'] ?? ''));
                 if (! empty($rawPatient['careContexts']) && is_array($rawPatient['careContexts'])) {
-                    $careContexts = $rawPatient['careContexts'];
+                    foreach ($rawPatient['careContexts'] as $cc) {
+                        if (is_array($cc) && ! empty($cc['referenceNumber'])) {
+                            $careContexts[] = $cc;
+                        }
+                    }
                 }
             }
         }
 
-        if ($patientRef === '') {
-            $patientRef = trim((string) (
-                $payload['patientRef']
-                ?? $payload['patient_ref']
-                ?? $payload['referenceNumber']
-                ?? $payload['patient_id']
-                ?? ''
-            ));
-        }
-
-        if ($abhaAddress === '') {
-            $abhaAddress = trim((string) (
-                $payload['abhaAddress']
-                ?? $payload['abha_address']
-                ?? $payload['abhaId']
-                ?? $payload['abha_id']
-                ?? ''
-            ));
-        }
-
-        if (empty($careContexts)) {
-            $careContexts = $payload['careContexts']
-                ?? $payload['care_contexts']
-                ?? [];
-            if (! is_array($careContexts)) {
-                $careContexts = [];
+        // 3. Deduplicate careContexts by referenceNumber
+        $dedupContexts = [];
+        $seenRefs = [];
+        foreach ($careContexts as $cc) {
+            $ref = trim((string) ($cc['referenceNumber'] ?? $cc['ref'] ?? $cc['careContextId'] ?? ''));
+            if ($ref !== '' && ! isset($seenRefs[$ref])) {
+                $seenRefs[$ref] = true;
+                $dedupContexts[] = $cc;
             }
         }
+        $careContexts = $dedupContexts;
 
         if ($patientRef === '') {
             return $this->response->setStatusCode(400)->setJSON([
@@ -13782,14 +13780,14 @@ class AbdmGateway extends BaseController
         }
 
         // Auto-resolve Gender from patient_master
-        if (empty($body['gender']) && ! empty($patientRow)) {
+        if (! empty($patientRow)) {
             $genderCode = (int) ($patientRow['gender'] ?? 0);
             $rawGender  = strtoupper(trim((string) ($patientRow['gender'] ?? '')));
             if ($genderCode === 1 || $rawGender === 'M' || $rawGender === 'MALE') {
                 $body['gender'] = 'M';
             } elseif ($genderCode === 2 || $rawGender === 'F' || $rawGender === 'FEMALE') {
                 $body['gender'] = 'F';
-            } else {
+            } elseif (empty($body['gender'])) {
                 $body['gender'] = 'O';
             }
         }
