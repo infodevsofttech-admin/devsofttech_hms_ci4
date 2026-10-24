@@ -1549,13 +1549,17 @@ class Abha extends BaseController
             // A missing Bridge endpoint must not block ABHA creation — the modal
             // keeps the ABDM-assigned address and skips the selection step.
             $unsupported = in_array((int) ($result['http_code'] ?? 0), [404, 405], true);
+            $bridgeErr   = $this->extractBridgeErrorText($result, 'Unable to load ABHA address suggestions.');
+            if (stripos($bridgeErr, 'Internal Server Error') !== false || (int) ($result['http_code'] ?? 0) >= 500) {
+                $bridgeErr = 'Suggested ABHA addresses are temporarily unavailable from ABDM.';
+            }
 
             return $this->response->setJSON([
                 'ok'         => 0,
                 'supported'  => ! $unsupported,
                 'error_text' => $unsupported
                     ? 'The ABDM Bridge does not expose ABHA address suggestions yet.'
-                    : $this->extractBridgeErrorText($result, 'Unable to load ABHA address suggestions.'),
+                    : $bridgeErr,
                 'request_id' => (string) ($result['request_id'] ?? ''),
             ]);
         }

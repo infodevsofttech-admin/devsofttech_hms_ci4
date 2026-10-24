@@ -383,6 +383,9 @@ window.AbhaCreateModal = (function () {
         var raw = response && (response.error_text || response.message)
             ? String(response.error_text || response.message)
             : fallback;
+        if (/Internal Server Error/i.test(raw)) {
+            raw = 'ABDM server is temporarily unavailable';
+        }
         if (/loginId/i.test(raw) && /invalid/i.test(raw)) {
             raw = 'Aadhaar Number is not valid. Valid 12-digit Aadhaar number is required.';
         }
@@ -793,7 +796,12 @@ window.AbhaCreateModal = (function () {
 
         $.post('<?= base_url('abha/create/address_suggestions') ?>', { txn_id: createTxnId, '<?= csrf_token() ?>': csrf() }, function (response) {
             if (!response || response.ok != 1 || !(response.suggestions || []).length) {
-                $('#abhaCreateAddressList').html('<div class="alert alert-warning py-2 mb-0">' + apiMessage(response, 'No suggested ABHA addresses are available from the bridge.') + ' Please enter a custom address below.</div>');
+                var msg = apiMessage(response, 'Suggested ABHA addresses are temporarily unavailable from ABDM.');
+                if (/Internal Server Error/i.test(msg) || /500/.test(msg)) {
+                    msg = 'Suggested ABHA addresses are temporarily unavailable from ABDM.';
+                }
+                msg = msg.replace(/\.+$/, '');
+                $('#abhaCreateAddressList').html('<div class="alert alert-info py-2 mb-0"><i class="bi bi-info-circle me-1"></i>' + msg + '. Please enter your preferred custom address below.</div>');
                 $('#abhaCreateCustomWrap').removeClass('d-none');
                 return;
             }
@@ -806,7 +814,12 @@ window.AbhaCreateModal = (function () {
             });
             $('#abhaCreateAddressList').html(html);
         }, 'json').fail(function (xhr) {
-            $('#abhaCreateAddressList').html('<div class="alert alert-warning py-2 mb-0">' + apiMessage(xhr.responseJSON, 'Unable to load address suggestions.') + ' Please enter a custom address below.</div>');
+            var msg = apiMessage(xhr.responseJSON, 'Suggested ABHA addresses are temporarily unavailable from ABDM.');
+            if (/Internal Server Error/i.test(msg) || /500/.test(msg)) {
+                msg = 'Suggested ABHA addresses are temporarily unavailable from ABDM.';
+            }
+            msg = msg.replace(/\.+$/, '');
+            $('#abhaCreateAddressList').html('<div class="alert alert-info py-2 mb-0"><i class="bi bi-info-circle me-1"></i>' + msg + '. Please enter your preferred custom address below.</div>');
             $('#abhaCreateCustomWrap').removeClass('d-none');
         });
     }
