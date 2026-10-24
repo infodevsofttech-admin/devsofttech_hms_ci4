@@ -131,9 +131,6 @@ class AbdmTaskBoard extends BaseController
         if (! empty($patientIds) && $db->tableExists('patient_master')) {
             $pFields = $db->getFieldNames('patient_master') ?? [];
             $pSel = ['id', 'p_code', 'p_fname', 'gender', 'dob'];
-            if (in_array('p_lname', $pFields, true)) {
-                $pSel[] = 'p_lname';
-            }
             if (in_array('mphone1', $pFields, true)) {
                 $pSel[] = 'mphone1';
             }
@@ -1240,9 +1237,6 @@ class AbdmTaskBoard extends BaseController
         }
 
         $select = ['id', 'p_code', 'p_fname', 'gender', 'dob'];
-        if (in_array('p_lname', $fields, true)) {
-            $select[] = 'p_lname';
-        }
         if (in_array('mphone1', $fields, true)) {
             $select[] = 'mphone1';
         }
@@ -1301,9 +1295,7 @@ class AbdmTaskBoard extends BaseController
                 continue;
             }
 
-            $fname = trim((string) ($row['p_fname'] ?? ''));
-            $lname = trim((string) ($row['p_lname'] ?? ''));
-            $fullName = trim($fname . ' ' . $lname);
+            $fullName = trim((string) ($row['p_fname'] ?? ''));
             if ($fullName === '') {
                 $fullName = 'Patient #' . ($row['id'] ?? '');
             }
@@ -1782,7 +1774,7 @@ class AbdmTaskBoard extends BaseController
             $abhaCol = $this->resolveExistingColumn($patientFields, ['abha_address', 'abha_id', 'abha_no', 'abha']);
             if ($abhaCol !== null) {
                 $wellnessRows = $this->db->table('patient_wellness_records w')
-                    ->select('w.id, w.patient_id, w.recorded_at, w.care_context_reference, w.bridge_record_id, w.abdm_status, p.p_fname, p.p_lname, p.' . $abhaCol . ' as abha_id', false)
+                    ->select('w.id, w.patient_id, w.recorded_at, w.care_context_reference, w.bridge_record_id, w.abdm_status, p.p_fname, p.' . $abhaCol . ' as abha_id', false)
                     ->join('patient_master p', 'p.id = w.patient_id', 'inner')
                     ->where('p.' . $abhaCol . ' !=', '')
                     ->orderBy('w.id', 'DESC')
@@ -1809,7 +1801,7 @@ class AbdmTaskBoard extends BaseController
                         continue;
                     }
 
-                    $patientName = trim(($wRow['p_fname'] ?? '') . ' ' . ($wRow['p_lname'] ?? ''));
+                    $patientName = trim((string) ($wRow['p_fname'] ?? ''));
                     $isPushed = (! empty($wRow['bridge_record_id']) || in_array($wRow['abdm_status'] ?? '', ['queued', 'pushed', 'linked'], true));
                     $taskId = $this->taskService->createOrRefreshTask(
                         'wellness_record_publish',

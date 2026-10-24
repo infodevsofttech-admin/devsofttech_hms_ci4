@@ -28,28 +28,48 @@ class AbdmV3DirectHelper
         $this->loadSettings();
     }
 
+    protected function log(string $level, string $msg): void
+    {
+        if (function_exists('log_message')) {
+            \log_message($level, $msg);
+        } else {
+            error_log("[AbdmV3DirectHelper] [{$level}] {$msg}");
+        }
+    }
+
     protected function loadSettings(): void
     {
         try {
-            $db = \Config\Database::connect();
-            if ($db->tableExists('hospital_setting')) {
-                $rows = $db->table('hospital_setting')
-                    ->whereIn('s_name', ['ABDM_CLIENT_ID', 'ABDM_CLIENT_SECRET'])
-                    ->get()->getResultArray();
-                foreach ($rows as $r) {
-                    $name = trim((string) ($r['s_name'] ?? ''));
-                    $val  = trim((string) ($r['s_value'] ?? ''));
-                    if ($name === 'ABDM_CLIENT_ID' && $val !== '') {
-                        $this->clientId = $val;
-                    }
-                    if ($name === 'ABDM_CLIENT_SECRET' && $val !== '') {
-                        $this->clientSecret = $val;
+            if (class_exists('\Config\Database') && function_exists('config')) {
+                $db = \Config\Database::connect();
+                if ($db->tableExists('hospital_setting')) {
+                    $rows = $db->table('hospital_setting')
+                        ->whereIn('s_name', ['ABDM_CLIENT_ID', 'ABDM_CLIENT_SECRET'])
+                        ->get()->getResultArray();
+                    foreach ($rows as $r) {
+                        $name = trim((string) ($r['s_name'] ?? ''));
+                        $val  = trim((string) ($r['s_value'] ?? ''));
+                        if ($name === 'ABDM_CLIENT_ID' && $val !== '') {
+                            $this->clientId = $val;
+                        }
+                        if ($name === 'ABDM_CLIENT_SECRET' && $val !== '') {
+                            $this->clientSecret = $val;
+                        }
                     }
                 }
             }
         } catch (\Throwable $e) {
-            if (function_exists('log_message')) {
-                log_message('warning', '[AbdmV3DirectHelper] loadSettings failed: ' . $e->getMessage());
+            $this->log('warning', '[AbdmV3DirectHelper] loadSettings failed: ' . $e->getMessage());
+        }
+
+        if (function_exists('env')) {
+            $envClientId = env('abdm.directClientId', env('BRIDGE_SOURCE_CODE', ''));
+            if (! empty($envClientId) && $this->clientId === 'SBXID_033661') {
+                $this->clientId = (string) $envClientId;
+            }
+            $envSecret = env('abdm.directClientSecret', '');
+            if (! empty($envSecret) && $this->clientSecret === '656f79f1-ef99-495f-9f37-713219ecbbcf') {
+                $this->clientSecret = (string) $envSecret;
             }
         }
     }
@@ -104,10 +124,10 @@ class AbdmV3DirectHelper
     /**
      * Get or refresh gateway session Bearer token.
      */
-    public function getSessionToken(): string
+    public function getSessionToken(bool $forceRefresh = false): string
     {
         $cacheKey = 'abdm_v3_direct_session_token';
-        if (function_exists('cache')) {
+        if (! $forceRefresh && function_exists('cache')) {
             try {
                 $cached = cache()->get($cacheKey);
                 if (is_string($cached) && trim($cached) !== '') {
@@ -141,10 +161,10 @@ class AbdmV3DirectHelper
     /**
      * Get or refresh ABDM RSA Public Certificate PEM.
      */
-    public function getPublicCertificatePem(): string
+    public function getPublicCertificatePem(bool $forceRefresh = false): string
     {
         $cacheKey = 'abdm_v3_direct_public_cert_pem';
-        if (function_exists('cache')) {
+        if (! $forceRefresh && function_exists('cache')) {
             try {
                 $cached = cache()->get($cacheKey);
                 if (is_string($cached) && trim($cached) !== '') {
@@ -153,7 +173,7 @@ class AbdmV3DirectHelper
             } catch (\Throwable $e) {}
         }
 
-        $token = $this->getSessionToken();
+        $token = $this->getSessionToken($forceRefresh);
         if ($token === '') {
             throw new \RuntimeException('Failed to obtain ABDM session token for certificate fetch.');
         }
@@ -162,6 +182,7 @@ class AbdmV3DirectHelper
             'Authorization: Bearer ' . $token,
             'REQUEST-ID: ' . $this->generateUuid(),
             'TIMESTAMP: '  . gmdate('Y-m-d\TH:i:s.000\Z'),
+            'X-Client-ID: ' . $this->clientId,
         ]);
 
         $rawKey = (string) ($resp['json']['publicKey'] ?? $resp['json']['Certificate'] ?? $resp['raw'] ?? '');
@@ -192,13 +213,22 @@ class AbdmV3DirectHelper
         $pem = $this->getPublicCertificatePem();
         $pubKey = openssl_pkey_get_public($pem);
         if ($pubKey === false) {
-            throw new \RuntimeException('Invalid ABDM public key resource: ' . openssl_error_string());
+            $pem = $this->getPublicCertificatePem(true);
+            $pubKey = openssl_pkey_get_public($pem);
+            if ($pubKey === false) {
+                throw new \RuntimeException('Invalid ABDM public key resource: ' . openssl_error_string());
+            }
         }
 
         $encrypted = '';
         $ok = openssl_public_encrypt($plainText, $encrypted, $pubKey, OPENSSL_PKCS1_OAEP_PADDING);
         if (! $ok) {
-            throw new \RuntimeException('RSA-OAEP encryption failed: ' . openssl_error_string());
+            $pem = $this->getPublicCertificatePem(true);
+            $pubKey = openssl_pkey_get_public($pem);
+            $ok = openssl_public_encrypt($plainText, $encrypted, $pubKey, OPENSSL_PKCS1_OAEP_PADDING);
+            if (! $ok) {
+                throw new \RuntimeException('RSA-OAEP encryption failed: ' . openssl_error_string());
+            }
         }
 
         return base64_encode($encrypted);
@@ -233,6 +263,20 @@ class AbdmV3DirectHelper
                 'TIMESTAMP: '  . gmdate('Y-m-d\TH:i:s.000\Z'),
                 'X-Client-ID: ' . $this->clientId,
             ]);
+
+            // If 401 Unauthorized, refresh token and retry once
+            if ($resp['code'] === 401) {
+                $token = $this->getSessionToken(true);
+                $resp = $this->curlCall($this->searchUrl, 'POST', [
+                    'scope'  => ['search-abha'],
+                    'mobile' => $encMobile,
+                ], [
+                    'Authorization: Bearer ' . $token,
+                    'REQUEST-ID: ' . $this->generateUuid(),
+                    'TIMESTAMP: '  . gmdate('Y-m-d\TH:i:s.000\Z'),
+                    'X-Client-ID: ' . $this->clientId,
+                ]);
+            }
 
             if ($resp['code'] >= 200 && $resp['code'] < 300 && ! empty($resp['json'])) {
                 $firstBlock = is_array($resp['json']) && isset($resp['json'][0]) ? $resp['json'][0] : $resp['json'];
@@ -274,7 +318,7 @@ class AbdmV3DirectHelper
             $errMsg = (string) ($resp['json']['message'] ?? $resp['json']['error']['message'] ?? 'ABDM search returned no accounts for this mobile.');
             return ['ok' => 0, 'error_text' => $errMsg, 'raw' => $resp['raw']];
         } catch (\Throwable $e) {
-            log_message('error', '[AbdmV3DirectHelper] searchByMobile exception: ' . $e->getMessage());
+            $this->log('error', '[AbdmV3DirectHelper] searchByMobile exception: ' . $e->getMessage());
             return ['ok' => 0, 'error_text' => $e->getMessage()];
         }
     }
@@ -317,6 +361,16 @@ class AbdmV3DirectHelper
                 'X-Client-ID: ' . $this->clientId,
             ]);
 
+            if ($resp['code'] === 401) {
+                $token = $this->getSessionToken(true);
+                $resp = $this->curlCall($this->otpUrl, 'POST', $payload, [
+                    'Authorization: Bearer ' . $token,
+                    'REQUEST-ID: ' . $this->generateUuid(),
+                    'TIMESTAMP: '  . gmdate('Y-m-d\TH:i:s.000\Z'),
+                    'X-Client-ID: ' . $this->clientId,
+                ]);
+            }
+
             if ($resp['code'] >= 200 && $resp['code'] < 300 && ! empty($resp['json'])) {
                 $newTxnId = (string) ($resp['json']['txnId'] ?? $searchTxnId);
                 $msg = (string) ($resp['json']['message'] ?? 'OTP sent successfully.');
@@ -330,7 +384,7 @@ class AbdmV3DirectHelper
             $errMsg = (string) ($resp['json']['message'] ?? $resp['json']['error']['message'] ?? 'Failed to request OTP from ABDM.');
             return ['ok' => 0, 'error_text' => $errMsg, 'raw' => $resp['raw']];
         } catch (\Throwable $e) {
-            log_message('error', '[AbdmV3DirectHelper] requestProfileOtp exception: ' . $e->getMessage());
+            $this->log('error', '[AbdmV3DirectHelper] requestProfileOtp exception: ' . $e->getMessage());
             return ['ok' => 0, 'error_text' => $e->getMessage()];
         }
     }
@@ -380,6 +434,16 @@ class AbdmV3DirectHelper
                 'X-Client-ID: ' . $this->clientId,
             ]);
 
+            if ($resp['code'] === 401) {
+                $token = $this->getSessionToken(true);
+                $resp = $this->curlCall($this->verifyUrl, 'POST', $payload, [
+                    'Authorization: Bearer ' . $token,
+                    'REQUEST-ID: ' . $this->generateUuid(),
+                    'TIMESTAMP: '  . gmdate('Y-m-d\TH:i:s.000\Z'),
+                    'X-Client-ID: ' . $this->clientId,
+                ]);
+            }
+
             if ($resp['code'] >= 200 && $resp['code'] < 300 && ! empty($resp['json'])) {
                 $authResult = strtolower((string) ($resp['json']['authResult'] ?? ''));
                 if ($authResult === 'failed') {
@@ -413,7 +477,7 @@ class AbdmV3DirectHelper
             $errMsg = (string) ($resp['json']['message'] ?? $resp['json']['error']['message'] ?? 'OTP verification failed.');
             return ['ok' => 0, 'error_text' => $errMsg, 'raw' => $resp['raw']];
         } catch (\Throwable $e) {
-            log_message('error', '[AbdmV3DirectHelper] verifyProfileOtp exception: ' . $e->getMessage());
+            $this->log('error', '[AbdmV3DirectHelper] verifyProfileOtp exception: ' . $e->getMessage());
             return ['ok' => 0, 'error_text' => $e->getMessage()];
         }
     }
@@ -580,7 +644,7 @@ class AbdmV3DirectHelper
 
             return ['ok' => 0, 'error_text' => $errMsg, 'raw' => $resp['raw']];
         } catch (\Throwable $e) {
-            log_message('error', '[AbdmV3DirectHelper] verifyLoginOtpByAadhaar exception: ' . $e->getMessage());
+            $this->log('error', '[AbdmV3DirectHelper] verifyLoginOtpByAadhaar exception: ' . $e->getMessage());
             return ['ok' => 0, 'error_text' => $e->getMessage()];
         }
     }

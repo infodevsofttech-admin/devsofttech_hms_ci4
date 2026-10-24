@@ -14127,6 +14127,7 @@ class AbdmGateway extends BaseController
 
         $result['care_contexts'] = $contexts;
         $result['total_linked'] = count($contexts);
+        $result['links'] = $contexts;
 
         return $this->response->setJSON($result);
     }
@@ -14304,6 +14305,7 @@ class AbdmGateway extends BaseController
 
         // Fetch already-linked care contexts from Bridge and Local DB (record_links & health_records)
         $linkedRefs = [];
+        $gatewayVerifiedRefs = [];
         if ($effAbhaAddress !== '') {
             try {
                 $bridgeLinks = $this->connector->hipGetPatientLinks(['abha_address' => $effAbhaAddress]);
@@ -14312,6 +14314,7 @@ class AbdmGateway extends BaseController
                         foreach ($linkPat['careContexts'] ?? [] as $cc) {
                             $ref = trim((string) ($cc['referenceNumber'] ?? $cc['ref'] ?? ''));
                             if ($ref !== '') {
+                                $gatewayVerifiedRefs[] = $ref;
                                 $linkedRefs[] = $ref;
                             }
                         }
@@ -14382,22 +14385,28 @@ class AbdmGateway extends BaseController
         }
 
         $linkedRefs = array_values(array_unique($linkedRefs));
+        $gatewayVerifiedRefs = array_values(array_unique($gatewayVerifiedRefs));
 
         $contextsList = [];
         foreach ($careContextsFull as $cc) {
             $ref = $cc['referenceNumber'] ?? $cc['careContextId'] ?? '';
+            $isGatewayLinked = in_array($ref, $gatewayVerifiedRefs, true);
             $isLinked = in_array($ref, $linkedRefs, true);
             if (! $isLinked && ! empty($cc['alias_reference'])) {
                 $isLinked = in_array($cc['alias_reference'], $linkedRefs, true);
+                if (in_array($cc['alias_reference'], $gatewayVerifiedRefs, true)) {
+                    $isGatewayLinked = true;
+                }
             }
             $contextsList[] = [
-                'ref'           => $ref,
-                'display'       => $cc['display'] ?? $ref,
-                'hi_type'       => $cc['record_type'] ?? 'OPConsultRecord',
-                'is_linked'     => $isLinked,
-                'is_fhir_ready' => (bool) ($cc['is_fhir_ready'] ?? false),
-                'is_primary'    => (bool) ($cc['is_primary'] ?? false),
-                'entity_id'     => (string) ($cc['entity_id'] ?? $cc['opd_id'] ?? ''),
+                'ref'               => $ref,
+                'display'           => $cc['display'] ?? $ref,
+                'hi_type'           => $cc['record_type'] ?? 'OPConsultRecord',
+                'is_linked'         => $isLinked,
+                'is_gateway_linked' => $isGatewayLinked,
+                'is_fhir_ready'     => (bool) ($cc['is_fhir_ready'] ?? false),
+                'is_primary'        => (bool) ($cc['is_primary'] ?? false),
+                'entity_id'         => (string) ($cc['entity_id'] ?? $cc['opd_id'] ?? ''),
             ];
         }
 
@@ -14422,7 +14431,7 @@ class AbdmGateway extends BaseController
                     $multiplePatients[] = [
                         'id'         => (int) $or['id'],
                         'p_code'     => (string) ($or['p_code'] ?? ''),
-                        'name'       => trim(($or['p_fname'] ?? '') . ' ' . ($or['p_lname'] ?? '')),
+                        'name'       => trim((string) ($or['p_fname'] ?? '')),
                         'gender'     => ((int) ($or['gender'] ?? 0) === 2 || strtoupper((string) ($or['gender'] ?? '')) === 'F') ? 'F' : 'M',
                         'dob'        => (string) ($or['dob'] ?? ''),
                         'is_current' => (int) $or['id'] === $patientId,
@@ -14445,10 +14454,11 @@ class AbdmGateway extends BaseController
                 'abha_number'   => $effAbhaNumber,
                 'phone'         => $cleanPhone,
             ],
-            'care_contexts'     => $contextsList,
-            'linked_refs'       => $linkedRefs,
-            'hospital_name'     => $hospitalName,
-            'multiple_patients' => $multiplePatients,
+            'care_contexts'         => $contextsList,
+            'linked_refs'           => $linkedRefs,
+            'gateway_verified_refs' => $gatewayVerifiedRefs,
+            'hospital_name'         => $hospitalName,
+            'multiple_patients'     => $multiplePatients,
         ]);
     }
 }

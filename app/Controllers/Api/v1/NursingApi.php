@@ -1263,7 +1263,7 @@ class NursingApi extends BaseController
                 'hfr_id' => 'IN0510000828',
                 'patient' => [
                     'id' => $patientId,
-                    'name' => trim(($patient['p_fname'] ?? '') . (($patient['p_lname'] ?? '') !== '' && ($patient['p_lname'] ?? '') !== '0' && strcasecmp((string)($patient['p_lname'] ?? ''), 'NA') !== 0 ? ' ' . $patient['p_lname'] : '')),
+                    'name' => trim((string) ($patient['p_fname'] ?? '')),
                     'gender' => match (strtolower(trim((string) ($patient['gender'] ?? '')))) {
                         '2', 'f', 'female' => 'female',
                         '1', 'm', 'male' => 'male',
@@ -1335,9 +1335,7 @@ class NursingApi extends BaseController
                     '3', 'o', 'other' => 'O',
                     default => 'F',
                 };
-                $pFname = trim((string) ($patient['p_fname'] ?? ''));
-                $pLname = trim((string) ($patient['p_lname'] ?? ''));
-                $cleanPatientName = trim($pFname . ($pLname !== '' && $pLname !== '0' && strcasecmp($pLname, 'NA') !== 0 ? ' ' . $pLname : ''));
+                $cleanPatientName = trim((string) ($patient['p_fname'] ?? ''));
 
                 $connector = \App\Libraries\Abdm\AbdmConnectorFactory::make();
                 $pushPayload = [
@@ -1407,7 +1405,7 @@ class NursingApi extends BaseController
                     'wellness',
                     (string) $wellnessId,
                     $patientId,
-                    trim(($patient['p_fname'] ?? '') . ' ' . ($patient['p_lname'] ?? '')),
+                    trim((string) ($patient['p_fname'] ?? '')),
                     $effectiveAbha,
                     'submit',
                     [

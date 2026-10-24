@@ -718,47 +718,179 @@ class Abha extends BaseController
         }
 
         try {
-            $helper = new \App\Libraries\Abdm\AbdmV3DirectHelper();
-            $result = $helper->searchByMobile($mobile);
-
-            if (! empty($result['ok']) && ! empty($result['profiles'])) {
-                return $this->response->setJSON([
-                    'ok'       => 1,
-                    'txn_id'   => $result['txn_id'] ?? '',
-                    'profiles' => $result['profiles'],
-                    'mobile'   => $mobile,
-                ]);
-            }
-
-            // Fallback: If ABDM Sandbox returns no external profiles, check if HMS patient_master has records with this mobile
             $db = \Config\Database::connect();
-            $rows = $db->table('patient_master')
+
+            // 1. Fetch matching local patients from patient_master
+            $localPatients = $db->table('patient_master')
                 ->groupStart()
                     ->where('mphone1', $mobile)
                     ->orWhere('mphone2', $mobile)
                 ->groupEnd()
                 ->get()->getResultArray();
 
-            if (! empty($rows)) {
+            // 2. Fetch all known ABHA addresses from abdm_link_transactions for these patients
+            $patientIds = array_filter(array_column($localPatients, 'id'));
+            $patientCodes = array_filter(array_column($localPatients, 'p_code'));
+            $linkedAddressesByPatient = [];
+            if (! empty($patientIds) || ! empty($patientCodes)) {
+                $builder = $db->table('abdm_link_transactions');
+                $builder->groupStart();
+                if (! empty($patientIds)) {
+                    $builder->whereIn('patient_id', $patientIds);
+                }
+                if (! empty($patientCodes)) {
+                    $builder->orWhereIn('patient_ref', $patientCodes);
+                }
+                $builder->groupEnd();
+                $txns = $builder->select('patient_id, patient_ref, abha_address')->get()->getResultArray();
+                foreach ($txns as $t) {
+                    $addr = trim((string)($t['abha_address'] ?? ''));
+                    if ($addr !== '') {
+                        if (! empty($t['patient_id'])) {
+                            $linkedAddressesByPatient['id_' . $t['patient_id']][$addr] = true;
+                        }
+                        if (! empty($t['patient_ref'])) {
+                            $linkedAddressesByPatient['ref_' . $t['patient_ref']][$addr] = true;
+                        }
+                    }
+                }
+            }
+
+            // 3. Query ABDM V3 Direct Helper
+            $helper = new \App\Libraries\Abdm\AbdmV3DirectHelper();
+            $result = $helper->searchByMobile($mobile);
+
+            if (! empty($result['ok']) && ! empty($result['profiles'])) {
+                // Enrich ABDM profiles with known local data (UHID, DOB, and associated ABHA addresses)
+                $enrichedProfiles = [];
+                foreach ($result['profiles'] as $prof) {
+                    $pIndex   = (string)($prof['index'] ?? '');
+                    $pName    = trim((string)($prof['name'] ?? ''));
+                    $pAbhaNum = trim((string)($prof['abha_number'] ?? ''));
+                    $last4    = preg_replace('/\D/', '', substr($pAbhaNum, -4));
+                    $pGender  = strtoupper(substr(trim((string)($prof['gender'] ?? 'M')), 0, 1));
+
+                    // Attempt match with local patient_master:
+                    // Priority 1: Match by last 4 digits of abha_id
+                    // Priority 2: Match by exact or partial name
+                    $matchedPatient = null;
+                    if ($last4 !== '') {
+                        foreach ($localPatients as $lp) {
+                            $lpAbha = preg_replace('/\D/', '', (string)($lp['abha_id'] ?? ''));
+                            if ($lpAbha !== '' && str_ends_with($lpAbha, $last4)) {
+                                $matchedPatient = $lp;
+                                break;
+                            }
+                        }
+                    }
+                    if (! $matchedPatient) {
+                        foreach ($localPatients as $lp) {
+                            $lpFName = trim((string)($lp['p_fname'] ?? ''));
+                            if ($lpFName !== '' && (stripos($lpFName, $pName) !== false || stripos($pName, $lpFName) !== false)) {
+                                $matchedPatient = $lp;
+                                break;
+                            }
+                        }
+                    }
+
+                    $allAddresses = [];
+                    $primaryAddress = '';
+                    $pCode = '';
+                    $pId = 0;
+                    $pDob = (string)($prof['dob'] ?? '');
+
+                    if ($matchedPatient) {
+                        $pCode = (string)($matchedPatient['p_code'] ?? '');
+                        $pId   = (int)($matchedPatient['id'] ?? 0);
+                        if ($pDob === '' && ! empty($matchedPatient['dob'])) {
+                            $pDob = (string)$matchedPatient['dob'];
+                        }
+                        if (! empty($matchedPatient['abha_address'])) {
+                            $addr = trim((string)$matchedPatient['abha_address']);
+                            $allAddresses[$addr] = true;
+                            $primaryAddress = $addr;
+                        }
+                        if (isset($linkedAddressesByPatient['id_' . $pId])) {
+                            foreach (array_keys($linkedAddressesByPatient['id_' . $pId]) as $a) {
+                                $allAddresses[$a] = true;
+                            }
+                        }
+                        if (isset($linkedAddressesByPatient['ref_' . $pCode])) {
+                            foreach (array_keys($linkedAddressesByPatient['ref_' . $pCode]) as $a) {
+                                $allAddresses[$a] = true;
+                            }
+                        }
+                    }
+
+                    $prof['abha_address']       = $primaryAddress !== '' ? $primaryAddress : (array_keys($allAddresses)[0] ?? '');
+                    $prof['all_abha_addresses'] = array_keys($allAddresses);
+                    $prof['p_code']             = $pCode;
+                    $prof['patient_id']         = $pId;
+                    $prof['dob']                = $pDob;
+
+                    $enrichedProfiles[] = $prof;
+                }
+
+                return $this->response->setJSON([
+                    'ok'       => 1,
+                    'txn_id'   => $result['txn_id'] ?? '',
+                    'profiles' => $enrichedProfiles,
+                    'mobile'   => $mobile,
+                ]);
+            }
+
+            // 4. Fallback: If ABDM Sandbox returns no external profiles, check if HMS patient_master has records with this mobile
+            if (! empty($localPatients)) {
                 $profiles = [];
                 $idx = 1;
-                foreach ($rows as $p) {
-                    $pName = trim((string)(($p['fname'] ?? '') . ' ' . ($p['mname'] ?? '') . ' ' . ($p['lname'] ?? '')));
-                    $pAbha = trim((string)($p['abdm_abha_number'] ?? $p['abha_number'] ?? $p['abdm_abha_id'] ?? ''));
+                foreach ($localPatients as $p) {
+                    $pName = trim((string)($p['p_fname'] ?? ''));
+                    if ($pName === '') {
+                        $pName = 'Patient ' . ($p['p_code'] ?? '');
+                    }
+
+                    $pAbha = trim((string)($p['abha_id'] ?? ''));
                     $maskedAbha = $pAbha !== ''
                         ? preg_replace('/^(\d{2})(\d{4})(\d{4})(\d{4})$/', 'xx-xxxx-xxxx-$4', preg_replace('/\D/', '', $pAbha))
                         : 'xx-xxxx-xxxx-XXXX';
+
+                    $pGender = 'M';
+                    $rawGen = (string)($p['gender'] ?? '1');
+                    if ($rawGen === '2' || strtoupper($rawGen) === 'F' || strtoupper($rawGen) === 'FEMALE') {
+                        $pGender = 'F';
+                    }
+
+                    $allAddresses = [];
+                    if (! empty($p['abha_address'])) {
+                        $allAddresses[trim((string)$p['abha_address'])] = true;
+                    }
+                    $pId = (int)($p['id'] ?? 0);
+                    $pCode = (string)($p['p_code'] ?? '');
+                    if (isset($linkedAddressesByPatient['id_' . $pId])) {
+                        foreach (array_keys($linkedAddressesByPatient['id_' . $pId]) as $a) {
+                            $allAddresses[$a] = true;
+                        }
+                    }
+                    if (isset($linkedAddressesByPatient['ref_' . $pCode])) {
+                        foreach (array_keys($linkedAddressesByPatient['ref_' . $pCode]) as $a) {
+                            $allAddresses[$a] = true;
+                        }
+                    }
+
                     $profiles[] = [
-                        'index'         => (string) $idx++,
-                        'abha_number'   => $maskedAbha,
-                        'name'          => $pName !== '' ? $pName : 'Patient ' . ($p['p_code'] ?? ''),
-                        'gender'        => strtoupper(substr((string)($p['gender'] ?? 'M'), 0, 1)),
-                        'dob'           => (string)($p['dob'] ?? ''),
-                        'kyc_verified'  => true,
-                        'auth_methods'  => ['MOBILE_OTP', 'AADHAAR_OTP'],
-                        'profile_photo' => '',
-                        'local_patient' => true,
-                        'p_code'        => (string)($p['p_code'] ?? ''),
+                        'index'              => (string) $idx++,
+                        'abha_number'        => $maskedAbha,
+                        'name'               => $pName,
+                        'gender'             => $pGender,
+                        'dob'                => (string)($p['dob'] ?? ''),
+                        'kyc_verified'       => true,
+                        'auth_methods'       => ['MOBILE_OTP', 'AADHAAR_OTP'],
+                        'profile_photo'      => '',
+                        'local_patient'      => true,
+                        'p_code'             => $pCode,
+                        'patient_id'         => $pId,
+                        'abha_address'       => (string)($p['abha_address'] ?? (array_keys($allAddresses)[0] ?? '')),
+                        'all_abha_addresses' => array_keys($allAddresses),
                     ];
                 }
                 return $this->response->setJSON([
@@ -1024,6 +1156,61 @@ class Abha extends BaseController
 
             $patientInfo = $this->tryAutoLinkByDirectMatch($abhaNum, $name, $profileMobile, $gender, $dob, $abhaMeta);
 
+            $allAbhaAddresses = [];
+            if ($abhaAddress !== '' && str_contains($abhaAddress, '@')) {
+                $allAbhaAddresses[$abhaAddress] = true;
+            }
+            if (! empty($result['accounts']) && is_array($result['accounts'])) {
+                foreach ($result['accounts'] as $acc) {
+                    if (is_array($acc)) {
+                        foreach (['preferredAbhaAddress', 'preferredAddress', 'abhaAddress', 'abha_address'] as $ak) {
+                            if (! empty($acc[$ak]) && is_string($acc[$ak]) && str_contains($acc[$ak], '@')) {
+                                $allAbhaAddresses[trim($acc[$ak])] = true;
+                            }
+                        }
+                    }
+                }
+            }
+
+            $db = \Config\Database::connect();
+            $patientIdForAddrs = $patientInfo !== null ? (int)($patientInfo['patient_id'] ?? 0) : 0;
+            $cleanAbhaDigits = preg_replace('/\D/', '', $abhaNum);
+
+            $pBuilder = $db->table('patient_master');
+            $pBuilder->groupStart();
+            if ($patientIdForAddrs > 0) {
+                $pBuilder->where('id', $patientIdForAddrs);
+            }
+            if ($cleanAbhaDigits !== '') {
+                $pBuilder->orWhere('abha_id', $cleanAbhaDigits);
+            }
+            if ($profileMobile !== '') {
+                $pBuilder->orWhere('mphone1', $profileMobile)->orWhere('mphone2', $profileMobile);
+            }
+            $pBuilder->groupEnd();
+            $pRows = $pBuilder->select('id, abha_address')->get()->getResultArray();
+            $matchedPids = [];
+            foreach ($pRows as $pr) {
+                $matchedPids[] = (int)$pr['id'];
+                $pa = trim((string)($pr['abha_address'] ?? ''));
+                if ($pa !== '' && str_contains($pa, '@')) {
+                    $allAbhaAddresses[$pa] = true;
+                }
+            }
+
+            if (! empty($matchedPids)) {
+                $txns = $db->table('abdm_link_transactions')
+                    ->select('abha_address')
+                    ->whereIn('patient_id', array_unique($matchedPids))
+                    ->get()->getResultArray();
+                foreach ($txns as $t) {
+                    $ta = trim((string)($t['abha_address'] ?? ''));
+                    if ($ta !== '' && str_contains($ta, '@')) {
+                        $allAbhaAddresses[$ta] = true;
+                    }
+                }
+            }
+
             $responseBase = [
                 'ok'                => 1,
                 'txn_id'            => $result['txn_id'] ?? $txnId,
@@ -1039,7 +1226,8 @@ class Abha extends BaseController
                 'mobile'            => $profileMobile,
                 'gender'            => $gender,
                 'dob'               => $dob,
-                'abha_address'      => $abhaAddress,
+                'abha_address'      => $abhaAddress !== '' ? $abhaAddress : (array_keys($allAbhaAddresses)[0] ?? ''),
+                'all_abha_addresses'=> array_keys($allAbhaAddresses),
                 'verified_status'   => 'ACTIVE',
                 'verification_type' => 'VERIFIED',
                 'kyc_verified'      => true,

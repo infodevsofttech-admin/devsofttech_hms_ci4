@@ -345,9 +345,6 @@ class AbdmFhirInspector extends BaseController
         }
 
         $select = ['id', 'p_code', 'p_fname', 'gender', 'dob'];
-        if (in_array('p_lname', $fields, true)) {
-            $select[] = 'p_lname';
-        }
         if (in_array('mphone1', $fields, true)) {
             $select[] = 'mphone1';
         }
@@ -406,7 +403,7 @@ class AbdmFhirInspector extends BaseController
                 continue;
             }
 
-            $name = trim(($row['p_fname'] ?? '') . ' ' . ($row['p_lname'] ?? ''));
+            $name = trim((string) ($row['p_fname'] ?? ''));
             if ($name === '') {
                 $name = 'Patient #' . $row['id'];
             }

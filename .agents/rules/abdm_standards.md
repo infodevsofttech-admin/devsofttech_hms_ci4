@@ -37,3 +37,13 @@ In `app/Controllers/AbdmGateway.php` and the bridge gateway:
 - Use valid LOINC codes for composition type and section codes.
 - Use SNOMED CT for clinical diagnoses, findings, and conditions.
 - Refer to `docs/abdm/CARE_CONTEXT_AND_FHIR_STANDARDS.md` for full implementation specifications.
+
+---
+
+## Rule 4: Patient Name Handling (`patient_master.p_fname`)
+- Patient full name is stored strictly in `patient_master.p_fname`.
+- The column `patient_master.p_lname` has been permanently dropped and deleted from `patient_master` in all databases.
+- NEVER query, select, join, insert, or reference `patient_master.p_lname` in any controllers, models, queries, or FHIR generators.
+- When generating FHIR Patient or Composition resources, map the patient's full name directly from `patient_master.p_fname`.
+- Note: Doctors in `doctor_master` continue to use `p_fname`, `p_mname`, and `p_lname`.
+

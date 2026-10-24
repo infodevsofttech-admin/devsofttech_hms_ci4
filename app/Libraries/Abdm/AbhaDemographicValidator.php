@@ -50,7 +50,7 @@ class AbhaDemographicValidator
         }
 
         $builder = $db->table('patient_master')
-            ->select('id, p_code, p_fname, p_lname, gender, dob, age, mphone1, abha_id, abha_address');
+            ->select('id, p_code, p_fname, gender, dob, age, mphone1, abha_id, abha_address');
 
         $matchedAny = false;
         $builder->groupStart();
@@ -101,7 +101,7 @@ class AbhaDemographicValidator
 
         $conflictId   = (int) ($conflict['id'] ?? 0);
         $conflictCode = (string) ($conflict['p_code'] ?? ('P-' . $conflictId));
-        $conflictName = trim(($conflict['p_fname'] ?? '') . ' ' . ($conflict['p_lname'] ?? ''));
+        $conflictName = trim((string) ($conflict['p_fname'] ?? ''));
         $matchedValue = $hasAddressCheck ? $cleanAbhaAddress : $cleanAbhaId;
 
         return [
@@ -152,9 +152,6 @@ class AbhaDemographicValidator
 
         // 3. Name Similarity Validation
         $patientName = trim((string) ($patientRow['p_fname'] ?? ($patientRow['input_name'] ?? '')));
-        if (! empty($patientRow['p_lname']) && $patientRow['p_lname'] !== '0') {
-            $patientName .= ' ' . trim((string) $patientRow['p_lname']);
-        }
         $abhaName = trim((string) ($abhaProfile['full_name'] ?? ($abhaProfile['name'] ?? '')));
 
         if ($patientName !== '' && $abhaName !== '') {

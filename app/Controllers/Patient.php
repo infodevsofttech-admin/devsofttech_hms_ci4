@@ -2349,11 +2349,7 @@ class Patient extends BaseController
 
 		$title = trim((string) ($patientRow['title'] ?? ''));
 		$fname = trim((string) ($patientRow['p_fname'] ?? ''));
-		$lname = trim((string) ($patientRow['p_lname'] ?? ''));
-		if ($lname === '0' || strtolower($lname) === 'null') {
-			$lname = '';
-		}
-		$patientName = trim($title . ' ' . $fname . ($lname !== '' ? ' ' . $lname : ''));
+		$patientName = trim($title . ' ' . $fname);
 		if ($patientName === '') {
 			$patientName = 'Patient #' . $pno;
 		}

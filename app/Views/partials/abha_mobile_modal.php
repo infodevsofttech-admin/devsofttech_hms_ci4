@@ -68,6 +68,14 @@
     .abha-mobile-modal .abha-card-preview { min-height:230px; display:grid; place-items:center; border:1px solid #dce3ec; background:#f8fafc; border-radius:8px; padding:12px; }
     .abha-mobile-modal .abha-card-preview img { max-width:100%; max-height:360px; object-fit:contain; border-radius:6px; box-shadow:0 4px 12px rgba(0,0,0,0.08); }
 
+    .abha-mobile-modal .bg-primary-subtle { background-color: #e7f1ff !important; color: #0d6efd !important; }
+    .abha-mobile-modal .bg-success-subtle { background-color: #e6f8f0 !important; color: #198754 !important; }
+    .abha-mobile-modal .bg-secondary-subtle { background-color: #f1f3f5 !important; color: #495057 !important; }
+    .abha-mobile-modal .cursor-pointer { cursor: pointer; }
+    .abha-mobile-modal .abha-addr-card { transition: all 0.15s ease-in-out; }
+    .abha-mobile-modal .abha-addr-card:hover { border-color: #356cf4 !important; background-color: #f8faff !important; }
+    .abha-mobile-modal .abha-addr-card.selected { border-color: #356cf4 !important; background-color: #f0f5ff !important; box-shadow: 0 0 0 1px #356cf4; }
+
     @media (max-width:575.98px) {
         .abha-mobile-modal .modal-body { padding:16px; }
         .abha-mobile-step:not(:last-child)::after { width:18px; }
@@ -194,6 +202,17 @@
                                     <div class="text-muted fw-semibold" id="abhaMobileProfileAddress"></div>
                                 </div>
                             </div>
+                            <!-- ABHA Address Selector when user has one or multiple addresses -->
+                            <div class="card border border-primary-subtle bg-light-subtle p-3 rounded-3 mb-3 d-none" id="abhaAddressSelectorCard">
+                                <label class="form-label fw-bold text-dark mb-2 d-flex align-items-center justify-content-between">
+                                    <span><i class="bi bi-at text-primary me-1"></i>Select ABHA Address to Link / Update:</span>
+                                    <span class="badge bg-primary rounded-pill" id="abhaAddressCountBadge">1</span>
+                                </label>
+                                <div id="abhaAddressRadioGroup" class="d-flex flex-column gap-2">
+                                    <!-- Populated dynamically -->
+                                </div>
+                            </div>
+
                             <dl class="abha-profile-list">
                                 <div><dt>ABHA Number</dt><dd id="abhaMobileProfileNumber">-</dd></div>
                                 <div><dt>ABHA Address</dt><dd id="abhaMobileProfileId">-</dd></div>
@@ -416,21 +435,39 @@ window.AbhaMobileModal = (function () {
                 ? '<img src="' + (String(prof.profile_photo).indexOf('data:') === 0 ? prof.profile_photo : 'data:image/jpeg;base64,' + prof.profile_photo) + '" class="rounded-circle" style="width:48px;height:48px;object-fit:cover">'
                 : '<div class="abha-profile-avatar"><i class="bi ' + iconClass + '"></i></div>';
 
+            var addrs = Array.isArray(prof.all_abha_addresses) && prof.all_abha_addresses.length > 0
+                ? prof.all_abha_addresses
+                : (prof.abha_address ? [prof.abha_address] : []);
+            var addrBadges = '';
+            if (addrs.length > 0) {
+                addrBadges = addrs.map(function(a) {
+                    return '<span class="badge bg-primary-subtle text-primary border border-primary-subtle font-monospace"><i class="bi bi-at"></i>' + escapeHtml(a) + '</span>';
+                }).join(' ');
+            } else {
+                addrBadges = '<span class="badge bg-light text-muted border"><i class="bi bi-person-badge me-1"></i>ABHA Profile</span>';
+            }
+
+            var uhidBadge = prof.p_code
+                ? '<span class="badge bg-secondary-subtle text-secondary border border-secondary-subtle"><i class="bi bi-hospital me-1"></i>UHID: ' + escapeHtml(prof.p_code) + '</span>'
+                : '';
+
             var card = document.createElement('div');
             card.className = 'abha-profile-card d-flex align-items-center justify-content-between gap-3 ' + (isSelected ? 'selected' : '');
             card.setAttribute('data-index', index);
             card.innerHTML =
-                '<div class="d-flex align-items-center gap-3">' +
+                '<div class="d-flex align-items-center gap-3 flex-grow-1">' +
                     '<div class="form-check m-0">' +
                         '<input class="form-check-input profile-radio" type="radio" name="abhaProfileOption" value="' + index + '" ' + (isSelected ? 'checked' : '') + '>' +
                     '</div>' +
                     photoHtml +
-                    '<div>' +
-                        '<div class="d-flex align-items-center gap-2 flex-wrap">' +
-                            '<h6 class="mb-0 fw-bold text-dark">' + escapeHtml(name) + '</h6>' +
+                    '<div class="flex-grow-1">' +
+                        '<div class="d-flex align-items-center gap-2 flex-wrap mb-1">' +
+                            '<h6 class="mb-0 fw-bold text-dark fs-6">' + escapeHtml(name) + '</h6>' +
                             (isVerified ? '<span class="badge bg-success-subtle text-success border border-success-subtle"><i class="bi bi-patch-check-fill me-1"></i>Active</span>' : '') +
+                            uhidBadge +
                         '</div>' +
-                        '<div class="text-muted small mt-1">' +
+                        '<div class="mb-1 d-flex flex-wrap gap-1">' + addrBadges + '</div>' +
+                        '<div class="text-muted small">' +
                             '<span class="me-3"><i class="bi bi-credit-card-2-front me-1"></i>ABHA: <strong>' + escapeHtml(formatAbha(abhaNum)) + '</strong></span>' +
                             '<span class="me-3"><i class="bi bi-gender-ambiguous me-1"></i>' + escapeHtml(gender) + '</span>' +
                             (dob && dob !== '-' ? '<span><i class="bi bi-calendar-event me-1"></i>DOB: ' + escapeHtml(dob) + '</span>' : '') +
@@ -610,6 +647,82 @@ window.AbhaMobileModal = (function () {
         if (elMobile) elMobile.textContent = maskMobile(profile.mobile || searchMobile);
         if (elFullAddr) elFullAddr.textContent = [profile.address, profile.district, profile.state, profile.zip].filter(Boolean).join(', ') || '-';
 
+        // Gather all known ABHA addresses for this profile
+        var allAddrs = [];
+        if (Array.isArray(profile.all_abha_addresses)) {
+            allAddrs = allAddrs.concat(profile.all_abha_addresses);
+        }
+        if (selectedProfile && Array.isArray(selectedProfile.all_abha_addresses)) {
+            allAddrs = allAddrs.concat(selectedProfile.all_abha_addresses);
+        }
+        if (profile.abha_address) {
+            allAddrs.push(profile.abha_address);
+        }
+        if (selectedProfile && selectedProfile.abha_address) {
+            allAddrs.push(selectedProfile.abha_address);
+        }
+
+        var uniqueAddrs = [];
+        allAddrs.forEach(function(a) {
+            a = String(a || '').trim();
+            if (a && a.indexOf('@') !== -1 && uniqueAddrs.indexOf(a) === -1) {
+                uniqueAddrs.push(a);
+            }
+        });
+
+        var currentSelectedAddr = profile.abha_address || uniqueAddrs[0] || '';
+        profile.abha_address = currentSelectedAddr;
+        verifiedProfile.abha_address = currentSelectedAddr;
+
+        var addrSelectorCard = document.getElementById('abhaAddressSelectorCard');
+        var addrGroup = document.getElementById('abhaAddressRadioGroup');
+        var addrCountBadge = document.getElementById('abhaAddressCountBadge');
+
+        if (addrSelectorCard && addrGroup) {
+            if (uniqueAddrs.length > 0) {
+                addrSelectorCard.classList.remove('d-none');
+                if (addrCountBadge) addrCountBadge.textContent = uniqueAddrs.length;
+                addrGroup.innerHTML = '';
+                uniqueAddrs.forEach(function(addr, idx) {
+                    var isChecked = (addr === currentSelectedAddr);
+                    var itemDiv = document.createElement('div');
+                    itemDiv.className = 'form-check p-2 px-3 border rounded-2 bg-white d-flex align-items-center gap-2 cursor-pointer abha-addr-card ' + (isChecked ? 'selected border-primary' : 'border-secondary-subtle');
+                    itemDiv.innerHTML =
+                        '<input class="form-check-input m-0 abha-addr-radio cursor-pointer" type="radio" name="selectedAbhaAddressOption" id="addrOpt_' + idx + '" value="' + escapeHtml(addr) + '" ' + (isChecked ? 'checked' : '') + '>' +
+                        '<label class="form-check-label flex-grow-1 cursor-pointer fw-semibold font-monospace text-dark mb-0" for="addrOpt_' + idx + '">' +
+                            '<i class="bi bi-at text-primary me-1"></i>' + escapeHtml(addr) +
+                        '</label>' +
+                        (isChecked ? '<span class="badge bg-success-subtle text-success border border-success-subtle active-badge"><i class="bi bi-check2 me-1"></i>Selected</span>' : '');
+
+                    itemDiv.addEventListener('click', function(e) {
+                        if (e.target.tagName !== 'INPUT') {
+                            var r = itemDiv.querySelector('input[type="radio"]');
+                            if (r) r.checked = true;
+                        }
+                        profile.abha_address = addr;
+                        verifiedProfile.abha_address = addr;
+                        if (elAddr) elAddr.textContent = addr;
+                        if (elId) elId.textContent = addr;
+                        addrGroup.querySelectorAll('.abha-addr-card').forEach(function(div) {
+                            div.classList.remove('selected', 'border-primary');
+                            div.classList.add('border-secondary-subtle');
+                            var b = div.querySelector('.active-badge');
+                            if (b) b.remove();
+                        });
+                        itemDiv.classList.remove('border-secondary-subtle');
+                        itemDiv.classList.add('selected', 'border-primary');
+                        var span = document.createElement('span');
+                        span.className = 'badge bg-success-subtle text-success border border-success-subtle active-badge';
+                        span.innerHTML = '<i class="bi bi-check2 me-1"></i>Selected';
+                        itemDiv.appendChild(span);
+                    });
+                    addrGroup.appendChild(itemDiv);
+                });
+            } else {
+                addrSelectorCard.classList.add('d-none');
+            }
+        }
+
         var photo = profile.photo ? (String(profile.photo).indexOf('data:') === 0 ? profile.photo : 'data:image/jpeg;base64,' + profile.photo) : '';
         var photoEl = document.getElementById('abhaMobilePhoto');
         if (photoEl) {
@@ -704,11 +817,62 @@ window.AbhaMobileModal = (function () {
         if (compareBtn) compareBtn.onclick = function () {
             if (!verifiedProfile) return;
             var profile = verifiedProfile;
+
+            // If auto-matched to an existing HMS patient:
             if (profile.need_confirmation === false && Number(profile.patient_id || 0) > 0) {
-                alertBox('success', 'This ABHA is already linked to HMS patient <strong>' + escapeHtml(profile.p_code || '') + '</strong>. Close this window when done.');
-                if (typeof onVerified === 'function') onVerified(profile);
+                var c = csrf();
+                var postData = new URLSearchParams();
+                postData.append('action', 'existing');
+                postData.append('update_mode', 'update');
+                postData.append('patient_id', profile.patient_id);
+                postData.append('abha_number', profile.abha_number || '');
+                postData.append('name', profile.name || '');
+                postData.append('mobile', profile.mobile || searchMobile);
+                postData.append('gender', profile.gender || '');
+                postData.append('dob', profile.dob || '');
+                postData.append('abha_address', profile.abha_address || '');
+                postData.append('photo', profile.photo || '');
+                postData.append('card_base64', profile.card_base64 || '');
+                postData.append('verified_status', 'ACTIVE');
+                postData.append('verification_type', 'VERIFIED');
+                postData.append('kyc_verified', profile.kyc_verified ? '1' : '0');
+                postData.append('mobile_verified', '1');
+                postData.append('<?= csrf_token() ?>', c);
+
+                compareBtn.disabled = true;
+                compareBtn.innerHTML = '<span class="spinner-border spinner-border-sm me-1"></span>Linking to HMS...';
+
+                fetch('<?= base_url('abha/create/confirm_patient') ?>', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/x-www-form-urlencoded',
+                        'X-Requested-With': 'XMLHttpRequest'
+                    },
+                    body: postData.toString()
+                })
+                .then(function(r) { return r.json(); })
+                .then(function(resp) {
+                    compareBtn.disabled = false;
+                    compareBtn.innerHTML = '<i class="bi bi-people me-1"></i>Compare with HMS Patients';
+                    if (resp && resp.ok == 1) {
+                        alertBox('success', 'ABHA <strong>' + escapeHtml(profile.abha_address) + '</strong> successfully linked with HMS Patient <strong>' + escapeHtml(profile.p_code) + '</strong>.');
+                        modalEl.addEventListener('hidden.bs.modal', function handler() {
+                            modalEl.removeEventListener('hidden.bs.modal', handler);
+                            if (typeof onVerified === 'function') onVerified(Object.assign({}, profile, resp));
+                        });
+                        setTimeout(function() { modal.hide(); }, 800);
+                    } else {
+                        alertBox('danger', (resp && resp.error_text) || 'Failed to update patient record.');
+                    }
+                })
+                .catch(function() {
+                    compareBtn.disabled = false;
+                    compareBtn.innerHTML = '<i class="bi bi-people me-1"></i>Compare with HMS Patients';
+                    alertBox('danger', 'Error updating patient record in HMS.');
+                });
                 return;
             }
+
             modalEl.addEventListener('hidden.bs.modal', function handler() {
                 modalEl.removeEventListener('hidden.bs.modal', handler);
                 if (typeof onVerified === 'function') onVerified(profile);

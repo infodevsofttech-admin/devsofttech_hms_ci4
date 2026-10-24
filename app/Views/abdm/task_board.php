@@ -205,6 +205,9 @@
                 </div>
             </div>
 
+            <!-- Notice Banner for Pending Linking / Auto-Sync -->
+            <div id="inspNoticeBanner" class="mb-3 d-none"></div>
+
             <!-- Care Contexts & FHIR Bundles Details Table -->
             <div class="table-responsive border rounded">
                 <table class="table table-sm table-hover mb-0" id="inspCareContextTable">
@@ -1287,24 +1290,54 @@
             document.getElementById('inspAbhaNumber').textContent = pat.abha_number || '-';
             document.getElementById('inspPhone').textContent = pat.phone || '-';
 
-            var linkedCount = 0;
+            var totalCount = contexts.length;
+            var gatewayLinkedCount = 0;
+            var localLinkedCount = 0;
             var fhirCount = 0;
+            var pendingPhrList = [];
+
             contexts.forEach(function (c) {
-                if (c.is_linked) linkedCount++;
+                if (c.is_gateway_linked) {
+                    gatewayLinkedCount++;
+                } else if (c.is_linked) {
+                    localLinkedCount++;
+                    pendingPhrList.push(c.ref || c.display || '');
+                }
                 if (c.is_fhir_ready) fhirCount++;
             });
 
-            document.getElementById('inspTotalContexts').textContent = contexts.length;
-            document.getElementById('inspLinkedContexts').textContent = linkedCount;
-            document.getElementById('inspUnlinkedContexts').textContent = contexts.length - linkedCount;
+            document.getElementById('inspTotalContexts').textContent = totalCount;
+            document.getElementById('inspLinkedContexts').textContent = gatewayLinkedCount;
+            document.getElementById('inspUnlinkedContexts').textContent = totalCount - gatewayLinkedCount;
             document.getElementById('inspFhirCount').textContent = fhirCount;
 
-            if (linkedRefs.length > 0) {
-                document.getElementById('inspGatewayStatus').innerHTML = '<span class="badge bg-success"><i class="bi bi-shield-check me-1"></i>Gateway Verified (' + linkedRefs.length + ' links)</span>';
-            } else if (linkedCount > 0) {
-                document.getElementById('inspGatewayStatus').innerHTML = '<span class="badge bg-primary"><i class="bi bi-check2-circle me-1"></i>Local Linked</span>';
+            if (gatewayLinkedCount > 0) {
+                document.getElementById('inspGatewayStatus').innerHTML = '<span class="badge bg-success"><i class="bi bi-shield-check me-1"></i>Gateway Verified (' + gatewayLinkedCount + ' in PHR)</span>';
+            } else if (localLinkedCount > 0) {
+                document.getElementById('inspGatewayStatus').innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-clock-history me-1"></i>Local Ready (' + localLinkedCount + ' pending PHR)</span>';
             } else {
-                document.getElementById('inspGatewayStatus').innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-exclamation-triangle me-1"></i>Unlinked</span>';
+                document.getElementById('inspGatewayStatus').innerHTML = '<span class="badge bg-secondary"><i class="bi bi-exclamation-triangle me-1"></i>Unlinked</span>';
+            }
+
+            var noticeBanner = document.getElementById('inspNoticeBanner');
+            if (noticeBanner) {
+                if (localLinkedCount > 0) {
+                    noticeBanner.className = 'alert alert-warning d-flex align-items-center mb-3 py-2 px-3 shadow-sm';
+                    noticeBanner.innerHTML = '<i class="bi bi-info-circle-fill fs-4 text-warning me-3 flex-shrink-0"></i>' +
+                        '<div>' +
+                            '<strong>Pending PHR App Link:</strong> Patient has <strong>' + localLinkedCount + '</strong> record(s) ready in HMS (' + hesc(pendingPhrList.slice(0, 3).join(', ')) + (pendingPhrList.length > 3 ? ' and more' : '') + ') that are not yet confirmed in the PHR app.' +
+                            '<br><span class="small text-muted">Records sync automatically via HIP Auto-Link. Alternatively, ask the patient to tap <strong>"Discover Records" / "Fetch New Records"</strong> in their ABHA app (e.g. ABHA / Aarogya Setu / Eka Care) to pull them instantly.</span>' +
+                        '</div>';
+                } else if (gatewayLinkedCount > 0 && totalCount === gatewayLinkedCount) {
+                    noticeBanner.className = 'alert alert-success d-flex align-items-center mb-3 py-2 px-3 shadow-sm';
+                    noticeBanner.innerHTML = '<i class="bi bi-check-circle-fill fs-4 text-success me-3 flex-shrink-0"></i>' +
+                        '<div>' +
+                            '<strong>All Records Synced:</strong> All ' + gatewayLinkedCount + ' care context(s) are confirmed linked on ABDM Gateway and accessible in the patient\'s PHR app.' +
+                        '</div>';
+                } else {
+                    noticeBanner.className = 'mb-3 d-none';
+                    noticeBanner.innerHTML = '';
+                }
             }
 
             if (contexts.length === 0) {
@@ -1315,13 +1348,26 @@
             var html = '';
             contexts.forEach(function (c) {
                 var ref = c.ref || '';
+                var isGatewayLinked = !!c.is_gateway_linked;
                 var isLinked = !!c.is_linked;
                 var isFhir = !!c.is_fhir_ready;
                 var hiType = c.hi_type || 'OPConsultRecord';
 
-                var linkBadge = isLinked
-                    ? '<span class="badge bg-success"><i class="bi bi-check-circle me-1"></i>LINKED</span>'
-                    : '<span class="badge bg-warning text-dark"><i class="bi bi-clock me-1"></i>UNLINKED</span>';
+                var linkBadge = '';
+                var actionBtn = '';
+                if (isGatewayLinked) {
+                    linkBadge = '<span class="badge bg-success" title="Confirmed on ABDM Gateway and linked in patient PHR app"><i class="bi bi-shield-check me-1"></i>Linked in PHR</span>';
+                    actionBtn = '<span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2"><i class="bi bi-check-all me-1"></i>In PHR</span>';
+                } else if (isLinked) {
+                    linkBadge = '<span class="badge bg-warning text-dark" title="Record is published in HMS; awaiting ABDM auto-link or PHR app discovery"><i class="bi bi-clock-history me-1"></i>Ready - Pending PHR Link</span>';
+                    actionBtn = '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 btn-insp-link" data-ref="' + hesc(ref) + '" data-type="' + hesc(hiType) + '" data-patient-id="' + pat.id + '" data-patient-name="' + hesc(pat.name) + '" data-abha="' + hesc(pat.abha_address || abhaAddress) + '" title="Initiate HIP auto-linking to PHR app"><i class="bi bi-arrow-repeat me-1"></i>Link to PHR</button>';
+                } else if (!isFhir) {
+                    linkBadge = '<span class="badge bg-secondary"><i class="bi bi-clock me-1"></i>UNLINKED</span>';
+                    actionBtn = '<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" disabled title="Clinical findings must be documented before linking to ABDM"><i class="bi bi-clock me-1"></i>Draft / Incomplete</button>';
+                } else {
+                    linkBadge = '<span class="badge bg-secondary"><i class="bi bi-clock me-1"></i>UNLINKED</span>';
+                    actionBtn = '<button type="button" class="btn btn-sm btn-outline-success py-0 px-2 btn-insp-link" data-ref="' + hesc(ref) + '" data-type="' + hesc(hiType) + '" data-patient-id="' + pat.id + '" data-patient-name="' + hesc(pat.name) + '" data-abha="' + hesc(pat.abha_address || abhaAddress) + '"><i class="bi bi-link-45deg me-1"></i>Link Context</button>';
+                }
 
                 var fhirBadge = isFhir
                     ? '<span class="badge bg-info"><i class="bi bi-file-earmark-code me-1"></i>Ready</span>'
@@ -1340,15 +1386,6 @@
                             : '<?= base_url('Opd_prescription/fhir_bundle_preview') ?>/' + opdId;
                         fhirPreviewBtn = '<button type="button" class="btn btn-sm btn-outline-primary py-0 px-2 ms-1 insp-preview-fhir" data-url="' + previewUrl + '" data-title="Care Context ' + ref + ' FHIR"><i class="bi bi-eye me-1"></i>Preview FHIR</button>';
                     }
-                }
-
-                var actionBtn = '';
-                if (isLinked) {
-                    actionBtn = '<span class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2"><i class="bi bi-check-all me-1"></i>Active</span>';
-                } else if (!isFhir) {
-                    actionBtn = '<button type="button" class="btn btn-sm btn-outline-secondary py-0 px-2" disabled title="Clinical findings must be documented before linking to ABDM"><i class="bi bi-clock me-1"></i>Draft / Incomplete</button>';
-                } else {
-                    actionBtn = '<button type="button" class="btn btn-sm btn-outline-success py-0 px-2 btn-insp-link" data-ref="' + hesc(ref) + '" data-type="' + hesc(hiType) + '" data-patient-id="' + pat.id + '" data-patient-name="' + hesc(pat.name) + '" data-abha="' + hesc(pat.abha_address || abhaAddress) + '"><i class="bi bi-link-45deg me-1"></i>Link Context</button>';
                 }
 
                 html += '<tr>';
@@ -2113,11 +2150,14 @@
                 headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' }
             }).then(function (r) { return r.json(); })
             .then(function (res) {
-                if (res && res.ok === 1 && res.links && res.links.length > 0) {
+                var links = (res && (res.care_contexts || res.links || (res.data && res.data.patient && res.data.patient.careContexts) || (res.data && res.data[0] && res.data[0].careContexts))) || [];
+                if (res && res.ok === 1 && links.length > 0) {
                     if (statusEl) {
-                        statusEl.innerHTML = '<span class="badge bg-success"><i class="bi bi-shield-check me-1"></i>Gateway Verified (' + res.links.length + ' links)</span>';
+                        statusEl.innerHTML = '<span class="badge bg-success"><i class="bi bi-shield-check me-1"></i>Gateway Verified (' + links.length + ' links)</span>';
                     }
-                    setStatus('ABDM Gateway verified ' + res.links.length + ' linked care context(s) for patient.');
+                    setStatus('ABDM Gateway verified ' + links.length + ' linked care context(s) for patient.');
+                    // Reload inspector so table highlights verified vs pending
+                    loadPatientAbhaInspector(currentAbhaFilter);
                 } else if (res && res.ok === 1) {
                     if (statusEl) {
                         statusEl.innerHTML = '<span class="badge bg-warning text-dark"><i class="bi bi-info-circle me-1"></i>No Gateway Links Found</span>';

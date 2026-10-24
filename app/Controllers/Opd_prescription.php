@@ -4892,12 +4892,12 @@ class Opd_prescription extends BaseController
             $abhaField   = $this->resolvePatientAbhaField();
             $abhaAddress = $abhaField !== null ? trim((string) ($patientRow[$abhaField] ?? '')) : '';
 
-            $patFirstName = $this->sanitizePersonNamePart((string) ($patientRow['p_fname'] ?? ''));
-            $patLastName  = $this->sanitizePersonNamePart((string) ($patientRow['p_lname'] ?? ''));
-            $patFullName  = trim($patFirstName . ($patLastName !== '' ? ' ' . $patLastName : ''));
+            $patFullName  = $this->sanitizePersonNamePart((string) ($patientRow['p_fname'] ?? ''));
             if ($patFullName === '') {
                 $patFullName = trim((string) ($opdRow['P_name'] ?? ''));
             }
+            $patFirstName = $patFullName;
+            $patLastName  = '';
 
             $patientFields = $this->db->getFieldNames('patient_master') ?? [];
             $phoneField    = $this->resolveFirstField($patientFields, ['p_contact', 'phone', 'mobile', 'contact_no', 'mobile_no', 'p_phone']);
@@ -11837,12 +11837,12 @@ class Opd_prescription extends BaseController
         $abhaField = $this->resolvePatientAbhaField();
         $abhaAddress = $abhaField !== null ? trim((string) ($patientRow[$abhaField] ?? '')) : '';
 
-        $patFirstName = $this->sanitizePersonNamePart((string) ($patientRow['p_fname'] ?? ''));
-        $patLastName  = $this->sanitizePersonNamePart((string) ($patientRow['p_lname'] ?? ''));
-        $patFullName  = trim($patFirstName . ($patLastName !== '' ? ' ' . $patLastName : ''));
+        $patFullName  = $this->sanitizePersonNamePart((string) ($patientRow['p_fname'] ?? ''));
         if ($patFullName === '') {
             $patFullName = trim((string) ($opdRow['P_name'] ?? ''));
         }
+        $patFirstName = $patFullName;
+        $patLastName  = '';
 
         // Resolve phone field (patient_master may use p_contact, phone, mobile, etc.)
         $patientFields = $this->db->tableExists('patient_master') ? ($this->db->getFieldNames('patient_master') ?? []) : [];
