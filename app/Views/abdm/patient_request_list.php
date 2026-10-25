@@ -144,17 +144,34 @@
         if (!consent) {
             return '<div class="text-danger small">No consent details available.</div>';
         }
-        var metaHtml = '<div class="row small text-muted mb-3">'
+        function renderDateField(label, reqVal, gntVal, isMod, effectiveVal) {
+            if (!reqVal && !gntVal && !effectiveVal) {
+                return '<div class="col-md-6">' + label + ': <strong>-</strong></div>';
+            }
+            if (isMod && reqVal && gntVal) {
+                return '<div class="col-md-6">' + label + ': '
+                    + '<span class="text-decoration-line-through text-muted small" title="Original Requested">' + fmtTs(reqVal) + '</span> '
+                    + '&rarr; <strong class="text-primary" title="Patient Updated in PHR">' + fmtTs(gntVal) + '</strong> '
+                    + '<span class="badge bg-warning-subtle text-warning border border-warning-subtle py-0 px-1 ms-1" style="font-size:0.75rem;" title="Updated by Patient in PHR App">Updated</span>'
+                    + '</div>';
+            }
+            var displayVal = gntVal || effectiveVal || reqVal;
+            return '<div class="col-md-6">' + label + ': <strong>' + fmtTs(displayVal) + '</strong></div>';
+        }
+
+        var metaHtml = '<div class="row small text-muted mb-3 g-2">'
             + '<div class="col-md-6">Patient: <strong>' + escHtml(consent.patient_name || '-') + '</strong></div>'
             + '<div class="col-md-6">UHID: <strong>' + escHtml(consent.patient_code || '-') + '</strong></div>'
             + '<div class="col-md-6">Consent ID: <strong>' + escHtml(consent.consent_id || consent.abdm_consent_artifact_id || consent.consent_request_id || consent.request_id || '-') + '</strong></div>'
             + '<div class="col-md-6">ABHA: <strong>' + escHtml(consent.abha_address || '-') + '</strong></div>'
             + '<div class="col-md-6">Purpose: <strong>' + escHtml(consent.purpose || '-') + '</strong></div>'
             + '<div class="col-md-6">Status: <strong>' + escHtml(consent.status || '-') + '</strong></div>'
-            + '<div class="col-md-6">Valid From: <strong>' + fmtTs(consent.valid_from) + '</strong></div>'
-            + '<div class="col-md-6">Valid To: <strong>' + fmtTs(consent.valid_to) + '</strong></div>'
+            + renderDateField('Request From', consent.requested_from, consent.granted_from, consent.is_date_from_modified, consent.valid_from)
+            + renderDateField('Request To', consent.requested_to, consent.granted_to, consent.is_date_to_modified, consent.valid_to)
             + '<div class="col-md-6">Requested On: <strong>' + fmtTs(consent.requested_on) + '</strong></div>'
-            + '<div class="col-md-6">Erase Date: <strong>' + fmtTs(consent.erase_at) + '</strong></div>'
+            + renderDateField('Consent Valid Upto', consent.requested_erase_at, consent.granted_erase_at, consent.is_erase_at_modified, consent.erase_at)
+            + (consent.granted_on ? '<div class="col-md-6">Granted On: <strong>' + fmtTs(consent.granted_on) + '</strong></div>' : '')
+            + (consent.requested_by ? '<div class="col-md-6">Requested By: <strong>' + escHtml(consent.requested_by) + '</strong></div>' : '')
             + '</div>';
 
         var rowsHtml = '';

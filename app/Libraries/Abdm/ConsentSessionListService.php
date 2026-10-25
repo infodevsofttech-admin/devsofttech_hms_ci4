@@ -573,9 +573,9 @@ class ConsentSessionListService
         $requestedHiTypes = [];
         $requestedOn = '';
         $purpose = '';
-        $validFrom = '';
-        $validTo = '';
-        $eraseAt = '';
+        $requestedFrom = '';
+        $requestedTo = '';
+        $requestedEraseAt = '';
         $requestedBy = '';
         $hfrId = trim((string) ($best['hfr_id'] ?? ''));
 
@@ -588,17 +588,17 @@ class ConsentSessionListService
             $requestedHiTypes = $this->normalizeHiTypesList($consentBlock['hiTypes'] ?? $consentBlock['hi_types'] ?? []);
             $requestedOn = trim((string) ($consentRequestRow['created_at'] ?? ''));
             $purpose = $this->extractScalarString($consentBlock['purpose']['text'] ?? $consentBlock['purpose']['code'] ?? null);
-            $validFrom = $this->extractScalarString(
+            $requestedFrom = $this->extractScalarString(
                 $consentBlock['permission']['dateRange']['from']
                 ?? $consentBlock['permission']['date_range']['from']
                 ?? null
             );
-            $validTo = $this->extractScalarString(
+            $requestedTo = $this->extractScalarString(
                 $consentBlock['permission']['dateRange']['to']
                 ?? $consentBlock['permission']['date_range']['to']
                 ?? null
             );
-            $eraseAt = $this->extractScalarString(
+            $requestedEraseAt = $this->extractScalarString(
                 $consentBlock['permission']['dataEraseAt']
                 ?? $consentBlock['permission']['data_erase_at']
                 ?? null
@@ -609,48 +609,55 @@ class ConsentSessionListService
             }
         }
 
-        // Fallback scanning across all session rows for missing metadata (dates, purpose, requestedBy)
+        // Fallback scanning across session rows for missing requested metadata
         foreach ($rows as $row) {
             $rowReq = json_decode((string) ($row['request_json'] ?? ''), true);
-            $rowResp = json_decode((string) ($row['response_json'] ?? ''), true);
             $containers = [
                 is_array($rowReq) ? ($rowReq['consent'] ?? null) : null,
                 is_array($rowReq) ? ($rowReq['consentDetail'] ?? null) : null,
+                is_array($rowReq) ? ($rowReq['data']['consent'] ?? null) : null,
                 is_array($rowReq) ? $rowReq : null,
-                is_array($rowResp) ? ($rowResp['consent'] ?? null) : null,
-                is_array($rowResp) ? ($rowResp['consentDetail'] ?? null) : null,
-                is_array($rowResp) ? $rowResp : null,
             ];
 
             foreach ($containers as $c) {
                 if (! is_array($c)) {
                     continue;
                 }
-                if ($validFrom === '') {
-                    $validFrom = $this->extractScalarString(
+                if ($requestedFrom === '') {
+                    $requestedFrom = $this->extractScalarString(
                         $c['permission']['dateRange']['from']
                         ?? $c['permission']['date_range']['from']
                         ?? $c['date_range']['from']
                         ?? $c['dateRange']['from']
+                        ?? $c['valid_from']
+                        ?? $c['validFrom']
+                        ?? $c['date_from']
+                        ?? $c['dateFrom']
                         ?? null
                     );
                 }
-                if ($validTo === '') {
-                    $validTo = $this->extractScalarString(
+                if ($requestedTo === '') {
+                    $requestedTo = $this->extractScalarString(
                         $c['permission']['dateRange']['to']
                         ?? $c['permission']['date_range']['to']
                         ?? $c['date_range']['to']
                         ?? $c['dateRange']['to']
+                        ?? $c['valid_to']
+                        ?? $c['validTo']
+                        ?? $c['date_to']
+                        ?? $c['dateTo']
                         ?? null
                     );
                 }
-                if ($eraseAt === '') {
-                    $eraseAt = $this->extractScalarString(
+                if ($requestedEraseAt === '') {
+                    $requestedEraseAt = $this->extractScalarString(
                         $c['permission']['dataEraseAt']
                         ?? $c['permission']['data_erase_at']
                         ?? (is_array($c['expiry'] ?? null) ? ($c['expiry']['date'] ?? null) : ($c['expiry'] ?? null))
                         ?? $c['dataEraseAt']
                         ?? $c['data_erase_at']
+                        ?? $c['erase_at']
+                        ?? $c['eraseAt']
                         ?? null
                     );
                 }
@@ -658,7 +665,6 @@ class ConsentSessionListService
                     $purpose = $this->extractScalarString(
                         $c['purpose']['text']
                         ?? $c['purpose']['code']
-                        ?? $c['purpose']
                         ?? null
                     );
                 }
@@ -669,27 +675,133 @@ class ConsentSessionListService
                         ?? null
                     );
                 }
-                if ($requestedOn === '') {
-                    $requestedOn = trim((string) ($row['created_at'] ?? ''));
-                }
+            }
+            if ($requestedOn === '') {
+                $requestedOn = trim((string) ($row['created_at'] ?? ''));
             }
         }
 
+        // Scan for GRANTED / UPDATED metadata from ABDM callback & response payloads
         $grantedHiTypes = [];
         $grantedOn = '';
+        $grantedFrom = '';
+        $grantedTo = '';
+        $grantedEraseAt = '';
+
         foreach ($rows as $row) {
             $decoded = json_decode((string) ($row['response_json'] ?? ''), true);
             if (! is_array($decoded)) {
                 continue;
             }
-            $rowHiTypes = $this->normalizeHiTypesList($decoded['hi_types'] ?? $decoded['consent']['hi_types'] ?? []);
-            if ($rowHiTypes !== []) {
-                $grantedHiTypes = $rowHiTypes;
-                $grantedOn = trim((string) (
-                    $this->extractScalarString($decoded['granted_at'] ?? null)
-                    ?: ($row['updated_at'] ?? '')
+
+            $containers = [
+                $decoded['consent'] ?? null,
+                $decoded['consentDetail'] ?? null,
+                $decoded['data']['consent'] ?? null,
+                $decoded['data']['consentDetail'] ?? null,
+                $decoded['data'] ?? null,
+                $decoded,
+            ];
+
+            foreach ($containers as $c) {
+                if (! is_array($c)) {
+                    continue;
+                }
+
+                $rowHiTypes = $this->normalizeHiTypesList($c['hi_types'] ?? $c['hiTypes'] ?? []);
+                if ($rowHiTypes !== []) {
+                    $grantedHiTypes = $rowHiTypes;
+                }
+
+                $candGrantedOn = trim((string) (
+                    $this->extractScalarString($c['granted_at'] ?? null)
+                    ?: $this->extractScalarString($c['grantedAt'] ?? null)
+                    ?: $this->extractScalarString($c['permission']['granted_at'] ?? null)
+                    ?: $this->extractScalarString($c['permission']['grantedAt'] ?? null)
+                    ?: ''
                 ));
-                break;
+                if ($candGrantedOn !== '') {
+                    $grantedOn = $candGrantedOn;
+                }
+
+                $candFrom = trim((string) (
+                    $this->extractScalarString($c['date_range']['from'] ?? null)
+                    ?: $this->extractScalarString($c['dateRange']['from'] ?? null)
+                    ?: $this->extractScalarString($c['permission']['dateRange']['from'] ?? null)
+                    ?: $this->extractScalarString($c['permission']['date_range']['from'] ?? null)
+                    ?: $this->extractScalarString($c['valid_from'] ?? null)
+                    ?: $this->extractScalarString($c['validFrom'] ?? null)
+                    ?: ''
+                ));
+                if ($candFrom !== '') {
+                    $grantedFrom = $candFrom;
+                }
+
+                $candTo = trim((string) (
+                    $this->extractScalarString($c['date_range']['to'] ?? null)
+                    ?: $this->extractScalarString($c['dateRange']['to'] ?? null)
+                    ?: $this->extractScalarString($c['permission']['dateRange']['to'] ?? null)
+                    ?: $this->extractScalarString($c['permission']['date_range']['to'] ?? null)
+                    ?: $this->extractScalarString($c['valid_to'] ?? null)
+                    ?: $this->extractScalarString($c['validTo'] ?? null)
+                    ?: ''
+                ));
+                if ($candTo !== '') {
+                    $grantedTo = $candTo;
+                }
+
+                $candErase = trim((string) (
+                    $this->extractScalarString(is_array($c['expiry'] ?? null) ? ($c['expiry']['date'] ?? null) : ($c['expiry'] ?? null))
+                    ?: $this->extractScalarString($c['permission']['dataEraseAt'] ?? null)
+                    ?: $this->extractScalarString($c['permission']['data_erase_at'] ?? null)
+                    ?: $this->extractScalarString($c['dataEraseAt'] ?? null)
+                    ?: $this->extractScalarString($c['data_erase_at'] ?? null)
+                    ?: $this->extractScalarString($c['erase_at'] ?? null)
+                    ?: $this->extractScalarString($c['eraseAt'] ?? null)
+                    ?: ''
+                ));
+                if ($candErase !== '') {
+                    $grantedEraseAt = $candErase;
+                }
+            }
+        }
+
+        // If this session's overall phase is GRANTED/COMPLETED but no row ever
+        // recorded WHICH hi_types were granted, fall back to requested types.
+        if ($grantedHiTypes === [] && $requestedHiTypes !== [] && in_array($phase, ['GRANTED', 'COMPLETED'], true)) {
+            $grantedHiTypes = $requestedHiTypes;
+        }
+
+        // Effective values: if granted values exist from ABDM, they represent the official patient-approved values
+        $validFrom = $grantedFrom !== '' ? $grantedFrom : $requestedFrom;
+        $validTo = $grantedTo !== '' ? $grantedTo : $requestedTo;
+        $eraseAt = $grantedEraseAt !== '' ? $grantedEraseAt : $requestedEraseAt;
+
+        // Detect if patient modified the date range or expiry in the PHR app
+        $isDateFromModified = false;
+        if ($requestedFrom !== '' && $grantedFrom !== '') {
+            $tsReqFrom = strtotime($requestedFrom);
+            $tsGntFrom = strtotime($grantedFrom);
+            if ($tsReqFrom !== false && $tsGntFrom !== false && date('Y-m-d', $tsReqFrom) !== date('Y-m-d', $tsGntFrom)) {
+                $isDateFromModified = true;
+            }
+        }
+
+        $isDateToModified = false;
+        if ($requestedTo !== '' && $grantedTo !== '') {
+            $tsReqTo = strtotime($requestedTo);
+            $tsGntTo = strtotime($grantedTo);
+            if ($tsReqTo !== false && $tsGntTo !== false && date('Y-m-d', $tsReqTo) !== date('Y-m-d', $tsGntTo)) {
+                $isDateToModified = true;
+            }
+        }
+
+        $isEraseAtModified = false;
+        if ($requestedEraseAt !== '' && $grantedEraseAt !== '') {
+            $tsReqErase = strtotime($requestedEraseAt);
+            $tsGntErase = strtotime($grantedEraseAt);
+            if ($tsReqErase !== false && $tsGntErase !== false && abs($tsReqErase - $tsGntErase) > 60) {
+                $isEraseAtModified = true;
             }
         }
 
@@ -702,20 +814,30 @@ class ConsentSessionListService
             ));
         }
 
-        // ABDM M3 HIU compliance: evaluate consent expiration against erase_at (dataEraseAt)
+        // ABDM M3 HIU compliance: evaluate consent expiration against effective erase_at (dataEraseAt)
         $isConsentExpired = false;
-        if ($phase === 'EXPIRED') {
-            $isConsentExpired = true;
-        } elseif ($eraseAt !== '') {
-            $eraseTimestamp = strtotime($eraseAt);
-            if ($eraseTimestamp !== false && $eraseTimestamp <= time()) {
+        $effectiveEraseTimestamp = ($eraseAt !== '') ? strtotime($eraseAt) : false;
+        if ($effectiveEraseTimestamp !== false) {
+            if ($effectiveEraseTimestamp <= time()) {
                 $isConsentExpired = true;
             }
-        }
-        if (! $isConsentExpired && $expiredOn !== '') {
+        } elseif ($expiredOn !== '') {
             $expTime = strtotime($expiredOn);
             if ($expTime !== false && $expTime <= time()) {
                 $isConsentExpired = true;
+            }
+        } elseif ($phase === 'EXPIRED') {
+            $isConsentExpired = true;
+        }
+
+        // If effective eraseAt is in the future, the consent is NOT expired!
+        // (Revive from any premature EXPIRED state stamped by legacy code)
+        if (! $isConsentExpired && $phase === 'EXPIRED') {
+            $expiredOn = '';
+            if ($status === 'SUCCESS' && ($state === 'DATA_RECEIVED' || in_array($bestPriority, [480, 490, 500], true))) {
+                $phase = 'COMPLETED';
+            } elseif ($grantedOn !== '' || in_array($rawConsentStatus, ['GRANTED', 'APPROVED', 'ACTIVE'], true) || in_array($state, ['GRANTED', 'APPROVED', 'ACTIVE'], true)) {
+                $phase = 'GRANTED';
             }
         }
 
@@ -797,6 +919,16 @@ class ConsentSessionListService
                 'valid_from' => $validFrom,
                 'valid_to' => $validTo,
                 'erase_at' => $eraseAt,
+                'requested_from' => $requestedFrom,
+                'requested_to' => $requestedTo,
+                'requested_erase_at' => $requestedEraseAt,
+                'granted_from' => $grantedFrom,
+                'granted_to' => $grantedTo,
+                'granted_erase_at' => $grantedEraseAt,
+                'is_date_from_modified' => $isDateFromModified,
+                'is_date_to_modified' => $isDateToModified,
+                'is_date_range_modified' => ($isDateFromModified || $isDateToModified),
+                'is_erase_at_modified' => $isEraseAtModified,
                 'requested_on' => $requestedOn,
                 'granted_on' => $grantedOn,
                 'revoked_on' => $revokedOn,

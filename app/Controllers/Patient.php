@@ -6327,9 +6327,9 @@ class Patient extends BaseController
 		$requestedHiTypes = [];
 		$requestedOn = '';
 		$purpose = '';
-		$validFrom = '';
-		$validTo = '';
-		$eraseAt = '';
+		$requestedFrom = '';
+		$requestedTo = '';
+		$requestedEraseAt = '';
 		$requestedBy = '';
 		$hfrId = trim((string) ($best['hfr_id'] ?? ''));
 
@@ -6342,40 +6342,31 @@ class Patient extends BaseController
 			$requestedHiTypes = $this->normalizeHiTypesList($consentBlock['hiTypes'] ?? $consentBlock['hi_types'] ?? []);
 			$requestedOn = trim((string) ($consentRequestRow['created_at'] ?? ''));
 			$purpose = trim((string) ($consentBlock['purpose']['text'] ?? $consentBlock['purpose']['code'] ?? ''));
-			$validFrom = trim((string) ($consentBlock['permission']['dateRange']['from'] ?? $consentBlock['permission']['date_range']['from'] ?? ''));
-			$validTo = trim((string) ($consentBlock['permission']['dateRange']['to'] ?? $consentBlock['permission']['date_range']['to'] ?? ''));
-			$eraseAt = trim((string) ($consentBlock['permission']['dataEraseAt'] ?? $consentBlock['permission']['data_erase_at'] ?? ''));
+			$requestedFrom = trim((string) ($consentBlock['permission']['dateRange']['from'] ?? $consentBlock['permission']['date_range']['from'] ?? ''));
+			$requestedTo = trim((string) ($consentBlock['permission']['dateRange']['to'] ?? $consentBlock['permission']['date_range']['to'] ?? ''));
+			$requestedEraseAt = trim((string) ($consentBlock['permission']['dataEraseAt'] ?? $consentBlock['permission']['data_erase_at'] ?? ''));
 			$requestedBy = trim((string) ($consentBlock['requester']['name'] ?? ''));
 			if ($hfrId === '') {
 				$hfrId = trim((string) ($consentRequestRow['hfr_id'] ?? ''));
 			}
 		}
 
-		// Fallback scanning across all session rows for missing metadata (dates, purpose, requestedBy)
+		// Fallback scanning across session rows for missing requested metadata
 		foreach ($rows as $row) {
 			$rowReq = json_decode((string) ($row['request_json'] ?? ''), true);
-			$rowResp = json_decode((string) ($row['response_json'] ?? ''), true);
 			$containers = [
 				is_array($rowReq) ? ($rowReq['consent'] ?? null) : null,
 				is_array($rowReq) ? ($rowReq['consentDetail'] ?? null) : null,
 				is_array($rowReq) ? ($rowReq['data']['consent'] ?? null) : null,
-				is_array($rowReq) ? ($rowReq['data']['consentDetail'] ?? null) : null,
-				is_array($rowReq) ? ($rowReq['data'] ?? null) : null,
 				is_array($rowReq) ? $rowReq : null,
-				is_array($rowResp) ? ($rowResp['consent'] ?? null) : null,
-				is_array($rowResp) ? ($rowResp['consentDetail'] ?? null) : null,
-				is_array($rowResp) ? ($rowResp['data']['consent'] ?? null) : null,
-				is_array($rowResp) ? ($rowResp['data']['consentDetail'] ?? null) : null,
-				is_array($rowResp) ? ($rowResp['data'] ?? null) : null,
-				is_array($rowResp) ? $rowResp : null,
 			];
 
 			foreach ($containers as $c) {
 				if (! is_array($c)) {
 					continue;
 				}
-				if ($validFrom === '') {
-					$validFrom = trim((string) (
+				if ($requestedFrom === '') {
+					$requestedFrom = trim((string) (
 						$c['permission']['dateRange']['from']
 						?? $c['permission']['date_range']['from']
 						?? $c['date_range']['from']
@@ -6387,8 +6378,8 @@ class Patient extends BaseController
 						?? ''
 					));
 				}
-				if ($validTo === '') {
-					$validTo = trim((string) (
+				if ($requestedTo === '') {
+					$requestedTo = trim((string) (
 						$c['permission']['dateRange']['to']
 						?? $c['permission']['date_range']['to']
 						?? $c['date_range']['to']
@@ -6400,8 +6391,8 @@ class Patient extends BaseController
 						?? ''
 					));
 				}
-				if ($eraseAt === '') {
-					$eraseAt = trim((string) (
+				if ($requestedEraseAt === '') {
+					$requestedEraseAt = trim((string) (
 						$c['permission']['dataEraseAt']
 						?? $c['permission']['data_erase_at']
 						?? $c['expiry']
@@ -6416,7 +6407,6 @@ class Patient extends BaseController
 					$purpose = trim((string) (
 						$c['purpose']['text']
 						?? $c['purpose']['code']
-						?? $c['purpose']
 						?? ''
 					));
 				}
@@ -6427,43 +6417,134 @@ class Patient extends BaseController
 						?? ''
 					));
 				}
-				if ($requestedOn === '') {
-					$requestedOn = trim((string) ($row['created_at'] ?? ''));
-				}
+			}
+			if ($requestedOn === '') {
+				$requestedOn = trim((string) ($row['created_at'] ?? ''));
 			}
 		}
 
-		// Bridge flattens consent.hi_types -> top-level hi_types on consent_status /
-		// consent_reconcile / consent_callback responses (see M3HiuGatewayClient
-		// flatten logic). The "best" row for overall phase can be a data_fetch /
-		// hi_data_push_callback row (once records are COMPLETED) whose response is
-		// a FHIR data bundle with no hi_types field at all — so look separately for
-		// the most recent row (within this session) that actually carries the
-		// granted hi_types payload.
+		// Scan for GRANTED / UPDATED metadata from ABDM callback & response payloads
 		$grantedHiTypes = [];
 		$grantedOn = '';
+		$grantedFrom = '';
+		$grantedTo = '';
+		$grantedEraseAt = '';
+
 		foreach ($rows as $row) {
 			$decoded = json_decode((string) ($row['response_json'] ?? ''), true);
 			if (! is_array($decoded)) {
 				continue;
 			}
-			$rowHiTypes = $this->normalizeHiTypesList($decoded['hi_types'] ?? $decoded['consent']['hi_types'] ?? []);
-			if ($rowHiTypes !== []) {
-				$grantedHiTypes = $rowHiTypes;
-				$grantedOn = trim((string) ($decoded['granted_at'] ?? $row['updated_at'] ?? ''));
-				break;
+
+			$containers = [
+				$decoded['consent'] ?? null,
+				$decoded['consentDetail'] ?? null,
+				$decoded['data']['consent'] ?? null,
+				$decoded['data']['consentDetail'] ?? null,
+				$decoded['data'] ?? null,
+				$decoded,
+			];
+
+			foreach ($containers as $c) {
+				if (! is_array($c)) {
+					continue;
+				}
+
+				$rowHiTypes = $this->normalizeHiTypesList($c['hi_types'] ?? $c['hiTypes'] ?? []);
+				if ($rowHiTypes !== []) {
+					$grantedHiTypes = $rowHiTypes;
+				}
+
+				$candGrantedOn = trim((string) (
+					$c['granted_at']
+					?? $c['grantedAt']
+					?? $c['permission']['granted_at']
+					?? $c['permission']['grantedAt']
+					?? ''
+				));
+				if ($candGrantedOn !== '') {
+					$grantedOn = $candGrantedOn;
+				}
+
+				$candFrom = trim((string) (
+					$c['date_range']['from']
+					?? $c['dateRange']['from']
+					?? $c['permission']['dateRange']['from']
+					?? $c['permission']['date_range']['from']
+					?? $c['valid_from']
+					?? $c['validFrom']
+					?? ''
+				));
+				if ($candFrom !== '') {
+					$grantedFrom = $candFrom;
+				}
+
+				$candTo = trim((string) (
+					$c['date_range']['to']
+					?? $c['dateRange']['to']
+					?? $c['permission']['dateRange']['to']
+					?? $c['permission']['date_range']['to']
+					?? $c['valid_to']
+					?? $c['validTo']
+					?? ''
+				));
+				if ($candTo !== '') {
+					$grantedTo = $candTo;
+				}
+
+				$candErase = trim((string) (
+					(is_array($c['expiry'] ?? null) ? ($c['expiry']['date'] ?? null) : ($c['expiry'] ?? null))
+					?? $c['permission']['dataEraseAt']
+					?? $c['permission']['data_erase_at']
+					?? $c['dataEraseAt']
+					?? $c['data_erase_at']
+					?? $c['erase_at']
+					?? $c['eraseAt']
+					?? ''
+				));
+				if ($candErase !== '') {
+					$grantedEraseAt = $candErase;
+				}
 			}
 		}
 
 		// If this session's overall phase is GRANTED/COMPLETED but no row ever
-		// recorded WHICH hi_types were granted (e.g. data arrived via an async
-		// hi_data_push_callback before any consent_reconcile/consent_status poll
-		// ran and stored a hi_types-bearing response), do not mark every
-		// requested type as DENIED for lack of evidence — a COMPLETED/GRANTED
-		// phase is itself proof the consent covers at least the requested
-		// types, so fall back to treating the full requested set as granted.
+		// recorded WHICH hi_types were granted, fall back to requested types.
 		if ($grantedHiTypes === [] && $requestedHiTypes !== [] && in_array($phase, ['GRANTED', 'COMPLETED'], true)) {
 			$grantedHiTypes = $requestedHiTypes;
+		}
+
+		// Effective values: if granted values exist from ABDM, they represent the official patient-approved values
+		$validFrom = $grantedFrom !== '' ? $grantedFrom : $requestedFrom;
+		$validTo = $grantedTo !== '' ? $grantedTo : $requestedTo;
+		$eraseAt = $grantedEraseAt !== '' ? $grantedEraseAt : $requestedEraseAt;
+
+		// Detect if patient modified the date range or expiry in the PHR app
+		$isDateFromModified = false;
+		if ($requestedFrom !== '' && $grantedFrom !== '') {
+			$tsReqFrom = strtotime($requestedFrom);
+			$tsGntFrom = strtotime($grantedFrom);
+			if ($tsReqFrom !== false && $tsGntFrom !== false && date('Y-m-d', $tsReqFrom) !== date('Y-m-d', $tsGntFrom)) {
+				$isDateFromModified = true;
+			}
+		}
+
+		$isDateToModified = false;
+		if ($requestedTo !== '' && $grantedTo !== '') {
+			$tsReqTo = strtotime($requestedTo);
+			$tsGntTo = strtotime($grantedTo);
+			if ($tsReqTo !== false && $tsGntTo !== false && date('Y-m-d', $tsReqTo) !== date('Y-m-d', $tsGntTo)) {
+				$isDateToModified = true;
+			}
+		}
+
+		$isEraseAtModified = false;
+		if ($requestedEraseAt !== '' && $grantedEraseAt !== '') {
+			$tsReqErase = strtotime($requestedEraseAt);
+			$tsGntErase = strtotime($grantedEraseAt);
+			if ($tsReqErase !== false && $tsGntErase !== false && abs($tsReqErase - $tsGntErase) > 60) {
+				$isEraseAtModified = true;
+			}
 		}
 
 		$revokedOn = trim((string) ($best['revoked_at'] ?? ''));
@@ -6472,20 +6553,30 @@ class Patient extends BaseController
 			$grantedOn = trim((string) ($bestDecoded['granted_at'] ?? $best['updated_at'] ?? ''));
 		}
 
-		// ABDM M3 HIU compliance: evaluate consent expiration against erase_at (dataEraseAt)
+		// ABDM M3 HIU compliance: evaluate consent expiration against effective erase_at (dataEraseAt)
 		$isConsentExpired = false;
-		if ($phase === 'EXPIRED') {
-			$isConsentExpired = true;
-		} elseif ($eraseAt !== '') {
-			$eraseTimestamp = strtotime($eraseAt);
-			if ($eraseTimestamp !== false && $eraseTimestamp <= time()) {
+		$effectiveEraseTimestamp = ($eraseAt !== '') ? strtotime($eraseAt) : false;
+		if ($effectiveEraseTimestamp !== false) {
+			if ($effectiveEraseTimestamp <= time()) {
 				$isConsentExpired = true;
 			}
-		}
-		if (! $isConsentExpired && $expiredOn !== '') {
+		} elseif ($expiredOn !== '') {
 			$expTime = strtotime($expiredOn);
 			if ($expTime !== false && $expTime <= time()) {
 				$isConsentExpired = true;
+			}
+		} elseif ($phase === 'EXPIRED') {
+			$isConsentExpired = true;
+		}
+
+		// If effective eraseAt is in the future, the consent is NOT expired!
+		// (Revive from any premature EXPIRED state stamped by legacy code)
+		if (! $isConsentExpired && $phase === 'EXPIRED') {
+			$expiredOn = '';
+			if ($status === 'SUCCESS' && ($state === 'DATA_RECEIVED' || in_array($bestPriority, [480, 490, 500], true))) {
+				$phase = 'COMPLETED';
+			} elseif ($grantedOn !== '' || in_array($rawConsentStatus, ['GRANTED', 'APPROVED', 'ACTIVE'], true) || in_array($state, ['GRANTED', 'APPROVED', 'ACTIVE'], true)) {
+				$phase = 'GRANTED';
 			}
 		}
 
@@ -6575,6 +6666,16 @@ class Patient extends BaseController
 				'valid_from' => $validFrom,
 				'valid_to' => $validTo,
 				'erase_at' => $eraseAt,
+				'requested_from' => $requestedFrom,
+				'requested_to' => $requestedTo,
+				'requested_erase_at' => $requestedEraseAt,
+				'granted_from' => $grantedFrom,
+				'granted_to' => $grantedTo,
+				'granted_erase_at' => $grantedEraseAt,
+				'is_date_from_modified' => $isDateFromModified,
+				'is_date_to_modified' => $isDateToModified,
+				'is_date_range_modified' => ($isDateFromModified || $isDateToModified),
+				'is_erase_at_modified' => $isEraseAtModified,
 				'requested_on' => $requestedOn,
 				'granted_on' => $grantedOn,
 				'revoked_on' => $revokedOn,
