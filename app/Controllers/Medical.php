@@ -1590,11 +1590,26 @@ class Medical extends BaseController
             return $this->invoiceUpdateResponse(false, 'Not Done');
         }
 
+        if (! $this->db->tableExists('invoice_med_master')) {
+            return $this->invoiceUpdateResponse(false, 'Invoice table missing');
+        }
+
+        $invoice = $this->db->table('invoice_med_master')->where('id', $invoiceId)->get()->getRow();
+        if (! $invoice) {
+            return $this->invoiceUpdateResponse(false, 'Invoice not found');
+        }
+
+        if ($this->isInvoiceFinalized($invoice)) {
+            return $this->invoiceUpdateResponse(false, 'Invoice is finalized');
+        }
+
         if ($docId > 0 && $this->db->tableExists('doctor_master')) {
             $doc = $this->db->table('doctor_master')->where('id', $docId)->get()->getRow();
             if ($doc) {
-                $docName = (string) ($doc->p_fname ?? $docName);
+                $docName = trim((string) ($doc->p_fname ?? $docName));
             }
+        } elseif ($docId < 0) {
+            $docId = 0;
         }
 
         $ok = $this->updateInvoiceMasterByFields($invoiceId, [
@@ -2329,8 +2344,8 @@ class Medical extends BaseController
             $legacyBalanceTotal += $balance;
 
             $ipdCredit = (int) ($row->ipd_credit ?? 0);
-            $groupInvoiceId = (int) ($row->group_invoice_id ?? 0);
-            if ($ipdCredit > 0 && $groupInvoiceId > 0) {
+            $ipdCreditType = (int) ($row->ipd_credit_type ?? 1);
+            if ($ipdCredit > 0 && $ipdCreditType === 0) {
                 $packageTotal += $net;
             } elseif ($ipdCredit > 0) {
                 $creditTotal += $net;
@@ -4075,6 +4090,33 @@ class Medical extends BaseController
             }
         }
 
+        $docList = [];
+        if ($this->db->tableExists('doctor_master')) {
+            $docBuilder = $this->db->table('doctor_master');
+            $docFields = $this->db->getFieldNames('doctor_master') ?? [];
+            if (in_array('active', $docFields, true)) {
+                $docBuilder->where('active', 1);
+            }
+            $docList = $docBuilder->orderBy('p_fname', 'ASC')->get()->getResult();
+
+            $invDocId = (int) ($invoice->doc_id ?? 0);
+            if ($invDocId > 0) {
+                $found = false;
+                foreach ($docList as $d) {
+                    if ((int) ($d->id ?? 0) === $invDocId) {
+                        $found = true;
+                        break;
+                    }
+                }
+                if (! $found) {
+                    $docRow = $this->db->table('doctor_master')->where('id', $invDocId)->get()->getRow();
+                    if ($docRow) {
+                        $docList[] = $docRow;
+                    }
+                }
+            }
+        }
+
         return [
             'invoice' => $invoice,
             'items' => $items,
@@ -4083,7 +4125,8 @@ class Medical extends BaseController
             'totals' => $totals,
             'oldInvoices' => $oldInvoices,
             'isFinalized' => $this->isInvoiceFinalized($invoice),
-            'message' => (string) $this->request->getGet('msg'),
+            'message' => (string) ($this->request ? $this->request->getGet('msg') : ''),
+            'docList' => $docList,
         ];
     }
 
@@ -10131,11 +10174,11 @@ class Medical extends BaseController
                     ELSE 0
                 END) AS ipd_cash_amount,
                 SUM(CASE
-                    WHEN IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.group_invoice_id,0)=0 THEN " . $netExpr . "
+                    WHEN IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.ipd_credit_type,1)=1 THEN " . $netExpr . "
                     ELSE 0
                 END) AS ipd_credit_amount,
                 SUM(CASE
-                    WHEN IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.group_invoice_id,0)>0 THEN " . $netExpr . "
+                    WHEN IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.ipd_credit_type,1)=0 THEN " . $netExpr . "
                     ELSE 0
                 END) AS ipd_package_amount
             FROM invoice_med_master m
@@ -10173,10 +10216,10 @@ class Medical extends BaseController
                 $billCondition = ' AND IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=0';
                 break;
             case 4:
-                $billCondition = ' AND IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.group_invoice_id,0)=0';
+                $billCondition = ' AND IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.ipd_credit_type,1)=1';
                 break;
             case 5:
-                $billCondition = ' AND IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.group_invoice_id,0)>0';
+                $billCondition = ' AND IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.ipd_credit_type,1)=0';
                 break;
             case 6:
                 $billCondition = ' AND IFNULL(m.sale_return,0)=1';
@@ -10220,8 +10263,8 @@ class Medical extends BaseController
                     WHEN IFNULL(m.ipd_id,0)=0 AND IFNULL(m.case_id,0)=0 AND IFNULL(m.case_credit,0)=0 THEN 'OPD CASH'
                     WHEN IFNULL(m.ipd_id,0)=0 AND IFNULL(m.case_id,0)>0 THEN 'OPD ORG'
                     WHEN IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=0 THEN 'IPD CASH'
-                    WHEN IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.group_invoice_id,0)=0 THEN 'IPD CREDIT'
-                    WHEN IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.group_invoice_id,0)>0 THEN 'IPD PACKAGE'
+                    WHEN IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.ipd_credit_type,1)=1 THEN 'IPD CREDIT'
+                    WHEN IFNULL(m.ipd_id,0)>0 AND IFNULL(m.ipd_credit,0)=1 AND IFNULL(m.ipd_credit_type,1)=0 THEN 'IPD PACKAGE'
                     ELSE 'OTHER'
                 END AS bill_type,
                 " . $orgNameExpr . " AS org_name

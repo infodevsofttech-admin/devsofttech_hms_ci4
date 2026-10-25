@@ -36,18 +36,66 @@
                 </div>
 
                 <?php if (empty($isFinalized)): ?>
-                    <form method="post" action="<?= base_url('Medical/go_final') ?>" class="row g-2 mb-3">
-                        <?= csrf_field() ?>
-                        <input type="hidden" name="inv_id" value="<?= (int)($invoice->id ?? 0) ?>">
-                        <div class="col-md-2">
-                            <label class="form-label form-label-sm mb-1">Doctor ID</label>
-                            <input type="number" name="doc_id" value="<?= esc($invoice->doc_id ?? 0) ?>" class="form-control form-control-sm" min="0" step="1">
+                    <?php
+                        $currentDocId = (int) ($invoice->doc_id ?? 0);
+                        $currentDocName = trim((string) ($invoice->doc_name ?? ''));
+
+                        $docFound = false;
+                        if (!empty($docList) && $currentDocId > 0) {
+                            foreach ($docList as $d) {
+                                if ((int) ($d->id ?? 0) === $currentDocId) {
+                                    $docFound = true;
+                                    break;
+                                }
+                            }
+                        }
+                        // If not found in hospital doctors list but doctor name exists, treat as outside doctor
+                        $isOtherDoc = (!$docFound && ($currentDocId === 0 || $currentDocId === 999999) && $currentDocName !== '');
+                    ?>
+                    <div class="row g-2 mb-3 align-items-end" id="invoice-doctor-panel">
+                        <input type="hidden" name="doc_id" id="hidden_doc_id" value="<?= $currentDocId ?>">
+                        <input type="hidden" name="doc_name" id="hidden_doc_name" value="<?= esc($currentDocName) ?>">
+
+                        <div class="col-md-4 col-sm-6">
+                            <label class="form-label form-label-sm mb-1 fw-bold text-secondary">
+                                <i class="bi bi-person-badge"></i> Doctor
+                            </label>
+                            <select id="invoice_doc_select" class="form-select form-select-sm">
+                                <option value="">-- Select Doctor --</option>
+                                <?php foreach (($docList ?? []) as $doc): ?>
+                                    <?php
+                                        $dId = (int) ($doc->id ?? 0);
+                                        $dName = trim((string) ($doc->p_fname ?? ('Doctor #' . $dId)));
+                                        $isSelected = (!$isOtherDoc && $currentDocId === $dId);
+                                    ?>
+                                    <option value="<?= $dId ?>" data-name="<?= esc($dName) ?>" <?= $isSelected ? 'selected' : '' ?>>
+                                        <?= esc($dName) ?>
+                                    </option>
+                                <?php endforeach; ?>
+                                <option value="other" <?= $isOtherDoc ? 'selected' : '' ?>>Outside Doctor / Other</option>
+                            </select>
                         </div>
-                        <div class="col-md-3">
-                            <label class="form-label form-label-sm mb-1">Doctor Name</label>
-                            <input type="text" name="doc_name" value="<?= esc($invoice->doc_name ?? '') ?>" class="form-control form-control-sm">
+
+                        <div class="col-md-4 col-sm-6" id="wrap_doc_other" style="<?= $isOtherDoc ? '' : 'display: none;' ?>">
+                            <label class="form-label form-label-sm mb-1 fw-bold text-secondary">
+                                <i class="bi bi-pencil-square"></i> Outside Doctor Name
+                            </label>
+                            <div class="input-group input-group-sm">
+                                <input type="text" id="input_doc_other" class="form-control form-control-sm" placeholder="Enter Doctor Name" value="<?= $isOtherDoc ? esc($currentDocName) : '' ?>">
+                                <button type="button" id="btn_save_doc_other" class="btn btn-outline-primary btn-sm" title="Save Doctor">Save</button>
+                            </div>
                         </div>
-                    </form>
+
+                        <div class="col-auto">
+                            <span id="doc_save_indicator" class="badge bg-success-subtle text-success border border-success-subtle py-1 px-2 d-none">
+                                <i class="bi bi-check-circle-fill"></i> Saved
+                            </span>
+                        </div>
+                    </div>
+                <?php else: ?>
+                    <div class="small mb-2 text-muted">
+                        <strong>Doctor :</strong> <span class="badge bg-light text-dark border"><?= esc($invoice->doc_name ?: 'Not Specified') ?></span>
+                    </div>
                 <?php endif; ?>
 
                 <div id="show_item_list" class="table-responsive mb-3">
@@ -210,11 +258,11 @@
                                     </div>
                                     <div class="col-md-4">
                                         <label class="form-label form-label-sm mb-1">Qty</label>
-                                        <input class="form-control form-control-sm" name="qty" id="input_product_qty" placeholder="Qty Like No. of Tab." type="number" min="0" step="1" value="0" autocomplete="off">
+                                        <input class="form-control form-control-sm" name="qty" id="input_product_qty" placeholder="Qty" type="number" min="1" step="1" value="" autocomplete="off" required>
                                     </div>
                                     <div class="col-md-3">
                                         <label class="form-label form-label-sm mb-1">Disc %</label>
-                                        <input class="form-control form-control-sm" name="disc_per" id="input_disc" placeholder="Discount %" type="number" min="0" max="100" $11" value="0" autocomplete="off">
+                                        <input class="form-control form-control-sm" name="disc_per" id="input_disc" placeholder="Discount %" type="number" min="0" max="100" value="0" autocomplete="off">
                                     </div>
                                     <div class="col-md-2">
                                         <button class="btn btn-sm btn-primary w-100" type="submit" id="additem" disabled>Add</button>
@@ -250,7 +298,7 @@
                                                         <input type="hidden" name="inv_id" value="<?= (int)($invoice->id ?? 0) ?>">
                                                         <input type="hidden" name="stock_id" value="<?= (int)($row->stock_id ?? 0) ?>">
                                                         <input type="number" name="qty" value="1" min="1" step="1" class="form-control form-control-sm" style="width:80px;">
-                                                        <input type="number" name="disc_per" value="0" min="0" max="100" $11" class="form-control form-control-sm" style="width:90px;" title="Disc %">
+                                                        <input type="number" name="disc_per" value="0" min="0" max="100" class="form-control form-control-sm" style="width:90px;" title="Disc %">
                                                         <button class="btn btn-sm btn-primary" type="submit">Add</button>
                                                     </form>
                                                 </td>
@@ -545,6 +593,7 @@
                 addBtn.disabled = !item.l_ss_no;
             }
             if (qtyInput) {
+                qtyInput.value = '';
                 qtyInput.focus();
             }
         }
@@ -737,11 +786,13 @@
                 }
 
                 var qtyInput = document.getElementById('input_product_qty');
-                var qtyValue = parseFloat((qtyInput && qtyInput.value) ? qtyInput.value : '0');
-                if (!qtyValue || qtyValue <= 0) {
+                var rawQty = (qtyInput && qtyInput.value) ? qtyInput.value.trim() : '';
+                var qtyValue = parseFloat(rawQty || '0');
+                if (!rawQty || isNaN(qtyValue) || qtyValue <= 0) {
                     event.preventDefault();
-                    alert('Enter valid Qty greater than 0.');
+                    alert('Please enter valid Qty greater than 0.');
                     if (qtyInput) {
+                        qtyInput.value = '';
                         qtyInput.focus();
                     }
                     return;
@@ -774,5 +825,129 @@
         if (addBtn) {
             addBtn.accessKey = 'i';
         }
+
+        // Doctor Select & Outside Doctor AJAX save handler
+        (function () {
+            var docSelect = document.getElementById('invoice_doc_select');
+            var wrapOther = document.getElementById('wrap_doc_other');
+            var inputOther = document.getElementById('input_doc_other');
+            var btnSaveOther = document.getElementById('btn_save_doc_other');
+            var hiddenDocId = document.getElementById('hidden_doc_id');
+            var hiddenDocName = document.getElementById('hidden_doc_name');
+            var saveIndicator = document.getElementById('doc_save_indicator');
+            var invId = <?= (int) ($invoice->id ?? 0) ?>;
+
+            if (!docSelect || !invId) {
+                return;
+            }
+
+            function showSaveStatus(text, isError) {
+                if (!saveIndicator) return;
+                saveIndicator.classList.remove('d-none', 'bg-success-subtle', 'text-success', 'border-success-subtle', 'bg-danger-subtle', 'text-danger', 'border-danger-subtle');
+                if (isError) {
+                    saveIndicator.classList.add('bg-danger-subtle', 'text-danger', 'border-danger-subtle');
+                    saveIndicator.innerHTML = '<i class="bi bi-exclamation-circle-fill"></i> ' + (text || 'Error');
+                } else {
+                    saveIndicator.classList.add('bg-success-subtle', 'text-success', 'border-success-subtle');
+                    saveIndicator.innerHTML = '<i class="bi bi-check-circle-fill"></i> ' + (text || 'Saved');
+                }
+                setTimeout(function () {
+                    if (saveIndicator) saveIndicator.classList.add('d-none');
+                }, 2500);
+            }
+
+            function updateDoctorAjax(docId, docName, onSuccess) {
+                var csrfInput = document.querySelector('input[name="<?= csrf_token() ?>"]');
+                var csrfHash = csrfInput ? csrfInput.value : '';
+
+                var body = new URLSearchParams();
+                body.append('<?= csrf_token() ?>', csrfHash);
+                body.append('med_invoice_id', String(invId));
+                body.append('doc_id', String(docId));
+                body.append('doc_name', String(docName || ''));
+
+                fetch('<?= base_url('Medical/update_doctor') ?>', {
+                    method: 'POST',
+                    body: body,
+                    headers: {
+                        'X-Requested-With': 'XMLHttpRequest',
+                        'Content-Type': 'application/x-www-form-urlencoded'
+                    }
+                }).then(function (res) {
+                    return res.json();
+                }).then(function (res) {
+                    if (res && res.csrfHash) {
+                        document.querySelectorAll('input[name="<?= csrf_token() ?>"]').forEach(function (inp) {
+                            inp.value = res.csrfHash;
+                        });
+                    }
+                    if (res && res.status) {
+                        if (hiddenDocId) hiddenDocId.value = docId;
+                        if (hiddenDocName) hiddenDocName.value = docName;
+                        showSaveStatus(docId === 0 ? 'Outside Doctor Saved' : 'Doctor Updated', false);
+                        if (typeof onSuccess === 'function') onSuccess();
+                    } else {
+                        showSaveStatus((res && res.remark) ? res.remark : 'Save Failed', true);
+                    }
+                }).catch(function () {
+                    showSaveStatus('Network Error', true);
+                });
+            }
+
+            docSelect.addEventListener('change', function () {
+                var val = docSelect.value;
+                if (val === 'other') {
+                    if (wrapOther) {
+                        wrapOther.style.display = '';
+                    }
+                    if (inputOther) {
+                        inputOther.focus();
+                        if (inputOther.value.trim() !== '') {
+                            updateDoctorAjax(0, inputOther.value.trim());
+                        }
+                    }
+                } else if (val === '') {
+                    if (wrapOther) {
+                        wrapOther.style.display = 'none';
+                    }
+                    updateDoctorAjax(0, '');
+                } else {
+                    if (wrapOther) {
+                        wrapOther.style.display = 'none';
+                    }
+                    var opt = docSelect.options[docSelect.selectedIndex];
+                    var docName = opt ? (opt.getAttribute('data-name') || opt.text.trim()) : '';
+                    updateDoctorAjax(parseInt(val, 10), docName);
+                }
+            });
+
+            function saveOtherDoctor() {
+                if (!inputOther) return;
+                var otherName = inputOther.value.trim();
+                if (!otherName) {
+                    inputOther.focus();
+                    showSaveStatus('Enter Doctor Name', true);
+                    return;
+                }
+                updateDoctorAjax(0, otherName);
+            }
+
+            if (btnSaveOther) {
+                btnSaveOther.addEventListener('click', saveOtherDoctor);
+            }
+            if (inputOther) {
+                inputOther.addEventListener('keydown', function (e) {
+                    if (e.key === 'Enter') {
+                        e.preventDefault();
+                        saveOtherDoctor();
+                    }
+                });
+                inputOther.addEventListener('blur', function () {
+                    if (docSelect.value === 'other' && inputOther.value.trim() !== '') {
+                        saveOtherDoctor();
+                    }
+                });
+            }
+        })();
     })();
 </script>

@@ -164,23 +164,51 @@
         </div>
 
         <div class="card mb-0">
-            <div class="card-body d-flex flex-wrap gap-2">
-                <div class="flex-grow-1">
-                    <label class="form-label">Doctor</label>
-                    <select class="form-select" id="doc-select">
-                        <option value="">Select</option>
-                        <?php foreach (($docList ?? []) as $doc): ?>
-                            <option value="<?= esc($doc->id ?? '') ?>" data-name="<?= esc($doc->p_fname ?? '') ?>" <?= ((int)($invoice->doc_id ?? 0) === (int)($doc->id ?? 0)) ? 'selected' : '' ?>>
-                                <?= esc($doc->p_fname ?? ('Doctor #' . ($doc->id ?? ''))) ?>
-                            </option>
-                        <?php endforeach; ?>
-                    </select>
-                    <input type="hidden" name="doc_id" id="doc_id" value="<?= (int)($invoice->doc_id ?? 0) ?>">
-                    <input type="hidden" name="doc_name" id="doc_name" value="<?= esc($invoice->doc_name ?? '') ?>">
-                </div>
-                <div class="d-flex align-items-end gap-2">
-                    <button type="submit" class="btn btn-success">Update Invoice Header</button>
-                    <a class="btn btn-outline-secondary" href="javascript:load_form_div('<?= base_url('Medical/invoice_edit/' . (int)($invoice->id ?? 0)) ?>','medical-main');">Cancel</a>
+            <div class="card-body">
+                <?php
+                    $masterDocId = (int) ($invoice->doc_id ?? 0);
+                    $masterDocName = trim((string) ($invoice->doc_name ?? ''));
+                    $masterDocFound = false;
+                    if (!empty($docList) && $masterDocId > 0) {
+                        foreach ($docList as $d) {
+                            if ((int) ($d->id ?? 0) === $masterDocId) {
+                                $masterDocFound = true;
+                                break;
+                            }
+                        }
+                    }
+                    $masterIsOtherDoc = (!$masterDocFound && ($masterDocId === 0 || $masterDocId === 999999) && $masterDocName !== '');
+                ?>
+                <div class="row g-2 align-items-end">
+                    <div class="col-md-4">
+                        <label class="form-label">Doctor</label>
+                        <select class="form-select" id="doc-select">
+                            <option value="">-- Select Doctor --</option>
+                            <?php foreach (($docList ?? []) as $doc): ?>
+                                <?php
+                                    $dId = (int) ($doc->id ?? 0);
+                                    $dName = trim((string) ($doc->p_fname ?? ('Doctor #' . $dId)));
+                                    $isSelected = (!$masterIsOtherDoc && $masterDocId === $dId);
+                                ?>
+                                <option value="<?= $dId ?>" data-name="<?= esc($dName) ?>" <?= $isSelected ? 'selected' : '' ?>>
+                                    <?= esc($dName) ?>
+                                </option>
+                            <?php endforeach; ?>
+                            <option value="other" <?= $masterIsOtherDoc ? 'selected' : '' ?>>Outside Doctor / Other</option>
+                        </select>
+                        <input type="hidden" name="doc_id" id="doc_id" value="<?= $masterDocId ?>">
+                        <input type="hidden" name="doc_name" id="doc_name" value="<?= esc($masterDocName) ?>">
+                    </div>
+
+                    <div class="col-md-4" id="wrap_master_doc_other" style="<?= $masterIsOtherDoc ? '' : 'display: none;' ?>">
+                        <label class="form-label">Outside Doctor Name</label>
+                        <input type="text" class="form-control" id="master_doc_other_input" placeholder="Enter Doctor Name" value="<?= $masterIsOtherDoc ? esc($masterDocName) : '' ?>">
+                    </div>
+
+                    <div class="col-md-4 d-flex align-items-end gap-2">
+                        <button type="submit" class="btn btn-success">Update Invoice Header</button>
+                        <a class="btn btn-outline-secondary" href="javascript:load_form_div('<?= base_url('Medical/invoice_edit/' . (int)($invoice->id ?? 0)) ?>','medical-main');">Cancel</a>
+                    </div>
                 </div>
             </div>
         </div>
@@ -419,20 +447,37 @@
 
     (function () {
         var select = document.getElementById('doc-select');
+        var wrapOther = document.getElementById('wrap_master_doc_other');
+        var otherInput = document.getElementById('master_doc_other_input');
+        var docIdInput = document.getElementById('doc_id');
+        var docNameInput = document.getElementById('doc_name');
         if (!select) {
             return;
         }
 
-        select.addEventListener('change', function () {
-            var option = select.options[select.selectedIndex];
-            var docIdInput = document.getElementById('doc_id');
-            var docNameInput = document.getElementById('doc_name');
-            if (docIdInput) {
-                docIdInput.value = option ? (option.value || 0) : 0;
+        function syncDoctor() {
+            var val = select.value;
+            if (val === 'other') {
+                if (wrapOther) wrapOther.style.display = '';
+                if (docIdInput) docIdInput.value = 0;
+                if (docNameInput && otherInput) docNameInput.value = otherInput.value.trim();
+                if (otherInput) otherInput.focus();
+            } else {
+                if (wrapOther) wrapOther.style.display = 'none';
+                var option = select.options[select.selectedIndex];
+                if (docIdInput) docIdInput.value = option ? (option.value || 0) : 0;
+                if (docNameInput) docNameInput.value = option ? (option.getAttribute('data-name') || '') : '';
             }
-            if (docNameInput) {
-                docNameInput.value = option ? (option.getAttribute('data-name') || '') : '';
-            }
-        });
+        }
+
+        select.addEventListener('change', syncDoctor);
+        if (otherInput) {
+            otherInput.addEventListener('input', function () {
+                if (select.value === 'other' && docNameInput) {
+                    docNameInput.value = otherInput.value.trim();
+                    if (docIdInput) docIdInput.value = 0;
+                }
+            });
+        }
     })();
 </script>

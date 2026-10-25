@@ -2318,12 +2318,22 @@ class Ipd extends BaseController
         }
 
         $this->recalculateIpdBillingSafely($ipdId, 'medical-bill.credit-type');
+        $updatedIpd = $this->db->table('ipd_master')->where('id', $ipdId)->get()->getRow();
 
         return $this->response->setJSON([
             'ok' => true,
             'invoice_id' => $invoiceId,
             'ipd_id' => $ipdId,
             'ipd_credit_type' => $creditType,
+            'summary' => [
+                'charge_amount' => number_format((float) ($updatedIpd->charge_amount ?? 0), 2),
+                'med_amount' => number_format((float) ($updatedIpd->med_amount ?? 0), 2),
+                'net_amount' => number_format((float) ($updatedIpd->net_amount ?? 0), 2),
+                'total_paid_amount' => number_format((float) ($updatedIpd->total_paid_amount ?? 0), 2),
+                'balance_amount' => number_format((float) ($updatedIpd->balance_amount ?? 0), 2),
+                'cash_med_amount' => number_format((float) ($updatedIpd->cash_med_amount ?? 0), 2),
+                'med_paid' => number_format((float) ($updatedIpd->med_paid ?? 0), 2),
+            ],
         ]);
     }
 

@@ -96,9 +96,9 @@
                             <?php
                                 $invoiceId = (int) ($row->id ?? 0);
                                 $ipdCredit = (int)($row->ipd_credit ?? 0);
-                                $groupInvoiceId = (int)($row->group_invoice_id ?? 0);
+                                $ipdCreditType = (int)($row->ipd_credit_type ?? 1);
                                 $creditText = ($ipdCredit > 0) ? 'Credit' : 'CASH';
-                                $packageText = ($ipdCredit > 0 && $groupInvoiceId > 0) ? 'Yes' : 'No';
+                                $packageText = ($ipdCredit > 0 && $ipdCreditType === 0) ? 'Yes' : 'No';
                                 $editMeta = $invoiceEditMeta[$invoiceId] ?? ['can_edit' => true, 'reason' => ''];
                                 $canEditRow = !empty($editMeta['can_edit']);
                                 $editReason = (string) ($editMeta['reason'] ?? 'Invoice is view-only.');
