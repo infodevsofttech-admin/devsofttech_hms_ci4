@@ -74,8 +74,21 @@ function remove_custom_item() {
     var itemid = parseInt($('#l_ssno').val() || '0', 10);
     var inv_id = <?= (int) ($invoice->id ?? 0) ?>;
 
-    if (itemid <= 0 || rqty <= 0) {
-        notify('error', 'Please Attention', 'Choose product and quantity');
+    if (itemid <= 0) {
+        notify('error', 'Please Attention', 'Please search and select a product first');
+        $('#input_drug').focus();
+        return;
+    }
+    if (rqty <= 0) {
+        notify('error', 'Please Attention', 'Please enter a valid return quantity');
+        $('#input_product_qty').focus();
+        return;
+    }
+
+    var availQty = parseFloat($('#hid_c_qty').val() || 0);
+    if (availQty > 0 && rqty > availQty) {
+        notify('error', 'Please Attention', 'Return quantity (' + rqty + ') cannot exceed available stock (' + availQty + ')');
+        $('#input_product_qty').focus();
         return;
     }
 
@@ -106,8 +119,11 @@ function remove_custom_item() {
         $('#input_product_unit_rate').val('');
         $('#l_ssno').val(0);
         $('#input_drug').val('');
-        $('#input_product_qty').val('0');
+        $('#input_product_qty').val('');
         $('#stock_product_qty').html('');
+        $('#input_supplier_info').html('');
+        $('#input_expiry_status').html('');
+        $('#selected_item_preview').hide();
         $('#purchase_id').val('');
 
         notify('success', 'Please Attention', data.msg_text || 'Item Added');

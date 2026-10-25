@@ -71,7 +71,7 @@
                             <a class="medical-master-link" href="javascript:load_form_div('<?= base_url('Medical/expire_stock') ?>','medical-main','Expiry Medicine :Pharmacy');">Expiry Medicine</a>
                         </li>
                         <li class="list-group-item px-0">
-                            <a class="medical-master-link" href="javascript:load_form_div('<?= base_url('Medical/master_report/lost-medicine') ?>','medical-main','Lost Medicine :Pharmacy');">Lost Medicine</a>
+                            <a class="medical-master-link" href="javascript:load_form_div('<?= base_url('Medical/disposal_register') ?>','medical-main','Expired &amp; Damaged Medicine Disposal Register :Pharmacy');">Expired / Lost Medicine Disposal Register</a>
                         </li>
                         <li class="list-group-item px-0">
                             <a class="medical-master-link" href="javascript:load_form_div('<?= base_url('Medical_Report/Short_medicine') ?>','medical-main','Short Medicine List :Pharmacy');">Short Medicine List</a>

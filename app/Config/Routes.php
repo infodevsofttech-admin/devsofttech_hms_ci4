@@ -222,6 +222,14 @@ $routes->get('Medical_backpanel/Stock_result_excel/(:segment)/(:segment)/(:segme
 $routes->get('Medical_backpanel/Stock_result_excel_3/(:segment)/(:segment)/(:segment)/(:segment)', 'Medical::stock_result_excel_3/$1/$2/$3/$4');
 $routes->get('Medical/expire_stock', 'Medical::expire_stock');
 $routes->get('Medical/expire_stock_pdf', 'Medical::expire_stock_pdf');
+$routes->post('Medical/dispose_expired_stock', 'Medical::dispose_expired_stock');
+$routes->post('Medical/quick_create_purchase_return', 'Medical::quick_create_purchase_return');
+$routes->match(['GET', 'POST'], 'Medical/disposal_register', 'Medical::disposal_register');
+$routes->get('Medical/disposal_register_pdf', 'Medical::disposal_register_pdf');
+$routes->post('Medical_backpanel/dispose_expired_stock', 'Medical::dispose_expired_stock');
+$routes->post('Medical_backpanel/quick_create_purchase_return', 'Medical::quick_create_purchase_return');
+$routes->match(['GET', 'POST'], 'Medical_backpanel/disposal_register', 'Medical::disposal_register');
+$routes->get('Medical_backpanel/disposal_register_pdf', 'Medical::disposal_register_pdf');
 $routes->get('Medical/stocktransfer', 'Medical::stocktransfer');
 $routes->get('Medical/merge_product', 'Medical::merge_product');
 $routes->post('Medical/product_info/(:num)', 'Medical::product_info/$1');

@@ -562,19 +562,37 @@ class Medical extends BaseController
                 $params[] = '%' . $term . '%';
             }
 
+            $hasPi = $this->db->tableExists('purchase_invoice');
+            $hasSupp = $this->db->tableExists('med_supplier');
+            $piJoin = ($hasPi && in_array('purchase_id', $tFields, true)) ? ' LEFT JOIN purchase_invoice pi ON t.purchase_id = pi.id' : '';
+            $suppJoin = ($hasPi && $hasSupp) ? ' LEFT JOIN med_supplier s ON pi.sid = s.sid' : '';
+            $suppNameCol = ($hasPi && $hasSupp) ? "IFNULL(s.name_supplier, IFNULL(pi.supp_name, '-'))" : "'-'";
+            $suppShortCol = ($hasPi && $hasSupp) ? "IFNULL(s.short_name, '')" : "''";
+            $suppIdCol = $hasPi ? "IFNULL(pi.sid, 0)" : "0";
+            $purRateCol = in_array('purchase_unit_rate', $tFields, true) ? 't.purchase_unit_rate' : '0';
+            $purIdCol = in_array('purchase_id', $tFields, true) ? 't.purchase_id' : '0';
+
             $sql = "SELECT t.id, p.id AS item_code, p.item_name AS item_name,
                         " . (in_array('formulation', $pFields, true) ? 'p.formulation' : "''") . " AS formulation,
                         " . (in_array('batch_no', $tFields, true) ? 't.batch_no' : "''") . " AS batch_no,
                         " . (in_array('expiry_date', $tFields, true) ? 't.expiry_date' : 'NULL') . " AS expiry_date,
                         " . (in_array('expiry_date', $tFields, true) ? "DATE_FORMAT(t.expiry_date, '%Y-%m-%d')" : "''") . " AS expiry_date_str,
+                        " . (in_array('expiry_date', $tFields, true) ? "DATE_FORMAT(t.expiry_date, '%d/%m/%Y')" : "''") . " AS expiry_date_display,
                         " . (in_array('mrp', $tFields, true) ? 't.mrp' : '0') . " AS mrp,
                         " . (in_array('selling_unit_rate', $tFields, true) ? 't.selling_unit_rate' : '0') . " AS selling_unit_rate,
+                        " . $purRateCol . " AS purchase_unit_rate,
                         " . (in_array('packing', $tFields, true) ? 't.packing' : '1') . " AS packing,
                         " . $stockQtySql . " AS c_qty,
                         " . (in_array('expiry_date', $tFields, true) ? 'DATEDIFF(LAST_DAY(t.expiry_date), CURDATE())' : '9999') . " AS expiry_month_pending,
-                        " . (in_array('stock_date', $tFields, true) ? "IF(t.stock_date>'2025-09-21',1,0)" : '0') . " AS new_stock
+                        " . (in_array('stock_date', $tFields, true) ? "IF(t.stock_date>'2025-09-21',1,0)" : '0') . " AS new_stock,
+                        " . $purIdCol . " AS purchase_id,
+                        " . $suppNameCol . " AS supplier_name,
+                        " . $suppShortCol . " AS supplier_short_name,
+                        " . $suppIdCol . " AS supplier_id
                     FROM med_product_master p
                     JOIN purchase_invoice_item t ON p.id=t.item_code
+                    " . $piJoin . "
+                    " . $suppJoin . "
                     WHERE " . $whereSearch . "
                         AND " . $stockQtySql . " > 0
                     ORDER BY item_name, t.id DESC
@@ -585,18 +603,36 @@ class Medical extends BaseController
             $itemNameCol = in_array('item_name', $tFields, true) ? 't.item_name' : (in_array('Item_name', $tFields, true) ? 't.Item_name' : "''");
             $itemCodeCol = in_array('item_code', $tFields, true) ? 't.item_code' : '0';
 
+            $hasPi = $this->db->tableExists('purchase_invoice');
+            $hasSupp = $this->db->tableExists('med_supplier');
+            $piJoin = ($hasPi && in_array('purchase_id', $tFields, true)) ? ' LEFT JOIN purchase_invoice pi ON t.purchase_id = pi.id' : '';
+            $suppJoin = ($hasPi && $hasSupp) ? ' LEFT JOIN med_supplier s ON pi.sid = s.sid' : '';
+            $suppNameCol = ($hasPi && $hasSupp) ? "IFNULL(s.name_supplier, IFNULL(pi.supp_name, '-'))" : "'-'";
+            $suppShortCol = ($hasPi && $hasSupp) ? "IFNULL(s.short_name, '')" : "''";
+            $suppIdCol = $hasPi ? "IFNULL(pi.sid, 0)" : "0";
+            $purRateCol = in_array('purchase_unit_rate', $tFields, true) ? 't.purchase_unit_rate' : '0';
+            $purIdCol = in_array('purchase_id', $tFields, true) ? 't.purchase_id' : '0';
+
             $sql = "SELECT t.id, " . $itemCodeCol . " AS item_code, " . $itemNameCol . " AS item_name,
                         " . (in_array('formulation', $tFields, true) ? 't.formulation' : "''") . " AS formulation,
                         " . (in_array('batch_no', $tFields, true) ? 't.batch_no' : "''") . " AS batch_no,
                         " . (in_array('expiry_date', $tFields, true) ? 't.expiry_date' : 'NULL') . " AS expiry_date,
                         " . (in_array('expiry_date', $tFields, true) ? "DATE_FORMAT(t.expiry_date, '%Y-%m-%d')" : "''") . " AS expiry_date_str,
+                        " . (in_array('expiry_date', $tFields, true) ? "DATE_FORMAT(t.expiry_date, '%d/%m/%Y')" : "''") . " AS expiry_date_display,
                         " . (in_array('mrp', $tFields, true) ? 't.mrp' : '0') . " AS mrp,
                         " . (in_array('selling_unit_rate', $tFields, true) ? 't.selling_unit_rate' : '0') . " AS selling_unit_rate,
+                        " . $purRateCol . " AS purchase_unit_rate,
                         " . (in_array('packing', $tFields, true) ? 't.packing' : '1') . " AS packing,
                         " . $stockQtySql . " AS c_qty,
                         " . (in_array('expiry_date', $tFields, true) ? 'DATEDIFF(LAST_DAY(t.expiry_date), CURDATE())' : '9999') . " AS expiry_month_pending,
-                        " . (in_array('stock_date', $tFields, true) ? "IF(t.stock_date>'2025-09-21',1,0)" : '0') . " AS new_stock
+                        " . (in_array('stock_date', $tFields, true) ? "IF(t.stock_date>'2025-09-21',1,0)" : '0') . " AS new_stock,
+                        " . $purIdCol . " AS purchase_id,
+                        " . $suppNameCol . " AS supplier_name,
+                        " . $suppShortCol . " AS supplier_short_name,
+                        " . $suppIdCol . " AS supplier_id
                     FROM purchase_invoice_item t
+                    " . $piJoin . "
+                    " . $suppJoin . "
                     WHERE (" . $itemNameCol . " LIKE ?)
                         AND " . $stockQtySql . " > 0
                     ORDER BY item_name, t.id DESC
@@ -609,15 +645,25 @@ class Medical extends BaseController
         foreach ($rows as $row) {
             $pendingDays = (float) ($row['expiry_month_pending'] ?? 9999);
             $noExpMonth = round($pendingDays / 30, 2);
+            $isExpired = ($pendingDays <= 0);
 
             $msgDesc = '';
-            if ($noExpMonth <= 4 && $noExpMonth >= 2) {
+            if ($isExpired) {
+                $monthsAgo = abs($noExpMonth);
+                $msgDesc = ' <span style="color: red; font-weight: 600;">Expired' . ($monthsAgo > 0 ? ' : ' . $monthsAgo . ' Month' : '') . ' </span>';
+            } elseif ($noExpMonth <= 1.0) {
+                $msgDesc = ' <span style="color: Orange; font-weight: 500;">Expire Within : ' . $noExpMonth . ' Month </span>';
+            } elseif ($noExpMonth <= 4.0) {
                 $msgDesc = ' <span style="color: blue;">Expire Within : ' . $noExpMonth . ' Month </span>';
-            } elseif ($noExpMonth == 1.0) {
-                $msgDesc = ' <span style="color: Orange;">Expired : ' . $noExpMonth . ' Month </span>';
-            } elseif ($noExpMonth < 1) {
-                $msgDesc = ' <span style="color: red;">Expired : ' . $noExpMonth . ' Month </span>';
             }
+
+            $purUnitRate = (float) ($row['purchase_unit_rate'] ?? 0);
+            if ($purUnitRate <= 0) {
+                $packing = (float) ($row['packing'] ?? 1);
+                $purUnitRate = $packing > 0 ? round(((float) ($row['mrp'] ?? 0)) / $packing, 4) : (float) ($row['selling_unit_rate'] ?? 0);
+            }
+
+            $expDisplay = (string) ($row['expiry_date_display'] ?? ($row['expiry_date_str'] ?? ''));
 
             $result[] = [
                 'label' => trim((string) ($row['item_name'] ?? '') . ' ' . (string) ($row['formulation'] ?? ''))
@@ -632,16 +678,23 @@ class Medical extends BaseController
                 'l_ss_no' => (string) ($row['id'] ?? ''),
                 'l_Batch' => (string) ($row['batch_no'] ?? ''),
                 'l_Expiry' => (string) ($row['expiry_date_str'] ?? ''),
+                'l_expiry_display' => $expDisplay,
                 'l_mrp' => (string) ($row['mrp'] ?? ''),
                 'l_unit_rate' => (string) (
                     ((float) ($row['packing'] ?? 0) > 0)
                         ? round(((float) ($row['mrp'] ?? 0)) / ((float) ($row['packing'] ?? 1)), 4)
                         : (float) ($row['selling_unit_rate'] ?? 0)
                 ),
+                'l_pur_unit_rate' => (string) ($purUnitRate > 0 ? round($purUnitRate, 4) : 0),
+                'l_purchase_id' => (string) ($row['purchase_id'] ?? 0),
                 'l_c_qty' => (string) ($row['c_qty'] ?? ''),
                 'l_packing' => (string) ($row['packing'] ?? ''),
                 'l_new_stock' => (string) ($row['new_stock'] ?? 0),
                 'item_code' => (string) ($row['item_code'] ?? ''),
+                'supplier_name' => (string) ($row['supplier_name'] ?? '-'),
+                'supplier_short_name' => (string) ($row['supplier_short_name'] ?? ''),
+                'supplier_id' => (int) ($row['supplier_id'] ?? 0),
+                'is_expired' => $isExpired ? 1 : 0,
             ];
         }
 
@@ -12827,7 +12880,9 @@ class Medical extends BaseController
         $sql = "SELECT p.id AS pur_id, p.invoice_no, p.date_of_invoice,
                     DATE_FORMAT(p.date_of_invoice,'%d-%m-%Y') AS str_date_of_invoice,
                     DATE_FORMAT(i.expiry_date,'%m-%Y') AS exp_date,
+                    DATE_FORMAT(i.expiry_date,'%d-%m-%Y') AS exp_date_full,
                     p.sid, s.name_supplier, s.short_name,
+                    i.id AS purchase_item_id,
                     i.*, (i.total_unit-i.total_sale_unit-i.total_lost_unit-i.total_return_unit) AS cur_qty
                 FROM purchase_invoice p
                 JOIN med_supplier s ON p.sid=s.sid
@@ -12835,7 +12890,7 @@ class Medical extends BaseController
                 WHERE i.remove_item=0
                   AND i.item_return=0
                   AND (i.total_unit-i.total_sale_unit-i.total_lost_unit-i.total_return_unit)>0
-                  AND p.date_of_invoice>=DATE_ADD(CURDATE(), INTERVAL -1 YEAR)
+                  AND p.date_of_invoice>=DATE_ADD(CURDATE(), INTERVAL -2 YEAR)
                   AND i.expiry_date<DATE_ADD(CURDATE(), INTERVAL 3 MONTH)
                 ORDER BY p.id DESC";
 
@@ -12881,6 +12936,362 @@ class Medical extends BaseController
         return $this->response
             ->setHeader('Content-Type', 'application/pdf')
             ->setBody($mpdf->Output('Expiry_Medicine_Report_' . date('Ymd_His') . '.pdf', 'S'));
+    }
+
+    private function ensureDisposalTableExists(): void
+    {
+        $this->db->query("CREATE TABLE IF NOT EXISTS `med_stock_disposal` (
+          `id` int NOT NULL AUTO_INCREMENT,
+          `disposal_no` varchar(50) DEFAULT NULL,
+          `purchase_item_id` int NOT NULL DEFAULT '0',
+          `purchase_id` int NOT NULL DEFAULT '0',
+          `item_code` int DEFAULT NULL,
+          `item_name` varchar(100) DEFAULT NULL,
+          `batch_no` varchar(50) DEFAULT NULL,
+          `expiry_date` date DEFAULT NULL,
+          `sid` int DEFAULT '0',
+          `supplier_name` varchar(100) DEFAULT NULL,
+          `qty` decimal(10,2) NOT NULL DEFAULT '0.00',
+          `mrp` decimal(10,2) DEFAULT '0.00',
+          `purchase_unit_rate` decimal(10,2) DEFAULT '0.00',
+          `total_cost_amount` decimal(10,2) DEFAULT '0.00',
+          `disposal_reason` varchar(100) DEFAULT 'Expired / Outdated',
+          `disposal_method` varchar(100) DEFAULT 'Bio-Medical Waste Handover',
+          `remarks` text DEFAULT NULL,
+          `disposed_by_user_id` int DEFAULT '0',
+          `disposed_by_name` varchar(100) DEFAULT NULL,
+          `disposal_date` date NOT NULL,
+          `insert_time` timestamp NULL DEFAULT CURRENT_TIMESTAMP,
+          PRIMARY KEY (`id`),
+          KEY `idx_disp_item_id` (`purchase_item_id`),
+          KEY `idx_disp_item_code` (`item_code`),
+          KEY `idx_disp_date` (`disposal_date`),
+          KEY `idx_disp_no` (`disposal_no`)
+        ) ENGINE=InnoDB DEFAULT CHARSET=utf8mb4;");
+    }
+
+    private function generateDisposalNo(): string
+    {
+        $prefix = 'EXP' . date('ym');
+        $maxRow = $this->db->table('med_stock_disposal')
+            ->like('disposal_no', $prefix, 'after')
+            ->orderBy('id', 'DESC')
+            ->get(1)
+            ->getRow();
+
+        $seq = 1;
+        if ($maxRow && ! empty($maxRow->disposal_no)) {
+            $numPart = (int) substr($maxRow->disposal_no, strlen($prefix));
+            $seq = $numPart + 1;
+        }
+
+        return $prefix . str_pad((string) $seq, 3, '0', STR_PAD_LEFT);
+    }
+
+    public function dispose_expired_stock()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setJSON(['status' => 0, 'msg' => 'Invalid request']);
+        }
+
+        $this->ensureDisposalTableExists();
+
+        $itemId = (int) ($this->request->getPost('item_id') ?? 0);
+        $qty = (float) ($this->request->getPost('qty') ?? 0);
+        $reason = trim((string) ($this->request->getPost('reason') ?? 'Expired / Outdated'));
+        $method = trim((string) ($this->request->getPost('method') ?? 'Bio-Medical Waste Handover'));
+        $remarks = trim((string) ($this->request->getPost('remarks') ?? ''));
+
+        if ($itemId <= 0 || $qty <= 0) {
+            return $this->response->setJSON(['status' => 0, 'msg' => 'Invalid item or quantity']);
+        }
+
+        $item = $this->db->table('purchase_invoice_item i')
+            ->select("i.*, p.sid, IFNULL(s.name_supplier, IFNULL(p.supp_name, '-')) AS name_supplier, (i.total_unit - i.total_sale_unit - i.total_lost_unit - i.total_return_unit) AS cur_qty", false)
+            ->join('purchase_invoice p', 'i.purchase_id = p.id', 'left')
+            ->join('med_supplier s', 'p.sid = s.sid', 'left')
+            ->where('i.id', $itemId)
+            ->get()
+            ->getRow();
+
+        if (! $item) {
+            return $this->response->setJSON(['status' => 0, 'msg' => 'Stock batch not found']);
+        }
+
+        $curQty = (float) ($item->cur_qty ?? 0);
+        if ($curQty <= 0) {
+            return $this->response->setJSON(['status' => 0, 'msg' => 'Current stock is 0. Already disposed or returned.']);
+        }
+
+        if ($qty > $curQty) {
+            return $this->response->setJSON(['status' => 0, 'msg' => "Disposal quantity ({$qty}) cannot exceed available stock ({$curQty})"]);
+        }
+
+        $user = service('auth')->user();
+        $userId = $user ? (int) $user->id : (int) (session('user_id') ?? 0);
+        $userName = $user ? (string) ($user->username ?? $user->email ?? 'Pharmacist') : (string) (session('username') ?? 'Pharmacist');
+
+        $purRate = (float) ($item->purchase_unit_rate ?? 0);
+        if ($purRate <= 0) {
+            $packing = (float) ($item->packing ?? 1);
+            $purRate = $packing > 0 ? round(((float) ($item->mrp ?? 0)) / $packing, 2) : (float) ($item->selling_unit_rate ?? 0);
+        }
+        $totalCost = round($qty * $purRate, 2);
+
+        $disposalNo = $this->generateDisposalNo();
+
+        $disposalData = [
+            'disposal_no' => $disposalNo,
+            'purchase_item_id' => $itemId,
+            'purchase_id' => (int) ($item->purchase_id ?? 0),
+            'item_code' => (int) ($item->item_code ?? 0),
+            'item_name' => (string) ($item->Item_name ?? ($item->item_name ?? '')),
+            'batch_no' => (string) ($item->batch_no ?? ''),
+            'expiry_date' => $item->expiry_date ?? null,
+            'sid' => (int) ($item->sid ?? 0),
+            'supplier_name' => (string) ($item->name_supplier ?? '-'),
+            'qty' => $qty,
+            'mrp' => (float) ($item->mrp ?? 0),
+            'purchase_unit_rate' => $purRate,
+            'total_cost_amount' => $totalCost,
+            'disposal_reason' => $reason !== '' ? $reason : 'Expired / Outdated',
+            'disposal_method' => $method !== '' ? $method : 'Bio-Medical Waste Handover',
+            'remarks' => $remarks !== '' ? $remarks : null,
+            'disposed_by_user_id' => $userId,
+            'disposed_by_name' => $userName,
+            'disposal_date' => date('Y-m-d'),
+        ];
+
+        $this->db->table('med_stock_disposal')->insert($disposalData);
+        $dispId = (int) $this->db->insertID();
+
+        if ($dispId <= 0) {
+            return $this->response->setJSON(['status' => 0, 'msg' => 'Failed to record disposal']);
+        }
+
+        // Increment total_lost_unit in purchase_invoice_item
+        $this->db->table('purchase_invoice_item')
+            ->where('id', $itemId)
+            ->set('total_lost_unit', "total_lost_unit + {$qty}", false)
+            ->update();
+
+        $remainingQty = $curQty - $qty;
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'msg' => "Successfully Disposed {$qty} units (Voucher: {$disposalNo}). Stock removed from inventory.",
+            'disposal_no' => $disposalNo,
+            'disposal_id' => $dispId,
+            'remaining_qty' => $remainingQty,
+        ]);
+    }
+
+    public function quick_create_purchase_return()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        if (! $this->request->isAJAX()) {
+            return $this->response->setJSON(['status' => 0, 'msg' => 'Invalid request']);
+        }
+
+        $itemId = (int) ($this->request->getPost('item_id') ?? 0);
+        $qty = (float) ($this->request->getPost('qty') ?? 0);
+
+        if ($itemId <= 0 || $qty <= 0) {
+            return $this->response->setJSON(['status' => 0, 'msg' => 'Invalid item or quantity']);
+        }
+
+        $item = $this->db->table('purchase_invoice_item i')
+            ->select("i.*, p.sid, IFNULL(s.name_supplier, IFNULL(p.supp_name, '-')) AS name_supplier, (i.total_unit - i.total_sale_unit - i.total_lost_unit - i.total_return_unit) AS cur_qty", false)
+            ->join('purchase_invoice p', 'i.purchase_id = p.id', 'left')
+            ->join('med_supplier s', 'p.sid = s.sid', 'left')
+            ->where('i.id', $itemId)
+            ->get()
+            ->getRow();
+
+        if (! $item) {
+            return $this->response->setJSON(['status' => 0, 'msg' => 'Stock batch not found']);
+        }
+
+        $curQty = (float) ($item->cur_qty ?? 0);
+        if ($curQty <= 0) {
+            return $this->response->setJSON(['status' => 0, 'msg' => 'Current stock is 0.']);
+        }
+
+        if ($qty > $curQty) {
+            return $this->response->setJSON(['status' => 0, 'msg' => "Return quantity ({$qty}) cannot exceed available stock ({$curQty})"]);
+        }
+
+        $sid = (int) ($item->sid ?? 0);
+        if ($sid <= 0) {
+            return $this->response->setJSON(['status' => 0, 'msg' => 'No supplier linked with this purchase item. Cannot create supplier return.']);
+        }
+
+        $invNoCol = $this->purchaseReturnInvoiceNoColumn();
+
+        // Check if there is an open/draft purchase return invoice today for this supplier
+        $existingInv = $this->db->table('purchase_return_invoice')
+            ->where('sid', $sid)
+            ->where('date_of_invoice', date('Y-m-d'))
+            ->where('(status = 0 OR status IS NULL)', null, false)
+            ->orderBy('id', 'DESC')
+            ->get(1)
+            ->getRow();
+
+        if ($existingInv) {
+            $invId = (int) $existingInv->id;
+            $invoiceNo = (string) ($existingInv->{$invNoCol} ?? ('PR#' . $invId));
+        } else {
+            // Create a new purchase return invoice
+            $insertData = [
+                'sid' => $sid,
+                'date_of_invoice' => date('Y-m-d'),
+                'status' => 0,
+            ];
+            $this->db->table('purchase_return_invoice')->insert($insertData);
+            $invId = (int) $this->db->insertID();
+
+            $invoiceNo = 'PR' . date('ym') . str_pad((string) ($invId % 1000), 3, '0', STR_PAD_LEFT);
+            $this->db->table('purchase_return_invoice')
+                ->where('id', $invId)
+                ->update([$invNoCol => $invoiceNo]);
+        }
+
+        // Insert into purchase_return_invoice_item
+        $retItemData = [
+            'purchase_inv_id' => $invId,
+            'purchase_item_id' => $itemId,
+            'item_code' => (int) ($item->item_code ?? 0),
+            'Item_name' => (string) ($item->Item_name ?? ($item->item_name ?? '')),
+            'batch_no_r' => (string) ($item->batch_no ?? ''),
+            'expiry_date_r' => $item->expiry_date ?? null,
+            'qty' => $qty,
+        ];
+
+        $this->db->table('purchase_return_invoice_item')->insert($retItemData);
+
+        // Adjust purchase item return unit
+        $this->adjustPurchaseItemReturnUnit($itemId, $qty);
+
+        return $this->response->setJSON([
+            'status' => 1,
+            'msg' => "Item successfully added to Return Invoice {$invoiceNo} (Supplier: {$item->name_supplier})",
+            'inv_id' => $invId,
+            'invoice_no' => $invoiceNo,
+            'supplier_name' => (string) ($item->name_supplier ?? '-'),
+        ]);
+    }
+
+    public function disposal_register()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $this->ensureDisposalTableExists();
+
+        $fromDt = $this->request->getGet('from_date') ?: date('Y-m-01');
+        $toDt = $this->request->getGet('to_date') ?: date('Y-m-d');
+        $search = trim((string) ($this->request->getGet('search') ?? ''));
+
+        $builder = $this->db->table('med_stock_disposal')
+            ->where('disposal_date >=', $fromDt)
+            ->where('disposal_date <=', $toDt);
+
+        if ($search !== '') {
+            $builder->groupStart()
+                ->like('item_name', $search)
+                ->orLike('batch_no', $search)
+                ->orLike('disposal_no', $search)
+                ->orLike('supplier_name', $search)
+                ->groupEnd();
+        }
+
+        $records = $builder->orderBy('id', 'DESC')->get()->getResult();
+
+        $totalUnits = 0.0;
+        $totalLoss = 0.0;
+        foreach ($records as $r) {
+            $totalUnits += (float) ($r->qty ?? 0);
+            $totalLoss += (float) ($r->total_cost_amount ?? 0);
+        }
+
+        return view('medical/disposal_register', [
+            'records' => $records,
+            'from_date' => $fromDt,
+            'to_date' => $toDt,
+            'search' => $search,
+            'total_units' => $totalUnits,
+            'total_loss' => $totalLoss,
+        ]);
+    }
+
+    public function disposal_register_pdf()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $this->ensureDisposalTableExists();
+
+        $fromDt = $this->request->getGet('from_date') ?: date('Y-m-01');
+        $toDt = $this->request->getGet('to_date') ?: date('Y-m-d');
+        $search = trim((string) ($this->request->getGet('search') ?? ''));
+
+        $builder = $this->db->table('med_stock_disposal')
+            ->where('disposal_date >=', $fromDt)
+            ->where('disposal_date <=', $toDt);
+
+        if ($search !== '') {
+            $builder->groupStart()
+                ->like('item_name', $search)
+                ->orLike('batch_no', $search)
+                ->orLike('disposal_no', $search)
+                ->orLike('supplier_name', $search)
+                ->groupEnd();
+        }
+
+        $records = $builder->orderBy('id', 'DESC')->get()->getResult();
+
+        $totalUnits = 0.0;
+        $totalLoss = 0.0;
+        foreach ($records as $r) {
+            $totalUnits += (float) ($r->qty ?? 0);
+            $totalLoss += (float) ($r->total_cost_amount ?? 0);
+        }
+
+        $html = view('medical/disposal_register_pdf', [
+            'records' => $records,
+            'from_date' => $fromDt,
+            'to_date' => $toDt,
+            'total_units' => $totalUnits,
+            'total_loss' => $totalLoss,
+            'generated_at' => date('d-m-Y H:i'),
+        ]);
+
+        $mpdf = new Mpdf([
+            'mode' => 'utf-8',
+            'format' => 'A4',
+            'orientation' => 'L',
+            'margin_left' => 8,
+            'margin_right' => 8,
+            'margin_top' => 8,
+            'margin_bottom' => 8,
+            'tempDir' => WRITEPATH . 'cache',
+        ]);
+
+        $mpdf->SetTitle('Expired Medicine Disposal Register');
+        $mpdf->WriteHTML($html);
+
+        return $this->response
+            ->setHeader('Content-Type', 'application/pdf')
+            ->setBody($mpdf->Output('Disposal_Register_' . date('Ymd_His') . '.pdf', 'S'));
     }
 
     public function stocktransfer()
