@@ -34,14 +34,81 @@ $flag = static function ($v): string {
     <div class="card-body pt-3">
         <style>
             #abdm-drug-suggest {
-                max-height: 260px;
+                max-height: 280px;
                 overflow-y: auto;
                 z-index: 1055;
                 display: none;
                 width: 100%;
+                background: #ffffff;
+                border-radius: 6px;
+                border: 1px solid #cbd5e1;
+                box-shadow: 0 10px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
             }
             #abdm-drug-selected {
                 font-size: 12px;
+            }
+            #abdm-drug-suggest .drug-suggest-item {
+                padding: 8px 12px;
+                border-bottom: 1px solid #e2e8f0;
+                cursor: pointer;
+                text-decoration: none;
+                transition: background-color 0.15s ease;
+                background-color: #ffffff;
+            }
+            #abdm-drug-suggest .drug-suggest-item:last-child {
+                border-bottom: none;
+            }
+            #abdm-drug-suggest .drug-suggest-title {
+                font-size: 0.95rem;
+                font-weight: 600;
+                color: #1e40af;
+                line-height: 1.35;
+            }
+            #abdm-drug-suggest .drug-suggest-mfr {
+                font-size: 0.75rem;
+                font-weight: 500;
+                padding: 2px 7px;
+                border-radius: 4px;
+                background-color: #f1f5f9;
+                color: #334155;
+                border: 1px solid #cbd5e1;
+                white-space: nowrap;
+            }
+            #abdm-drug-suggest .drug-suggest-details {
+                font-size: 0.8rem;
+                color: #64748b;
+                margin-top: 2px;
+                line-height: 1.3;
+            }
+            #abdm-drug-suggest .drug-suggest-details strong {
+                color: #1e293b;
+                font-weight: 600;
+            }
+
+            /* Hover & Active / Selection State (High Contrast White Text) */
+            #abdm-drug-suggest .drug-suggest-item:hover {
+                background-color: #f8fafc;
+            }
+
+            #abdm-drug-suggest .drug-suggest-item.active,
+            #abdm-drug-suggest .drug-suggest-item.active:hover {
+                background-color: #0284c7 !important;
+                border-color: #0284c7 !important;
+            }
+            #abdm-drug-suggest .drug-suggest-item.active .drug-suggest-title {
+                color: #ffffff !important;
+                text-shadow: 0 1px 1px rgba(0,0,0,0.2);
+            }
+            #abdm-drug-suggest .drug-suggest-item.active .drug-suggest-mfr {
+                background-color: rgba(255, 255, 255, 0.22) !important;
+                color: #ffffff !important;
+                border-color: rgba(255, 255, 255, 0.45) !important;
+            }
+            #abdm-drug-suggest .drug-suggest-item.active .drug-suggest-details {
+                color: #e0f2fe !important;
+            }
+            #abdm-drug-suggest .drug-suggest-item.active .drug-suggest-details strong {
+                color: #ffffff !important;
             }
         </style>
         <div id="product-msg"></div>
@@ -1179,7 +1246,7 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
 
             var fullTitle = displayName || label || brandName || identifier;
 
-            var $a = $('<a href="#" class="list-group-item list-group-item-action py-2 px-3 border-bottom"></a>');
+            var $a = $('<a href="#" class="list-group-item list-group-item-action drug-suggest-item"></a>');
             $a.attr('data-idx', String(idx));
 
             var detailParts = [];
@@ -1197,16 +1264,16 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
             }
 
             var html = '<div class="d-flex justify-content-between align-items-center mb-1">'
-                     + '  <div class="fw-bold text-primary" style="font-size: 0.95rem;">' + $('<div>').text(fullTitle).html() + '</div>';
+                     + '  <div class="drug-suggest-title">' + $('<div>').text(fullTitle).html() + '</div>';
             if (manufacturerName) {
-                html += '  <span class="badge bg-secondary text-white ms-2 text-truncate" style="max-width: 200px;" title="' + $('<div>').text(manufacturerName).html() + '">' 
+                html += '  <span class="drug-suggest-mfr ms-2 text-truncate" style="max-width: 200px;" title="' + $('<div>').text(manufacturerName).html() + '">' 
                      +     $('<div>').text(manufacturerName).html() 
                      + '  </span>';
             }
             html += '</div>';
 
             if (detailParts.length) {
-                html += '<div class="text-muted small">' + detailParts.join(' &nbsp;|&nbsp; ') + '</div>';
+                html += '<div class="drug-suggest-details">' + detailParts.join(' &nbsp;•&nbsp; ') + '</div>';
             }
 
             $a.html(html);
