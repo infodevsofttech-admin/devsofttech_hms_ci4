@@ -4198,11 +4198,13 @@ class Medical extends BaseController
         $toDate = $this->normalizeDate((string) $this->request->getGet('to'));
         $search = trim((string) $this->request->getGet('q'));
         $caseId = (int) $this->request->getGet('case_id');
+        $source = strtolower(trim((string) $this->request->getGet('source')));
 
         $message = (string) $this->request->getGet('msg');
 
         return view('medical/invoice_med_draft', [
             'status' => $status,
+            'source' => $source,
             'fromDate' => $fromDate,
             'toDate' => $toDate,
             'search' => $search,
@@ -4266,6 +4268,11 @@ class Medical extends BaseController
         }
         if ($toDate !== '' && in_array('inv_date', $fields, true)) {
             $baseBuilder->where('DATE(m.inv_date) <=', $toDate);
+        }
+
+        $source = strtolower(trim((string) ($this->request->getVar('source') ?? '')));
+        if ($source === 'mobile' && in_array('draft_source', $fields, true)) {
+            $baseBuilder->where('m.draft_source', 'mobile_picker');
         }
 
         if ($quickSearch !== '') {
@@ -4346,7 +4353,7 @@ class Medical extends BaseController
         }
 
         $selectParts = ['m.id'];
-        foreach (['inv_med_code', 'inv_name', 'patient_code', 'inv_date', 'net_amount', 'payment_received', 'payment_balance'] as $col) {
+        foreach (['inv_med_code', 'inv_name', 'patient_code', 'inv_date', 'net_amount', 'payment_received', 'payment_balance', 'draft_source', 'picker_name', 'bed_no'] as $col) {
             if (in_array($col, $fields, true)) {
                 $selectParts[] = 'm.' . $col;
             }
@@ -4401,9 +4408,21 @@ class Medical extends BaseController
             $balance = (float) ($row->payment_balance ?? ($net - $paid));
             $sumNet += $net;
 
-            $statusBadge = $isFinalized
+            $isMobileDraft = (property_exists($row, 'draft_source') && $row->draft_source === 'mobile_picker');
+            $mobileBadge = '';
+            if ($isMobileDraft) {
+                $picker = !empty($row->picker_name) ? esc($row->picker_name) : 'Mobile';
+                $mobileBadge = ' <span class="badge bg-primary text-white" style="font-size:10px;" title="Picked via Mobile by ' . $picker . '"><i class="bi bi-phone"></i> ' . $picker . '</span>';
+            }
+
+            $actionBtns = '';
+            if (!$isFinalized) {
+                $actionBtns = ' <a href="javascript:load_form_div(\'' . base_url('Medical/invoice_edit/' . $invoiceId) . '\',\'medical-main\',\'Medical Invoice\');" class="btn btn-sm btn-outline-primary py-0 px-1 ms-1" title="Open & Bill Draft" style="font-size:11px;"><i class="bi bi-lightning-charge-fill"></i> Bill</a>';
+            }
+
+            $statusBadge = ($isFinalized
                 ? '<span class="badge bg-success">Finalized</span>'
-                : '<span class="badge bg-warning text-dark">Draft</span>';
+                : '<span class="badge bg-warning text-dark">Draft</span>') . $mobileBadge . $actionBtns;
 
             $data[] = [
                 $invoiceLink,
@@ -15464,5 +15483,688 @@ class Medical extends BaseController
         }
 
         return redirect()->to(base_url('Medical/master_report/' . $slug));
+    }
+
+    // =========================================================================
+    // CENTRAL PHARMACY MOBILE APP & DRAFT PICKER & PHYSICAL STOCK AUDIT
+    // =========================================================================
+
+    public function mobile()
+    {
+        $hospitalSetting = [];
+        if ($this->db->tableExists('hospital_setting')) {
+            $hospitalSetting = $this->db->table('hospital_setting')->get()->getRowArray() ?: [];
+        }
+
+        $sessionUser = session('name') ?: (session('user_name') ?: '');
+        $userId = session('user_id') ?: 0;
+
+        return view('medical/mobile_store', [
+            'hospitalSetting' => $hospitalSetting,
+            'sessionUser'     => $sessionUser,
+            'userId'          => $userId,
+            'pageTitle'       => 'Central Pharmacy Mobile & Picker'
+        ]);
+    }
+
+    public function mobilePatientSearch()
+    {
+        $term = trim((string)($this->request->getGet('q') ?? ''));
+        if ($term === '') {
+            return $this->response->setJSON(['status' => 1, 'patients' => []]);
+        }
+
+        $intTerm = (int)$term;
+
+        // Unified search: UHID, OPD Code, IPD ID, IPD Code, Patient Name (p_fname), Mobile
+        $builder = $this->db->table('patient_master p');
+        $builder->select('
+            p.id AS patient_id,
+            p.p_code AS uhid,
+            p.p_fname AS patient_name,
+            p.mphone1 AS mobile,
+            p.age,
+            p.gender,
+            ipd.id AS ipd_id,
+            ipd.ipd_code,
+            ipd.bed_no,
+            ipd.r_doc_name AS ipd_doc_name,
+            ipd.ipd_status,
+            opd.opd_id,
+            opd.opd_code,
+            opd.doc_name AS opd_doc_name
+        ', false);
+
+        // Join active or recent IPD
+        $builder->join('(SELECT id, ipd_code, p_id, bed_no, r_doc_name, ipd_status FROM ipd_master ORDER BY id DESC LIMIT 500) ipd', 'ipd.p_id = p.id', 'left');
+
+        // Join active or recent OPD
+        $builder->join('(SELECT opd_id, opd_code, p_id, doc_name FROM opd_master ORDER BY opd_id DESC LIMIT 500) opd', 'opd.p_id = p.id', 'left');
+
+        $builder->groupStart();
+        $builder->like('p.p_code', $term);
+        $builder->orLike('p.p_fname', $term);
+        $builder->orLike('p.mphone1', $term);
+        $builder->orLike('ipd.ipd_code', $term);
+        $builder->orLike('opd.opd_code', $term);
+        if ($intTerm > 0) {
+            $builder->orWhere('ipd.id', $intTerm);
+            $builder->orWhere('p.id', $intTerm);
+            $builder->orWhere('opd.opd_id', $intTerm);
+        }
+        $builder->groupEnd();
+
+        $builder->groupBy('p.id');
+        $builder->orderBy('p.id', 'DESC');
+        $builder->limit(15);
+
+        $results = $builder->get()->getResultArray();
+        $patients = [];
+
+        foreach ($results as $r) {
+            $isIpd = !empty($r['ipd_id']) && ((int)($r['ipd_status'] ?? 1) === 1 || empty($r['opd_id']));
+            $docName = $isIpd ? ($r['ipd_doc_name'] ?: ($r['opd_doc_name'] ?: 'Doctor')) : ($r['opd_doc_name'] ?: ($r['ipd_doc_name'] ?: 'Doctor'));
+            $genderStr = ((int)($r['gender'] ?? 0) === 1) ? 'Male' : (((int)($r['gender'] ?? 0) === 2) ? 'Female' : 'Other');
+
+            $patients[] = [
+                'patient_id'   => (int)$r['patient_id'],
+                'uhid'         => (string)($r['uhid'] ?: ('P' . $r['patient_id'])),
+                'patient_name' => (string)($r['patient_name'] ?: 'Unknown Patient'),
+                'mobile'       => (string)($r['mobile'] ?: ''),
+                'age'          => (string)($r['age'] ?: '-'),
+                'gender'       => $genderStr,
+                'is_ipd'       => $isIpd,
+                'ipd_id'       => (int)($r['ipd_id'] ?? 0),
+                'ipd_code'     => (string)($r['ipd_code'] ?? ''),
+                'bed_no'       => (string)($r['bed_no'] ?? ''),
+                'opd_id'       => (int)($r['opd_id'] ?? 0),
+                'opd_code'     => (string)($r['opd_code'] ?? ''),
+                'doc_name'     => (string)$docName,
+                'badge'        => $isIpd ? ('IPD #' . ($r['ipd_id'] ?: $r['ipd_code']) . (!empty($r['bed_no']) ? ' [Bed: ' . $r['bed_no'] . ']' : '')) : ('OPD #' . ($r['opd_code'] ?: $r['opd_id']))
+            ];
+        }
+
+        return $this->response->setJSON(['status' => 1, 'patients' => $patients]);
+    }
+
+    public function mobilePatientPrescription($patientId)
+    {
+        $patientId = (int)$patientId;
+        $items = [];
+
+        if ($this->db->tableExists('opd_prescription')) {
+            $presc = $this->db->table('opd_prescription op')
+                ->select('op.medicine_name, op.dosage, op.duration, op.frequency, op.quantity')
+                ->where('op.patient_id', $patientId)
+                ->orderBy('op.id', 'DESC')
+                ->limit(20)
+                ->get()
+                ->getResultArray();
+            if (!empty($presc)) {
+                $items = $presc;
+            }
+        }
+
+        return $this->response->setJSON(['status' => 1, 'prescriptions' => $items]);
+    }
+
+    public function mobileMedicineSearch()
+    {
+        $term = trim((string)($this->request->getGet('q') ?? ''));
+        $rack = trim((string)($this->request->getGet('rack') ?? ''));
+
+        $builder = $this->db->table('purchase_invoice_item p');
+        $builder->select('
+            p.id AS batch_id,
+            p.item_code,
+            m.item_name,
+            m.genericname,
+            m.formulation,
+            m.packing AS m_packing,
+            p.packing AS p_packing,
+            p.batch_no,
+            p.expiry_date,
+            DATE_FORMAT(p.expiry_date, "%m/%Y") AS exp_formatted,
+            p.mrp,
+            p.selling_unit_rate,
+            IFNULL(NULLIF(p.rack_no, ""), m.rack_no) AS rack_no,
+            IFNULL(NULLIF(p.shelf_no, ""), m.shelf_no) AS shelf_no,
+            p.cold_storage,
+            (p.total_unit - p.total_sale_unit + p.total_return_unit - p.total_lost_unit) AS available_units
+        ', false);
+        $builder->join('med_product_master m', 'm.id = p.item_code');
+        $builder->where('p.item_code >', 0);
+
+        if ($term !== '') {
+            $builder->groupStart();
+            $builder->like('m.item_name', $term);
+            $builder->orLike('p.batch_no', $term);
+            $builder->orLike('m.genericname', $term);
+            $builder->groupEnd();
+        }
+
+        if ($rack !== '') {
+            $builder->groupStart();
+            $builder->where('p.rack_no', $rack);
+            $builder->orWhere('m.rack_no', $rack);
+            $builder->groupEnd();
+        }
+
+        if ($term === '' && $rack === '') {
+            $builder->having('available_units >', 0);
+        }
+
+        $builder->orderBy('m.item_name', 'ASC');
+        $builder->orderBy('p.expiry_date', 'ASC');
+        $builder->limit(30);
+
+        $rows = $builder->get()->getResultArray();
+
+        $grouped = [];
+        foreach ($rows as $r) {
+            $itemId = (int)$r['item_code'];
+            if (!isset($grouped[$itemId])) {
+                $grouped[$itemId] = [
+                    'item_code'    => $itemId,
+                    'item_name'    => (string)$r['item_name'],
+                    'genericname'  => (string)($r['genericname'] ?? ''),
+                    'formulation'  => (string)($r['formulation'] ?? 'Medicine'),
+                    'packing'      => (string)($r['m_packing'] ?: ($r['p_packing'] ?: '1')),
+                    'rack_no'      => (string)($r['rack_no'] ?? ''),
+                    'shelf_no'     => (string)($r['shelf_no'] ?? ''),
+                    'cold_storage' => (string)($r['cold_storage'] ?? ''),
+                    'batches'      => []
+                ];
+            }
+
+            $avail = (int)$r['available_units'];
+            $grouped[$itemId]['batches'][] = [
+                'batch_id'          => (int)$r['batch_id'],
+                'batch_no'          => (string)($r['batch_no'] ?: 'DEFAULT'),
+                'expiry_date'       => (string)($r['expiry_date'] ?? ''),
+                'exp_formatted'     => (string)($r['exp_formatted'] ?? ''),
+                'mrp'               => (float)($r['mrp'] ?? 0),
+                'selling_unit_rate' => (float)($r['selling_unit_rate'] ?? 0),
+                'available_units'   => $avail,
+                'rack_no'           => (string)($r['rack_no'] ?? ''),
+                'shelf_no'          => (string)($r['shelf_no'] ?? '')
+            ];
+        }
+
+        return $this->response->setJSON(['status' => 1, 'items' => array_values($grouped)]);
+    }
+
+    public function mobileSaveDraft()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        if (empty($json) && !empty($this->request->getBody())) {
+            $json = json_decode($this->request->getBody(), true) ?: [];
+        }
+
+        $items = $json['items'] ?? [];
+        if (empty($items) || !is_array($items)) {
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Please add at least one medicine item to basket.']);
+        }
+
+        $patientId = (int)($json['patient_id'] ?? 0);
+        $uhid = trim((string)($json['uhid'] ?? ''));
+        $patientName = trim((string)($json['patient_name'] ?? 'Walk-in Customer'));
+        $mobile = trim((string)($json['mobile'] ?? ''));
+        $ipdId = (int)($json['ipd_id'] ?? 0);
+        $ipdCode = trim((string)($json['ipd_code'] ?? ''));
+        $bedNo = trim((string)($json['bed_no'] ?? ''));
+        $opdId = (int)($json['opd_id'] ?? 0);
+        $opdCode = trim((string)($json['opd_code'] ?? ''));
+        $docName = trim((string)($json['doc_name'] ?? ''));
+        $pickerName = trim((string)($json['picker_name'] ?? (session('name') ?: 'Mobile Picker')));
+
+        $invFields = $this->db->getFieldNames('invoice_med_master') ?? [];
+        $setIfExists = static function (array &$arr, array $fields, string $col, $val): void {
+            if (in_array($col, $fields, true)) {
+                $arr[$col] = $val;
+            }
+        };
+
+        $header = [];
+        $setIfExists($header, $invFields, 'store_id', 1);
+        $setIfExists($header, $invFields, 'inv_date', date('Y-m-d'));
+        $setIfExists($header, $invFields, 'inv_insert_datetime', date('Y-m-d H:i:s'));
+        $setIfExists($header, $invFields, 'customer_type', $ipdId > 0 ? 2 : 1);
+        $setIfExists($header, $invFields, 'patient_id', $patientId);
+        $setIfExists($header, $invFields, 'patient_code', $uhid);
+        $setIfExists($header, $invFields, 'inv_name', $patientName);
+        $setIfExists($header, $invFields, 'inv_phone_number', $mobile);
+        $setIfExists($header, $invFields, 'ipd_id', $ipdId);
+        $setIfExists($header, $invFields, 'ipd_code', $ipdCode);
+        $setIfExists($header, $invFields, 'bed_no', $bedNo);
+        $setIfExists($header, $invFields, 'doc_name', $docName);
+        $setIfExists($header, $invFields, 'draft_source', 'mobile_picker');
+        $setIfExists($header, $invFields, 'picker_name', $pickerName);
+        $setIfExists($header, $invFields, 'prepared_by', $pickerName);
+        $setIfExists($header, $invFields, 'bill_final', 0);
+        $setIfExists($header, $invFields, 'invoice_status', 0);
+        $setIfExists($header, $invFields, 'log', 'Mobile draft basket created by ' . $pickerName . ' at ' . date('d-m-Y H:i:s'));
+
+        $this->db->table('invoice_med_master')->insert($header);
+        $invoiceId = (int)$this->db->insertID();
+
+        if ($invoiceId <= 0) {
+            return $this->response->setStatusCode(500)->setJSON(['status' => 0, 'message' => 'Failed to initialize draft bill.']);
+        }
+
+        $pid = str_pad(substr((string)$invoiceId, -7, 7), 7, '0', STR_PAD_LEFT);
+        $invoiceCode = 'M' . date('ym') . $pid;
+        if (in_array('inv_med_code', $invFields, true)) {
+            $this->db->table('invoice_med_master')->where('id', $invoiceId)->update(['inv_med_code' => $invoiceCode]);
+        }
+
+        $itemFields = $this->db->getFieldNames('inv_med_item') ?? [];
+        $totalGross = 0;
+        foreach ($items as $it) {
+            $itemCode = (int)($it['item_code'] ?? 0);
+            $batchId = (int)($it['batch_id'] ?? 0);
+            $qty = max(1, (int)($it['qty'] ?? 1));
+            $rate = (float)($it['rate'] ?? ($it['selling_unit_rate'] ?? ($it['mrp'] ?? 0)));
+            $mrp = (float)($it['mrp'] ?? $rate);
+            $packing = (float)($it['packing'] ?? 1);
+            $lineTotal = round($qty * $rate, 2);
+            $totalGross += $lineTotal;
+
+            $taxBreakup = $this->calculateInvoiceItemTaxBreakup($lineTotal, 6.0, 6.0, 0.0);
+
+            $line = [];
+            $setIfExists($line, $itemFields, 'inv_med_id', $invoiceId);
+            $setIfExists($line, $itemFields, 'item_code', $itemCode);
+            $setIfExists($line, $itemFields, 'store_stock_id', $batchId);
+            $setIfExists($line, $itemFields, 'purchase_item_id', $batchId);
+            $setIfExists($line, $itemFields, 'item_Name', (string)($it['item_name'] ?? 'Medicine'));
+            $setIfExists($line, $itemFields, 'formulation', (string)($it['formulation'] ?? ''));
+            $setIfExists($line, $itemFields, 'batch_no', (string)($it['batch_no'] ?? ''));
+            $setIfExists($line, $itemFields, 'expiry', (string)($it['expiry_date'] ?? ''));
+            $setIfExists($line, $itemFields, 'qty', $qty);
+            $setIfExists($line, $itemFields, 'price', $rate);
+            $setIfExists($line, $itemFields, 'mrp', $mrp);
+            $setIfExists($line, $itemFields, 'packing', $packing);
+            $setIfExists($line, $itemFields, 'amount', $lineTotal);
+            $setIfExists($line, $itemFields, 'tamount', $lineTotal);
+            $setIfExists($line, $itemFields, 'TaxableAmount', $taxBreakup['taxable']);
+            $setIfExists($line, $itemFields, 'CGST_per', 6.0);
+            $setIfExists($line, $itemFields, 'CGST', $taxBreakup['cgst']);
+            $setIfExists($line, $itemFields, 'SGST_per', 6.0);
+            $setIfExists($line, $itemFields, 'SGST', $taxBreakup['sgst']);
+            $setIfExists($line, $itemFields, 'update_by_remark', 'Mobile Picker: ' . $pickerName);
+
+            $this->db->table('inv_med_item')->insert($line);
+        }
+
+        $this->recalculateInvoiceTotals($invoiceId);
+
+        return $this->response->setJSON([
+            'status'       => 1,
+            'message'      => "Draft Bill #{$invoiceCode} created and sent to billing counter.",
+            'draft_id'     => $invoiceId,
+            'draft_code'   => $invoiceCode,
+            'total_items'  => count($items),
+            'total_amount' => round($totalGross, 2)
+        ]);
+    }
+
+    public function mobileRecentDrafts()
+    {
+        $builder = $this->db->table('invoice_med_master m');
+        $builder->select('
+            m.id,
+            m.inv_med_code,
+            m.patient_code AS uhid,
+            m.inv_name AS patient_name,
+            m.ipd_id,
+            m.ipd_code,
+            m.bed_no,
+            m.net_amount,
+            m.bill_final,
+            m.draft_source,
+            m.picker_name,
+            m.inv_date,
+            m.inv_insert_datetime,
+            COUNT(i.id) AS total_items
+        ', false);
+        $builder->join('inv_med_item i', 'i.inv_med_id = m.id', 'left');
+        $builder->groupStart();
+        $builder->where('m.draft_source', 'mobile_picker');
+        $builder->orWhere('m.inv_date', date('Y-m-d'));
+        $builder->groupEnd();
+        $builder->groupBy('m.id');
+        $builder->orderBy('m.id', 'DESC');
+        $builder->limit(30);
+
+        $drafts = $builder->get()->getResultArray();
+        $list = [];
+
+        foreach ($drafts as $d) {
+            $isFinal = (int)($d['bill_final'] ?? 0) === 1;
+            $timeStr = !empty($d['inv_insert_datetime']) ? date('h:i A', strtotime($d['inv_insert_datetime'])) : date('d-M', strtotime($d['inv_date']));
+
+            $list[] = [
+                'id'           => (int)$d['id'],
+                'draft_code'   => (string)($d['inv_med_code'] ?: ('M' . $d['id'])),
+                'uhid'         => (string)($d['uhid'] ?: '-'),
+                'patient_name' => (string)($d['patient_name'] ?: 'Patient'),
+                'ipd_tag'      => !empty($d['ipd_id']) ? ('IPD #' . ($d['ipd_code'] ?: $d['ipd_id']) . (!empty($d['bed_no']) ? ' [' . $d['bed_no'] . ']' : '')) : 'OPD',
+                'net_amount'   => (float)($d['net_amount'] ?? 0),
+                'total_items'  => (int)($d['total_items'] ?? 0),
+                'picker_name'  => (string)($d['picker_name'] ?: 'Picker'),
+                'time_str'     => $timeStr,
+                'status'       => $isFinal ? 'BILLED' : 'DRAFT',
+                'status_label' => $isFinal ? 'Billed at Counter' : 'At Billing Counter'
+            ];
+        }
+
+        return $this->response->setJSON(['status' => 1, 'drafts' => $list]);
+    }
+
+    public function mobileAuditRacks()
+    {
+        $racks = [];
+        $res = $this->db->query("
+            SELECT DISTINCT rack_no FROM purchase_invoice_item WHERE rack_no IS NOT NULL AND rack_no != '' AND rack_no != '0'
+            UNION
+            SELECT DISTINCT rack_no FROM med_product_master WHERE rack_no IS NOT NULL AND rack_no != '' AND rack_no != '0'
+            ORDER BY rack_no ASC
+        ")->getResultArray();
+
+        foreach ($res as $r) {
+            $racks[] = (string)$r['rack_no'];
+        }
+
+        return $this->response->setJSON(['status' => 1, 'racks' => $racks]);
+    }
+
+    public function mobileAuditItems()
+    {
+        $rack = trim((string)($this->request->getGet('rack') ?? ''));
+        $shelf = trim((string)($this->request->getGet('shelf') ?? ''));
+        $q = trim((string)($this->request->getGet('q') ?? ''));
+
+        $builder = $this->db->table('purchase_invoice_item p');
+        $builder->select('
+            p.id AS batch_id,
+            p.item_code,
+            m.item_name,
+            m.formulation,
+            p.packing,
+            p.batch_no,
+            p.expiry_date,
+            DATE_FORMAT(p.expiry_date, "%m/%Y") AS exp_formatted,
+            p.mrp,
+            p.purchase_unit_rate,
+            p.selling_unit_rate,
+            IFNULL(NULLIF(p.rack_no, ""), m.rack_no) AS rack_no,
+            IFNULL(NULLIF(p.shelf_no, ""), m.shelf_no) AS shelf_no,
+            (p.total_unit - p.total_sale_unit + p.total_return_unit - p.total_lost_unit) AS system_qty
+        ', false);
+        $builder->join('med_product_master m', 'm.id = p.item_code');
+        $builder->where('p.item_code >', 0);
+
+        if ($rack !== '') {
+            $builder->groupStart();
+            $builder->where('p.rack_no', $rack);
+            $builder->orWhere('m.rack_no', $rack);
+            $builder->groupEnd();
+        }
+
+        if ($shelf !== '') {
+            $builder->groupStart();
+            $builder->where('p.shelf_no', $shelf);
+            $builder->orWhere('m.shelf_no', $shelf);
+            $builder->groupEnd();
+        }
+
+        if ($q !== '') {
+            $builder->groupStart();
+            $builder->like('m.item_name', $q);
+            $builder->orLike('p.batch_no', $q);
+            $builder->groupEnd();
+        }
+
+        $builder->orderBy('m.item_name', 'ASC');
+        $builder->orderBy('p.expiry_date', 'ASC');
+        $builder->limit(50);
+
+        $rows = $builder->get()->getResultArray();
+
+        $auditedMap = [];
+        if (!empty($rows)) {
+            $batchIds = array_column($rows, 'batch_id');
+            if (!empty($batchIds)) {
+                $aRows = $this->db->table('mst_stock_audit')
+                    ->select('batch_id, physical_qty, variation_qty, audit_type, remarks, created_at')
+                    ->whereIn('batch_id', $batchIds)
+                    ->where('DATE(created_at)', date('Y-m-d'))
+                    ->get()
+                    ->getResultArray();
+                foreach ($aRows as $ar) {
+                    $auditedMap[$ar['batch_id']] = $ar;
+                }
+            }
+        }
+
+        $items = [];
+        foreach ($rows as $r) {
+            $bId = (int)$r['batch_id'];
+            $audit = $auditedMap[$bId] ?? null;
+
+            $items[] = [
+                'batch_id'           => $bId,
+                'item_code'          => (int)$r['item_code'],
+                'item_name'          => (string)$r['item_name'],
+                'formulation'        => (string)($r['formulation'] ?? ''),
+                'packing'            => (string)($r['packing'] ?: '1'),
+                'batch_no'           => (string)($r['batch_no'] ?: 'DEFAULT'),
+                'expiry_date'        => (string)($r['expiry_date'] ?? ''),
+                'exp_formatted'      => (string)($r['exp_formatted'] ?? ''),
+                'mrp'                => (float)($r['mrp'] ?? 0),
+                'rate'               => (float)($r['selling_unit_rate'] ?? 0),
+                'rack_no'            => (string)($r['rack_no'] ?? ''),
+                'shelf_no'           => (string)($r['shelf_no'] ?? ''),
+                'system_qty'         => (int)$r['system_qty'],
+                'last_audited_today' => $audit ? [
+                    'physical_qty'  => (int)$audit['physical_qty'],
+                    'variation_qty' => (int)$audit['variation_qty'],
+                    'audit_type'    => (string)$audit['audit_type'],
+                    'time'          => date('h:i A', strtotime($audit['created_at']))
+                ] : null
+            ];
+        }
+
+        return $this->response->setJSON(['status' => 1, 'items' => $items]);
+    }
+
+    public function mobileSaveAudit()
+    {
+        $json = $this->request->getJSON(true) ?: $this->request->getPost();
+        if (empty($json) && !empty($this->request->getBody())) {
+            $json = json_decode($this->request->getBody(), true) ?: [];
+        }
+
+        $batchId = (int)($json['batch_id'] ?? 0);
+        $itemCode = (int)($json['item_code'] ?? 0);
+        $physicalQty = (int)($json['physical_qty'] ?? 0);
+        $systemQty = (int)($json['system_qty'] ?? 0);
+        $auditType = trim((string)($json['audit_type'] ?? 'PHYSICAL_VARIATION'));
+        $remarks = trim((string)($json['remarks'] ?? ''));
+        $rackNo = trim((string)($json['rack_no'] ?? ''));
+        $shelfNo = trim((string)($json['shelf_no'] ?? ''));
+        $auditedByName = trim((string)($json['audited_by_name'] ?? (session('name') ?: 'Store Staff')));
+        $auditedBy = (int)(session('user_id') ?: 1);
+
+        if ($batchId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Invalid batch selected.']);
+        }
+
+        $batch = $this->db->table('purchase_invoice_item')->where('id', $batchId)->get()->getRowArray();
+        if (!$batch) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Batch not found.']);
+        }
+
+        $rate = (float)($batch['selling_unit_rate'] ?? ($batch['mrp'] ?? 0));
+        $variationQty = $physicalQty - $systemQty;
+        $totalValue = abs($variationQty) * $rate;
+
+        $insertData = [
+            'store_id'          => 1,
+            'item_id'           => $itemCode > 0 ? $itemCode : (int)($batch['item_code'] ?? 0),
+            'batch_id'          => $batchId,
+            'batch_no'          => (string)($batch['batch_no'] ?? ''),
+            'expiry_date'       => (string)($batch['expiry_date'] ?? ''),
+            'audit_type'        => $auditType,
+            'system_qty'        => $systemQty,
+            'physical_qty'      => $physicalQty,
+            'variation_qty'     => $variationQty,
+            'rate'              => $rate,
+            'total_value'       => round($totalValue, 2),
+            'remarks'           => $remarks,
+            'rack_no'           => $rackNo ?: (string)($batch['rack_no'] ?? ''),
+            'shelf_no'          => $shelfNo ?: (string)($batch['shelf_no'] ?? ''),
+            'conducted_by'      => $auditedBy,
+            'conducted_by_name' => $auditedByName,
+            'reconciled_status' => 'PENDING',
+            'created_at'        => date('Y-m-d H:i:s')
+        ];
+
+        $this->db->table('mst_stock_audit')->insert($insertData);
+        $auditId = (int)$this->db->insertID();
+
+        if ($rackNo !== '' || $shelfNo !== '') {
+            $locUpdate = [];
+            if ($rackNo !== '') $locUpdate['rack_no'] = $rackNo;
+            if ($shelfNo !== '') $locUpdate['shelf_no'] = $shelfNo;
+            $this->db->table('purchase_invoice_item')->where('id', $batchId)->update($locUpdate);
+
+            if ($itemCode > 0) {
+                $this->db->table('med_product_master')
+                    ->where('id', $itemCode)
+                    ->where('rack_no', '')
+                    ->update($locUpdate);
+            }
+        }
+
+        return $this->response->setJSON([
+            'status'        => 1,
+            'message'       => 'Audit record logged successfully.',
+            'audit_id'      => $auditId,
+            'variation_qty' => $variationQty,
+            'status_tag'    => $variationQty === 0 ? 'MATCH' : ($variationQty < 0 ? 'SHORTAGE' : 'SURPLUS')
+        ]);
+    }
+
+    public function stockAuditReport()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $fromDate = $this->request->getGet('from_date') ?: date('Y-m-01');
+        $toDate = $this->request->getGet('to_date') ?: date('Y-m-d');
+        $auditType = trim((string)($this->request->getGet('audit_type') ?? ''));
+        $status = trim((string)($this->request->getGet('status') ?? ''));
+
+        $builder = $this->db->table('mst_stock_audit a');
+        $builder->select('
+            a.*,
+            m.item_name,
+            m.formulation,
+            p.packing
+        ');
+        $builder->join('med_product_master m', 'm.id = a.item_id', 'left');
+        $builder->join('purchase_invoice_item p', 'p.id = a.batch_id', 'left');
+        $builder->where('DATE(a.created_at) >=', $fromDate);
+        $builder->where('DATE(a.created_at) <=', $toDate);
+
+        if ($auditType !== '') {
+            $builder->where('a.audit_type', $auditType);
+        }
+        if ($status !== '') {
+            $builder->where('a.reconciled_status', $status);
+        }
+
+        $builder->orderBy('a.audit_id', 'DESC');
+        $audits = $builder->get()->getResultArray();
+
+        $totalAudited = count($audits);
+        $totalMatched = 0;
+        $totalShortageUnits = 0;
+        $totalSurplusUnits = 0;
+        $netVarianceVal = 0.0;
+        $pendingCount = 0;
+
+        foreach ($audits as $row) {
+            $v = (int)($row['variation_qty'] ?? 0);
+            if ($v === 0) {
+                $totalMatched++;
+            } elseif ($v < 0) {
+                $totalShortageUnits += abs($v);
+            } else {
+                $totalSurplusUnits += $v;
+            }
+            $netVarianceVal += ($v * (float)($row['rate'] ?? 0));
+            if (($row['reconciled_status'] ?? '') === 'PENDING') {
+                $pendingCount++;
+            }
+        }
+
+        return view('medical/stock_audit_report', [
+            'audits'             => $audits,
+            'fromDate'           => $fromDate,
+            'toDate'             => $toDate,
+            'auditType'          => $auditType,
+            'status'             => $status,
+            'totalAudited'       => $totalAudited,
+            'totalMatched'       => $totalMatched,
+            'totalShortageUnits' => $totalShortageUnits,
+            'totalSurplusUnits'  => $totalSurplusUnits,
+            'netVarianceVal'     => round($netVarianceVal, 2),
+            'pendingCount'       => $pendingCount
+        ]);
+    }
+
+    public function stockAuditReconcile()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $auditId = (int)$this->request->getPost('audit_id');
+        if ($auditId <= 0) {
+            return $this->response->setStatusCode(400)->setJSON(['status' => 0, 'message' => 'Invalid audit record.']);
+        }
+
+        $audit = $this->db->table('mst_stock_audit')->where('audit_id', $auditId)->get()->getRowArray();
+        if (!$audit) {
+            return $this->response->setStatusCode(404)->setJSON(['status' => 0, 'message' => 'Audit log not found.']);
+        }
+
+        $batchId = (int)$audit['batch_id'];
+        $variation = (int)$audit['variation_qty'];
+
+        if ($batchId > 0 && $variation !== 0) {
+            $batch = $this->db->table('purchase_invoice_item')->where('id', $batchId)->get()->getRowArray();
+            if ($batch) {
+                if ($variation < 0) {
+                    $lost = (int)($batch['total_lost_unit'] ?? 0) + abs($variation);
+                    $this->db->table('purchase_invoice_item')->where('id', $batchId)->update(['total_lost_unit' => $lost]);
+                } else {
+                    $tot = (int)($batch['total_unit'] ?? 0) + $variation;
+                    $this->db->table('purchase_invoice_item')->where('id', $batchId)->update(['total_unit' => $tot]);
+                }
+            }
+        }
+
+        $userName = session('name') ?: 'Store Manager';
+        $this->db->table('mst_stock_audit')->where('audit_id', $auditId)->update([
+            'reconciled_status' => 'RECONCILED',
+            'remarks'           => trim(($audit['remarks'] ?? '') . ' [Reconciled by ' . $userName . ' on ' . date('d-m-Y H:i') . ']')
+        ]);
+
+        return $this->response->setJSON(['status' => 1, 'message' => 'Stock inventory adjusted and audit marked as RECONCILED.']);
     }
 }

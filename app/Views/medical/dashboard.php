@@ -47,6 +47,16 @@
                     </a>
                 </li>
                 <li>
+                    <a class="dropdown-item py-1" href="javascript:load_form_div('<?= base_url('Medical/stock_audit_report') ?>','medical-main','Stock Audit :Pharmacy');">
+                        <i class="bi bi-clipboard2-check text-warning me-2"></i> <strong>Stock Audit &amp; Reconciliation</strong>
+                    </a>
+                </li>
+                <li>
+                    <a class="dropdown-item py-1 text-primary" href="<?= base_url('Medical/mobile') ?>" target="_blank">
+                        <i class="bi bi-phone text-primary me-2"></i> <strong>Main Pharmacy Mobile App</strong>
+                    </a>
+                </li>
+                <li>
                     <a class="dropdown-item py-1" href="javascript:load_form_div('<?= base_url('Medical/main_store') ?>','medical-main','Store Main :Pharmacy');">
                         <i class="bi bi-display text-dark me-2"></i> Central Store Main
                     </a>

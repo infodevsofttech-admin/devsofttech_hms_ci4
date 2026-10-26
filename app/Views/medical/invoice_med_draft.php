@@ -7,13 +7,17 @@
         <?php endif; ?>
 
         <div class="d-flex gap-2 mb-3 flex-wrap">
-            <a class="btn btn-sm <?= ($status ?? 'draft') === 'draft' ? 'btn-primary' : 'btn-outline-primary' ?>" href="javascript:load_form('<?= base_url('Medical/Invoice_Med_Draft?status=draft') ?>','Invoice List :Pharmacy');">Draft</a>
+            <a class="btn btn-sm <?= (($status ?? 'draft') === 'draft' && ($source ?? '') !== 'mobile') ? 'btn-primary' : 'btn-outline-primary' ?>" href="javascript:load_form('<?= base_url('Medical/Invoice_Med_Draft?status=draft') ?>','Invoice List :Pharmacy');">Draft</a>
+            <a class="btn btn-sm <?= ($source ?? '') === 'mobile' ? 'btn-info text-white fw-bold shadow-sm' : 'btn-outline-info' ?>" href="javascript:load_form('<?= base_url('Medical/Invoice_Med_Draft?status=draft&source=mobile') ?>','Invoice List :Pharmacy');"><i class="bi bi-phone"></i> Mobile Picker Drafts</a>
             <a class="btn btn-sm <?= ($status ?? '') === 'all' ? 'btn-dark' : 'btn-outline-dark' ?>" href="javascript:load_form('<?= base_url('Medical/Invoice_Med_Draft?status=all') ?>','Invoice List :Pharmacy');">All</a>
         </div>
 
         <form id="medical-invoice-filter-form" method="get" action="<?= base_url(($status ?? 'draft') === 'final' ? 'Medical/Invoice_Med_Final' : 'Medical/Invoice_Med_Draft') ?>" class="row g-2 mb-3">
             <?php if (($status ?? 'draft') !== 'final'): ?>
                 <input type="hidden" name="status" value="<?= esc($status ?? 'draft') ?>">
+            <?php endif; ?>
+            <?php if (!empty($source)): ?>
+                <input type="hidden" name="source" value="<?= esc($source) ?>">
             <?php endif; ?>
             <?php if (!empty($caseId)): ?>
                 <input type="hidden" name="case_id" value="<?= (int) $caseId ?>">
@@ -93,12 +97,14 @@
                 type: 'GET',
                 data: function (data) {
                     var statusInput = filterForm.find('input[name="status"]');
+                    var sourceInput = filterForm.find('input[name="source"]');
                     var caseInput = filterForm.find('input[name="case_id"]');
                     var fromInput = filterForm.find('input[name="from"]');
                     var toInput = filterForm.find('input[name="to"]');
                     var qInput = filterForm.find('input[name="q"]');
 
                     data.status = statusInput.length ? (statusInput.val() || defaultStatus) : defaultStatus;
+                    data.source = sourceInput.length ? (sourceInput.val() || '') : '<?= esc($source ?? '') ?>';
                     data.from = fromInput.length ? (fromInput.val() || '') : '';
                     data.to = toInput.length ? (toInput.val() || '') : '';
                     data.q = qInput.length ? (qInput.val() || '') : '';

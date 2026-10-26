@@ -304,25 +304,32 @@
                 <!-- Step 1: App Selection Cards -->
                 <label class="form-label fw-bold small text-secondary mb-2">1. SELECT APPLICATION</label>
                 <div class="row g-2 mb-3">
-                    <div class="col-4">
+                    <div class="col-6 col-md-3">
                         <div class="card p-2 text-center border-primary bg-primary-subtle text-primary h-100 app-card-item active" style="cursor: pointer;" id="app_card_nursing" data-app="nursing">
                             <i class="bi bi-heart-pulse-fill fs-3 mb-1"></i>
                             <div class="fw-bold small" style="font-size:12px;">Nursing Care</div>
                             <span class="badge bg-primary mt-1" style="font-size:9px;">Active PWA</span>
                         </div>
                     </div>
-                    <div class="col-4">
+                    <div class="col-6 col-md-3">
                         <div class="card p-2 text-center border-secondary bg-light text-dark h-100 app-card-item" style="cursor: pointer;" id="app_card_doctor" data-app="doctor">
                             <i class="bi bi-person-badge-fill fs-3 mb-1 text-primary"></i>
                             <div class="fw-bold small" style="font-size:12px;">Doctor App</div>
                             <span class="badge bg-success mt-1" style="font-size:9px;">Active PWA</span>
                         </div>
                     </div>
-                    <div class="col-4">
+                    <div class="col-6 col-md-3">
                         <div class="card p-2 text-center border-secondary bg-light text-dark h-100 app-card-item" style="cursor: pointer;" id="app_card_pharmacy" data-app="pharmacy">
                             <i class="bi bi-capsule fs-3 mb-1" style="color: #0891b2;"></i>
                             <div class="fw-bold small" style="font-size:12px;">Pharmacy POS</div>
                             <span class="badge text-white mt-1" style="font-size:9px; background: #0891b2;">Active PWA</span>
+                        </div>
+                    </div>
+                    <div class="col-6 col-md-3">
+                        <div class="card p-2 text-center border-secondary bg-light text-dark h-100 app-card-item" style="cursor: pointer;" id="app_card_central_pharmacy" data-app="central_pharmacy">
+                            <i class="bi bi-box-seam-fill fs-3 mb-1" style="color: #6366f1;"></i>
+                            <div class="fw-bold small" style="font-size:12px;">Main Pharmacy</div>
+                            <span class="badge text-white mt-1" style="font-size:9px; background: #6366f1;">Store &amp; Picker</span>
                         </div>
                     </div>
                 </div>
@@ -358,6 +365,9 @@
     var selectedApp = 'nursing';
 
     function getAppBaseUrl() {
+        if (selectedApp === 'central_pharmacy') {
+            return '<?= base_url('Medical/mobile') ?>';
+        }
         if (selectedApp === 'pharmacy') {
             return '<?= base_url('MedicalStore') ?>';
         }
@@ -378,8 +388,11 @@
         if (urlInput) urlInput.value = appUrl;
         if (launchLink) launchLink.href = appUrl;
 
-        var title = (selectedApp === 'doctor') ? 'DoctorCare EMR App' : ((selectedApp === 'pharmacy') ? 'Medical Store & Pharmacy POS' : 'Nursing Care App');
-        var path = (selectedApp === 'pharmacy') ? '/MedicalStore' : ('/app/' + selectedApp);
+        var title = (selectedApp === 'doctor') ? 'DoctorCare EMR App' 
+            : ((selectedApp === 'central_pharmacy') ? 'Central Pharmacy & Floor Picker PWA' 
+            : ((selectedApp === 'pharmacy') ? 'Medical Store & Pharmacy POS' : 'Nursing Care App'));
+        var path = (selectedApp === 'central_pharmacy') ? '/Medical/mobile' 
+            : ((selectedApp === 'pharmacy') ? '/MedicalStore' : ('/app/' + selectedApp));
 
         if (targetName) targetName.textContent = title;
         if (targetCode) targetCode.textContent = path;
