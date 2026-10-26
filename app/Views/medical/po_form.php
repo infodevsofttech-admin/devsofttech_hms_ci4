@@ -33,6 +33,9 @@
     <div class="card-body p-3">
         <form id="po-create-form" onsubmit="event.preventDefault(); submitPoForm();">
             <?= csrf_field() ?>
+            <?php if ($isEdit): ?>
+                <input type="hidden" name="po_id" id="po_id" value="<?= (int)($po['po_id'] ?? 0) ?>">
+            <?php endif; ?>
             <div class="row g-3">
                 <div class="col-md-4">
                     <label class="form-label form-label-sm fw-semibold">Supplier / Pharmaceutical Vendor <span class="text-danger">*</span></label>
@@ -87,7 +90,7 @@
                     </button>
                 </div>
                 <div class="card-body p-3">
-                    <div class="row g-2 align-items-end mb-3">
+                    <div class="row g-2 align-items-end mb-2">
                         <div class="col-md-5">
                             <label class="form-label form-label-sm mb-1 fw-semibold">Search Medicine / Drug Master</label>
                             <input type="text" id="quick_drug_search" class="form-control form-control-sm" placeholder="Type medicine brand name or generic salt..." autocomplete="off">
@@ -95,18 +98,22 @@
                             <input type="hidden" id="selected_item_name" value="">
                             <input type="hidden" id="selected_generic_name" value="">
                             <input type="hidden" id="selected_category" value="">
+                            <input type="hidden" id="selected_gst_rate" value="12">
+                            <input type="hidden" id="selected_discount_percent" value="0">
+                            <input type="hidden" id="selected_sch_disc_per" value="0">
+                            <input type="hidden" id="selected_scheme_info" value="">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label form-label-sm mb-1 fw-semibold">Pack Size (Units)</label>
-                            <input type="number" id="quick_units_per_pack" class="form-control form-control-sm" value="10" min="1" step="1">
+                            <input type="number" id="quick_units_per_pack" class="form-control form-control-sm text-center" value="10" min="1" step="1">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label form-label-sm mb-1 fw-semibold">Order Packs</label>
-                            <input type="number" id="quick_order_packs" class="form-control form-control-sm" value="10" min="1" step="1">
+                            <input type="number" id="quick_order_packs" class="form-control form-control-sm text-center" value="10" min="1" step="1">
                         </div>
                         <div class="col-md-2">
                             <label class="form-label form-label-sm mb-1 fw-semibold">Est. Rate / Pack (₹)</label>
-                            <input type="number" id="quick_ptr" class="form-control form-control-sm" value="0.00" min="0" step="0.01">
+                            <input type="number" id="quick_ptr" class="form-control form-control-sm text-end" value="0.00" min="0" step="0.01">
                         </div>
                         <div class="col-md-1">
                             <button type="button" class="btn btn-primary btn-sm w-100" id="btn-add-line" onclick="addItemToPoTable();" disabled>
@@ -115,25 +122,35 @@
                         </div>
                     </div>
 
+                    <!-- Selected Drug History Pill -->
+                    <div id="selected_drug_info_pill" class="mb-3" style="display: none;"></div>
+
                     <div class="table-responsive">
                         <table class="table table-bordered table-sm align-middle mb-0" id="po-items-table">
                             <thead class="table-light">
                                 <tr>
-                                    <th style="width: 40px;">#</th>
+                                    <th style="width: 35px;">#</th>
                                     <th>Product Name</th>
                                     <th>Generic / Salt</th>
-                                    <th>Formulation</th>
-                                    <th class="text-center" style="width: 100px;">Units/Pack</th>
-                                    <th class="text-center" style="width: 110px;">Order Packs</th>
-                                    <th class="text-end" style="width: 120px;">Est. Rate (₹)</th>
-                                    <th class="text-center" style="width: 90px;">GST %</th>
-                                    <th class="text-end" style="width: 130px;">Line Total (₹)</th>
-                                    <th style="width: 50px;"></th>
+                                    <th style="width: 85px;">Formulation</th>
+                                    <th class="text-center" style="width: 85px;">Units/Pack</th>
+                                    <th class="text-center" style="width: 95px;">Order Packs</th>
+                                    <th class="text-end" style="width: 105px;">Est. Rate (₹)</th>
+                                    <th class="text-center" style="width: 130px;">Scheme / Disc</th>
+                                    <th class="text-center" style="width: 95px;">GST %</th>
+                                    <th class="text-end" style="width: 115px;">Line Total (₹)</th>
+                                    <th style="width: 40px;"></th>
                                 </tr>
                             </thead>
                             <tbody id="po-items-body">
                                 <?php if (!empty($poItems)): ?>
                                     <?php foreach ($poItems as $idx => $it): ?>
+                                        <?php
+                                            $itGst = (float)($it['gst_rate'] ?? 12);
+                                            $discPer = (float)($it['discount_percent'] ?? 0);
+                                            $schDiscPer = (float)($it['sch_disc_per'] ?? 0);
+                                            $schInfo = (string)($it['scheme_info'] ?? '');
+                                        ?>
                                         <tr data-item-id="<?= (int)$it['item_id'] ?>">
                                             <td class="row-num"><?= $idx + 1 ?></td>
                                             <td>
@@ -150,20 +167,37 @@
                                                 <input type="hidden" name="items[<?= $idx ?>][category]" value="<?= esc($it['category']) ?>">
                                             </td>
                                             <td class="text-center">
-                                                <input type="number" name="items[<?= $idx ?>][units_per_pack]" class="form-control form-control-sm text-center line-units" value="<?= (int)$it['units_per_pack'] ?>" min="1">
+                                                <input type="number" name="items[<?= $idx ?>][units_per_pack]" class="form-control form-control-sm text-center line-units px-1" value="<?= (int)$it['units_per_pack'] ?>" min="1">
                                             </td>
                                             <td class="text-center">
-                                                <input type="number" name="items[<?= $idx ?>][order_packs]" class="form-control form-control-sm text-center line-packs" value="<?= (float)$it['order_packs'] ?>" min="1" onchange="recalculatePoTotals();">
+                                                <input type="number" name="items[<?= $idx ?>][order_packs]" class="form-control form-control-sm text-center line-packs px-1" value="<?= (float)$it['order_packs'] ?>" min="1" onchange="recalculatePoTotals();">
                                             </td>
                                             <td class="text-end">
-                                                <input type="number" name="items[<?= $idx ?>][estimated_ptr]" class="form-control form-control-sm text-end line-rate" value="<?= number_format((float)$it['estimated_ptr'], 2, '.', '') ?>" min="0" step="0.01" onchange="recalculatePoTotals();">
+                                                <input type="number" name="items[<?= $idx ?>][estimated_ptr]" class="form-control form-control-sm text-end line-rate px-1" value="<?= number_format((float)$it['estimated_ptr'], 2, '.', '') ?>" min="0" step="0.01" onchange="recalculatePoTotals();">
                                             </td>
                                             <td class="text-center">
-                                                <select name="items[<?= $idx ?>][gst_rate]" class="form-select form-select-sm text-center line-gst" onchange="recalculatePoTotals();">
-                                                    <option value="0" <?= ((float)$it['gst_rate'] == 0) ? 'selected' : '' ?>>0%</option>
-                                                    <option value="5" <?= ((float)$it['gst_rate'] == 5) ? 'selected' : '' ?>>5%</option>
-                                                    <option value="12" <?= ((float)$it['gst_rate'] == 12) ? 'selected' : '' ?>>12%</option>
-                                                    <option value="18" <?= ((float)$it['gst_rate'] == 18) ? 'selected' : '' ?>>18%</option>
+                                                <div class="d-flex flex-column gap-1">
+                                                    <div class="input-group input-group-sm">
+                                                        <span class="input-group-text py-0 px-1 bg-light text-muted" style="font-size:10px;">Disc%</span>
+                                                        <input type="number" name="items[<?= $idx ?>][discount_percent]" class="form-control form-control-sm text-end line-disc px-1" value="<?= $discPer > 0 ? number_format($discPer, 2, '.', '') : '0' ?>" min="0" max="100" step="0.01" onchange="recalculatePoTotals();" style="font-size:11px;">
+                                                    </div>
+                                                    <div class="input-group input-group-sm">
+                                                        <span class="input-group-text py-0 px-1 bg-light text-muted" style="font-size:10px;">Sch</span>
+                                                        <input type="text" name="items[<?= $idx ?>][scheme_info]" class="form-control form-control-sm line-scheme px-1" value="<?= esc($schInfo) ?>" placeholder="e.g. 10+1" style="font-size:11px;">
+                                                    </div>
+                                                    <input type="hidden" name="items[<?= $idx ?>][sch_disc_per]" class="line-sch-per" value="<?= $schDiscPer ?>">
+                                                </div>
+                                            </td>
+                                            <td class="text-center">
+                                                <select name="items[<?= $idx ?>][gst_rate]" class="form-select form-select-sm text-center line-gst px-1" onchange="recalculatePoTotals();">
+                                                    <option value="0" <?= ((float)$itGst == 0) ? 'selected' : '' ?>>0%</option>
+                                                    <option value="5" <?= (abs((float)$itGst - 5) < 0.1) ? 'selected' : '' ?>>5%</option>
+                                                    <option value="12" <?= (abs((float)$itGst - 12) < 0.1) ? 'selected' : '' ?>>12%</option>
+                                                    <option value="18" <?= (abs((float)$itGst - 18) < 0.1) ? 'selected' : '' ?>>18%</option>
+                                                    <option value="28" <?= (abs((float)$itGst - 28) < 0.1) ? 'selected' : '' ?>>28%</option>
+                                                    <?php if (!in_array((float)$itGst, [0, 5, 12, 18, 28])): ?>
+                                                        <option value="<?= (float)$itGst ?>" selected><?= (float)$itGst ?>%</option>
+                                                    <?php endif; ?>
                                                 </select>
                                             </td>
                                             <td class="text-end fw-semibold line-total-display">
@@ -176,7 +210,7 @@
                                     <?php endforeach; ?>
                                 <?php else: ?>
                                     <tr id="no-items-row">
-                                        <td colspan="10" class="text-center py-4 text-muted">
+                                        <td colspan="11" class="text-center py-4 text-muted">
                                             No items added yet. Search above to add items or auto-load low stock items.
                                         </td>
                                     </tr>
@@ -184,18 +218,23 @@
                             </tbody>
                             <tfoot class="table-light">
                                 <tr>
-                                    <th colspan="8" class="text-end">Estimated Subtotal:</th>
-                                    <th class="text-end" id="po-subtotal-disp">₹0.00</th>
+                                    <th colspan="9" class="text-end">Estimated Subtotal (Taxable):</th>
+                                    <th class="text-end font-monospace" id="po-subtotal-disp">₹0.00</th>
+                                    <th></th>
+                                </tr>
+                                <tr id="po-disc-row" style="display:none;">
+                                    <th colspan="9" class="text-end text-success">Total Discount Saved:</th>
+                                    <th class="text-end text-success font-monospace" id="po-discount-disp">-₹0.00</th>
                                     <th></th>
                                 </tr>
                                 <tr>
-                                    <th colspan="8" class="text-end">Estimated GST Tax:</th>
-                                    <th class="text-end" id="po-tax-disp">₹0.00</th>
+                                    <th colspan="9" class="text-end">Estimated GST Tax:</th>
+                                    <th class="text-end font-monospace" id="po-tax-disp">₹0.00</th>
                                     <th></th>
                                 </tr>
                                 <tr class="table-primary">
-                                    <th colspan="8" class="text-end fs-6">Grand Total Commitment:</th>
-                                    <th class="text-end fs-6 text-primary fw-bold" id="po-grand-total-disp">₹0.00</th>
+                                    <th colspan="9" class="text-end fs-6">Grand Total Commitment:</th>
+                                    <th class="text-end fs-6 text-primary fw-bold font-monospace" id="po-grand-total-disp">₹0.00</th>
                                     <th></th>
                                 </tr>
                             </tfoot>
@@ -235,20 +274,55 @@ function initPoDrugAutocomplete() {
 
     $("#quick_drug_search").autocomplete({
         source: function(request, response) {
-            $.getJSON("<?= base_url('Medical/get_drug') ?>", request, function(data) {
+            var suppId = $('#po_supplier_id').val() || 0;
+            $.getJSON("<?= base_url('Medical/po_search_drug') ?>", {
+                term: request.term,
+                supplier_id: suppId
+            }, function(data) {
                 response(data || []);
             });
         },
         minLength: 1,
         select: function(event, ui) {
             var item = ui.item || {};
-            document.getElementById('selected_item_id').value = item.item_code || item.l_item_code || '';
+            document.getElementById('selected_item_id').value = item.item_code || '';
             document.getElementById('selected_item_name').value = item.value || '';
             document.getElementById('selected_generic_name').value = item.generic_name || '';
             document.getElementById('selected_category').value = item.formulation || 'Tablet';
-            document.getElementById('quick_units_per_pack').value = item.l_packing || 10;
-            document.getElementById('quick_ptr').value = item.l_unit_rate ? (parseFloat(item.l_unit_rate) * (item.l_packing || 10)).toFixed(2) : '100.00';
+            document.getElementById('quick_units_per_pack').value = item.packing || 10;
+            document.getElementById('quick_ptr').value = item.estimated_ptr || '0.00';
+            document.getElementById('selected_gst_rate').value = item.gst_rate !== undefined ? item.gst_rate : 12;
+            document.getElementById('selected_discount_percent').value = item.discount_percent || 0;
+            document.getElementById('selected_sch_disc_per').value = item.sch_disc_per || 0;
+            document.getElementById('selected_scheme_info').value = item.scheme_info || '';
             document.getElementById('btn-add-line').disabled = false;
+
+            // Render Drug History / Scheme info pill
+            var pill = document.getElementById('selected_drug_info_pill');
+            if (pill) {
+                var h = '<div class="alert alert-light border py-1 px-3 d-flex flex-wrap align-items-center justify-content-between gap-2 shadow-sm" style="font-size:12px;">';
+                h += '<div>';
+                h += '<strong class="text-primary me-2"><i class="bi bi-capsule"></i> ' + escapeHtml(item.value) + '</strong>';
+                if (item.has_last_purchase) {
+                    h += '<span class="badge bg-secondary me-1">Last Rate: ₹' + item.estimated_ptr + '</span>';
+                    h += '<span class="badge bg-info text-dark me-1">GST: ' + item.gst_rate + '%</span>';
+                    if (item.scheme_summary) {
+                        h += '<span class="badge bg-success me-1"><i class="bi bi-tag-fill"></i> ' + escapeHtml(item.scheme_summary) + '</span>';
+                    }
+                    if (item.is_vendor_match) {
+                        h += '<span class="badge bg-success-subtle text-success border border-success-subtle ms-1"><i class="bi bi-check-circle"></i> From selected vendor</span>';
+                    } else if (item.last_supplier_name) {
+                        h += '<span class="text-muted ms-1 small">(Last: ' + escapeHtml(item.last_supplier_name) + (item.last_purchase_date ? ' ' + item.last_purchase_date : '') + ')</span>';
+                    }
+                } else {
+                    h += '<span class="badge bg-light text-muted border">New Item &bull; Master GST: ' + item.gst_rate + '%</span>';
+                }
+                h += '</div>';
+                h += '<span class="text-muted fst-italic small">Auto-filled rate &amp; GST &bull; Click + Add</span>';
+                h += '</div>';
+                pill.innerHTML = h;
+                pill.style.display = 'block';
+            }
         }
     });
 }
@@ -271,7 +345,10 @@ function addItemToPoTable(prefill) {
         units_per_pack: document.getElementById('quick_units_per_pack').value || 10,
         order_packs: document.getElementById('quick_order_packs').value || 10,
         estimated_ptr: document.getElementById('quick_ptr').value || 0,
-        gst_rate: 12
+        gst_rate: document.getElementById('selected_gst_rate').value || 12,
+        discount_percent: document.getElementById('selected_discount_percent').value || 0,
+        sch_disc_per: document.getElementById('selected_sch_disc_per').value || 0,
+        scheme_info: document.getElementById('selected_scheme_info').value || ''
     };
 
     if (!item.item_id || !item.item_name) {
@@ -296,6 +373,21 @@ function addItemToPoTable(prefill) {
     var tr = document.createElement('tr');
     tr.setAttribute('data-item-id', item.item_id);
 
+    var itemGst = parseFloat(item.gst_rate !== undefined ? item.gst_rate : 12);
+    var discVal = parseFloat(item.discount_percent || 0);
+    var schVal = parseFloat(item.sch_disc_per || 0);
+    var schInfo = item.scheme_info || '';
+
+    // Standard GST options
+    var standardGsts = [0, 5, 12, 18, 28];
+    var gstOptionsHtml = '';
+    standardGsts.forEach(function(g) {
+        gstOptionsHtml += `<option value="${g}" ${Math.abs(itemGst - g) < 0.1 ? 'selected' : ''}>${g}%</option>`;
+    });
+    if (!standardGsts.some(g => Math.abs(itemGst - g) < 0.1)) {
+        gstOptionsHtml += `<option value="${itemGst}" selected>${itemGst}%</option>`;
+    }
+
     tr.innerHTML = `
         <td class="row-num">${rowIdx + 1}</td>
         <td>
@@ -312,20 +404,30 @@ function addItemToPoTable(prefill) {
             <input type="hidden" name="items[${rowIdx}][category]" value="${escapeHtml(item.category || '')}">
         </td>
         <td class="text-center">
-            <input type="number" name="items[${rowIdx}][units_per_pack]" class="form-control form-control-sm text-center line-units" value="${item.units_per_pack}" min="1">
+            <input type="number" name="items[${rowIdx}][units_per_pack]" class="form-control form-control-sm text-center line-units px-1" value="${item.units_per_pack}" min="1">
         </td>
         <td class="text-center">
-            <input type="number" name="items[${rowIdx}][order_packs]" class="form-control form-control-sm text-center line-packs" value="${item.order_packs}" min="1" onchange="recalculatePoTotals();">
+            <input type="number" name="items[${rowIdx}][order_packs]" class="form-control form-control-sm text-center line-packs px-1" value="${item.order_packs}" min="1" onchange="recalculatePoTotals();">
         </td>
         <td class="text-end">
-            <input type="number" name="items[${rowIdx}][estimated_ptr]" class="form-control form-control-sm text-end line-rate" value="${parseFloat(item.estimated_ptr).toFixed(2)}" min="0" step="0.01" onchange="recalculatePoTotals();">
+            <input type="number" name="items[${rowIdx}][estimated_ptr]" class="form-control form-control-sm text-end line-rate px-1" value="${parseFloat(item.estimated_ptr).toFixed(2)}" min="0" step="0.01" onchange="recalculatePoTotals();">
         </td>
         <td class="text-center">
-            <select name="items[${rowIdx}][gst_rate]" class="form-select form-select-sm text-center line-gst" onchange="recalculatePoTotals();">
-                <option value="0" ${item.gst_rate == 0 ? 'selected' : ''}>0%</option>
-                <option value="5" ${item.gst_rate == 5 ? 'selected' : ''}>5%</option>
-                <option value="12" ${item.gst_rate == 12 ? 'selected' : ''}>12%</option>
-                <option value="18" ${item.gst_rate == 18 ? 'selected' : ''}>18%</option>
+            <div class="d-flex flex-column gap-1">
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text py-0 px-1 bg-light text-muted" style="font-size:10px;">Disc%</span>
+                    <input type="number" name="items[${rowIdx}][discount_percent]" class="form-control form-control-sm text-end line-disc px-1" value="${discVal > 0 ? discVal.toFixed(2) : '0'}" min="0" max="100" step="0.01" onchange="recalculatePoTotals();" style="font-size:11px;">
+                </div>
+                <div class="input-group input-group-sm">
+                    <span class="input-group-text py-0 px-1 bg-light text-muted" style="font-size:10px;">Sch</span>
+                    <input type="text" name="items[${rowIdx}][scheme_info]" class="form-control form-control-sm line-scheme px-1" value="${escapeHtml(schInfo)}" placeholder="e.g. 10+1" style="font-size:11px;">
+                </div>
+                <input type="hidden" name="items[${rowIdx}][sch_disc_per]" class="line-sch-per" value="${schVal}">
+            </div>
+        </td>
+        <td class="text-center">
+            <select name="items[${rowIdx}][gst_rate]" class="form-select form-select-sm text-center line-gst px-1" onchange="recalculatePoTotals();">
+                ${gstOptionsHtml}
             </select>
         </td>
         <td class="text-end fw-semibold line-total-display">₹0.00</td>
@@ -344,7 +446,19 @@ function resetQuickAddInputs() {
     document.getElementById('selected_item_id').value = '';
     document.getElementById('selected_item_name').value = '';
     document.getElementById('selected_generic_name').value = '';
+    document.getElementById('selected_gst_rate').value = '12';
+    document.getElementById('selected_discount_percent').value = '0';
+    document.getElementById('selected_sch_disc_per').value = '0';
+    document.getElementById('selected_scheme_info').value = '';
+    document.getElementById('quick_ptr').value = '0.00';
     document.getElementById('btn-add-line').disabled = true;
+
+    var pill = document.getElementById('selected_drug_info_pill');
+    if (pill) {
+        pill.innerHTML = '';
+        pill.style.display = 'none';
+    }
+
     document.getElementById('quick_drug_search').focus();
 }
 
@@ -353,7 +467,7 @@ function removePoRow(btn) {
     var tbody = document.getElementById('po-items-body');
     var rows = tbody.querySelectorAll('tr');
     if (rows.length === 0) {
-        tbody.innerHTML = '<tr id="no-items-row"><td colspan="10" class="text-center py-4 text-muted">No items added yet.</td></tr>';
+        tbody.innerHTML = '<tr id="no-items-row"><td colspan="11" class="text-center py-4 text-muted">No items added yet. Search above to add items or auto-load low stock items.</td></tr>';
     } else {
         rows.forEach(function(r, idx) {
             var numTd = r.querySelector('.row-num');
@@ -365,28 +479,48 @@ function removePoRow(btn) {
 
 function recalculatePoTotals() {
     var rows = document.querySelectorAll('#po-items-body tr:not(#no-items-row)');
-    var subtotal = 0.0;
+    var totalGross = 0.0;
+    var totalDiscount = 0.0;
+    var totalTaxable = 0.0;
     var totalTax = 0.0;
 
     rows.forEach(function(r) {
         var packs = parseFloat(r.querySelector('.line-packs')?.value || 0);
         var rate = parseFloat(r.querySelector('.line-rate')?.value || 0);
+        var discPer = parseFloat(r.querySelector('.line-disc')?.value || 0);
+        var schPer = parseFloat(r.querySelector('.line-sch-per')?.value || 0);
         var gst = parseFloat(r.querySelector('.line-gst')?.value || 0);
 
-        var lineSub = packs * rate;
-        var lineTax = lineSub * (gst / 100);
-        var lineTotal = lineSub + lineTax;
+        var lineGross = packs * rate;
+        var schAmt = (schPer > 0) ? (lineGross * (schPer / 100)) : 0.0;
+        var afterSch = Math.max(0.0, lineGross - schAmt);
+        var tradeDiscAmt = (discPer > 0) ? (afterSch * (discPer / 100)) : 0.0;
+        var lineTaxable = Math.max(0.0, afterSch - tradeDiscAmt);
+        var lineTax = lineTaxable * (gst / 100);
+        var lineTotal = lineTaxable + lineTax;
 
-        subtotal += lineSub;
+        totalGross += lineGross;
+        totalDiscount += (schAmt + tradeDiscAmt);
+        totalTaxable += lineTaxable;
         totalTax += lineTax;
 
         var totalDisp = r.querySelector('.line-total-display');
         if (totalDisp) totalDisp.innerText = '₹' + lineTotal.toFixed(2);
     });
 
-    document.getElementById('po-subtotal-disp').innerText = '₹' + subtotal.toFixed(2);
+    document.getElementById('po-subtotal-disp').innerText = '₹' + totalTaxable.toFixed(2);
     document.getElementById('po-tax-disp').innerText = '₹' + totalTax.toFixed(2);
-    document.getElementById('po-grand-total-disp').innerText = '₹' + (subtotal + totalTax).toFixed(2);
+    document.getElementById('po-grand-total-disp').innerText = '₹' + (totalTaxable + totalTax).toFixed(2);
+
+    var discRow = document.getElementById('po-disc-row');
+    if (discRow) {
+        if (totalDiscount > 0) {
+            discRow.style.display = '';
+            document.getElementById('po-discount-disp').innerText = '-₹' + totalDiscount.toFixed(2);
+        } else {
+            discRow.style.display = 'none';
+        }
+    }
 }
 
 function fetchSupplierReorderItems() {
@@ -406,8 +540,11 @@ function fetchSupplierReorderItems() {
                         category: it.category || 'Tablet',
                         units_per_pack: it.units_per_pack || 10,
                         order_packs: 10,
-                        estimated_ptr: it.estimated_ptr || 50,
-                        gst_rate: it.gst_rate || 12
+                        estimated_ptr: it.estimated_ptr || 0,
+                        gst_rate: it.gst_rate !== undefined ? it.gst_rate : 12,
+                        discount_percent: it.discount_percent || 0,
+                        sch_disc_per: it.sch_disc_per || 0,
+                        scheme_info: it.scheme_info || ''
                     });
                     added++;
                 });

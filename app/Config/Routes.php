@@ -133,6 +133,7 @@ $routes->get('Medical/po_edit/(:num)', 'MedicalProcurement::po_edit/$1');
 $routes->post('Medical/po_status/(:num)', 'MedicalProcurement::po_status/$1');
 $routes->get('Medical/po_print/(:num)', 'MedicalProcurement::po_print/$1');
 $routes->get('Medical/po_reorder_items/(:num)', 'MedicalProcurement::po_reorder_items/$1');
+$routes->get('Medical/po_search_drug', 'MedicalProcurement::po_search_drug');
 
 $routes->get('Medical/grn_list', 'MedicalProcurement::grn_list');
 $routes->get('Medical/grn_new', 'MedicalProcurement::grn_new');

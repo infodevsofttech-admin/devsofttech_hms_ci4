@@ -102,19 +102,45 @@ if (!isset($branding) || !is_array($branding)) {
     <table class="items-table">
         <thead>
             <tr>
-                <th style="width: 30px;">#</th>
+                <th style="width: 25px;">#</th>
                 <th>Item / Brand Name</th>
                 <th>Salt Composition</th>
-                <th class="text-center" style="width: 70px;">Pack Size</th>
-                <th class="text-center" style="width: 70px;">Order Qty</th>
-                <th class="text-end" style="width: 80px;">Rate/Pack</th>
-                <th class="text-center" style="width: 50px;">GST %</th>
-                <th class="text-end" style="width: 90px;">Total (₹)</th>
+                <th class="text-center" style="width: 55px;">Pack Size</th>
+                <th class="text-center" style="width: 55px;">Order Qty</th>
+                <th class="text-end" style="width: 75px;">Rate/Pack</th>
+                <th class="text-center" style="width: 80px;">Scheme / Disc</th>
+                <th class="text-center" style="width: 48px;">GST %</th>
+                <th class="text-end" style="width: 85px;">Total (₹)</th>
             </tr>
         </thead>
         <tbody>
-            <?php if (!empty($items)): ?>
+            <?php 
+            $calcGross = 0.0;
+            $calcDiscount = 0.0;
+            if (!empty($items)): 
+            ?>
                 <?php foreach ($items as $idx => $it): ?>
+                    <?php
+                        $lineGross = round((float)$it['order_packs'] * (float)$it['estimated_ptr'], 2);
+                        $schPer = (float)($it['sch_disc_per'] ?? 0);
+                        $schAmt = ($schPer > 0) ? round($lineGross * ($schPer / 100), 2) : 0.0;
+                        $afterSch = max(0.0, $lineGross - $schAmt);
+                        $discPer = (float)($it['discount_percent'] ?? 0);
+                        $discAmt = ($discPer > 0) ? round($afterSch * ($discPer / 100), 2) : 0.0;
+                        $calcGross += $lineGross;
+                        $calcDiscount += ($schAmt + $discAmt);
+
+                        $discTags = [];
+                        if ($discPer > 0) {
+                            $discTags[] = $discPer . '% Disc';
+                        }
+                        if ($schPer > 0) {
+                            $discTags[] = $schPer . '% Sch';
+                        }
+                        if (!empty($it['scheme_info'])) {
+                            $discTags[] = esc($it['scheme_info']);
+                        }
+                    ?>
                     <tr>
                         <td class="text-center"><?= $idx + 1 ?></td>
                         <td><strong><?= esc($it['item_name']) ?></strong></td>
@@ -122,6 +148,9 @@ if (!isset($branding) || !is_array($branding)) {
                         <td class="text-center"><?= (int)$it['units_per_pack'] ?>s</td>
                         <td class="text-center"><strong><?= (float)$it['order_packs'] ?></strong></td>
                         <td class="text-end">₹<?= number_format((float)$it['estimated_ptr'], 2) ?></td>
+                        <td class="text-center" style="font-size: 9px;">
+                            <?= !empty($discTags) ? implode('<br>', $discTags) : '<span style="color:#94a3b8;">-</span>' ?>
+                        </td>
                         <td class="text-center"><?= (float)$it['gst_rate'] ?>%</td>
                         <td class="text-end">₹<?= number_format((float)$it['estimated_amount'], 2) ?></td>
                     </tr>
@@ -131,8 +160,18 @@ if (!isset($branding) || !is_array($branding)) {
     </table>
 
     <table class="totals-table">
+        <?php if ($calcDiscount > 0.009): ?>
         <tr>
-            <td>Estimated Subtotal:</td>
+            <td>Gross Amount:</td>
+            <td class="text-end">₹<?= number_format($calcGross, 2) ?></td>
+        </tr>
+        <tr>
+            <td style="color: #166534;">Total Schemes / Discounts:</td>
+            <td class="text-end" style="color: #166534;">-₹<?= number_format($calcDiscount, 2) ?></td>
+        </tr>
+        <?php endif; ?>
+        <tr>
+            <td>Taxable Subtotal:</td>
             <td class="text-end">₹<?= number_format((float)$po['total_estimated_amount'], 2) ?></td>
         </tr>
         <tr>

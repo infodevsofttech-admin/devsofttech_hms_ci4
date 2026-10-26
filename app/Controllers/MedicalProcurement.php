@@ -26,6 +26,28 @@ class MedicalProcurement extends BaseController
         $this->grnModel = new PharmacyGrnModel();
         $this->grnItemModel = new PharmacyGrnItemModel();
         $this->ensureGrnSchema();
+        $this->ensurePoSchema();
+    }
+
+    private function ensurePoSchema(): void
+    {
+        try {
+            if (!$this->db->tableExists('mst_purchase_order_items')) {
+                return;
+            }
+
+            if (!$this->db->fieldExists('discount_percent', 'mst_purchase_order_items')) {
+                $this->db->query("ALTER TABLE `mst_purchase_order_items` ADD COLUMN `discount_percent` DECIMAL(5,2) DEFAULT 0.00 AFTER `estimated_ptr`");
+            }
+            if (!$this->db->fieldExists('sch_disc_per', 'mst_purchase_order_items')) {
+                $this->db->query("ALTER TABLE `mst_purchase_order_items` ADD COLUMN `sch_disc_per` DECIMAL(5,2) DEFAULT 0.00 AFTER `discount_percent`");
+            }
+            if (!$this->db->fieldExists('scheme_info', 'mst_purchase_order_items')) {
+                $this->db->query("ALTER TABLE `mst_purchase_order_items` ADD COLUMN `scheme_info` VARCHAR(100) DEFAULT '' AFTER `sch_disc_per`");
+            }
+        } catch (\Throwable $e) {
+            log_message('error', 'ensurePoSchema: ' . $e->getMessage());
+        }
     }
 
     private function ensureGrnSchema(): void
@@ -215,6 +237,7 @@ class MedicalProcurement extends BaseController
             return $deny;
         }
 
+        $poId = (int)($this->request->getPost('po_id') ?? 0);
         $supplierId = (int)$this->request->getPost('supplier_id');
         $storeId = (int)($this->request->getPost('store_id') ?: 1);
         $poDate = trim((string)$this->request->getPost('po_date') ?: date('Y-m-d'));
@@ -233,7 +256,6 @@ class MedicalProcurement extends BaseController
             return $this->response->setJSON(['status' => 0, 'message' => 'Please add at least one item to the purchase order.']);
         }
 
-        $poNumber = $this->poModel->generatePoNumber();
         $userId = $this->getCurrentUserId();
 
         $totalEstimatedAmount = 0.0;
@@ -249,16 +271,23 @@ class MedicalProcurement extends BaseController
             $unitsPerPack = (int)($row['units_per_pack'] ?? 10);
             $estimatedPtr = (float)($row['estimated_ptr'] ?? 0);
             $gstRate = (float)($row['gst_rate'] ?? 12.0);
+            $discountPercent = (float)($row['discount_percent'] ?? 0.0);
+            $schDiscPer = (float)($row['sch_disc_per'] ?? 0.0);
+            $schemeInfo = trim((string)($row['scheme_info'] ?? ''));
 
             if ($itemId <= 0 || $itemName === '' || $orderPacks <= 0) {
                 continue;
             }
 
-            $lineSubtotal = round($orderPacks * $estimatedPtr, 2);
-            $lineTax = round($lineSubtotal * ($gstRate / 100), 2);
-            $lineTotal = $lineSubtotal + $lineTax;
+            $lineGross = round($orderPacks * $estimatedPtr, 2);
+            $schAmt = ($schDiscPer > 0) ? round($lineGross * ($schDiscPer / 100), 2) : 0.0;
+            $afterSch = max(0.0, $lineGross - $schAmt);
+            $discAmt = ($discountPercent > 0) ? round($afterSch * ($discountPercent / 100), 2) : 0.0;
+            $taxable = max(0.0, $afterSch - $discAmt);
+            $lineTax = round($taxable * ($gstRate / 100), 2);
+            $lineTotal = $taxable + $lineTax;
 
-            $totalEstimatedAmount += $lineSubtotal;
+            $totalEstimatedAmount += $taxable;
             $totalTaxAmount += $lineTax;
 
             $validItems[] = [
@@ -271,6 +300,9 @@ class MedicalProcurement extends BaseController
                 'received_packs'   => 0,
                 'remaining_packs'  => $orderPacks,
                 'estimated_ptr'    => $estimatedPtr,
+                'discount_percent' => $discountPercent,
+                'sch_disc_per'     => $schDiscPer,
+                'scheme_info'      => $schemeInfo,
                 'gst_rate'         => $gstRate,
                 'estimated_amount' => $lineTotal,
                 'status'           => 'pending',
@@ -283,35 +315,75 @@ class MedicalProcurement extends BaseController
 
         $this->db->transStart();
 
-        $poHeader = [
-            'store_id'               => $storeId,
-            'supplier_id'            => $supplierId,
-            'po_number'              => $poNumber,
-            'po_date'                => $poDate,
-            'expected_delivery_date' => $expectedDelivery ?: null,
-            'payment_terms'          => $paymentTerms,
-            'total_items'            => count($validItems),
-            'total_estimated_amount' => $totalEstimatedAmount,
-            'tax_amount'             => $totalTaxAmount,
-            'grand_total'            => $totalEstimatedAmount + $totalTaxAmount,
-            'status'                 => $status,
-            'remarks'                => $remarks,
-            'created_by'             => $userId,
-            'created_at'             => date('Y-m-d H:i:s'),
-            'updated_at'             => date('Y-m-d H:i:s'),
-        ];
+        if ($poId > 0) {
+            $existingPo = $this->poModel->find($poId);
+            if (!$existingPo) {
+                $this->db->transRollback();
+                return $this->response->setJSON(['status' => 0, 'message' => 'Existing purchase order not found.']);
+            }
 
-        if ($status === 'approved' || $status === 'ordered') {
-            $poHeader['approved_by'] = $userId;
-            $poHeader['approved_at'] = date('Y-m-d H:i:s');
-        }
+            $poNumber = $existingPo['po_number'];
 
-        $this->poModel->insert($poHeader);
-        $poId = (int)$this->db->insertID();
+            $poHeader = [
+                'store_id'               => $storeId,
+                'supplier_id'            => $supplierId,
+                'po_date'                => $poDate,
+                'expected_delivery_date' => $expectedDelivery ?: null,
+                'payment_terms'          => $paymentTerms,
+                'total_items'            => count($validItems),
+                'total_estimated_amount' => $totalEstimatedAmount,
+                'tax_amount'             => $totalTaxAmount,
+                'grand_total'            => $totalEstimatedAmount + $totalTaxAmount,
+                'status'                 => $status,
+                'remarks'                => $remarks,
+                'updated_at'             => date('Y-m-d H:i:s'),
+            ];
 
-        foreach ($validItems as &$item) {
-            $item['po_id'] = $poId;
-            $this->poItemModel->insert($item);
+            if (($status === 'approved' || $status === 'ordered') && empty($existingPo['approved_at'])) {
+                $poHeader['approved_by'] = $userId;
+                $poHeader['approved_at'] = date('Y-m-d H:i:s');
+            }
+
+            $this->poModel->update($poId, $poHeader);
+            $this->poItemModel->where('po_id', $poId)->delete();
+
+            foreach ($validItems as &$item) {
+                $item['po_id'] = $poId;
+                $this->poItemModel->insert($item);
+            }
+        } else {
+            $poNumber = $this->poModel->generatePoNumber();
+
+            $poHeader = [
+                'store_id'               => $storeId,
+                'supplier_id'            => $supplierId,
+                'po_number'              => $poNumber,
+                'po_date'                => $poDate,
+                'expected_delivery_date' => $expectedDelivery ?: null,
+                'payment_terms'          => $paymentTerms,
+                'total_items'            => count($validItems),
+                'total_estimated_amount' => $totalEstimatedAmount,
+                'tax_amount'             => $totalTaxAmount,
+                'grand_total'            => $totalEstimatedAmount + $totalTaxAmount,
+                'status'                 => $status,
+                'remarks'                => $remarks,
+                'created_by'             => $userId,
+                'created_at'             => date('Y-m-d H:i:s'),
+                'updated_at'             => date('Y-m-d H:i:s'),
+            ];
+
+            if ($status === 'approved' || $status === 'ordered') {
+                $poHeader['approved_by'] = $userId;
+                $poHeader['approved_at'] = date('Y-m-d H:i:s');
+            }
+
+            $this->poModel->insert($poHeader);
+            $poId = (int)$this->db->insertID();
+
+            foreach ($validItems as &$item) {
+                $item['po_id'] = $poId;
+                $this->poItemModel->insert($item);
+            }
         }
 
         $this->db->transComplete();
@@ -322,7 +394,7 @@ class MedicalProcurement extends BaseController
 
         return $this->response->setJSON([
             'status'    => 1,
-            'message'   => "Purchase Order {$poNumber} created successfully!",
+            'message'   => "Purchase Order {$poNumber} saved successfully!",
             'po_id'     => $poId,
             'po_number' => $poNumber,
         ]);
@@ -460,15 +532,19 @@ class MedicalProcurement extends BaseController
 
         // Fetch drugs supplied by this vendor or general low stock items
         $sql = "SELECT p.id AS item_id, p.item_name, p.genericname AS generic_name, 
-                       p.formulation AS category, 10 AS units_per_pack,
+                       p.formulation AS category, 
+                       IFNULL(t.packing, IFNULL(p.packing, 10)) AS units_per_pack,
                        IFNULL(t.purchase_price, 0) AS estimated_ptr,
-                       IFNULL(t.CGST_per + t.SGST_per, 12) AS gst_rate,
+                       IFNULL(t.CGST_per + t.SGST_per, IFNULL(p.CGST_per + p.SGST_per, 12)) AS gst_rate,
+                       IFNULL(t.discount, 0) AS discount_percent,
+                       IFNULL(t.sch_disc_per, 0) AS sch_disc_per,
+                       IF(t.qty_free > 0, CONCAT('Free: ', CAST(t.qty_free AS UNSIGNED)), '') AS scheme_info,
                        (IFNULL(t.total_unit, 0) - IFNULL(t.total_sale_unit, 0) - IFNULL(t.total_return_unit, 0) - IFNULL(t.total_lost_unit, 0)) AS current_stock
                 FROM med_product_master p
                 LEFT JOIN purchase_invoice_item t ON p.id = t.item_code
                 LEFT JOIN purchase_invoice m ON t.purchase_id = m.id
                 WHERE (m.sid = ? OR m.sid IS NULL)
-                  AND p.is_continue = 1
+                  AND (p.is_continue = 1 OR p.is_continue IS NULL)
                 GROUP BY p.id
                 HAVING current_stock < 50
                 ORDER BY current_stock ASC
@@ -481,6 +557,261 @@ class MedicalProcurement extends BaseController
             'count'  => count($rows),
             'items'  => $rows,
         ]);
+    }
+
+    public function po_search_drug()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $term = trim((string)$this->request->getGet('term'));
+        $supplierId = (int)($this->request->getGet('supplier_id') ?? 0);
+
+        if ($term === '') {
+            return $this->response->setJSON([]);
+        }
+
+        if (!$this->db->tableExists('med_product_master')) {
+            return $this->response->setJSON([]);
+        }
+
+        $pFields = $this->db->getFieldNames('med_product_master') ?? [];
+        $hasGeneric = in_array('genericname', $pFields, true);
+        $hasCompany = in_array('company_name', $pFields, true);
+        $hasContinue = in_array('is_continue', $pFields, true);
+
+        $builder = $this->db->table('med_product_master p')
+            ->select('p.id, p.item_name, p.formulation, '
+                . ($hasGeneric ? 'p.genericname' : "'' AS genericname") . ', '
+                . (in_array('packing', $pFields, true) ? 'p.packing' : "'10' AS packing") . ', '
+                . (in_array('CGST_per', $pFields, true) ? 'p.CGST_per' : '0 AS CGST_per') . ', '
+                . (in_array('SGST_per', $pFields, true) ? 'p.SGST_per' : '0 AS SGST_per') . ', '
+                . ($hasCompany ? 'p.company_name' : "'' AS company_name"));
+
+        if ($hasContinue) {
+            $builder->groupStart()
+                ->where('p.is_continue', 1)
+                ->orWhere('p.is_continue IS NULL')
+                ->groupEnd();
+        }
+
+        $builder->groupStart()
+            ->like('p.item_name', $term);
+        if ($hasGeneric) {
+            $builder->orLike('p.genericname', $term);
+        }
+        if ($hasCompany) {
+            $builder->orLike('p.company_name', $term);
+        }
+        $builder->groupEnd();
+
+        // Order: matches starting with term first, then alphabetical
+        $builder->orderBy("CASE WHEN p.item_name LIKE " . $this->db->escape($term . '%') . " THEN 1 ELSE 2 END", 'ASC', false)
+            ->orderBy('p.item_name', 'ASC')
+            ->limit(40);
+
+        $products = $builder->get()->getResultArray();
+
+        $hasPiItem = $this->db->tableExists('purchase_invoice_item');
+        $hasPi = $this->db->tableExists('purchase_invoice');
+        $hasGrnItem = $this->db->tableExists('mst_grn_items');
+        $hasGrn = $this->db->tableExists('mst_grns');
+
+        $result = [];
+
+        foreach ($products as $p) {
+            $itemId = (int)$p['id'];
+            $lastPur = null;
+            $isVendorMatch = false;
+
+            // 1. Check last purchase from selected supplier in purchase_invoice_item
+            if ($supplierId > 0 && $hasPiItem && $hasPi) {
+                $lastPur = $this->db->table('purchase_invoice_item pii')
+                    ->select('pii.purchase_price, pii.purchase_unit_rate, pii.packing, pii.CGST_per, pii.SGST_per, pii.discount, pii.sch_disc_per, pii.sch_disc_amt, pii.qty_free, pii.mrp, pi.sid, pi.supp_name, pi.date_of_invoice')
+                    ->join('purchase_invoice pi', 'pi.id = pii.purchase_id', 'left')
+                    ->where('pii.item_code', $itemId)
+                    ->where('pi.sid', $supplierId)
+                    ->orderBy('pii.id', 'DESC')
+                    ->get(1)
+                    ->getRowArray();
+                if ($lastPur) {
+                    $isVendorMatch = true;
+                }
+            }
+
+            // 2. Check in mst_grn_items from selected supplier if still not found
+            if (!$lastPur && $supplierId > 0 && $hasGrnItem && $hasGrn) {
+                $lastGrn = $this->db->table('mst_grn_items gi')
+                    ->select('gi.unit_purchase_rate, gi.packing, gi.gross_amount, gi.cgst_percent, gi.sgst_percent, gi.igst_percent, gi.discount_percent, gi.sch_disc_per, gi.sch_disc_amt, gi.free_packs, gi.mrp, g.supplier_id AS sid, s.name_supplier AS supp_name, g.grn_date AS date_of_invoice')
+                    ->join('mst_grns g', 'g.grn_id = gi.grn_id', 'left')
+                    ->join('med_supplier s', 's.sid = g.supplier_id', 'left')
+                    ->where('gi.item_code', $itemId)
+                    ->where('g.supplier_id', $supplierId)
+                    ->orderBy('gi.grn_item_id', 'DESC')
+                    ->get(1)
+                    ->getRowArray();
+
+                if ($lastGrn) {
+                    $isVendorMatch = true;
+                    $pack = (int)($lastGrn['packing'] ?? 10);
+                    $ratePerPack = (float)($lastGrn['unit_purchase_rate'] ?? 0) * ($pack > 0 ? $pack : 1);
+                    $lastPur = [
+                        'purchase_price'     => $ratePerPack,
+                        'purchase_unit_rate' => $lastGrn['unit_purchase_rate'],
+                        'packing'            => $pack,
+                        'CGST_per'           => $lastGrn['cgst_percent'],
+                        'SGST_per'           => $lastGrn['sgst_percent'],
+                        'discount'           => $lastGrn['discount_percent'],
+                        'sch_disc_per'       => $lastGrn['sch_disc_per'],
+                        'sch_disc_amt'       => $lastGrn['sch_disc_amt'],
+                        'qty_free'           => $lastGrn['free_packs'],
+                        'mrp'                => $lastGrn['mrp'],
+                        'sid'                => $lastGrn['sid'],
+                        'supp_name'          => $lastGrn['supp_name'],
+                        'date_of_invoice'    => $lastGrn['date_of_invoice'],
+                    ];
+                }
+            }
+
+            // 3. Fallback: check last purchase from ANY supplier in purchase_invoice_item
+            if (!$lastPur && $hasPiItem && $hasPi) {
+                $lastPur = $this->db->table('purchase_invoice_item pii')
+                    ->select('pii.purchase_price, pii.purchase_unit_rate, pii.packing, pii.CGST_per, pii.SGST_per, pii.discount, pii.sch_disc_per, pii.sch_disc_amt, pii.qty_free, pii.mrp, pi.sid, pi.supp_name, pi.date_of_invoice')
+                    ->join('purchase_invoice pi', 'pi.id = pii.purchase_id', 'left')
+                    ->where('pii.item_code', $itemId)
+                    ->orderBy('pii.id', 'DESC')
+                    ->get(1)
+                    ->getRowArray();
+            }
+
+            // 4. Fallback: check in mst_grn_items from ANY supplier
+            if (!$lastPur && $hasGrnItem && $hasGrn) {
+                $lastGrn = $this->db->table('mst_grn_items gi')
+                    ->select('gi.unit_purchase_rate, gi.packing, gi.gross_amount, gi.cgst_percent, gi.sgst_percent, gi.igst_percent, gi.discount_percent, gi.sch_disc_per, gi.sch_disc_amt, gi.free_packs, gi.mrp, g.supplier_id AS sid, s.name_supplier AS supp_name, g.grn_date AS date_of_invoice')
+                    ->join('mst_grns g', 'g.grn_id = gi.grn_id', 'left')
+                    ->join('med_supplier s', 's.sid = g.supplier_id', 'left')
+                    ->where('gi.item_code', $itemId)
+                    ->orderBy('gi.grn_item_id', 'DESC')
+                    ->get(1)
+                    ->getRowArray();
+
+                if ($lastGrn) {
+                    $pack = (int)($lastGrn['packing'] ?? 10);
+                    $ratePerPack = (float)($lastGrn['unit_purchase_rate'] ?? 0) * ($pack > 0 ? $pack : 1);
+                    $lastPur = [
+                        'purchase_price'     => $ratePerPack,
+                        'purchase_unit_rate' => $lastGrn['unit_purchase_rate'],
+                        'packing'            => $pack,
+                        'CGST_per'           => $lastGrn['cgst_percent'],
+                        'SGST_per'           => $lastGrn['sgst_percent'],
+                        'discount'           => $lastGrn['discount_percent'],
+                        'sch_disc_per'       => $lastGrn['sch_disc_per'],
+                        'sch_disc_amt'       => $lastGrn['sch_disc_amt'],
+                        'qty_free'           => $lastGrn['free_packs'],
+                        'mrp'                => $lastGrn['mrp'],
+                        'sid'                => $lastGrn['sid'],
+                        'supp_name'          => $lastGrn['supp_name'],
+                        'date_of_invoice'    => $lastGrn['date_of_invoice'],
+                    ];
+                }
+            }
+
+            // Determine packing
+            $packing = (int)($lastPur['packing'] ?? 0);
+            if ($packing <= 0) {
+                $packing = (int)preg_replace('/[^0-9]/', '', (string)($p['packing'] ?? ''));
+            }
+            if ($packing <= 0) {
+                $packing = 10;
+            }
+
+            // Determine Rate (estimated PTR per pack)
+            $rate = 0.0;
+            if ($lastPur && (float)($lastPur['purchase_price'] ?? 0) > 0) {
+                $rate = (float)$lastPur['purchase_price'];
+            } elseif ($lastPur && (float)($lastPur['purchase_unit_rate'] ?? 0) > 0) {
+                $rate = (float)$lastPur['purchase_unit_rate'] * $packing;
+            }
+
+            // Determine GST %
+            $gstRate = null;
+            if ($lastPur) {
+                $purGst = (float)($lastPur['CGST_per'] ?? 0) + (float)($lastPur['SGST_per'] ?? 0);
+                if ($purGst > 0) {
+                    $gstRate = $purGst;
+                }
+            }
+            if ($gstRate === null) {
+                $masterGst = (float)($p['CGST_per'] ?? 0) + (float)($p['SGST_per'] ?? 0);
+                if ($masterGst > 0) {
+                    $gstRate = $masterGst;
+                }
+            }
+            if ($gstRate === null) {
+                $gstRate = 12.0;
+            }
+
+            // Scheme & Discount
+            $tradeDisc = (float)($lastPur['discount'] ?? 0);
+            $schDiscPer = (float)($lastPur['sch_disc_per'] ?? 0);
+            $schDiscAmt = (float)($lastPur['sch_disc_amt'] ?? 0);
+            $freeQty = (float)($lastPur['qty_free'] ?? 0);
+
+            $schemeParts = [];
+            if ($tradeDisc > 0) {
+                $schemeParts[] = "Disc: " . rtrim(rtrim(number_format($tradeDisc, 2), '0'), '.') . "%";
+            }
+            if ($schDiscPer > 0) {
+                $schemeParts[] = "Sch Disc: " . rtrim(rtrim(number_format($schDiscPer, 2), '0'), '.') . "%";
+            }
+            if ($schDiscAmt > 0) {
+                $schemeParts[] = "Sch Amt: ₹" . number_format($schDiscAmt, 2);
+            }
+            if ($freeQty > 0) {
+                $schemeParts[] = "Free: " . (int)$freeQty;
+            }
+            $schemeSummary = !empty($schemeParts) ? implode(', ', $schemeParts) : '';
+
+            $schemeInfo = '';
+            if ($freeQty > 0) {
+                $schemeInfo = "Free: " . (int)$freeQty;
+            } elseif ($schDiscPer > 0) {
+                $schemeInfo = "Sch: " . rtrim(rtrim(number_format($schDiscPer, 2), '0'), '.') . "%";
+            }
+
+            // Clean Label for Autocomplete: Only Medicine Name, Formulation, and Generic Salt
+            $cleanLabel = trim($p['item_name']);
+            if (!empty($p['formulation'])) {
+                $cleanLabel .= ' [' . trim($p['formulation']) . ']';
+            }
+            if (!empty($p['genericname'])) {
+                $cleanLabel .= ' - ' . trim($p['genericname']);
+            }
+
+            $result[] = [
+                'label'              => $cleanLabel,
+                'value'              => $p['item_name'],
+                'item_code'          => (int)$p['id'],
+                'generic_name'       => (string)($p['genericname'] ?? ''),
+                'formulation'        => (string)($p['formulation'] ?? 'Tablet'),
+                'packing'            => $packing,
+                'estimated_ptr'      => number_format($rate, 2, '.', ''),
+                'gst_rate'           => (float)$gstRate,
+                'discount_percent'   => number_format($tradeDisc, 2, '.', ''),
+                'sch_disc_per'       => number_format($schDiscPer, 2, '.', ''),
+                'sch_disc_amt'       => number_format($schDiscAmt, 2, '.', ''),
+                'qty_free'           => (float)$freeQty,
+                'scheme_info'        => $schemeInfo,
+                'scheme_summary'     => $schemeSummary,
+                'has_last_purchase'  => $lastPur ? 1 : 0,
+                'is_vendor_match'    => $isVendorMatch ? 1 : 0,
+                'last_supplier_name' => (string)($lastPur['supp_name'] ?? ''),
+                'last_purchase_date' => !empty($lastPur['date_of_invoice']) ? date('d-M-Y', strtotime($lastPur['date_of_invoice'])) : '',
+            ];
+        }
+
+        return $this->response->setJSON($result);
     }
 
     // =========================================================================
