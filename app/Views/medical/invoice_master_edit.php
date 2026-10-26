@@ -177,6 +177,22 @@
                             }
                         }
                     }
+
+                    // Auto-match doctor by name if masterDocId is 0 or unassigned
+                    if (!$masterDocFound && !empty($docList) && $masterDocName !== '') {
+                        $cleanMasterDoc = trim(preg_replace('/^(dr\.?|doctor)\s+/i', '', $masterDocName));
+                        foreach ($docList as $d) {
+                            $dName = trim((string) ($d->p_fname ?? ''));
+                            $cleanDName = trim(preg_replace('/^(dr\.?|doctor)\s+/i', '', $dName));
+                            if (strcasecmp($dName, $masterDocName) === 0 || strcasecmp($cleanDName, $cleanMasterDoc) === 0) {
+                                $masterDocId = (int) ($d->id ?? 0);
+                                $masterDocName = $dName;
+                                $masterDocFound = true;
+                                break;
+                            }
+                        }
+                    }
+
                     $masterIsOtherDoc = (!$masterDocFound && ($masterDocId === 0 || $masterDocId === 999999) && $masterDocName !== '');
                 ?>
                 <div class="row g-2 align-items-end">

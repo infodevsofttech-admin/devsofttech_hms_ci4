@@ -4167,6 +4167,24 @@ class Medical extends BaseController
                         $docList[] = $docRow;
                     }
                 }
+            } elseif (!empty($invoice->doc_name)) {
+                $cleanName = trim(preg_replace('/^(dr\.?|doctor)\s+/i', '', trim((string)$invoice->doc_name)));
+                foreach ($docList as $d) {
+                    $dName = trim((string) ($d->p_fname ?? ''));
+                    $cleanDName = trim(preg_replace('/^(dr\.?|doctor)\s+/i', '', $dName));
+                    if (strcasecmp($dName, $invoice->doc_name) === 0 || strcasecmp($cleanDName, $cleanName) === 0) {
+                        $matchedId = (int) ($d->id ?? 0);
+                        if ($matchedId > 0) {
+                            $invoice->doc_id = $matchedId;
+                            $invoice->doc_name = $dName;
+                            $this->db->table('invoice_med_master')->where('id', $invoice->id)->update([
+                                'doc_id'   => $matchedId,
+                                'doc_name' => $dName
+                            ]);
+                            break;
+                        }
+                    }
+                }
             }
         }
 
@@ -15531,18 +15549,20 @@ class Medical extends BaseController
             ipd.id AS ipd_id,
             ipd.ipd_code,
             ipd.bed_no,
+            ipd.r_doc_id AS ipd_doc_id,
             ipd.r_doc_name AS ipd_doc_name,
             ipd.ipd_status,
             opd.opd_id,
             opd.opd_code,
+            opd.doc_id AS opd_doc_id,
             opd.doc_name AS opd_doc_name
         ', false);
 
         // Join active or recent IPD
-        $builder->join('(SELECT id, ipd_code, p_id, bed_no, r_doc_name, ipd_status FROM ipd_master ORDER BY id DESC LIMIT 500) ipd', 'ipd.p_id = p.id', 'left');
+        $builder->join('(SELECT id, ipd_code, p_id, bed_no, r_doc_id, r_doc_name, ipd_status FROM ipd_master ORDER BY id DESC LIMIT 500) ipd', 'ipd.p_id = p.id', 'left');
 
         // Join active or recent OPD
-        $builder->join('(SELECT opd_id, opd_code, p_id, doc_name FROM opd_master ORDER BY opd_id DESC LIMIT 500) opd', 'opd.p_id = p.id', 'left');
+        $builder->join('(SELECT opd_id, opd_code, p_id, doc_id, doc_name FROM opd_master ORDER BY opd_id DESC LIMIT 500) opd', 'opd.p_id = p.id', 'left');
 
         $builder->groupStart();
         $builder->like('p.p_code', $term);
@@ -15566,7 +15586,27 @@ class Medical extends BaseController
 
         foreach ($results as $r) {
             $isIpd = !empty($r['ipd_id']) && ((int)($r['ipd_status'] ?? 1) === 1 || empty($r['opd_id']));
+            $docId = $isIpd ? ((int)($r['ipd_doc_id'] ?? 0) ?: (int)($r['opd_doc_id'] ?? 0)) : ((int)($r['opd_doc_id'] ?? 0) ?: (int)($r['ipd_doc_id'] ?? 0));
             $docName = $isIpd ? ($r['ipd_doc_name'] ?: ($r['opd_doc_name'] ?: 'Doctor')) : ($r['opd_doc_name'] ?: ($r['ipd_doc_name'] ?: 'Doctor'));
+
+            if ($docId <= 0 && !empty($docName) && $docName !== 'Doctor' && $this->db->tableExists('doctor_master')) {
+                $cleanDoc = trim(preg_replace('/^(dr\.?|doctor)\s+/i', '', $docName));
+                $matchedDoc = $this->db->table('doctor_master')
+                    ->select('id, p_fname')
+                    ->groupStart()
+                        ->where('p_fname', $docName)
+                        ->orWhere('p_fname', $cleanDoc)
+                        ->orLike('p_fname', $cleanDoc)
+                    ->groupEnd()
+                    ->where('active', 1)
+                    ->get()
+                    ->getRowArray();
+                if ($matchedDoc) {
+                    $docId = (int)$matchedDoc['id'];
+                    $docName = trim((string)($matchedDoc['p_fname'] ?? $docName));
+                }
+            }
+
             $genderStr = ((int)($r['gender'] ?? 0) === 1) ? 'Male' : (((int)($r['gender'] ?? 0) === 2) ? 'Female' : 'Other');
 
             $patients[] = [
@@ -15582,6 +15622,7 @@ class Medical extends BaseController
                 'bed_no'       => (string)($r['bed_no'] ?? ''),
                 'opd_id'       => (int)($r['opd_id'] ?? 0),
                 'opd_code'     => (string)($r['opd_code'] ?? ''),
+                'doc_id'       => $docId,
                 'doc_name'     => (string)$docName,
                 'badge'        => $isIpd ? ('IPD #' . ($r['ipd_id'] ?: $r['ipd_code']) . (!empty($r['bed_no']) ? ' [Bed: ' . $r['bed_no'] . ']' : '')) : ('OPD #' . ($r['opd_code'] ?: $r['opd_id']))
             ];
@@ -15721,8 +15762,27 @@ class Medical extends BaseController
             $bedNo = trim((string)($json['bed_no'] ?? ''));
             $opdId = (int)($json['opd_id'] ?? 0);
             $opdCode = trim((string)($json['opd_code'] ?? ''));
+            $docId = (int)($json['doc_id'] ?? 0);
             $docName = trim((string)($json['doc_name'] ?? ''));
             $pickerName = trim((string)($json['picker_name'] ?? (session('name') ?: 'Mobile Picker')));
+
+            if ($docId <= 0 && $docName !== '' && $docName !== 'Doctor' && $this->db->tableExists('doctor_master')) {
+                $cleanDoc = trim(preg_replace('/^(dr\.?|doctor)\s+/i', '', $docName));
+                $matchedDoc = $this->db->table('doctor_master')
+                    ->select('id, p_fname')
+                    ->groupStart()
+                        ->where('p_fname', $docName)
+                        ->orWhere('p_fname', $cleanDoc)
+                        ->orLike('p_fname', $cleanDoc)
+                    ->groupEnd()
+                    ->where('active', 1)
+                    ->get()
+                    ->getRowArray();
+                if ($matchedDoc) {
+                    $docId = (int)$matchedDoc['id'];
+                    $docName = trim((string)($matchedDoc['p_fname'] ?? $docName));
+                }
+            }
 
             $invFields = $this->db->getFieldNames('invoice_med_master') ?? [];
             $setIfExists = static function (array &$arr, array $fields, string $col, $val): void {
@@ -15743,6 +15803,7 @@ class Medical extends BaseController
             $setIfExists($header, $invFields, 'ipd_id', $ipdId);
             $setIfExists($header, $invFields, 'ipd_code', $ipdCode);
             $setIfExists($header, $invFields, 'bed_no', $bedNo);
+            $setIfExists($header, $invFields, 'doc_id', $docId);
             $setIfExists($header, $invFields, 'doc_name', $docName);
             $setIfExists($header, $invFields, 'draft_source', 'mobile_picker');
             $setIfExists($header, $invFields, 'picker_name', $pickerName);

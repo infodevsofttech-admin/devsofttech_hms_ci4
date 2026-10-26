@@ -49,6 +49,22 @@
                                 }
                             }
                         }
+
+                        // Auto-match doctor by name if doc_id is 0 or unassigned
+                        if (!$docFound && !empty($docList) && $currentDocName !== '') {
+                            $cleanCurrentDoc = trim(preg_replace('/^(dr\.?|doctor)\s+/i', '', $currentDocName));
+                            foreach ($docList as $d) {
+                                $dName = trim((string) ($d->p_fname ?? ''));
+                                $cleanDName = trim(preg_replace('/^(dr\.?|doctor)\s+/i', '', $dName));
+                                if (strcasecmp($dName, $currentDocName) === 0 || strcasecmp($cleanDName, $cleanCurrentDoc) === 0) {
+                                    $currentDocId = (int) ($d->id ?? 0);
+                                    $currentDocName = $dName;
+                                    $docFound = true;
+                                    break;
+                                }
+                            }
+                        }
+
                         // If not found in hospital doctors list but doctor name exists, treat as outside doctor
                         $isOtherDoc = (!$docFound && ($currentDocId === 0 || $currentDocId === 999999) && $currentDocName !== '');
                     ?>

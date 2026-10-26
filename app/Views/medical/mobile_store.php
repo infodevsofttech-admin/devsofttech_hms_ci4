@@ -824,6 +824,7 @@
             bed_no: selectedPatient ? selectedPatient.bed_no : '',
             opd_id: selectedPatient ? selectedPatient.opd_id : 0,
             opd_code: selectedPatient ? selectedPatient.opd_code : '',
+            doc_id: selectedPatient ? (selectedPatient.doc_id || 0) : 0,
             doc_name: selectedPatient ? selectedPatient.doc_name : '',
             picker_name: operatorName,
             items: cartItems
