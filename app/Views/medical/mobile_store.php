@@ -337,19 +337,24 @@
                             <div class="col-7">
                                 <label class="form-label small fw-bold text-muted mb-0">Select / Type Rack</label>
                                 <div class="input-group input-group-sm">
-                                    <input type="text" class="form-control form-control-sm" id="audit_rack_input" placeholder="e.g. Rack A" list="rack_datalist">
+                                    <input type="text" class="form-control form-control-sm" id="audit_rack_input" placeholder="e.g. Rack A" list="rack_datalist" autocomplete="off">
                                     <datalist id="rack_datalist"></datalist>
+                                    <button class="btn btn-outline-secondary" type="button" onclick="clearAuditRack();" title="Clear Rack / Shelf"><i class="bi bi-x"></i></button>
                                 </div>
                             </div>
                             <div class="col-5">
                                 <label class="form-label small fw-bold text-muted mb-0">Shelf No.</label>
-                                <input type="text" class="form-control form-control-sm" id="audit_shelf_input" placeholder="e.g. 1">
+                                <input type="text" class="form-control form-control-sm" id="audit_shelf_input" placeholder="e.g. 1" autocomplete="off">
                             </div>
                         </div>
 
                         <div class="input-group input-group-sm mb-2">
-                            <input type="text" class="form-control" id="audit_search_q" placeholder="Or search medicine / batch...">
-                            <button class="btn btn-primary" type="button" onclick="loadAuditItems();">
+                            <span class="input-group-text bg-white text-muted"><i class="bi bi-search"></i></span>
+                            <input type="text" class="form-control" id="audit_search_q" placeholder="Search medicine name or batch no..." autocomplete="off">
+                            <button class="btn btn-outline-secondary" type="button" id="btn_clear_audit_q" onclick="clearAuditSearch();" title="Clear Search" style="display:none;">
+                                <i class="bi bi-x-lg"></i>
+                            </button>
+                            <button class="btn btn-primary" type="button" id="btn_audit_load" onclick="loadAuditItems();">
                                 <i class="bi bi-arrow-clockwise"></i> Load
                             </button>
                         </div>
@@ -360,7 +365,7 @@
                 <div id="audit_items_container">
                     <div class="text-center py-4 text-muted">
                         <i class="bi bi-boxes fs-1 text-secondary opacity-50 d-block mb-2"></i>
-                        <span>Select a rack or click Load to start shelf counting.</span>
+                        <span>Select a rack or type medicine/batch name to start shelf counting.</span>
                     </div>
                 </div>
 
@@ -383,13 +388,6 @@
             </div>
 
         </div>
-
-        <!-- System & License Footer -->
-        <footer class="text-center py-3 mt-4 mb-4 text-muted" style="font-size: 11px; border-top: 1px solid #e2e8f0;">
-            &copy; 2017 - 2026 <strong><a href="https://www.e-atria.in" target="_blank" rel="noopener" class="text-decoration-none text-primary">E-Atria</a></strong>. All Rights Reserved | 
-            <a href="<?= base_url('software-use-license.html') ?>" target="_blank" rel="noopener" class="text-decoration-none text-secondary">Software Use License</a> | 
-            Version: <?= esc($footerVersion ?? '26.117') ?>
-        </footer>
 
     </div>
 
@@ -899,13 +897,81 @@
     }
     loadRacksDatalist();
 
+    function clearAuditSearch() {
+        jQuery('#audit_search_q').val('').focus();
+        jQuery('#btn_clear_audit_q').hide();
+        loadAuditItems();
+    }
+
+    function clearAuditRack() {
+        jQuery('#audit_rack_input').val('');
+        jQuery('#audit_shelf_input').val('');
+        loadAuditItems();
+    }
+
+    var auditSearchTimer = null;
+    jQuery('#audit_search_q').on('input', function() {
+        clearTimeout(auditSearchTimer);
+        var q = jQuery(this).val().trim();
+        if (q.length > 0) {
+            jQuery('#btn_clear_audit_q').show();
+        } else {
+            jQuery('#btn_clear_audit_q').hide();
+        }
+
+        var rack = jQuery('#audit_rack_input').val().trim();
+        var shelf = jQuery('#audit_shelf_input').val().trim();
+
+        if (q.length === 0 && rack === '' && shelf === '') {
+            jQuery('#audit_items_container').html(
+                '<div class="text-center py-4 text-muted">' +
+                '<i class="bi bi-boxes fs-1 text-secondary opacity-50 d-block mb-2"></i>' +
+                '<span>Select a rack or type medicine/batch name to start shelf counting.</span>' +
+                '</div>'
+            );
+            return;
+        }
+
+        auditSearchTimer = setTimeout(loadAuditItems, 300);
+    });
+
+    jQuery('#audit_rack_input, #audit_shelf_input').on('change input', function() {
+        clearTimeout(auditSearchTimer);
+        auditSearchTimer = setTimeout(loadAuditItems, 350);
+    });
+
+    jQuery('#audit_search_q, #audit_rack_input, #audit_shelf_input').on('keydown', function(e) {
+        if (e.key === 'Enter') {
+            e.preventDefault();
+            clearTimeout(auditSearchTimer);
+            loadAuditItems();
+        }
+    });
+
     function loadAuditItems() {
         var rack = jQuery('#audit_rack_input').val().trim();
         var shelf = jQuery('#audit_shelf_input').val().trim();
         var q = jQuery('#audit_search_q').val().trim();
 
+        if (q.length > 0) {
+            jQuery('#btn_clear_audit_q').show();
+        } else {
+            jQuery('#btn_clear_audit_q').hide();
+        }
+
         var container = jQuery('#audit_items_container');
-        container.html('<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm text-primary"></div> Loading shelf batches...</div>');
+
+        if (q === '' && rack === '' && shelf === '') {
+            container.html(
+                '<div class="text-center py-4 text-muted">' +
+                '<i class="bi bi-boxes fs-1 text-secondary opacity-50 d-block mb-2"></i>' +
+                '<span>Select a rack or type medicine/batch name to start shelf counting.</span>' +
+                '</div>'
+            );
+            return;
+        }
+
+        container.html('<div class="text-center py-4 text-muted"><div class="spinner-border spinner-border-sm text-primary"></div> Searching shelf batches...</div>');
 
         jQuery.ajax({
             url: baseUrl + 'Medical/mobile_audit_items',
@@ -914,7 +980,10 @@
             dataType: 'json',
             success: function(res) {
                 if (!res.items || res.items.length === 0) {
-                    container.html('<div class="text-center py-4 text-muted"><i class="bi bi-inbox fs-3 d-block mb-1"></i> No batches found in this rack / shelf.</div>');
+                    var notFoundMsg = q 
+                        ? ('No medicines or batches found matching "' + escapeHtml(q) + '"' + (rack ? ' in rack ' + escapeHtml(rack) : '') + '.')
+                        : ('No batches found in rack "' + escapeHtml(rack) + '"' + (shelf ? ' / shelf ' + escapeHtml(shelf) : '') + '.');
+                    container.html('<div class="text-center py-4 text-muted"><i class="bi bi-inbox fs-3 d-block mb-1"></i> ' + notFoundMsg + '</div>');
                     return;
                 }
 

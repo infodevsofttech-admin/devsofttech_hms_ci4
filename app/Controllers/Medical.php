@@ -15979,11 +15979,15 @@ class Medical extends BaseController
         $shelf = trim((string)($this->request->getGet('shelf') ?? ''));
         $q = trim((string)($this->request->getGet('q') ?? ''));
 
+        if ($rack === '' && $shelf === '' && $q === '') {
+            return $this->response->setJSON(['status' => 1, 'items' => []]);
+        }
+
         $builder = $this->db->table('purchase_invoice_item p');
         $builder->select('
             p.id AS batch_id,
             p.item_code,
-            m.item_name,
+            COALESCE(NULLIF(m.item_name, ""), p.Item_name, "Medicine") AS item_name,
             m.formulation,
             p.packing,
             p.batch_no,
@@ -15994,10 +15998,14 @@ class Medical extends BaseController
             p.selling_unit_rate,
             IFNULL(NULLIF(p.rack_no, ""), m.rack_no) AS rack_no,
             IFNULL(NULLIF(p.shelf_no, ""), m.shelf_no) AS shelf_no,
-            (p.total_unit - p.total_sale_unit + p.total_return_unit - p.total_lost_unit) AS system_qty
+            (IFNULL(p.total_unit, 0) - IFNULL(p.total_sale_unit, 0) + IFNULL(p.total_return_unit, 0) - IFNULL(p.total_lost_unit, 0)) AS system_qty
         ', false);
-        $builder->join('med_product_master m', 'm.id = p.item_code');
+        $builder->join('med_product_master m', 'm.id = p.item_code', 'left');
         $builder->where('p.item_code >', 0);
+
+        if ($this->db->fieldExists('remove_item', 'purchase_invoice_item')) {
+            $builder->where('p.remove_item', 0);
+        }
 
         if ($rack !== '') {
             $builder->groupStart();
@@ -16016,7 +16024,18 @@ class Medical extends BaseController
         if ($q !== '') {
             $builder->groupStart();
             $builder->like('m.item_name', $q);
+            $builder->orLike('p.Item_name', $q);
             $builder->orLike('p.batch_no', $q);
+            if ($this->db->fieldExists('genericname', 'med_product_master')) {
+                $builder->orLike('m.genericname', $q);
+            }
+            if (is_numeric($q)) {
+                $builder->orWhere('p.item_code', (int)$q);
+                $builder->orWhere('p.id', (int)$q);
+            }
+            if ($this->db->fieldExists('barcode', 'purchase_invoice_item')) {
+                $builder->orLike('p.barcode', $q);
+            }
             $builder->groupEnd();
         }
 
