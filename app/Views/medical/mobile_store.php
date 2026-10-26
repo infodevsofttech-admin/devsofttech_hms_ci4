@@ -384,6 +384,13 @@
 
         </div>
 
+        <!-- System & License Footer -->
+        <footer class="text-center py-3 mt-4 mb-4 text-muted" style="font-size: 11px; border-top: 1px solid #e2e8f0;">
+            &copy; 2017 - 2026 <strong><a href="https://www.e-atria.in" target="_blank" rel="noopener" class="text-decoration-none text-primary">E-Atria</a></strong>. All Rights Reserved | 
+            <a href="<?= base_url('software-use-license.html') ?>" target="_blank" rel="noopener" class="text-decoration-none text-secondary">Software Use License</a> | 
+            Version: <?= esc($footerVersion ?? '26.117') ?>
+        </footer>
+
     </div>
 
     <!-- Floating Bottom Bar for Basket -->
@@ -400,7 +407,7 @@
             <button type="button" class="btn btn-outline-secondary btn-sm" onclick="showBasketDrawer();" title="View Picked Items">
                 <i class="bi bi-list-check"></i> Review
             </button>
-            <button type="button" class="btn btn-primary btn-sm fw-bold px-3 shadow-sm" id="btn_send_draft" onclick="sendDraftToCounter();">
+            <button type="button" class="btn btn-primary btn-sm fw-bold px-3 shadow-sm btn-send-draft-action" id="btn_send_draft" onclick="sendDraftToCounter();">
                 <i class="bi bi-send-fill me-1"></i> Send to Counter
             </button>
         </div>
@@ -424,7 +431,7 @@
                         <div class="small text-muted">Total Estimated Amount</div>
                         <h5 class="fw-bold text-primary mb-0" id="basket_modal_total">₹0.00</h5>
                     </div>
-                    <button type="button" class="btn btn-primary fw-bold" onclick="sendDraftToCounter();">
+                    <button type="button" class="btn btn-primary fw-bold btn-send-draft-action" id="btn_modal_confirm_draft" onclick="sendDraftToCounter();">
                         <i class="bi bi-send-fill me-1"></i> Confirm &amp; Send Draft
                     </button>
                 </div>
@@ -465,7 +472,19 @@
     // =========================================================================
     // STATE & GLOBAL VARIABLES
     // =========================================================================
-    var baseUrl = '<?= base_url() ?>';
+    var baseUrl = '<?= rtrim(base_url(), '/') ?>/';
+    var csrfHeader = '<?= csrf_header() ?>';
+    var csrfTokenName = '<?= csrf_token() ?>';
+    var csrfHash = '<?= csrf_hash() ?>';
+
+    // Global AJAX setup: inject CSRF token header & X-Requested-With
+    jQuery.ajaxSetup({
+        headers: {
+            '<?= csrf_header() ?>': '<?= csrf_hash() ?>',
+            'X-Requested-With': 'XMLHttpRequest'
+        }
+    });
+
     var selectedPatient = null;
     var cartItems = [];
     var html5QrCodeScanner = null;
@@ -809,9 +828,10 @@
             picker_name: operatorName,
             items: cartItems
         };
+        payload[csrfTokenName] = csrfHash;
 
-        var btn = jQuery('#btn_send_draft');
-        btn.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Sending...');
+        var btns = jQuery('.btn-send-draft-action');
+        btns.prop('disabled', true).html('<span class="spinner-border spinner-border-sm me-1"></span> Sending Draft...');
 
         jQuery.ajax({
             url: baseUrl + 'Medical/mobile_save_draft',
@@ -820,7 +840,10 @@
             contentType: 'application/json',
             dataType: 'json',
             success: function(res) {
-                btn.prop('disabled', false).html('<i class="bi bi-send-fill me-1"></i> Send to Counter');
+                btns.prop('disabled', false);
+                jQuery('#btn_send_draft').html('<i class="bi bi-send-fill me-1"></i> Send to Counter');
+                jQuery('#btn_modal_confirm_draft').html('<i class="bi bi-send-fill me-1"></i> Confirm &amp; Send Draft');
+
                 if (res.status === 1) {
                     var m = bootstrap.Modal.getInstance(document.getElementById('basketModal'));
                     if (m) m.hide();
@@ -837,9 +860,19 @@
                     alert(res.message || 'Failed to save draft bill.');
                 }
             },
-            error: function() {
-                btn.prop('disabled', false).html('<i class="bi bi-send-fill me-1"></i> Send to Counter');
-                alert("Failed to communicate with hospital server. Please check WiFi/intranet connection.");
+            error: function(xhr, status, error) {
+                btns.prop('disabled', false);
+                jQuery('#btn_send_draft').html('<i class="bi bi-send-fill me-1"></i> Send to Counter');
+                jQuery('#btn_modal_confirm_draft').html('<i class="bi bi-send-fill me-1"></i> Confirm &amp; Send Draft');
+
+                var errDetail = "HTTP " + xhr.status + " (" + (xhr.statusText || error || 'Connection Error') + ")";
+                try {
+                    var parsed = JSON.parse(xhr.responseText);
+                    if (parsed && parsed.message) {
+                        errDetail += "\n\nServer message: " + parsed.message;
+                    }
+                } catch(e) {}
+                alert("Failed to communicate with hospital server.\n\n" + errDetail + "\n\nPlease check WiFi/intranet connection or contact IT support.");
             }
         });
     }
@@ -996,6 +1029,7 @@
             shelf_no: shelfNo,
             audited_by_name: operatorName
         };
+        payload[csrfTokenName] = csrfHash;
 
         jQuery.ajax({
             url: baseUrl + 'Medical/mobile_save_audit',
@@ -1014,6 +1048,10 @@
                 } else {
                     alert(res.message || 'Error recording audit.');
                 }
+            },
+            error: function(xhr, status, error) {
+                var errDetail = "HTTP " + xhr.status + " (" + (xhr.statusText || error || 'Connection Error') + ")";
+                alert("Failed to save audit count.\n\n" + errDetail);
             }
         });
     }
@@ -1059,6 +1097,16 @@
                 });
 
                 container.html(html);
+            },
+            error: function(xhr, status, error) {
+                var errDetail = "HTTP " + xhr.status + " (" + (xhr.statusText || error || 'Connection Error') + ")";
+                container.html('<div class="text-center py-4 text-danger">' +
+                    '<i class="bi bi-exclamation-triangle fs-3 d-block mb-1"></i>' +
+                    'Failed to load recent drafts: ' + escapeHtml(errDetail) + '<br>' +
+                    '<button type="button" class="btn btn-sm btn-outline-primary mt-2" onclick="loadRecentDrafts();">' +
+                        '<i class="bi bi-arrow-repeat"></i> Retry' +
+                    '</button>' +
+                '</div>');
             }
         });
     }
