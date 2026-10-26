@@ -2019,6 +2019,19 @@ class EAtriaBridgeConnector implements AbdmConnectorInterface
         return $this->get('/v3/drugs/version', $query);
     }
 
+    public function drugsSyncPack(int $page = 1, int $limit = 500): array
+    {
+        $query = [
+            'page' => max(1, $page),
+            'limit' => max(1, min(1000, $limit)),
+        ];
+        if ($this->hfrId !== '') {
+            $query['hfr_id'] = $this->hfrId;
+        }
+
+        return $this->get('/v3/drugs/sync-pack', $query);
+    }
+
     // -------------------------------------------------------------------------
     // Pathology Terminology (LOINC)
     // -------------------------------------------------------------------------

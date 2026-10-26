@@ -6252,90 +6252,180 @@ class Medical extends BaseController
             $limit = 10;
         }
 
+        // -------------------------------------------------------------
+        // Step B: Hybrid Model - 1. Local-First Search (HMS Database)
+        // -------------------------------------------------------------
+        $localSuggestions = [];
+        $seenIdentifiers = [];
+
+        if ($this->db->tableExists('med_product_master')) {
+            $localBuilder = $this->db->table('med_product_master');
+            $localBuilder->groupStart();
+            $localBuilder->like('item_name', $q, 'after');
+            $localBuilder->orLike('item_name', $q);
+            $localBuilder->orLike('genericname', $q);
+            $localBuilder->orLike('abdm_drug_display', $q);
+            $localBuilder->groupEnd();
+            $localBuilder->where('is_continue', 1);
+            $localBuilder->limit($limit);
+
+            $localRows = $localBuilder->get()->getResultArray();
+            foreach ($localRows as $lr) {
+                $id = trim((string) ($lr['abdm_drug_identifier'] ?? ''));
+                $name = trim((string) ($lr['item_name'] ?? ''));
+                $disp = trim((string) ($lr['abdm_drug_display'] ?? '')) ?: $name;
+                $gen = trim((string) ($lr['genericname'] ?? ''));
+                $form = trim((string) ($lr['formulation'] ?? ''));
+                $comp = trim((string) ($lr['company_name'] ?? ''));
+
+                if ($id !== '') {
+                    $seenIdentifiers[$id] = true;
+                }
+                if ($name !== '') {
+                    $seenIdentifiers[strtolower($name)] = true;
+                }
+
+                $localSuggestions[] = [
+                    'label'             => $disp,
+                    'display_name'      => $disp,
+                    'brand_name'        => $name,
+                    'generic_name'      => $gen,
+                    'identifier'        => $id ?: ('HMS-' . $lr['id']),
+                    'type'              => (string) ($lr['abdm_drug_type'] ?? 'brand'),
+                    'dosage_form'       => $form,
+                    'route'             => '',
+                    'manufacturer_name' => $comp,
+                    'strength_text'     => '',
+                    'pack_size_text'    => (string) ($lr['packing'] ?? ''),
+                    'source'            => 'local',
+                ];
+            }
+        }
+
+        // If local database has full quota of results, return immediately (1-2ms!)
+        if (count($localSuggestions) >= $limit) {
+            return $this->response->setJSON([
+                'ok'          => 1,
+                'suggestions' => $localSuggestions,
+                'source'      => 'local',
+                'error_text'  => '',
+            ]);
+        }
+
+        // -------------------------------------------------------------
+        // Step B: Hybrid Model - 2. Gateway Fallback / Complement
+        // -------------------------------------------------------------
         $cacheKey = 'abdm_drug_ac_v2_' . md5($type . '_' . strtolower($q) . '_' . $limit);
         $cached = cache($cacheKey);
+        $gatewaySuggestions = [];
+
         if (is_array($cached) && ! empty($cached) && ($cached['ok'] ?? 0) === 1) {
-            return $this->response->setJSON($cached);
+            $gatewaySuggestions = $cached['suggestions'] ?? [];
+        } else {
+            try {
+                $connector = new \App\Libraries\Abdm\EAtriaBridgeConnector();
+                $result = $connector->drugsAutocomplete($q, $type, $limit);
+                $items = $this->extractDrugResultList($result);
+                foreach ($items as $row) {
+                    if (! is_array($row)) {
+                        continue;
+                    }
+
+                    $displayName = $this->extractDrugText($row, [
+                        'display_name', 'drug_display_name', 'product_name', 'medicine_name', 'med_name',
+                        'brand_name', 'trade_name', 'drug_name', 'name', 'display', 'term', 'title', 'label',
+                    ]);
+                    $brandName = $this->extractDrugText($row, ['brand_name', 'trade_name']);
+                    $label = $this->extractDrugText($row, [
+                        'label', 'display_name', 'name', 'display', 'term', 'title', 'drug_name', 'product_name',
+                        'medicine_name', 'brand_name', 'trade_name',
+                    ]);
+                    $identifier = $this->extractDrugText($row, ['identifier', 'id', 'code', 'concept_id', 'value']);
+                    $generic = $this->extractDrugText($row, ['generic_name', 'genericname', 'generic', 'salt', 'molecule', 'composition']);
+                    $itemType = strtolower($this->extractDrugText($row, ['type', 'entity_type', 'category']));
+                    if ($itemType === '') {
+                        $itemType = $type;
+                    }
+
+                    if ($displayName !== '') {
+                        $label = $displayName;
+                    } elseif ($brandName !== '') {
+                        $label = $brandName;
+                    } elseif ($label === '' || $this->isDrugIdentifierLike($label)) {
+                        $label = $identifier;
+                    }
+
+                    if ($label === '' && $identifier === '') {
+                        continue;
+                    }
+
+                    $dosageForm = $this->extractDrugText($row, ['dosage_form', 'formulation', 'short_formulation', 'drug_form']);
+                    $route = $this->extractDrugText($row, ['route', 'administration_route']);
+                    $manufacturer = $this->extractDrugText($row, ['manufacturer_name', 'manufacturer', 'company_name', 'company']);
+                    $strength = $this->extractDrugText($row, ['strength_text', 'strength']);
+                    $packSize = $this->extractDrugText($row, ['pack_size_text', 'pack_size', 'package', 'packing']);
+
+                    $gatewaySuggestions[] = [
+                        'label'             => $label,
+                        'display_name'      => $displayName,
+                        'brand_name'        => $brandName,
+                        'generic_name'      => $generic,
+                        'identifier'        => $identifier,
+                        'type'              => $itemType,
+                        'dosage_form'       => $dosageForm,
+                        'route'             => $route,
+                        'manufacturer_name' => $manufacturer,
+                        'strength_text'     => $strength,
+                        'pack_size_text'    => $packSize,
+                        'source'            => 'gateway',
+                    ];
+                }
+
+                if (! empty($gatewaySuggestions)) {
+                    cache()->save($cacheKey, [
+                        'ok'          => 1,
+                        'suggestions' => $gatewaySuggestions,
+                    ], 86400);
+                }
+            } catch (\Throwable $e) {
+                if (! empty($localSuggestions)) {
+                    return $this->response->setJSON([
+                        'ok'          => 1,
+                        'suggestions' => $localSuggestions,
+                        'source'      => 'local',
+                        'error_text'  => '',
+                    ]);
+                }
+                return $this->response->setJSON([
+                    'ok'          => 0,
+                    'suggestions' => [],
+                    'error_text'  => $e->getMessage(),
+                ]);
+            }
         }
 
-        try {
-            $connector = new \App\Libraries\Abdm\EAtriaBridgeConnector();
-            $result = $connector->drugsAutocomplete($q, $type, $limit);
-        } catch (\Throwable $e) {
-            return $this->response->setJSON([
-                'ok' => 0,
-                'suggestions' => [],
-                'error_text' => $e->getMessage(),
-            ]);
-        }
-
-        $items = $this->extractDrugResultList($result);
-        $suggestions = [];
-        foreach ($items as $row) {
-            if (! is_array($row)) {
+        // Merge local and gateway suggestions, deduplicating by identifier / name
+        $merged = $localSuggestions;
+        foreach ($gatewaySuggestions as $gs) {
+            $gid = $gs['identifier'] ?? '';
+            $gname = strtolower($gs['brand_name'] ?? '');
+            if ($gid !== '' && isset($seenIdentifiers[$gid])) {
                 continue;
             }
-
-            $displayName = $this->extractDrugText($row, [
-                'display_name', 'drug_display_name', 'product_name', 'medicine_name', 'med_name',
-                'brand_name', 'trade_name', 'drug_name', 'name', 'display', 'term', 'title', 'label',
-            ]);
-            $brandName = $this->extractDrugText($row, ['brand_name', 'trade_name']);
-            $label = $this->extractDrugText($row, [
-                'label', 'display_name', 'name', 'display', 'term', 'title', 'drug_name', 'product_name',
-                'medicine_name', 'brand_name', 'trade_name',
-            ]);
-            $identifier = $this->extractDrugText($row, ['identifier', 'id', 'code', 'concept_id', 'value']);
-            $generic = $this->extractDrugText($row, ['generic_name', 'genericname', 'generic', 'salt', 'molecule', 'composition']);
-            $itemType = strtolower($this->extractDrugText($row, ['type', 'entity_type', 'category']));
-            if ($itemType === '') {
-                $itemType = $type;
-            }
-
-            if ($displayName !== '') {
-                $label = $displayName;
-            } elseif ($brandName !== '') {
-                $label = $brandName;
-            } elseif ($label === '' || $this->isDrugIdentifierLike($label)) {
-                $label = $identifier;
-            }
-
-            if ($label === '' && $identifier === '') {
+            if ($gname !== '' && isset($seenIdentifiers[$gname])) {
                 continue;
             }
-
-            $dosageForm = $this->extractDrugText($row, ['dosage_form', 'formulation', 'short_formulation', 'drug_form']);
-            $route = $this->extractDrugText($row, ['route', 'administration_route']);
-            $manufacturer = $this->extractDrugText($row, ['manufacturer_name', 'manufacturer', 'company_name', 'company']);
-            $strength = $this->extractDrugText($row, ['strength_text', 'strength']);
-            $packSize = $this->extractDrugText($row, ['pack_size_text', 'pack_size', 'package', 'packing']);
-
-            $suggestions[] = [
-                'label'             => $label,
-                'display_name'      => $displayName,
-                'brand_name'        => $brandName,
-                'generic_name'      => $generic,
-                'identifier'        => $identifier,
-                'type'              => $itemType,
-                'dosage_form'       => $dosageForm,
-                'route'             => $route,
-                'manufacturer_name' => $manufacturer,
-                'strength_text'     => $strength,
-                'pack_size_text'    => $packSize,
-            ];
+            $merged[] = $gs;
+            if (count($merged) >= $limit) {
+                break;
+            }
         }
 
-        $responsePayload = [
-            'ok' => (int) ($result['ok'] ?? 0),
-            'suggestions' => $suggestions,
-            'error_text' => (string) ($result['error_text'] ?? $result['message'] ?? ''),
-        ];
-
-        if (($responsePayload['ok'] ?? 0) === 1 && ! empty($suggestions)) {
-            cache()->save($cacheKey, $responsePayload, 86400);
-        }
-
-        return $this->response->setJSON($responsePayload);
+        return $this->response->setJSON([
+            'ok'          => 1,
+            'suggestions' => $merged,
+            'error_text'  => '',
+        ]);
     }
 
     public function drug_terminology_detail()
@@ -6451,6 +6541,38 @@ class Medical extends BaseController
 
         if (($detailPayload['ok'] ?? 0) === 1 && ! empty($detailPayload['selected'])) {
             cache()->save($cacheKey, $detailPayload, 86400);
+
+            // Step B: Auto-save / link in med_product_master on selection
+            if ($canonicalId !== '' && $this->db->tableExists('med_product_master')) {
+                try {
+                    $existingProd = $this->db->table('med_product_master')
+                        ->where('abdm_drug_identifier', $canonicalId)
+                        ->get()
+                        ->getRowArray();
+
+                    if (! $existingProd) {
+                        $cleanName = $displayName ?: ($brandName ?: $label);
+                        $this->db->table('med_product_master')->insert([
+                            'item_name'                => $cleanName,
+                            'genericname'              => $generic ?: $displayName,
+                            'formulation'              => $dosageForm ?: ($formulation ?: 'Tablet'),
+                            'company_name'             => $manufacturerName,
+                            'abdm_drug_type'           => $itemType ?: 'brand',
+                            'abdm_drug_identifier'     => $canonicalId,
+                            'abdm_drug_display'        => $displayName ?: $label,
+                            'abdm_drug_generic'        => $generic,
+                            'abdm_drug_payload_json'   => $payloadJson,
+                            'abdm_drug_last_synced_at' => date('Y-m-d H:i:s'),
+                            'is_continue'              => 1,
+                            'batch_applicable'         => 1,
+                            'exp_date_applicable'      => 1,
+                            'insert_by'                => 'abdm_selection',
+                        ]);
+                    }
+                } catch (\Throwable $e) {
+                    // Non-blocking auto-save
+                }
+            }
         }
 
         return $this->response->setJSON($detailPayload);
