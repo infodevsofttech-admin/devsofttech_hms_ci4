@@ -6252,6 +6252,12 @@ class Medical extends BaseController
             $limit = 10;
         }
 
+        $cacheKey = 'abdm_drug_ac_' . md5($type . '_' . strtolower($q) . '_' . $limit);
+        $cached = cache($cacheKey);
+        if (is_array($cached) && ! empty($cached) && ($cached['ok'] ?? 0) === 1) {
+            return $this->response->setJSON($cached);
+        }
+
         try {
             $connector = new \App\Libraries\Abdm\EAtriaBridgeConnector();
             $result = $connector->drugsAutocomplete($q, $type, $limit);
@@ -6316,11 +6322,17 @@ class Medical extends BaseController
             ];
         }
 
-        return $this->response->setJSON([
+        $responsePayload = [
             'ok' => (int) ($result['ok'] ?? 0),
             'suggestions' => $suggestions,
             'error_text' => (string) ($result['error_text'] ?? $result['message'] ?? ''),
-        ]);
+        ];
+
+        if (($responsePayload['ok'] ?? 0) === 1 && ! empty($suggestions)) {
+            cache()->save($cacheKey, $responsePayload, 86400);
+        }
+
+        return $this->response->setJSON($responsePayload);
     }
 
     public function drug_terminology_detail()
@@ -6337,6 +6349,12 @@ class Medical extends BaseController
                 'selected' => null,
                 'error_text' => 'Identifier is required',
             ]);
+        }
+
+        $cacheKey = 'abdm_drug_dt_' . md5($type . '_' . $identifier);
+        $cached = cache($cacheKey);
+        if (is_array($cached) && ! empty($cached) && ($cached['ok'] ?? 0) === 1) {
+            return $this->response->setJSON($cached);
         }
 
         try {
@@ -6409,7 +6427,7 @@ class Medical extends BaseController
         $packSizeText = $this->extractDrugText($record, ['pack_size_text', 'pack_size', 'package', 'packing']);
         $compositionText = $this->extractDrugText($record, ['composition_text', 'composition', 'generic_name', 'generic']);
 
-        return $this->response->setJSON([
+        $detailPayload = [
             'ok' => (int) ($result['ok'] ?? 0),
             'selected' => [
                 'label' => $label,
@@ -6432,7 +6450,13 @@ class Medical extends BaseController
                 'synced_at' => date('Y-m-d H:i:s'),
             ],
             'error_text' => (string) ($result['error_text'] ?? $result['message'] ?? ''),
-        ]);
+        ];
+
+        if (($detailPayload['ok'] ?? 0) === 1 && ! empty($detailPayload['selected'])) {
+            cache()->save($cacheKey, $detailPayload, 86400);
+        }
+
+        return $this->response->setJSON($detailPayload);
     }
 
     /**
@@ -7207,21 +7231,82 @@ class Medical extends BaseController
         }
     }
 
+    public function companySearchAjax()
+    {
+        if ($deny = $this->ensurePharmacyAccess()) {
+            return $deny;
+        }
+
+        $term = trim((string) ($this->request->getGet('q') ?? $this->request->getPost('q') ?? ''));
+        $id = (int) ($this->request->getGet('id') ?? $this->request->getPost('id') ?? 0);
+
+        if (! $this->db->tableExists('med_company')) {
+            return $this->response->setJSON(['results' => []]);
+        }
+
+        $builder = $this->db->table('med_company');
+        $companyFields = $this->db->getFieldNames('med_company') ?? [];
+        $codeCol = in_array('company_code', $companyFields, true) ? 'company_code' : (in_array('code', $companyFields, true) ? 'code' : null);
+
+        if ($id > 0) {
+            $row = $builder->where('id', $id)->get()->getRowArray();
+            if (! $row) {
+                return $this->response->setJSON(['results' => []]);
+            }
+            return $this->response->setJSON([
+                'results' => [
+                    [
+                        'id'   => (int) $row['id'],
+                        'text' => (string) ($row['company_name'] ?? ''),
+                        'code' => $codeCol ? (string) ($row[$codeCol] ?? '') : ''
+                    ]
+                ]
+            ]);
+        }
+
+        if ($term !== '') {
+            $builder->groupStart();
+            $builder->like('company_name', $term, 'after');
+            $builder->orLike('company_name', $term);
+            if ($codeCol) {
+                $builder->orLike($codeCol, $term);
+            }
+            $builder->groupEnd();
+        }
+
+        $rows = $builder->select('id, company_name' . ($codeCol ? ", {$codeCol} AS company_code" : ''))
+            ->orderBy('company_name', 'ASC')
+            ->limit(30)
+            ->get()
+            ->getResultArray();
+
+        $results = [];
+        foreach ($rows as $r) {
+            $results[] = [
+                'id'   => (int) $r['id'],
+                'text' => (string) ($r['company_name'] ?? ''),
+                'code' => (string) ($r['company_code'] ?? '')
+            ];
+        }
+
+        return $this->response->setJSON(['results' => $results]);
+    }
+
     public function product_edit($productId = 0)
     {
         if ($deny = $this->ensurePharmacyAccess()) {
             return $deny;
         }
 
-        $this->runDrugMasterStandardizationOnce();
-
         $productId = (int) $productId;
         $productData = [];
+        $selectedCompanyId = 0;
 
         if ($this->db->tableExists('med_product_master') && $productId > 0) {
             $row = $this->db->table('med_product_master')->where('id', $productId)->get()->getRow();
             if ($row) {
                 $productData = [$row];
+                $selectedCompanyId = (int) ($row->company_id ?? 0);
             }
         }
 
@@ -7233,8 +7318,11 @@ class Medical extends BaseController
         }
 
         $companies = [];
-        if ($this->db->tableExists('med_company')) {
-            $companies = $this->db->table('med_company')->orderBy('company_name', 'ASC')->get()->getResult();
+        if ($selectedCompanyId > 0 && $this->db->tableExists('med_company')) {
+            $compRow = $this->db->table('med_company')->where('id', $selectedCompanyId)->get()->getRow();
+            if ($compRow) {
+                $companies = [$compRow];
+            }
         }
 
         $categories = [];

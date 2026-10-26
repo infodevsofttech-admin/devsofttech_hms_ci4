@@ -94,7 +94,7 @@ $flag = static function ($v): string {
             <div class="col-md-3">
                 <label class="form-label">Company</label>
                 <select name="input_company_name" id="input_company_name" class="form-select">
-                    <option value="0">Select</option>
+                    <option value="0">Select company</option>
                     <?php foreach (($med_company ?? []) as $row): ?>
                         <?php $companyCode = (string) ($row->company_code ?? ($row->manufacturer_code ?? ($row->code ?? ''))); ?>
                         <option value="<?= (int) ($row->id ?? 0) ?>" data-company-code="<?= esc($companyCode) ?>" <?= ((int) ($row->id ?? 0) === $companyId) ? 'selected' : '' ?>><?= esc($row->company_name ?? '') ?></option>
@@ -263,8 +263,25 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
         $('#input_company_name').select2({
             theme: 'bootstrap4',
             width: '100%',
-            placeholder: 'Select company',
-            allowClear: true
+            placeholder: 'Search & select company...',
+            allowClear: true,
+            ajax: {
+                url: '<?= base_url('product_master/company_search_ajax') ?>',
+                dataType: 'json',
+                delay: 200,
+                data: function (params) {
+                    return {
+                        q: params.term || ''
+                    };
+                },
+                processResults: function (data) {
+                    return {
+                        results: data.results || []
+                    };
+                },
+                cache: true
+            },
+            minimumInputLength: 0
         });
     }
 
@@ -742,7 +759,7 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
     }
 
     function setCompanyByName(companyName) {
-        var needle = normalizeCompanyText(companyName).toLowerCase();
+        var needle = normalizeCompanyText(companyName);
         if (!needle) {
             return;
         }
@@ -751,7 +768,7 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
 
         $c.find('option').each(function () {
             var text = normalizeCompanyText($(this).text()).toLowerCase();
-            if (text === needle) {
+            if (text === needle.toLowerCase()) {
                 matchedVal = $(this).val();
                 return false;
             }
@@ -761,19 +778,16 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
             return;
         }
 
-        $c.find('option').each(function () {
-            var text = normalizeCompanyText($(this).text()).toLowerCase();
-            if (!text || text === 'select') {
-                return;
-            }
-            if (text === needle || text.indexOf(needle) >= 0 || needle.indexOf(text) >= 0) {
-                matchedVal = $(this).val();
-                return false;
+        $.getJSON('<?= base_url('product_master/company_search_ajax') ?>', { q: needle }, function (res) {
+            if (res && res.results && res.results.length > 0) {
+                var first = res.results[0];
+                var option = new Option(first.text, first.id, true, true);
+                if (first.code) {
+                    $(option).attr('data-company-code', first.code);
+                }
+                $c.append(option).trigger('change');
             }
         });
-        if (matchedVal !== '') {
-            $c.val(matchedVal).trigger('change');
-        }
     }
 
     function setCompanyByCode(companyCode) {
@@ -792,7 +806,19 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
         });
         if (matchedVal !== '') {
             $c.val(matchedVal).trigger('change');
+            return;
         }
+
+        $.getJSON('<?= base_url('product_master/company_search_ajax') ?>', { q: needle }, function (res) {
+            if (res && res.results && res.results.length > 0) {
+                var first = res.results[0];
+                var option = new Option(first.text, first.id, true, true);
+                if (first.code) {
+                    $(option).attr('data-company-code', first.code);
+                }
+                $c.append(option).trigger('change');
+            }
+        });
     }
 
     function setFormulationByCode(formulationCode) {
@@ -1003,8 +1029,15 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
         showSelectedDrugSummary();
     }
 
+    var clientDetailCache = {};
     function fetchDrugDetail(type, identifier) {
         if (!identifier) {
+            return;
+        }
+
+        var cKey = (type || 'brand') + ':' + identifier;
+        if (clientDetailCache[cKey]) {
+            applyDrugDetail(clientDetailCache[cKey]);
             return;
         }
 
@@ -1015,6 +1048,7 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
             if (!resp || Number(resp.ok || 0) !== 1 || !resp.selected) {
                 return;
             }
+            clientDetailCache[cKey] = resp.selected;
             applyDrugDetail(resp.selected);
         });
     }
@@ -1143,6 +1177,7 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
         }
     }
 
+    var clientDrugCache = {};
     function fetchDrugSuggestions() {
         var q = ($('#input_item_name').val() || '').trim();
         var type = ($('#abdm_drug_search_type').val() || 'brand').trim();
@@ -1156,6 +1191,12 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
             return;
         }
         lastQuery = q;
+
+        var cacheKey = type + ':' + q.toLowerCase();
+        if (clientDrugCache[cacheKey]) {
+            renderSuggestions(clientDrugCache[cacheKey]);
+            return;
+        }
 
         if (suggestXhr && typeof suggestXhr.abort === 'function') {
             suggestXhr.abort();
@@ -1172,6 +1213,7 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
                 clearSuggestionBox();
                 return;
             }
+            clientDrugCache[cacheKey] = resp.suggestions || [];
             renderSuggestions(resp.suggestions || []);
         }).fail(function (_xhr, status) {
             suggestXhr = null;
@@ -1186,7 +1228,7 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
         if (suggestTimer) {
             clearTimeout(suggestTimer);
         }
-        suggestTimer = setTimeout(fetchDrugSuggestions, 1000);
+        suggestTimer = setTimeout(fetchDrugSuggestions, 250);
     });
 
     $('#input_item_name').off('keydown.abdmDrug').on('keydown.abdmDrug', function (evt) {

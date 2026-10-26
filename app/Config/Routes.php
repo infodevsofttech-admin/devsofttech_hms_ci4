@@ -142,13 +142,17 @@ $routes->get('product_master/drug_master_list', 'Medical::drug_master_list');
 $routes->post('product_master/Product_search', 'Medical::product_search');
 $routes->get('product_master/drug_terminology_autocomplete', 'Medical::drug_terminology_autocomplete');
 $routes->get('product_master/drug_terminology_detail', 'Medical::drug_terminology_detail');
+$routes->get('product_master/company_search_ajax', 'Medical::companySearchAjax');
 $routes->get('product_master/Product_edit/(:num)', 'Medical::product_edit/$1');
 $routes->post('product_master/product_master_update/(:num)', 'Medical::product_master_update/$1');
 $routes->get('Product_master/drug_master_list', 'Medical::drug_master_list');
 $routes->post('Product_master/Product_search', 'Medical::product_search');
 $routes->get('Product_master/drug_terminology_autocomplete', 'Medical::drug_terminology_autocomplete');
 $routes->get('Product_master/drug_terminology_detail', 'Medical::drug_terminology_detail');
+$routes->get('Product_master/company_search_ajax', 'Medical::companySearchAjax');
 $routes->get('Product_master/Product_edit/(:num)', 'Medical::product_edit/$1');
+$routes->get('Medical/company_search_ajax', 'Medical::companySearchAjax');
+$routes->get('medical/company_search_ajax', 'Medical::companySearchAjax');
 // Pharmacy Procurement: Purchase Orders (PO) & GRN
 $routes->get('Medical/purchase_orders', 'MedicalProcurement::po_list');
 $routes->get('Medical/po_new', 'MedicalProcurement::po_new');
