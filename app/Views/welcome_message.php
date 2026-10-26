@@ -36,6 +36,26 @@
     <link href="<?= base_url('assets/css/style.css') ?>" rel="stylesheet">
     <link href="<?= base_url('assets/css/custom-theme-dark-borders.css') ?>" rel="stylesheet">
 
+    <style>
+        /* Sticky footer layout: keeps footer pinned to the bottom on all screen sizes */
+        html, body {
+            height: 100%;
+        }
+        body {
+            min-height: 100vh;
+            display: flex;
+            flex-direction: column;
+        }
+        #main {
+            flex: 1 0 auto;
+            min-height: calc(100vh - 130px);
+        }
+        #footer {
+            margin-top: auto;
+            flex-shrink: 0;
+        }
+    </style>
+
     <script>
         (function() {
             var checkingSession = false;

@@ -95,5 +95,5 @@
 </div>
 
 <section class="section">
-    <div id="medical-main" class="pt-1"></div>
+    <div id="medical-main" class="pt-1" style="min-height: calc(100vh - 160px);"></div>
 </section>

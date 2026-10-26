@@ -13,10 +13,18 @@
   scroll-behavior: smooth;
 }
 
+html,
+body {
+  height: 100%;
+}
+
 body {
   font-family: "Open Sans", sans-serif;
   background: #f6f9ff;
   color: #444444;
+  min-height: 100vh;
+  display: flex;
+  flex-direction: column;
 }
 
 a {
@@ -45,6 +53,8 @@ h6 {
   margin-top: 60px;
   padding: 20px 30px;
   transition: all 0.3s;
+  flex: 1 0 auto;
+  min-height: calc(100vh - 130px);
 }
 
 @media (max-width: 1199px) {
@@ -1233,6 +1243,8 @@ h6 {
   font-size: 14px;
   transition: all 0.3s;
   border-top: 1px solid #cddfff;
+  margin-top: auto;
+  flex-shrink: 0;
 }
 
 .footer .copyright {
