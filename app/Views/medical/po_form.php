@@ -130,14 +130,14 @@
                             <thead class="table-light">
                                 <tr>
                                     <th style="width: 35px;">#</th>
-                                    <th>Product Name</th>
-                                    <th>Generic / Salt</th>
-                                    <th style="width: 85px;">Formulation</th>
-                                    <th class="text-center" style="width: 85px;">Units/Pack</th>
-                                    <th class="text-center" style="width: 95px;">Order Packs</th>
-                                    <th class="text-end" style="width: 105px;">Est. Rate (₹)</th>
-                                    <th class="text-center" style="width: 130px;">Scheme / Disc</th>
-                                    <th class="text-center" style="width: 95px;">GST %</th>
+                                    <th>Product &amp; Salt Name</th>
+                                    <th style="width: 90px;">Formulation</th>
+                                    <th class="text-center" style="width: 80px;">Units/Pack</th>
+                                    <th class="text-center" style="width: 90px;">Order Packs</th>
+                                    <th class="text-end" style="width: 100px;">Est. Rate (₹)</th>
+                                    <th class="text-center" style="width: 85px;">Disc %</th>
+                                    <th class="text-center" style="width: 110px;">Scheme</th>
+                                    <th class="text-center" style="width: 90px;">GST %</th>
                                     <th class="text-end" style="width: 115px;">Line Total (₹)</th>
                                     <th style="width: 40px;"></th>
                                 </tr>
@@ -154,17 +154,17 @@
                                         <tr data-item-id="<?= (int)$it['item_id'] ?>">
                                             <td class="row-num"><?= $idx + 1 ?></td>
                                             <td>
-                                                <strong><?= esc($it['item_name']) ?></strong>
+                                                <div class="fw-bold text-dark"><?= esc($it['item_name']) ?></div>
+                                                <?php if (!empty($it['generic_name'])): ?>
+                                                    <small class="text-muted d-block" style="font-size: 11px; line-height: 1.2;"><?= esc($it['generic_name']) ?></small>
+                                                <?php endif; ?>
                                                 <input type="hidden" name="items[<?= $idx ?>][item_id]" value="<?= (int)$it['item_id'] ?>">
                                                 <input type="hidden" name="items[<?= $idx ?>][item_name]" value="<?= esc($it['item_name']) ?>">
-                                            </td>
-                                            <td>
-                                                <?= esc($it['generic_name'] ?: '-') ?>
                                                 <input type="hidden" name="items[<?= $idx ?>][generic_name]" value="<?= esc($it['generic_name']) ?>">
+                                                <input type="hidden" name="items[<?= $idx ?>][category]" value="<?= esc($it['category']) ?>">
                                             </td>
                                             <td>
-                                                <?= esc($it['category'] ?: 'Tablet') ?>
-                                                <input type="hidden" name="items[<?= $idx ?>][category]" value="<?= esc($it['category']) ?>">
+                                                <span class="badge bg-light text-secondary border"><?= esc($it['category'] ?: 'Tablet') ?></span>
                                             </td>
                                             <td class="text-center">
                                                 <input type="number" name="items[<?= $idx ?>][units_per_pack]" class="form-control form-control-sm text-center line-units px-1" value="<?= (int)$it['units_per_pack'] ?>" min="1">
@@ -176,17 +176,14 @@
                                                 <input type="number" name="items[<?= $idx ?>][estimated_ptr]" class="form-control form-control-sm text-end line-rate px-1" value="<?= number_format((float)$it['estimated_ptr'], 2, '.', '') ?>" min="0" step="0.01" onchange="recalculatePoTotals();">
                                             </td>
                                             <td class="text-center">
-                                                <div class="d-flex flex-column gap-1">
-                                                    <div class="input-group input-group-sm">
-                                                        <span class="input-group-text py-0 px-1 bg-light text-muted" style="font-size:10px;">Disc%</span>
-                                                        <input type="number" name="items[<?= $idx ?>][discount_percent]" class="form-control form-control-sm text-end line-disc px-1" value="<?= $discPer > 0 ? number_format($discPer, 2, '.', '') : '0' ?>" min="0" max="100" step="0.01" onchange="recalculatePoTotals();" style="font-size:11px;">
-                                                    </div>
-                                                    <div class="input-group input-group-sm">
-                                                        <span class="input-group-text py-0 px-1 bg-light text-muted" style="font-size:10px;">Sch</span>
-                                                        <input type="text" name="items[<?= $idx ?>][scheme_info]" class="form-control form-control-sm line-scheme px-1" value="<?= esc($schInfo) ?>" placeholder="e.g. 10+1" style="font-size:11px;">
-                                                    </div>
-                                                    <input type="hidden" name="items[<?= $idx ?>][sch_disc_per]" class="line-sch-per" value="<?= $schDiscPer ?>">
+                                                <div class="input-group input-group-sm">
+                                                    <input type="number" name="items[<?= $idx ?>][discount_percent]" class="form-control form-control-sm text-end line-disc px-1" value="<?= $discPer > 0 ? number_format($discPer, 2, '.', '') : '0' ?>" min="0" max="100" step="0.01" onchange="recalculatePoTotals();">
+                                                    <span class="input-group-text py-0 px-1 bg-light text-muted" style="font-size:10px;">%</span>
                                                 </div>
+                                            </td>
+                                            <td class="text-center">
+                                                <input type="text" name="items[<?= $idx ?>][scheme_info]" class="form-control form-control-sm line-scheme px-1" value="<?= esc($schInfo) ?>" placeholder="e.g. 10+1">
+                                                <input type="hidden" name="items[<?= $idx ?>][sch_disc_per]" class="line-sch-per" value="<?= $schDiscPer ?>">
                                             </td>
                                             <td class="text-center">
                                                 <select name="items[<?= $idx ?>][gst_rate]" class="form-select form-select-sm text-center line-gst px-1" onchange="recalculatePoTotals();">
@@ -391,17 +388,15 @@ function addItemToPoTable(prefill) {
     tr.innerHTML = `
         <td class="row-num">${rowIdx + 1}</td>
         <td>
-            <strong>${escapeHtml(item.item_name)}</strong>
+            <div class="fw-bold text-dark">${escapeHtml(item.item_name)}</div>
+            ${item.generic_name ? `<small class="text-muted d-block" style="font-size: 11px; line-height: 1.2;">${escapeHtml(item.generic_name)}</small>` : ''}
             <input type="hidden" name="items[${rowIdx}][item_id]" value="${item.item_id}">
             <input type="hidden" name="items[${rowIdx}][item_name]" value="${escapeHtml(item.item_name)}">
-        </td>
-        <td>
-            ${escapeHtml(item.generic_name || '-')}
             <input type="hidden" name="items[${rowIdx}][generic_name]" value="${escapeHtml(item.generic_name || '')}">
+            <input type="hidden" name="items[${rowIdx}][category]" value="${escapeHtml(item.category || '')}">
         </td>
         <td>
-            ${escapeHtml(item.category || 'Tablet')}
-            <input type="hidden" name="items[${rowIdx}][category]" value="${escapeHtml(item.category || '')}">
+            <span class="badge bg-light text-secondary border">${escapeHtml(item.category || 'Tablet')}</span>
         </td>
         <td class="text-center">
             <input type="number" name="items[${rowIdx}][units_per_pack]" class="form-control form-control-sm text-center line-units px-1" value="${item.units_per_pack}" min="1">
@@ -413,17 +408,14 @@ function addItemToPoTable(prefill) {
             <input type="number" name="items[${rowIdx}][estimated_ptr]" class="form-control form-control-sm text-end line-rate px-1" value="${parseFloat(item.estimated_ptr).toFixed(2)}" min="0" step="0.01" onchange="recalculatePoTotals();">
         </td>
         <td class="text-center">
-            <div class="d-flex flex-column gap-1">
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text py-0 px-1 bg-light text-muted" style="font-size:10px;">Disc%</span>
-                    <input type="number" name="items[${rowIdx}][discount_percent]" class="form-control form-control-sm text-end line-disc px-1" value="${discVal > 0 ? discVal.toFixed(2) : '0'}" min="0" max="100" step="0.01" onchange="recalculatePoTotals();" style="font-size:11px;">
-                </div>
-                <div class="input-group input-group-sm">
-                    <span class="input-group-text py-0 px-1 bg-light text-muted" style="font-size:10px;">Sch</span>
-                    <input type="text" name="items[${rowIdx}][scheme_info]" class="form-control form-control-sm line-scheme px-1" value="${escapeHtml(schInfo)}" placeholder="e.g. 10+1" style="font-size:11px;">
-                </div>
-                <input type="hidden" name="items[${rowIdx}][sch_disc_per]" class="line-sch-per" value="${schVal}">
+            <div class="input-group input-group-sm">
+                <input type="number" name="items[${rowIdx}][discount_percent]" class="form-control form-control-sm text-end line-disc px-1" value="${discVal > 0 ? discVal.toFixed(2) : '0'}" min="0" max="100" step="0.01" onchange="recalculatePoTotals();">
+                <span class="input-group-text py-0 px-1 bg-light text-muted" style="font-size:10px;">%</span>
             </div>
+        </td>
+        <td class="text-center">
+            <input type="text" name="items[${rowIdx}][scheme_info]" class="form-control form-control-sm line-scheme px-1" value="${escapeHtml(schInfo)}" placeholder="e.g. 10+1">
+            <input type="hidden" name="items[${rowIdx}][sch_disc_per]" class="line-sch-per" value="${schVal}">
         </td>
         <td class="text-center">
             <select name="items[${rowIdx}][gst_rate]" class="form-select form-select-sm text-center line-gst px-1" onchange="recalculatePoTotals();">

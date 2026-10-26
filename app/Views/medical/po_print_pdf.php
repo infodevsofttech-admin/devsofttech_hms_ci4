@@ -103,12 +103,12 @@ if (!isset($branding) || !is_array($branding)) {
         <thead>
             <tr>
                 <th style="width: 25px;">#</th>
-                <th>Item / Brand Name</th>
-                <th>Salt Composition</th>
+                <th>Item Description &amp; Salt</th>
                 <th class="text-center" style="width: 55px;">Pack Size</th>
                 <th class="text-center" style="width: 55px;">Order Qty</th>
                 <th class="text-end" style="width: 75px;">Rate/Pack</th>
-                <th class="text-center" style="width: 80px;">Scheme / Disc</th>
+                <th class="text-center" style="width: 50px;">Disc %</th>
+                <th class="text-center" style="width: 75px;">Scheme</th>
                 <th class="text-center" style="width: 48px;">GST %</th>
                 <th class="text-end" style="width: 85px;">Total (₹)</th>
             </tr>
@@ -130,26 +130,30 @@ if (!isset($branding) || !is_array($branding)) {
                         $calcGross += $lineGross;
                         $calcDiscount += ($schAmt + $discAmt);
 
-                        $discTags = [];
-                        if ($discPer > 0) {
-                            $discTags[] = $discPer . '% Disc';
-                        }
+                        $schParts = [];
                         if ($schPer > 0) {
-                            $discTags[] = $schPer . '% Sch';
+                            $schParts[] = number_format($schPer, 1) . '% Sch';
                         }
                         if (!empty($it['scheme_info'])) {
-                            $discTags[] = esc($it['scheme_info']);
+                            $schParts[] = esc($it['scheme_info']);
                         }
                     ?>
                     <tr>
                         <td class="text-center"><?= $idx + 1 ?></td>
-                        <td><strong><?= esc($it['item_name']) ?></strong></td>
-                        <td><?= esc($it['generic_name'] ?: '-') ?></td>
+                        <td>
+                            <strong style="color: #0f172a; font-size: 10.5px;"><?= esc($it['item_name']) ?></strong>
+                            <?php if (!empty($it['generic_name'])): ?>
+                                <div style="font-size: 9px; color: #475569; margin-top: 1px;"><?= esc($it['generic_name']) ?></div>
+                            <?php endif; ?>
+                        </td>
                         <td class="text-center"><?= (int)$it['units_per_pack'] ?>s</td>
                         <td class="text-center"><strong><?= (float)$it['order_packs'] ?></strong></td>
                         <td class="text-end">₹<?= number_format((float)$it['estimated_ptr'], 2) ?></td>
+                        <td class="text-center">
+                            <?= $discPer > 0 ? (number_format($discPer, 2) . '%') : '<span style="color:#94a3b8;">-</span>' ?>
+                        </td>
                         <td class="text-center" style="font-size: 9px;">
-                            <?= !empty($discTags) ? implode('<br>', $discTags) : '<span style="color:#94a3b8;">-</span>' ?>
+                            <?= !empty($schParts) ? implode(', ', $schParts) : '<span style="color:#94a3b8;">-</span>' ?>
                         </td>
                         <td class="text-center"><?= (float)$it['gst_rate'] ?>%</td>
                         <td class="text-end">₹<?= number_format((float)$it['estimated_amount'], 2) ?></td>
