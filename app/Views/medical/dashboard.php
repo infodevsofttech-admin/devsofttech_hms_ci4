@@ -5,42 +5,24 @@
         </h4>
     </div>
 
-    <!-- Right-aligned Compact Button Groups / Dropdowns -->
+    <!-- Right-aligned Actions & Dropdowns -->
     <div class="d-flex align-items-center flex-wrap gap-2">
         
-        <!-- 1. Sales & Billing Group -->
-        <div class="btn-group">
-            <button type="button" class="btn btn-outline-primary btn-sm dropdown-toggle shadow-sm" data-bs-toggle="dropdown" aria-expanded="false">
-                <i class="bi bi-receipt"></i> Sales &amp; Billing
-            </button>
-            <ul class="dropdown-menu dropdown-menu-end shadow">
-                <li><h6 class="dropdown-header text-uppercase py-1" style="font-size: 10px; letter-spacing: 0.5px;">Dispensing &amp; Billing</h6></li>
-                <li>
-                    <a class="dropdown-item py-1" href="javascript:load_form_div('<?= base_url('Medical/search_customer') ?>','medical-main','OPD Search Panel :Pharmacy');">
-                        <i class="bi bi-cart-plus text-primary me-2"></i> <strong>OPD Sale</strong>
-                    </a>
-                </li>
-                <li>
-                    <a class="dropdown-item py-1" href="javascript:load_form_div('<?= base_url('Medical/Invoice_Med_Draft') ?>','medical-main','Invoice List :Pharmacy');">
-                        <i class="bi bi-receipt text-success me-2"></i> Counter Invoice
-                    </a>
-                </li>
-                <li><hr class="dropdown-divider my-1"></li>
-                <li><h6 class="dropdown-header text-uppercase py-1" style="font-size: 10px; letter-spacing: 0.5px;">Inpatient &amp; Credit</h6></li>
-                <li>
-                    <a class="dropdown-item py-1" href="javascript:load_form_div('<?= base_url('Medical/list_org_ipd') ?>','medical-main','IPD List :Pharmacy');">
-                        <i class="bi bi-hospital text-info me-2"></i> IPD / Credit Invoice
-                    </a>
-                </li>
-                <li>
-                    <a class="dropdown-item py-1" href="javascript:load_form_div('<?= base_url('Medical/list_org') ?>','medical-main','OrgCr. List :Pharmacy');">
-                        <i class="bi bi-building text-secondary me-2"></i> Org. Credit Invoice
-                    </a>
-                </li>
-            </ul>
-        </div>
+        <!-- Individual Frequent Sales & Billing Buttons -->
+        <a class="btn btn-outline-primary btn-sm shadow-sm" href="javascript:load_form_div('<?= base_url('Medical/search_customer') ?>','medical-main','OPD Search Panel :Pharmacy');" title="Quick OPD Medicine Dispensing">
+            <i class="bi bi-cart"></i> OPD Sale
+        </a>
+        <a class="btn btn-outline-primary btn-sm shadow-sm" href="javascript:load_form_div('<?= base_url('Medical/Invoice_Med_Draft') ?>','medical-main','Invoice List :Pharmacy');" title="Counter Sale Invoices">
+            <i class="bi bi-receipt"></i> Invoice
+        </a>
+        <a class="btn btn-outline-primary btn-sm shadow-sm" href="javascript:load_form_div('<?= base_url('Medical/list_org_ipd') ?>','medical-main','IPD List :Pharmacy');" title="IPD / Indoor Patient Credit Billing">
+            <i class="bi bi-hospital"></i> IPD or Credit Invoice
+        </a>
+        <a class="btn btn-outline-primary btn-sm shadow-sm" href="javascript:load_form_div('<?= base_url('Medical/list_org') ?>','medical-main','OrgCr. List :Pharmacy');" title="Corporate / TPA Organization Credit">
+            <i class="bi bi-building"></i> Org. Credit Invoice
+        </a>
 
-        <!-- 2. Store & Procurement Group -->
+        <!-- Store & Procurement Group -->
         <div class="btn-group">
             <button type="button" class="btn btn-outline-info btn-sm dropdown-toggle shadow-sm text-dark" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="bi bi-box-seam"></i> Store &amp; Orders
@@ -72,7 +54,7 @@
             </ul>
         </div>
 
-        <!-- 3. Reports & Finance Group -->
+        <!-- Reports & Finance Group -->
         <div class="btn-group">
             <button type="button" class="btn btn-outline-success btn-sm dropdown-toggle shadow-sm" data-bs-toggle="dropdown" aria-expanded="false">
                 <i class="bi bi-graph-up"></i> Reports &amp; Finance
@@ -104,8 +86,8 @@
             </ul>
         </div>
 
-        <!-- 4. Master Button -->
-        <a class="btn btn-outline-secondary btn-sm shadow-sm" href="javascript:load_form_div('<?= base_url('Medical/master') ?>','medical-main','Master :Pharmacy');">
+        <!-- Master Button -->
+        <a class="btn btn-outline-secondary btn-sm shadow-sm" href="javascript:load_form_div('<?= base_url('Medical/master') ?>','medical-main','Master :Pharmacy');" title="Drug &amp; Pharmacy Masters">
             <i class="bi bi-sliders"></i> Master
         </a>
 
