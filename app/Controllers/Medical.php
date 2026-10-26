@@ -6252,7 +6252,7 @@ class Medical extends BaseController
             $limit = 10;
         }
 
-        $cacheKey = 'abdm_drug_ac_' . md5($type . '_' . strtolower($q) . '_' . $limit);
+        $cacheKey = 'abdm_drug_ac_v2_' . md5($type . '_' . strtolower($q) . '_' . $limit);
         $cached = cache($cacheKey);
         if (is_array($cached) && ! empty($cached) && ($cached['ok'] ?? 0) === 1) {
             return $this->response->setJSON($cached);
@@ -6282,7 +6282,7 @@ class Medical extends BaseController
             ]);
             $brandName = $this->extractDrugText($row, ['brand_name', 'trade_name']);
             $label = $this->extractDrugText($row, [
-                'label', 'name', 'display', 'term', 'title', 'drug_name', 'product_name',
+                'label', 'display_name', 'name', 'display', 'term', 'title', 'drug_name', 'product_name',
                 'medicine_name', 'brand_name', 'trade_name',
             ]);
             $identifier = $this->extractDrugText($row, ['identifier', 'id', 'code', 'concept_id', 'value']);
@@ -6292,33 +6292,36 @@ class Medical extends BaseController
                 $itemType = $type;
             }
 
-            if ($itemType === 'brand' && $brandName !== '') {
-                $label = $brandName;
-            }
-
-            if ($this->isDrugIdentifierLike($label) && $displayName !== '' && ! $this->isDrugIdentifierLike($displayName)) {
+            if ($displayName !== '') {
                 $label = $displayName;
+            } elseif ($brandName !== '') {
+                $label = $brandName;
+            } elseif ($label === '' || $this->isDrugIdentifierLike($label)) {
+                $label = $identifier;
             }
 
             if ($label === '' && $identifier === '') {
                 continue;
             }
 
-            if ($label === '' && $displayName !== '') {
-                $label = $displayName;
-            }
-
-            if ($label === '') {
-                $label = $identifier;
-            }
+            $dosageForm = $this->extractDrugText($row, ['dosage_form', 'formulation', 'short_formulation', 'drug_form']);
+            $route = $this->extractDrugText($row, ['route', 'administration_route']);
+            $manufacturer = $this->extractDrugText($row, ['manufacturer_name', 'manufacturer', 'company_name', 'company']);
+            $strength = $this->extractDrugText($row, ['strength_text', 'strength']);
+            $packSize = $this->extractDrugText($row, ['pack_size_text', 'pack_size', 'package', 'packing']);
 
             $suggestions[] = [
-                'label' => $label,
-                'display_name' => $displayName,
-                'brand_name' => $brandName,
-                'generic_name' => $generic,
-                'identifier' => $identifier,
-                'type' => $itemType,
+                'label'             => $label,
+                'display_name'      => $displayName,
+                'brand_name'        => $brandName,
+                'generic_name'      => $generic,
+                'identifier'        => $identifier,
+                'type'              => $itemType,
+                'dosage_form'       => $dosageForm,
+                'route'             => $route,
+                'manufacturer_name' => $manufacturer,
+                'strength_text'     => $strength,
+                'pack_size_text'    => $packSize,
             ];
         }
 
@@ -6351,7 +6354,7 @@ class Medical extends BaseController
             ]);
         }
 
-        $cacheKey = 'abdm_drug_dt_' . md5($type . '_' . $identifier);
+        $cacheKey = 'abdm_drug_dt_v2_' . md5($type . '_' . $identifier);
         $cached = cache($cacheKey);
         if (is_array($cached) && ! empty($cached) && ($cached['ok'] ?? 0) === 1) {
             return $this->response->setJSON($cached);
@@ -6375,7 +6378,7 @@ class Medical extends BaseController
         ]);
         $brandName = $this->extractDrugText($record, ['brand_name', 'trade_name']);
         $label = $this->extractDrugText($record, [
-            'label', 'name', 'display', 'term', 'title', 'drug_name', 'product_name',
+            'label', 'display_name', 'name', 'display', 'term', 'title', 'drug_name', 'product_name',
             'medicine_name', 'brand_name', 'trade_name',
         ]);
         $generic = $this->extractDrugText($record, ['generic_name', 'genericname', 'generic', 'salt', 'molecule']);
@@ -6392,17 +6395,11 @@ class Medical extends BaseController
             $canonicalId = $identifier;
         }
 
-        if ($itemType === 'brand' && $brandName !== '') {
+        if ($displayName !== '') {
+            $label = $displayName;
+        } elseif ($brandName !== '') {
             $label = $brandName;
-        }
-
-        if ($this->isDrugIdentifierLike($label) && $displayName !== '' && ! $this->isDrugIdentifierLike($displayName)) {
-            $label = $displayName;
-        }
-        if ($label === '' && $displayName !== '') {
-            $label = $displayName;
-        }
-        if ($label === '') {
+        } elseif ($label === '' || $this->isDrugIdentifierLike($label)) {
             $label = $canonicalId;
         }
 

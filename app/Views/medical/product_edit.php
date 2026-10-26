@@ -553,14 +553,24 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
             after = normalizeSpace(m[3]);
         }
 
-        if (before) {
-            result.productName = before;
-        }
-
-        var formRegex = /\b(tablet|capsule|syrup|suspension|injection|cream|ointment|gel|drops?|solution|powder|lotion|spray|respules?|inhaler|patch|suppository|lozenge|granules?)\b/i;
+        var formRegex = /\b(tablet|capsule|syrup|suspension|injection|cream|ointment|gel|drops?|solution\s+for\s+(?:infusion|injection)|solution|powder|lotion|spray|respules?|inhaler|patch|suppository|lozenge|granules?)\b/i;
         var formMatch = formRegex.exec(after || label);
         if (formMatch) {
             result.formulation = normalizeSpace(formMatch[1]);
+        }
+
+        if (before) {
+            var cleanAfter = after ? normalizeSpace(after.replace(/\b(oral|route|for\s+oral\s+use)\b/gi, '')) : '';
+            if (result.formulation && cleanAfter) {
+                var reForm = new RegExp('\\b' + result.formulation.replace(/[-/\\^$*+?.()|[\]{}]/g, '\\$&') + '\\b', 'i');
+                var capForm = result.formulation.charAt(0).toUpperCase() + result.formulation.slice(1);
+                cleanAfter = cleanAfter.replace(reForm, capForm);
+            }
+            if (cleanAfter) {
+                result.productName = normalizeSpace(before + ' ' + cleanAfter);
+            } else {
+                result.productName = before;
+            }
         }
 
         if (inside) {
@@ -708,25 +718,25 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
     }
 
     function deriveDrugName(detail, parsed) {
+        var productName = normalizeSpace(parsed && parsed.productName ? parsed.productName : '');
+        var displayName = normalizeSpace(detail.display_name || '');
+        var label = normalizeSpace(detail.label || '');
         var brandName = normalizeSpace(detail.brand_name || '');
         var manufacturerName = normalizeSpace(detail.manufacturer_name || '');
-        var label = normalizeSpace(detail.label || '');
-        var displayName = normalizeSpace(detail.display_name || '');
-        var productName = normalizeSpace(parsed && parsed.productName ? parsed.productName : '');
 
-        if (brandName) {
-            return brandName;
+        if (productName && !isIdentifierLike(productName)) {
+            return productName;
         }
-        if (manufacturerName && !isIdentifierLike(manufacturerName)) {
-            return manufacturerName;
+        if (displayName && !isIdentifierLike(displayName)) {
+            return displayName;
         }
         if (label && !isIdentifierLike(label)) {
             return label;
         }
-        if (displayName && !isIdentifierLike(displayName)) {
-            return parsed && parsed.productName ? productName : displayName;
+        if (brandName && !isIdentifierLike(brandName)) {
+            return brandName;
         }
-        return productName || displayName || label;
+        return productName || displayName || label || '';
     }
 
     function deriveGenericName(detail, parsed, flatMeta) {
@@ -1100,28 +1110,43 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
         var genericName = item.generic_name || '';
         var type = item.type || '';
         var identifier = item.identifier || '';
+        var dosageForm = item.dosage_form || '';
+        var manufacturerName = item.manufacturer_name || '';
 
         clearSuggestionBox();
 
-        // Apply parsed fields immediately so user sees direct form fill.
-        applyParsedLabelToForm(label);
+        // Use the rich displayName (contains brand, generic, strength, route, and formulation)
+        var richLabel = displayName || label;
+        var parsed = parseDrugLabel(richLabel);
 
-        if (type === 'brand' && brandName && !isIdentifierLike(brandName)) {
-            $('#input_item_name').val(brandName);
-        } else if (displayName && !isIdentifierLike(displayName)) {
-            $('#input_item_name').val(displayName);
+        // Derive clean product name (e.g. "Dolo 650 mg Tablet")
+        var derivedName = parsed.productName || brandName || richLabel;
+        if (derivedName && !isIdentifierLike(derivedName)) {
+            $('#input_item_name').val(derivedName);
         }
-        if (genericName) {
+        if (parsed.genericName) {
+            $('#input_genericname').val(parsed.genericName);
+        } else if (genericName) {
             $('#input_genericname').val(genericName);
         }
+        if (parsed.formulation) {
+            setFormulationValue(parsed.formulation);
+            setFormulationByCode(parsed.formulation);
+        } else if (dosageForm) {
+            setFormulationValue(dosageForm);
+            setFormulationByCode(dosageForm);
+        }
+        if (manufacturerName) {
+            setCompanyByName(manufacturerName);
+        }
 
-        $('#abdm_drug_display').val((type === 'brand' && brandName) ? brandName : label);
+        $('#abdm_drug_display').val(richLabel);
         $('#abdm_drug_type').val(type);
         $('#abdm_drug_identifier').val(identifier);
         $('#abdm_drug_last_synced_at').val(new Date().toISOString().slice(0, 19).replace('T', ' '));
         showSelectedDrugSummary();
 
-        // Fetch canonical details for richer metadata autofill.
+        // Fetch canonical details for richer metadata autofill (company code, HSN, tax, schedules, etc.)
         fetchDrugDetail(type, identifier);
     }
 
@@ -1144,24 +1169,47 @@ window.closeDrugMasterSubView = window.closeDrugMasterSubView || function () {
             var genericName = item.generic_name || '';
             var type = item.type || '';
             var identifier = item.identifier || '';
-            if (!label && !identifier) {
+            var dosageForm = item.dosage_form || '';
+            var manufacturerName = item.manufacturer_name || '';
+            var strengthText = item.strength_text || '';
+
+            if (!label && !identifier && !displayName) {
                 return;
             }
 
-            var $a = $('<a href="#" class="list-group-item list-group-item-action py-1 px-2"></a>');
+            var fullTitle = displayName || label || brandName || identifier;
+
+            var $a = $('<a href="#" class="list-group-item list-group-item-action py-2 px-3 border-bottom"></a>');
             $a.attr('data-idx', String(idx));
-            var mainText = (type === 'brand' ? (brandName || label) : '') || displayName || label || identifier;
+
             var detailParts = [];
-            if (genericName && genericName.toLowerCase() !== String(mainText).toLowerCase()) {
-                detailParts.push('Generic: ' + genericName);
+            if (genericName) {
+                detailParts.push('Generic: <strong>' + $('<div>').text(genericName).html() + '</strong>');
             }
-            if (type) {
-                detailParts.push('Type: ' + type);
+            if (dosageForm) {
+                detailParts.push('Form: ' + $('<div>').text(dosageForm).html());
             }
-            if (identifier && identifier !== mainText) {
-                detailParts.push('ID: ' + identifier);
+            if (strengthText) {
+                detailParts.push('Strength: ' + $('<div>').text(strengthText).html());
             }
-            $a.text(mainText + (detailParts.length ? ' | ' + detailParts.join(' | ') : ''));
+            if (identifier) {
+                detailParts.push('CDCI ID: ' + $('<div>').text(identifier).html());
+            }
+
+            var html = '<div class="d-flex justify-content-between align-items-center mb-1">'
+                     + '  <div class="fw-bold text-primary" style="font-size: 0.95rem;">' + $('<div>').text(fullTitle).html() + '</div>';
+            if (manufacturerName) {
+                html += '  <span class="badge bg-secondary text-white ms-2 text-truncate" style="max-width: 200px;" title="' + $('<div>').text(manufacturerName).html() + '">' 
+                     +     $('<div>').text(manufacturerName).html() 
+                     + '  </span>';
+            }
+            html += '</div>';
+
+            if (detailParts.length) {
+                html += '<div class="text-muted small">' + detailParts.join(' &nbsp;|&nbsp; ') + '</div>';
+            }
+
+            $a.html(html);
             $a.on('click', function (e) {
                 e.preventDefault();
                 chooseSuggestion(idx);
