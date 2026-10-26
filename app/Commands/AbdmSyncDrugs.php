@@ -19,9 +19,27 @@ class AbdmSyncDrugs extends BaseCommand
 
     public function run(array $params)
     {
-        $pages = (int) ($params['pages'] ?? CLI::getOption('pages') ?? 6);
-        $limit = (int) ($params['limit'] ?? CLI::getOption('limit') ?? 500);
-        $dryRun = (bool) (CLI::getOption('dry-run') ?? false);
+        $pages = 6;
+        $limit = 500;
+        $dryRun = false;
+
+        $optPages = CLI::getOption('pages');
+        if ($optPages !== null && is_numeric($optPages)) {
+            $pages = (int) $optPages;
+        } elseif (! empty($params[0]) && is_numeric($params[0])) {
+            $pages = (int) $params[0];
+        }
+
+        $optLimit = CLI::getOption('limit');
+        if ($optLimit !== null && is_numeric($optLimit)) {
+            $limit = (int) $optLimit;
+        } elseif (! empty($params[1]) && is_numeric($params[1])) {
+            $limit = (int) $params[1];
+        }
+
+        if (CLI::getOption('dry-run') !== null || in_array('--dry-run', $params, true) || in_array('dry-run', $params, true)) {
+            $dryRun = true;
+        }
 
         if ($pages <= 0) {
             $pages = 6;
@@ -39,6 +57,30 @@ class AbdmSyncDrugs extends BaseCommand
         if (! $db->tableExists('med_product_master')) {
             CLI::error("Table 'med_product_master' does not exist in database.");
             return;
+        }
+
+        // Determine item_name column length & try to expand if needed
+        $itemNameMaxLength = 64;
+        try {
+            $fields = $db->getFieldData('med_product_master');
+            foreach ($fields as $f) {
+                if ($f->name === 'item_name' && ! empty($f->max_length)) {
+                    $itemNameMaxLength = (int) $f->max_length;
+                    break;
+                }
+            }
+
+            if ($itemNameMaxLength < 191 && ! $dryRun) {
+                try {
+                    $db->query("ALTER TABLE med_product_master MODIFY COLUMN item_name VARCHAR(191) NOT NULL");
+                    $itemNameMaxLength = 191;
+                    CLI::write("Expanded 'item_name' column to VARCHAR(191).", 'green');
+                } catch (\Throwable $e) {
+                    // Table alter may be restricted; continue with existing max length
+                }
+            }
+        } catch (\Throwable $e) {
+            // Ignore
         }
 
         $connector = new \App\Libraries\Abdm\EAtriaBridgeConnector();
@@ -93,9 +135,9 @@ class AbdmSyncDrugs extends BaseCommand
                 }
 
                 // Clean Product Name
-                $itemName = $this->deriveCleanItemName($displayName, $brandName, $dosageForm);
+                $itemName = $this->deriveCleanItemName($displayName, $brandName, $dosageForm, $itemNameMaxLength);
                 if ($itemName === '') {
-                    $itemName = $displayName ?: $genericName;
+                    $itemName = mb_substr($displayName ?: $genericName, 0, $itemNameMaxLength);
                 }
 
                 // Check if already exists by abdm_drug_identifier
@@ -107,19 +149,51 @@ class AbdmSyncDrugs extends BaseCommand
                         ->getRowArray();
                 }
 
-                // If not found by identifier, check by exact item_name
+                // If not found by identifier, check for collision or match by item_name
                 if (! $existing && $itemName !== '') {
-                    $existing = $db->table('med_product_master')
-                        ->where('item_name', $itemName)
-                        ->get()
-                        ->getRowArray();
+                    $candidate = $itemName;
+                    $counter = 1;
+                    while (true) {
+                        $collision = $db->table('med_product_master')
+                            ->where('item_name', $candidate)
+                            ->get()
+                            ->getRowArray();
+
+                        if (! $collision) {
+                            $itemName = $candidate;
+                            break;
+                        }
+
+                        // Existing row matches this drug's identifier or has no identifier yet
+                        if (! empty($collision['abdm_drug_identifier']) && $collision['abdm_drug_identifier'] === $identifier) {
+                            $existing = $collision;
+                            $itemName = $candidate;
+                            break;
+                        }
+                        if (empty($collision['abdm_drug_identifier'])) {
+                            $existing = $collision;
+                            $itemName = $candidate;
+                            break;
+                        }
+
+                        // Another record already has this exact name; make name distinct
+                        $suffix = ' (' . substr($identifier, -4) . ($counter > 1 ? "-{$counter}" : '') . ')';
+                        $allowedLen = max(10, $itemNameMaxLength - strlen($suffix));
+                        $candidate = mb_substr($itemName, 0, $allowedLen) . $suffix;
+                        $counter++;
+
+                        if ($counter > 10) {
+                            $itemName = $candidate;
+                            break;
+                        }
+                    }
                 }
 
                 $recordData = [
                     'item_name'                => $itemName,
-                    'genericname'              => $genericName ?: $displayName,
-                    'formulation'              => $dosageForm ?: 'Tablet',
-                    'company_name'             => $manufacturer,
+                    'genericname'              => mb_substr($genericName ?: $displayName, 0, 255),
+                    'formulation'              => mb_substr($dosageForm ?: 'Tablet', 0, 50),
+                    'company_name'             => mb_substr($manufacturer, 0, 100),
                     'abdm_drug_type'           => $type ?: 'generic',
                     'abdm_drug_identifier'     => $identifier,
                     'abdm_drug_display'        => $displayName,
@@ -142,13 +216,19 @@ class AbdmSyncDrugs extends BaseCommand
                     $recordData['SGST_per'] = (float) $item['sgst_percent'];
                 }
 
-                if ($existing) {
-                    $db->table('med_product_master')->where('id', $existing['id'])->update($recordData);
-                    $totalUpdated++;
-                } else {
-                    $recordData['insert_by'] = 'abdm_sync';
-                    $db->table('med_product_master')->insert($recordData);
-                    $totalInserted++;
+                try {
+                    if ($existing) {
+                        $db->table('med_product_master')->where('id', $existing['id'])->update($recordData);
+                        $totalUpdated++;
+                    } else {
+                        $recordData['insert_by'] = 'abdm_sync';
+                        $db->table('med_product_master')->insert($recordData);
+                        $totalInserted++;
+                    }
+                } catch (\Throwable $itemErr) {
+                    // Safe item-level catch: avoid halting the entire sync on duplicate entry or constraint error
+                    $totalSkipped++;
+                    log_message('warning', "[abdm:sync-drugs] Skipped item {$identifier} ({$itemName}): " . $itemErr->getMessage());
                 }
             }
 
@@ -168,28 +248,47 @@ class AbdmSyncDrugs extends BaseCommand
         CLI::write("--------------------------------------------------\n", 'cyan');
     }
 
-    private function deriveCleanItemName(string $displayName, string $brandName, string $formulation): string
+    private function deriveCleanItemName(string $displayName, string $brandName, string $formulation, int $maxLength = 191): string
     {
         $label = trim($displayName);
         if ($label === '') {
-            return $brandName;
+            $label = trim($brandName);
+        }
+        if ($label === '') {
+            return '';
         }
 
-        if (preg_match('/^([^()]+?)\s*\(([^)]+)\)\s*(.*)$/i', $label, $m)) {
+        // Pattern 1: Brand (Generic Salts...) Strength Form
+        // e.g. "Droclox CV (amoxicillin and clavulanate potassium) 500 mg + 125 mg oral tablet"
+        // => "Droclox CV 500 mg + 125 mg Tablet"
+        if (preg_match('/^([^(]+?)\s*\(([^)]+)\)\s*(.*)$/i', $label, $m)) {
             $before = trim($m[1]);
-            $after = trim($m[3]);
-            $cleanAfter = preg_replace('/\b(oral|route|for\s+oral\s+use)\b/i', '', $after);
-            $cleanAfter = preg_replace('/\s+/', ' ', trim($cleanAfter));
-            if ($formulation !== '' && $cleanAfter !== '') {
-                $re = '/' . preg_quote($formulation, '/') . '/i';
-                $cleanAfter = preg_replace($re, ucfirst($formulation), $cleanAfter);
+            $inside = trim($m[2]);
+            $after  = trim($m[3]);
+
+            if ($after !== '' && ! preg_match('/^(as|equivalent\s+to)\b/i', $before)) {
+                $cleanAfter = preg_replace('/\b(oral\s+route|oral\s+use|for\s+oral\s+use|oral)\b/i', '', $after);
+                $cleanAfter = preg_replace('/\s+/', ' ', trim($cleanAfter));
+                if ($formulation !== '' && $cleanAfter !== '') {
+                    $re = '/' . preg_quote($formulation, '/') . '/i';
+                    $cleanAfter = preg_replace($re, ucfirst($formulation), $cleanAfter);
+                }
+                $candidate = trim($before . ' ' . $cleanAfter);
+                return mb_substr($candidate, 0, $maxLength);
             }
-            if ($cleanAfter !== '') {
-                return trim($before . ' ' . $cleanAfter);
-            }
-            return $before;
         }
 
-        return $label;
+        // Pattern 2: Generic description with "(as ...)" or "(equivalent to ...)" chemical salt
+        // e.g. "Amoxicillin 500 mg and Clavulanic acid (as clavulanate potassium) 125 mg ..."
+        $clean = preg_replace('/\s*\((?:as|equivalent\s+to)[^)]+\)/i', '', $label);
+        $clean = preg_replace('/\b(oral\s+route|oral\s+use|for\s+oral\s+use|oral)\b/i', '', $clean);
+        $clean = preg_replace('/\s+/', ' ', trim($clean));
+
+        if ($formulation !== '' && $clean !== '') {
+            $re = '/' . preg_quote($formulation, '/') . '/i';
+            $clean = preg_replace($re, ucfirst($formulation), $clean);
+        }
+
+        return mb_substr($clean, 0, $maxLength);
     }
 }
