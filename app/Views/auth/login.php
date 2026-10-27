@@ -103,16 +103,16 @@ $footerVersion = hms_footer_version();
 
         .login-hero-section.has-wallpaper {
             background-size: cover;
-            background-position: center right;
+            background-position: center center;
             background-repeat: no-repeat;
-            color: #0b2545;
+            color: #ffffff;
         }
 
         .login-hero-section.has-wallpaper::before {
             content: '';
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: linear-gradient(135deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.1) 50%, rgba(240, 248, 248, 0.25) 100%);
+            background: linear-gradient(180deg, rgba(7, 24, 43, 0.18) 0%, rgba(7, 24, 43, 0.42) 50%, rgba(7, 24, 43, 0.8) 100%);
             z-index: 1;
         }
 
@@ -125,43 +125,67 @@ $footerVersion = hms_footer_version();
             height: 100%;
         }
 
+        /* 3D Format Box for Hospital Logo with curved corners */
         .login-hero-logo-wrap {
             display: inline-flex;
             align-items: center;
-            justify-content: flex-start;
-            padding: 0;
-            background: transparent;
-            border: none;
-            box-shadow: none;
+            justify-content: center;
+            padding: 16px 26px;
+            border-radius: 20px;
+            background: linear-gradient(150deg, #ffffff 0%, #edf6f7 100%);
+            border: 1px solid rgba(255, 255, 255, 0.95);
+            box-shadow: 
+                0 16px 36px rgba(0, 0, 0, 0.38),
+                0 4px 10px rgba(0, 0, 0, 0.22),
+                inset 0 2px 1px rgba(255, 255, 255, 1),
+                inset 0 -2px 4px rgba(7, 34, 53, 0.08);
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+
+        .login-hero-logo-wrap:hover {
+            transform: translateY(-2px);
+            box-shadow: 
+                0 20px 42px rgba(0, 0, 0, 0.42),
+                0 6px 14px rgba(0, 0, 0, 0.25),
+                inset 0 2px 1px rgba(255, 255, 255, 1),
+                inset 0 -2px 4px rgba(7, 34, 53, 0.08);
         }
 
         .login-hero-logo-img {
-            max-height: 95px;
-            max-width: 290px;
+            max-height: 85px;
+            max-width: 260px;
             width: auto;
             height: auto;
             object-fit: contain;
-            filter: drop-shadow(0 2px 6px rgba(11, 37, 69, 0.12));
+            filter: drop-shadow(0 1px 3px rgba(0, 0, 0, 0.1));
             transition: transform 0.2s ease;
         }
 
+        /* Radiant, crisp heading on dark background with dark outline and ambient glow */
         .login-hero-title {
             font-size: clamp(2.2rem, 3.8vw, 3.4rem);
             font-weight: 800;
             line-height: 1.18;
             letter-spacing: -0.015em;
-            color: #0b2545;
-            text-shadow: 0 1px 2px rgba(255, 255, 255, 0.85);
+            color: #ffffff;
+            -webkit-text-stroke: 1.2px #061c2e;
+            paint-order: stroke fill;
+            text-shadow: 
+                0 3px 6px rgba(0, 0, 0, 0.8),
+                0 8px 24px rgba(0, 0, 0, 0.6),
+                0 0 32px rgba(45, 212, 191, 0.3);
         }
 
         .login-hero-subtitle {
             font-size: 1.15rem;
-            color: #334e68;
+            color: #e2e8f0;
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
             max-width: 620px;
         }
 
         .login-hero-meta {
-            color: #486581;
+            color: #f1f5f9;
+            text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
             font-weight: 500;
         }
 
@@ -257,19 +281,19 @@ $footerVersion = hms_footer_version();
                     </p>
 
                     <?php if (!empty($hospitalAddress1) || !empty($hospitalPhone) || !empty($hospitalHfrId)): ?>
-                        <div class="d-flex flex-wrap gap-3 align-items-center small login-hero-meta">
+                        <div class="d-flex flex-wrap gap-3 align-items-center text-white small login-hero-meta">
                             <?php if (!empty($hospitalAddress1)): ?>
                                 <span class="d-inline-flex align-items-center gap-1">
-                                    <i class="bi bi-geo-alt-fill" style="color: #257a82;"></i> <?= esc($hospitalAddress1) ?><?= !empty($hospitalAddress2) ? ', ' . esc($hospitalAddress2) : '' ?>
+                                    <i class="bi bi-geo-alt-fill text-warning"></i> <?= esc($hospitalAddress1) ?><?= !empty($hospitalAddress2) ? ', ' . esc($hospitalAddress2) : '' ?>
                                 </span>
                             <?php endif; ?>
                             <?php if (!empty($hospitalPhone)): ?>
                                 <span class="d-inline-flex align-items-center gap-1">
-                                    <i class="bi bi-telephone-fill" style="color: #257a82;"></i> <?= esc($hospitalPhone) ?>
+                                    <i class="bi bi-telephone-fill text-success"></i> <?= esc($hospitalPhone) ?>
                                 </span>
                             <?php endif; ?>
                             <?php if (!empty($hospitalHfrId)): ?>
-                                <span class="badge px-2 py-1 shadow-sm" style="background-color: #e6f6f4; color: #147d75; border: 1px solid #b2e2df; font-weight: 600;">
+                                <span class="badge bg-primary bg-opacity-75 border border-primary px-2 py-1 shadow-sm">
                                     <i class="bi bi-shield-check me-1"></i> HFR ID: <?= esc($hospitalHfrId) ?>
                                 </span>
                             <?php endif; ?>
