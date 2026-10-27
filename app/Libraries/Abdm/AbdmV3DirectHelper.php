@@ -13,8 +13,8 @@ namespace App\Libraries\Abdm;
  */
 class AbdmV3DirectHelper
 {
-    protected string $clientId     = 'SBXID_033661';
-    protected string $clientSecret = '656f79f1-ef99-495f-9f37-713219ecbbcf';
+    protected string $clientId     = '';
+    protected string $clientSecret = '';
     protected string $sessionsUrl  = 'https://dev.abdm.gov.in/api/hiecm/gateway/v3/sessions';
     protected string $certUrl      = 'https://abhasbx.abdm.gov.in/abha/api/v3/profile/public/certificate';
     protected string $searchUrl    = 'https://abhasbx.abdm.gov.in/abha/api/v3/profile/account/abha/search';
@@ -64,11 +64,11 @@ class AbdmV3DirectHelper
 
         if (function_exists('env')) {
             $envClientId = env('abdm.directClientId', env('BRIDGE_SOURCE_CODE', ''));
-            if (! empty($envClientId) && $this->clientId === 'SBXID_033661') {
+            if (! empty($envClientId) && empty($this->clientId)) {
                 $this->clientId = (string) $envClientId;
             }
             $envSecret = env('abdm.directClientSecret', '');
-            if (! empty($envSecret) && $this->clientSecret === '656f79f1-ef99-495f-9f37-713219ecbbcf') {
+            if (! empty($envSecret) && empty($this->clientSecret)) {
                 $this->clientSecret = (string) $envSecret;
             }
         }

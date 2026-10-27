@@ -128,7 +128,7 @@ Header: Authorization: Bearer YOUR_TOKEN
 
 | Variable | Value | Notes |
 |----------|-------|-------|
-| `BRIDGE_SOURCE_CODE` | `SBXID_033661` | Client ID from ABDM |
+| `BRIDGE_SOURCE_CODE` | `<your-abdm-client-id>` | Client ID from ABDM |
 | `BRIDGE_SYNC_TOKEN` | Bearer token | Get from middleware provider |
 | `ABDM_M3_URL` | `https://dev.abdm.gov.in/api/v3` | Sandbox API endpoint |
 | `ABDM_M3_TOKEN` | Bearer token | ABDM M3 authentication |
