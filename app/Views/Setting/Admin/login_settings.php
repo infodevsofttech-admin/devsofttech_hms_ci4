@@ -1,3 +1,27 @@
+<?php $isStandalone = $is_standalone ?? false; ?>
+<?php if ($isStandalone): ?>
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Login Page Customizer - Admin Panel</title>
+    <link href="<?= base_url('assets/vendor/bootstrap/css/bootstrap.min.css') ?>" rel="stylesheet">
+    <link href="<?= base_url('assets/vendor/bootstrap-icons/bootstrap-icons.css') ?>" rel="stylesheet">
+    <link href="<?= base_url('assets/css/style.css') ?>" rel="stylesheet">
+    <script src="<?= base_url('assets/vendor/jquery/jquery-3.7.1.min.js') ?>"></script>
+    <script src="<?= base_url('assets/vendor/bootstrap/js/bootstrap.bundle.min.js') ?>"></script>
+</head>
+<body class="bg-light py-4 px-2 px-md-4">
+    <div class="container-fluid" style="max-width: 1200px;">
+        <div class="mb-3 d-flex align-items-center justify-content-between">
+            <a href="<?= base_url('dashboard') ?>" class="btn btn-outline-secondary btn-sm">
+                <i class="bi bi-arrow-left me-1"></i> Back to Dashboard
+            </a>
+            <span class="text-muted small"><i class="bi bi-shield-check text-success me-1"></i> Hospital Administration</span>
+        </div>
+<?php endif; ?>
+
 <div class="card shadow-sm border-0">
     <div class="card-header bg-white border-bottom py-3 d-flex align-items-center justify-content-between flex-wrap gap-2">
         <div>
@@ -470,3 +494,9 @@
     });
 })();
 </script>
+
+<?php if ($isStandalone): ?>
+    </div>
+</body>
+</html>
+<?php endif; ?>

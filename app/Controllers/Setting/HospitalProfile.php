@@ -252,6 +252,7 @@ class HospitalProfile extends BaseController
             'login_show_contact_meta' => $this->readSettingValue('LOGIN_SHOW_CONTACT_META') !== '' ? $this->readSettingValue('LOGIN_SHOW_CONTACT_META') : '1',
             'login_show_pwa_card' => $this->readSettingValue('LOGIN_SHOW_PWA_CARD') !== '' ? $this->readSettingValue('LOGIN_SHOW_PWA_CARD') : '1',
             'presets' => $presets,
+            'is_standalone' => ! $this->request->isAJAX(),
         ]);
     }
 
