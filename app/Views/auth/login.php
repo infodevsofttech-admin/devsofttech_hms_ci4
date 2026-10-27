@@ -103,16 +103,16 @@ $footerVersion = hms_footer_version();
 
         .login-hero-section.has-wallpaper {
             background-size: cover;
-            background-position: center center;
+            background-position: center right;
             background-repeat: no-repeat;
-            color: #ffffff;
+            color: #0b2545;
         }
 
         .login-hero-section.has-wallpaper::before {
             content: '';
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: linear-gradient(180deg, rgba(15, 23, 42, 0.2) 0%, rgba(15, 23, 42, 0.45) 50%, rgba(15, 23, 42, 0.85) 100%);
+            background: linear-gradient(135deg, rgba(255, 255, 255, 0.45) 0%, rgba(255, 255, 255, 0.1) 50%, rgba(240, 248, 248, 0.25) 100%);
             z-index: 1;
         }
 
@@ -128,22 +128,20 @@ $footerVersion = hms_footer_version();
         .login-hero-logo-wrap {
             display: inline-flex;
             align-items: center;
-            justify-content: center;
-            padding: 12px 22px;
-            border-radius: 16px;
-            background: rgba(255, 255, 255, 0.92);
-            backdrop-filter: blur(16px);
-            -webkit-backdrop-filter: blur(16px);
-            border: 1px solid rgba(255, 255, 255, 0.7);
-            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22), 0 2px 6px rgba(0, 0, 0, 0.12);
+            justify-content: flex-start;
+            padding: 0;
+            background: transparent;
+            border: none;
+            box-shadow: none;
         }
 
         .login-hero-logo-img {
-            max-height: 85px;
-            max-width: 270px;
+            max-height: 95px;
+            max-width: 290px;
             width: auto;
             height: auto;
             object-fit: contain;
+            filter: drop-shadow(0 2px 6px rgba(11, 37, 69, 0.12));
             transition: transform 0.2s ease;
         }
 
@@ -151,26 +149,20 @@ $footerVersion = hms_footer_version();
             font-size: clamp(2.2rem, 3.8vw, 3.4rem);
             font-weight: 800;
             line-height: 1.18;
-            letter-spacing: -0.01em;
-            color: #ffffff;
-            -webkit-text-stroke: 1.2px #071e33;
-            paint-order: stroke fill;
-            text-shadow: 
-                0 3px 8px rgba(0, 0, 0, 0.75),
-                0 8px 24px rgba(0, 0, 0, 0.5);
+            letter-spacing: -0.015em;
+            color: #0b2545;
+            text-shadow: 0 1px 2px rgba(255, 255, 255, 0.85);
         }
 
         .login-hero-subtitle {
             font-size: 1.15rem;
-            color: rgba(255, 255, 255, 0.92);
-            text-shadow: 
-                0 1px 3px rgba(0, 0, 0, 0.9),
-                0 3px 12px rgba(0, 0, 0, 0.75);
+            color: #334e68;
             max-width: 620px;
         }
 
         .login-hero-meta {
-            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 2px 8px rgba(0, 0, 0, 0.65);
+            color: #486581;
+            font-weight: 500;
         }
 
         /* Hero Blank / Neutral State (First time / No Wallpaper) */
@@ -265,19 +257,19 @@ $footerVersion = hms_footer_version();
                     </p>
 
                     <?php if (!empty($hospitalAddress1) || !empty($hospitalPhone) || !empty($hospitalHfrId)): ?>
-                        <div class="d-flex flex-wrap gap-3 align-items-center text-white small login-hero-meta">
+                        <div class="d-flex flex-wrap gap-3 align-items-center small login-hero-meta">
                             <?php if (!empty($hospitalAddress1)): ?>
                                 <span class="d-inline-flex align-items-center gap-1">
-                                    <i class="bi bi-geo-alt-fill text-warning"></i> <?= esc($hospitalAddress1) ?><?= !empty($hospitalAddress2) ? ', ' . esc($hospitalAddress2) : '' ?>
+                                    <i class="bi bi-geo-alt-fill" style="color: #257a82;"></i> <?= esc($hospitalAddress1) ?><?= !empty($hospitalAddress2) ? ', ' . esc($hospitalAddress2) : '' ?>
                                 </span>
                             <?php endif; ?>
                             <?php if (!empty($hospitalPhone)): ?>
                                 <span class="d-inline-flex align-items-center gap-1">
-                                    <i class="bi bi-telephone-fill text-success"></i> <?= esc($hospitalPhone) ?>
+                                    <i class="bi bi-telephone-fill" style="color: #257a82;"></i> <?= esc($hospitalPhone) ?>
                                 </span>
                             <?php endif; ?>
                             <?php if (!empty($hospitalHfrId)): ?>
-                                <span class="badge bg-primary bg-opacity-75 border border-primary px-2 py-1 shadow-sm">
+                                <span class="badge px-2 py-1 shadow-sm" style="background-color: #e6f6f4; color: #147d75; border: 1px solid #b2e2df; font-weight: 600;">
                                     <i class="bi bi-shield-check me-1"></i> HFR ID: <?= esc($hospitalHfrId) ?>
                                 </span>
                             <?php endif; ?>
