@@ -158,7 +158,7 @@ Create the database in MySQL:
 mysql -u root -p -e "CREATE DATABASE IF NOT EXISTS \`hms_johri_ss_hospital\` CHARACTER SET utf8mb4 COLLATE utf8mb4_general_ci;"
 ```
 
-Run the built-in Spark installation command:
+Run the built-in Spark installation command (automatically seeds schema and templates):
 ```bash
 php spark hms:install \
   --hospital-name="Johri Hospital" \
@@ -166,6 +166,13 @@ php spark hms:install \
   --admin-email="admin@example.com" \
   --admin-password="Admin@12345"
 ```
+
+### Seeding the Comprehensive Medical Templates Library:
+To populate or update all out-of-the-box Pathology panels (37 panels, 228 tests with LOINC), Radiology templates (59 templates across USG, ECHO, X-Ray, CT, MRI), 7 NABH IPD discharge summaries, 36 clinical narratives, 13 IPD consent forms, 29 OPD doctor templates, and 3 prescription print formats:
+```bash
+php spark db:seed MedicalTemplatesLibrarySeeder
+```
+> **Safe Mode Guarantee (Insert-If-Not-Exists):** The seeder strictly checks if records already exist. It **never overwrites or updates** existing templates or tests, preserving all custom test rates, personalized normal reference intervals, and doctor notes. Only missing or newly added templates are inserted.
 
 *Alternatively*, import the starter SQL file directly via MySQL CLI:
 ```bash
