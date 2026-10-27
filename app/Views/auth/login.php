@@ -33,9 +33,30 @@ $footerVersion = hms_footer_version();
     <meta charset="utf-8">
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
 
-    <title><?= lang('Auth.login') ?> - <?= esc($hospitalName !== '' ? $hospitalName : 'E-Atria HMS') ?></title>
-    <meta content="" name="description">
-    <meta content="" name="keywords">
+    <?php
+    $portalTitle = esc(($hospitalName !== '' ? $hospitalName : 'E-Atria HMS') . ' - Login');
+    $portalDesc = esc(($hospitalName !== '' ? $hospitalName : 'E-Atria Hospital Management System') . ' - Secure Healthcare Delivery, Digital EMR & Clinical Management Portal');
+    $shareImage = esc($hasWallpaper ? $wallpaperUrl : ($hasLogo ? $logoUrl : base_url('assets/img/logo.png')));
+    ?>
+    <title><?= $portalTitle ?></title>
+    <meta name="description" content="<?= $portalDesc ?>">
+    <meta name="keywords" content="Hospital Management System, EMR, EHR, ABDM, OPD, IPD, Healthcare, <?= esc($hospitalName) ?>">
+    <meta name="author" content="<?= esc($hospitalName !== '' ? $hospitalName : 'E-Atria') ?>">
+
+    <!-- Open Graph / WhatsApp / Facebook Meta Tags -->
+    <meta property="og:type" content="website">
+    <meta property="og:url" content="<?= esc(current_url()) ?>">
+    <meta property="og:title" content="<?= $portalTitle ?>">
+    <meta property="og:description" content="<?= $portalDesc ?>">
+    <meta property="og:image" content="<?= $shareImage ?>">
+    <meta property="og:site_name" content="<?= esc($hospitalName !== '' ? $hospitalName : 'E-Atria HMS') ?>">
+
+    <!-- Twitter Card Meta Tags -->
+    <meta name="twitter:card" content="summary_large_image">
+    <meta name="twitter:url" content="<?= esc(current_url()) ?>">
+    <meta name="twitter:title" content="<?= $portalTitle ?>">
+    <meta name="twitter:description" content="<?= $portalDesc ?>">
+    <meta name="twitter:image" content="<?= $shareImage ?>">
 
     <link href="assets/img/logo.ico" rel="icon" type="image/x-icon">
     <link href="assets/img/favicon.png" rel="alternate icon" type="image/png">
@@ -104,50 +125,53 @@ $footerVersion = hms_footer_version();
             height: 100%;
         }
 
-        .login-hero-badge {
-            background: rgba(255, 255, 255, 0.18);
-            backdrop-filter: blur(10px);
-            -webkit-backdrop-filter: blur(10px);
-            border: 1px solid rgba(255, 255, 255, 0.3);
-            border-radius: 9999px;
-            padding: 0.5rem 1.25rem;
+        .login-hero-logo-wrap {
             display: inline-flex;
             align-items: center;
-            gap: 0.75rem;
-            color: #ffffff;
-            width: fit-content;
-            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+            justify-content: center;
+            padding: 10px 18px;
+            border-radius: 18px;
+            background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.08) 55%, rgba(255, 255, 255, 0) 80%);
+            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+        }
+
+        .login-hero-logo-img {
+            max-height: 105px;
+            max-width: 320px;
+            width: auto;
+            height: auto;
+            object-fit: contain;
+            filter: 
+                drop-shadow(0 0 12px rgba(255, 255, 255, 0.5))
+                drop-shadow(0 4px 14px rgba(0, 0, 0, 0.65));
+            transition: transform 0.2s ease;
         }
 
         .login-hero-title {
-            font-size: clamp(2rem, 3.5vw, 3.25rem);
+            font-size: clamp(2.2rem, 3.8vw, 3.4rem);
             font-weight: 800;
-            line-height: 1.15;
+            line-height: 1.18;
             letter-spacing: -0.02em;
             color: #ffffff;
-            text-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+            text-shadow: 
+                0 0 12px rgba(255, 255, 255, 0.6),
+                0 0 30px rgba(255, 255, 255, 0.4),
+                0 0 60px rgba(56, 189, 248, 0.4),
+                0 2px 4px rgba(0, 0, 0, 0.8),
+                0 4px 16px rgba(0, 0, 0, 0.65);
         }
 
         .login-hero-subtitle {
             font-size: 1.15rem;
-            color: rgba(255, 255, 255, 0.85);
-            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+            color: rgba(255, 255, 255, 0.92);
+            text-shadow: 
+                0 1px 3px rgba(0, 0, 0, 0.9),
+                0 3px 12px rgba(0, 0, 0, 0.75);
             max-width: 620px;
         }
 
-        .login-hero-pill {
-            background: rgba(255, 255, 255, 0.14);
-            backdrop-filter: blur(8px);
-            -webkit-backdrop-filter: blur(8px);
-            border: 1px solid rgba(255, 255, 255, 0.25);
-            border-radius: 9999px;
-            padding: 0.4rem 1rem;
-            font-size: 0.85rem;
-            font-weight: 500;
-            color: #ffffff;
-            display: inline-flex;
-            align-items: center;
-            gap: 0.4rem;
+        .login-hero-meta {
+            text-shadow: 0 1px 3px rgba(0, 0, 0, 0.9), 0 2px 8px rgba(0, 0, 0, 0.65);
         }
 
         /* Hero Blank / Neutral State (First time / No Wallpaper) */
@@ -165,20 +189,6 @@ $footerVersion = hms_footer_version();
         .login-hero-section.no-wallpaper .login-hero-subtitle {
             color: #64748b;
             text-shadow: none;
-        }
-
-        .login-hero-section.no-wallpaper .login-hero-badge {
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
-            color: #1e293b;
-            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
-        }
-
-        .login-hero-section.no-wallpaper .login-hero-pill {
-            background: #ffffff;
-            border: 1px solid #e2e8f0;
-            color: #475569;
-            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
         }
 
         /* Right Side Form Panel */
@@ -234,19 +244,11 @@ $footerVersion = hms_footer_version();
         <!-- Left Branding / Wallpaper Hero Section -->
         <section class="login-hero-section has-wallpaper" style="background-image: url('<?= esc($wallpaperUrl) ?>');">
             <div class="login-hero-inner">
-                <!-- Top Header / Hospital Tag -->
+                <!-- Top Header / Hospital Logo (Logo only, prominent with soft drop shadow) -->
                 <div>
                     <?php if ($hasLogo): ?>
-                        <div class="login-hero-badge">
-                            <img src="<?= esc($logoUrl) ?>" alt="Hospital Logo" style="max-height: 38px; max-width: 140px; object-fit: contain;">
-                            <?php if (!empty($hospitalName)): ?>
-                                <span class="fw-bold small"><?= esc($hospitalName) ?></span>
-                            <?php endif; ?>
-                        </div>
-                    <?php elseif (!empty($hospitalName)): ?>
-                        <div class="login-hero-badge">
-                            <i class="bi bi-hospital fs-5 text-warning"></i>
-                            <span class="fw-bold small"><?= esc($hospitalName) ?></span>
+                        <div class="login-hero-logo-wrap">
+                            <img src="<?= esc($logoUrl) ?>" alt="<?= esc($hospitalName) ?> Logo" class="login-hero-logo-img">
                         </div>
                     <?php endif; ?>
                 </div>
@@ -254,9 +256,9 @@ $footerVersion = hms_footer_version();
                 <!-- Center / Bottom Hospital Branding Showcase -->
                 <div class="my-auto py-4">
                     <?php if (!empty($hospitalName)): ?>
-                        <h1 class="login-hero-title mb-2"><?= esc($hospitalName) ?></h1>
+                        <h1 class="login-hero-title mb-3"><?= esc($hospitalName) ?></h1>
                     <?php else: ?>
-                        <h1 class="login-hero-title mb-2">Hospital Information Management System</h1>
+                        <h1 class="login-hero-title mb-3">Hospital Information Management System</h1>
                     <?php endif; ?>
 
                     <p class="login-hero-subtitle mb-4">
@@ -264,7 +266,7 @@ $footerVersion = hms_footer_version();
                     </p>
 
                     <?php if (!empty($hospitalAddress1) || !empty($hospitalPhone) || !empty($hospitalHfrId)): ?>
-                        <div class="d-flex flex-wrap gap-3 align-items-center mb-4 text-white-50 small">
+                        <div class="d-flex flex-wrap gap-3 align-items-center text-white small login-hero-meta">
                             <?php if (!empty($hospitalAddress1)): ?>
                                 <span class="d-inline-flex align-items-center gap-1">
                                     <i class="bi bi-geo-alt-fill text-warning"></i> <?= esc($hospitalAddress1) ?><?= !empty($hospitalAddress2) ? ', ' . esc($hospitalAddress2) : '' ?>
@@ -276,30 +278,16 @@ $footerVersion = hms_footer_version();
                                 </span>
                             <?php endif; ?>
                             <?php if (!empty($hospitalHfrId)): ?>
-                                <span class="badge bg-primary bg-opacity-75 border border-primary px-2 py-1">
+                                <span class="badge bg-primary bg-opacity-75 border border-primary px-2 py-1 shadow-sm">
                                     <i class="bi bi-shield-check me-1"></i> HFR ID: <?= esc($hospitalHfrId) ?>
                                 </span>
                             <?php endif; ?>
                         </div>
                     <?php endif; ?>
-
-                    <div class="d-flex flex-wrap gap-2">
-                        <span class="login-hero-pill">
-                            <i class="bi bi-shield-check text-success"></i> ABDM M1, M2 &amp; M3 Integrated
-                        </span>
-                        <span class="login-hero-pill">
-                            <i class="bi bi-hospital text-info"></i> OPD, IPD &amp; E-Prescription
-                        </span>
-                        <span class="login-hero-pill">
-                            <i class="bi bi-phone text-warning"></i> Mobile PWA &amp; Bedside Care
-                        </span>
-                    </div>
                 </div>
 
-                <!-- Hero Footer Note -->
-                <div class="small text-white-50">
-                    <i class="bi bi-shield-lock me-1"></i> Government of India ABDM Compliant &bull; Digital Health Mission
-                </div>
+                <!-- Bottom spacer to balance vertical layout -->
+                <div></div>
             </div>
         </section>
         <?php else: ?>
