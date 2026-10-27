@@ -67,6 +67,23 @@
                 </div>
             </div>
 
+            <div class="col-md-7">
+                <label class="form-label fw-semibold">Login Screen Wallpaper / Branding Image</label>
+                <input type="file" class="form-control" id="hospital_wallpaper" accept=".png,.jpg,.jpeg,.webp">
+                <div class="form-text">Displayed on the software login page. Recommended: 1920x1080 or 1280x720 (PNG, JPG, WEBP).</div>
+            </div>
+            <div class="col-md-5">
+                <label class="form-label fw-semibold">Current Wallpaper</label>
+                <div id="hospital_wallpaper_preview" class="border rounded p-2 text-center bg-light">
+                    <?php if (!empty($hospital_wallpaper_url ?? '')): ?>
+                        <img src="<?= esc((string) $hospital_wallpaper_url) ?>" alt="Hospital Wallpaper" style="max-height:80px;max-width:100%;object-fit:cover;border-radius:4px;">
+                        <div class="small text-muted mt-1"><?= esc((string) ($hospital_wallpaper ?? '')) ?></div>
+                    <?php else: ?>
+                        <span class="text-muted small">No wallpaper uploaded (Login page uses blank/neutral)</span>
+                    <?php endif; ?>
+                </div>
+            </div>
+
             <div class="col-12 mt-3"><hr><h6 class="mb-2">Pharmacy Information</h6></div>
             <div class="col-md-6">
                 <label class="form-label">Pharmacy Name</label>
@@ -105,6 +122,7 @@
         <div class="d-flex gap-2 flex-wrap mt-3">
             <button type="button" class="btn btn-primary" id="btn_hospital_profile_save">Save Profile</button>
             <button type="button" class="btn btn-outline-danger" id="btn_hospital_logo_delete">Delete Logo</button>
+            <button type="button" class="btn btn-outline-danger" id="btn_hospital_wallpaper_delete">Delete Wallpaper</button>
             <button type="button" class="btn btn-outline-danger" id="btn_pharmacy_logo_delete">Delete Pharmacy Logo</button>
             <button type="button" class="btn btn-outline-dark" id="btn_hospital_profile_reset">Reset All</button>
         </div>
@@ -149,6 +167,17 @@
         wrap.html(html);
     }
 
+    function renderWallpaper(targetId, url, name) {
+        var wrap = $('#' + targetId);
+        if (!url) {
+            wrap.html('<span class="text-muted small">No wallpaper uploaded (Login page uses blank/neutral)</span>');
+            return;
+        }
+        var html = '<img src="' + url + '" alt="Wallpaper" style="max-height:80px;max-width:100%;object-fit:cover;border-radius:4px;">'
+            + '<div class="small text-muted mt-1">' + $('<div>').text(name || '').html() + '</div>';
+        wrap.html(html);
+    }
+
     $('#btn_hospital_profile_save').on('click', function() {
         var name = ($('#hospital_name').val() || '').trim();
         var address = ($('#hospital_address_1').val() || '').trim();
@@ -178,6 +207,10 @@
         if (fileInput && fileInput.files && fileInput.files.length > 0) {
             fd.append('hospital_logo', fileInput.files[0]);
         }
+        var wallpaperInput = document.getElementById('hospital_wallpaper');
+        if (wallpaperInput && wallpaperInput.files && wallpaperInput.files.length > 0) {
+            fd.append('hospital_wallpaper', wallpaperInput.files[0]);
+        }
         var pharmacyLogoInput = document.getElementById('pharmacy_logo');
         if (pharmacyLogoInput && pharmacyLogoInput.files && pharmacyLogoInput.files.length > 0) {
             fd.append('pharmacy_logo', pharmacyLogoInput.files[0]);
@@ -200,10 +233,14 @@
             if (fileInput) {
                 fileInput.value = '';
             }
+            if (wallpaperInput) {
+                wallpaperInput.value = '';
+            }
             if (pharmacyLogoInput) {
                 pharmacyLogoInput.value = '';
             }
             renderLogo('hospital_logo_preview', data.logo_url || '', data.logo_name || '');
+            renderWallpaper('hospital_wallpaper_preview', data.wallpaper_url || '', data.wallpaper_name || '');
             renderLogo('pharmacy_logo_preview', data.pharmacy_logo_url || '', data.pharmacy_logo_name || '');
         }).fail(function(xhr) {
             var data = (xhr && xhr.responseJSON) ? xhr.responseJSON : {};
@@ -234,6 +271,30 @@
             var data = (xhr && xhr.responseJSON) ? xhr.responseJSON : {};
             updateCsrf(data || {});
             showMessage('error', data.error_text || 'Server error while deleting logo.');
+        });
+    });
+
+    $('#btn_hospital_wallpaper_delete').on('click', function() {
+        if (!confirm('Delete hospital login wallpaper?')) {
+            return;
+        }
+        var csrf = getCsrfPair();
+        var payload = {};
+        payload[csrf.name] = csrf.value;
+        payload.type = 'wallpaper';
+
+        $.post('<?= base_url('setting/admin/hospital-profile/delete-logo') ?>', payload, function(data) {
+            updateCsrf(data || {});
+            if ((data.update || 0) !== 1) {
+                showMessage('error', data.error_text || 'Unable to delete wallpaper.');
+                return;
+            }
+            showMessage('success', data.error_text || 'Wallpaper deleted.');
+            renderWallpaper('hospital_wallpaper_preview', '', '');
+        }, 'json').fail(function(xhr) {
+            var data = (xhr && xhr.responseJSON) ? xhr.responseJSON : {};
+            updateCsrf(data || {});
+            showMessage('error', data.error_text || 'Server error while deleting wallpaper.');
         });
     });
 
@@ -293,11 +354,16 @@
             if (fileInput) {
                 fileInput.value = '';
             }
+            var wallpaperInput = document.getElementById('hospital_wallpaper');
+            if (wallpaperInput) {
+                wallpaperInput.value = '';
+            }
             var pharmacyLogoInput = document.getElementById('pharmacy_logo');
             if (pharmacyLogoInput) {
                 pharmacyLogoInput.value = '';
             }
             renderLogo('hospital_logo_preview', '', '');
+            renderWallpaper('hospital_wallpaper_preview', '', '');
             renderLogo('pharmacy_logo_preview', '', '');
             showMessage('success', data.error_text || 'Profile reset completed.');
         }, 'json').fail(function(xhr) {

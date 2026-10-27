@@ -1,4 +1,31 @@
-<?php helper('common'); ?>
+<?php
+helper('common');
+
+$hospitalName = hospital_setting_value('H_Name', '');
+$hospitalAddress1 = hospital_setting_value('H_address_1', '');
+$hospitalAddress2 = hospital_setting_value('H_address_2', '');
+$hospitalPhone = hospital_setting_value('H_phone_No', '');
+$hospitalEmail = hospital_setting_value('H_Email', '');
+$hospitalHfrId = hospital_setting_value('H_HFR_ID', '');
+$hospitalLogo = hospital_setting_value('H_logo', '');
+$hospitalWallpaper = hospital_setting_value('H_login_wallpaper', '');
+
+$hasLogo = false;
+$logoUrl = '';
+if ($hospitalLogo !== '' && is_file(FCPATH . 'assets/images/' . $hospitalLogo)) {
+    $hasLogo = true;
+    $logoUrl = base_url('assets/images/' . rawurlencode($hospitalLogo));
+}
+
+$hasWallpaper = false;
+$wallpaperUrl = '';
+if ($hospitalWallpaper !== '' && is_file(FCPATH . 'assets/images/' . $hospitalWallpaper)) {
+    $hasWallpaper = true;
+    $wallpaperUrl = base_url('assets/images/' . rawurlencode($hospitalWallpaper));
+}
+
+$footerVersion = hms_footer_version();
+?>
 <!DOCTYPE html>
 <html lang="en">
 
@@ -6,7 +33,7 @@
     <meta charset="utf-8">
     <meta content="width=device-width, initial-scale=1.0" name="viewport">
 
-    <title><?= lang('Auth.login') ?></title>
+    <title><?= lang('Auth.login') ?> - <?= esc($hospitalName !== '' ? $hospitalName : 'E-Atria HMS') ?></title>
     <meta content="" name="description">
     <meta content="" name="keywords">
 
@@ -18,186 +45,441 @@
     <meta name="csrf-token" content="<?= csrf_hash() ?>">
     <meta name="csrf-header" content="<?= config('Security')->headerName ?>">
 
-
     <link href="assets/vendor/bootstrap/css/bootstrap.min.css" rel="stylesheet">
     <link href="assets/vendor/bootstrap-icons/bootstrap-icons.css" rel="stylesheet">
-
     <link href="assets/css/style.css" rel="stylesheet">
     <link href="assets/css/custom-theme-dark-borders.css" rel="stylesheet">
 
+    <style>
+        html, body {
+            height: 100%;
+            margin: 0;
+            padding: 0;
+            background-color: #f8fafc;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        .login-page-wrapper {
+            min-height: 100vh;
+            display: flex;
+            width: 100%;
+            position: relative;
+            background-color: #f1f5f9;
+        }
+
+        /* Left Hero/Branding section */
+        .login-hero-section {
+            flex: 1;
+            position: relative;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 3.5rem 4rem;
+            min-height: 100vh;
+            background-color: #f1f5f9;
+            overflow: hidden;
+        }
+
+        .login-hero-section.has-wallpaper {
+            background-size: cover;
+            background-position: center center;
+            background-repeat: no-repeat;
+            color: #ffffff;
+        }
+
+        .login-hero-section.has-wallpaper::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(135deg, rgba(15, 23, 42, 0.82) 0%, rgba(15, 23, 42, 0.45) 50%, rgba(15, 23, 42, 0.88) 100%);
+            z-index: 1;
+        }
+
+        .login-hero-inner {
+            position: relative;
+            z-index: 2;
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            height: 100%;
+        }
+
+        .login-hero-badge {
+            background: rgba(255, 255, 255, 0.18);
+            backdrop-filter: blur(10px);
+            -webkit-backdrop-filter: blur(10px);
+            border: 1px solid rgba(255, 255, 255, 0.3);
+            border-radius: 9999px;
+            padding: 0.5rem 1.25rem;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.75rem;
+            color: #ffffff;
+            width: fit-content;
+            box-shadow: 0 4px 15px rgba(0, 0, 0, 0.15);
+        }
+
+        .login-hero-title {
+            font-size: clamp(2rem, 3.5vw, 3.25rem);
+            font-weight: 800;
+            line-height: 1.15;
+            letter-spacing: -0.02em;
+            color: #ffffff;
+            text-shadow: 0 4px 16px rgba(0, 0, 0, 0.4);
+        }
+
+        .login-hero-subtitle {
+            font-size: 1.15rem;
+            color: rgba(255, 255, 255, 0.85);
+            text-shadow: 0 2px 8px rgba(0, 0, 0, 0.35);
+            max-width: 620px;
+        }
+
+        .login-hero-pill {
+            background: rgba(255, 255, 255, 0.14);
+            backdrop-filter: blur(8px);
+            -webkit-backdrop-filter: blur(8px);
+            border: 1px solid rgba(255, 255, 255, 0.25);
+            border-radius: 9999px;
+            padding: 0.4rem 1rem;
+            font-size: 0.85rem;
+            font-weight: 500;
+            color: #ffffff;
+            display: inline-flex;
+            align-items: center;
+            gap: 0.4rem;
+        }
+
+        /* Hero Blank / Neutral State (First time / No Wallpaper) */
+        .login-hero-section.no-wallpaper {
+            background: linear-gradient(135deg, #f8fafc 0%, #eef2f6 100%);
+            border-right: 1px solid #e2e8f0;
+            color: #475569;
+        }
+
+        .login-hero-section.no-wallpaper .login-hero-title {
+            color: #0f172a;
+            text-shadow: none;
+        }
+
+        .login-hero-section.no-wallpaper .login-hero-subtitle {
+            color: #64748b;
+            text-shadow: none;
+        }
+
+        .login-hero-section.no-wallpaper .login-hero-badge {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            color: #1e293b;
+            box-shadow: 0 2px 8px rgba(0, 0, 0, 0.04);
+        }
+
+        .login-hero-section.no-wallpaper .login-hero-pill {
+            background: #ffffff;
+            border: 1px solid #e2e8f0;
+            color: #475569;
+            box-shadow: 0 2px 6px rgba(0, 0, 0, 0.03);
+        }
+
+        /* Right Side Form Panel */
+        .login-form-section {
+            width: 460px;
+            max-width: 100%;
+            min-height: 100vh;
+            background: #ffffff;
+            border-left: 1px solid #e2e8f0;
+            box-shadow: -10px 0 40px rgba(0, 0, 0, 0.05);
+            display: flex;
+            flex-direction: column;
+            justify-content: space-between;
+            padding: 1.5rem 1.75rem 1rem;
+            z-index: 10;
+            overflow-y: auto;
+        }
+
+        .login-form-container {
+            width: 100%;
+            max-width: 390px;
+            margin: auto 0;
+        }
+
+        @media (max-width: 991.98px) {
+            .login-page-wrapper {
+                flex-direction: column;
+            }
+            .login-hero-section {
+                min-height: auto;
+                padding: 2rem 1.5rem;
+                flex: none;
+            }
+            .login-hero-section.no-wallpaper {
+                display: none;
+            }
+            .login-form-section {
+                width: 100%;
+                min-height: auto;
+                border-left: none;
+                box-shadow: none;
+                padding: 1.5rem 1rem;
+            }
+        }
+    </style>
 </head>
 
 <body>
 
-    <?php $footerVersion = hms_footer_version(); ?>
+    <main class="login-page-wrapper">
 
-    <main>
-        <div class="container">
-
-            <section class="section register min-vh-100 d-flex flex-column align-items-center justify-content-center py-4">
-                <div class="container">
-                    <div class="row justify-content-center">
-                        <div class="col-lg-4 col-md-6 d-flex flex-column align-items-center justify-content-center">
-
-                            <div class="d-flex justify-content-center py-4">
-                                <a href="/" class="logo d-flex align-items-center w-auto">
-                                    <img src="assets/img/logo.png" alt="">
-                                    <span class="d-none d-lg-block">E-Atria</span>
-                                </a>
-                            </div>
-
-                            <div class="card mb-3">
-
-                                <div class="card-body">
-
-                                    <div class="pt-4 pb-2">
-                                        <h5 class="card-title text-center pb-0 fs-4"><?= lang('Auth.loginTitle') ?></h5>
-                                        <p class="text-center small"><?= lang('Auth.loginSubtitle') ?></p>
-                                    </div>
-
-                                    <?php if (session('error') !== null) : ?>
-                                        <div class="alert alert-danger" role="alert"><?= esc(session('error')) ?></div>
-                                    <?php elseif (session('errors') !== null) : ?>
-                                        <div class="alert alert-danger" role="alert">
-                                            <?php if (is_array(session('errors'))) : ?>
-                                                <?php foreach (session('errors') as $error) : ?>
-                                                    <?= esc($error) ?>
-                                                    <br>
-                                                <?php endforeach ?>
-                                            <?php else : ?>
-                                                <?= esc(session('errors')) ?>
-                                            <?php endif ?>
-                                        </div>
-                                    <?php endif ?>
-
-                                    <?php if (session('message') !== null) : ?>
-                                        <div class="alert alert-success" role="alert"><?= esc(session('message')) ?></div>
-                                    <?php endif ?>
-
-                                    <form action="<?= url_to('login') ?>" method="post" class="row g-3 needs-validation" novalidate>
-                                        <?= csrf_field() ?>
-
-                                        <div class="col-12">
-                                            <label for="floatingUsernameInput"><?= lang('Auth.username') ?></label>
-                                            <div class="input-group has-validation">
-                                                <span class="input-group-text" id="inputGroupPrepend">@</span>
-                                                <input type="text" class="form-control" id="floatingUsernameInput" name="username" inputmode="text" autocomplete="username" placeholder="<?= lang('Auth.username') ?>" value="<?= old('username') ?>" required>
-                                                <div class="invalid-feedback">Please enter your username.</div>
-                                            </div>
-                                        </div>
-
-                                        <div class="col-12">
-                                            <label for="floatingPasswordInput"><?= lang('Auth.password') ?></label>
-                                            <input type="password" name="password" class="form-control" id="floatingPasswordInput" autocomplete="current-password" required>
-                                            <div class="invalid-feedback">Please enter your password!</div>
-                                        </div>
-
-                                        <!-- Security Verification CAPTCHA (WASA Brute-Force & Bot Defense) -->
-                                        <div class="col-12">
-                                            <div class="d-flex justify-content-between align-items-center mb-1">
-                                                <label for="captchaInput" class="form-label mb-0 small fw-semibold text-secondary">
-                                                    <i class="bi bi-shield-check text-primary me-1"></i> Security Code
-                                                </label>
-                                                <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none" id="btnRefreshCaptcha" style="font-size: 11px;">
-                                                    <i class="bi bi-arrow-clockwise"></i> Change Code
-                                                </button>
-                                            </div>
-                                            <div class="input-group has-validation">
-                                                <span class="input-group-text p-1 bg-white border-end-0" style="cursor: pointer;" title="Click to change image code" onclick="refreshLoginCaptcha();">
-                                                    <img src="<?= base_url('captcha') ?>" id="captchaImage" alt="Security CAPTCHA" style="height: 36px; border-radius: 4px;">
-                                                </span>
-                                                <input type="text" name="captcha" id="captchaInput" class="form-control form-control-lg text-uppercase fw-bold text-center border-start-0 fs-5" placeholder="Enter Code" maxlength="6" autocomplete="off" required style="letter-spacing: 2px;">
-                                                <div class="invalid-feedback">Please enter the security verification characters.</div>
-                                            </div>
-                                        </div>
-
-                                        <script>
-                                        function refreshLoginCaptcha() {
-                                            var img = document.getElementById('captchaImage');
-                                            if (img) {
-                                                img.src = '<?= base_url('captcha') ?>?' + Date.now();
-                                            }
-                                            var inp = document.getElementById('captchaInput');
-                                            if (inp) {
-                                                inp.value = '';
-                                                inp.focus();
-                                            }
-                                        }
-                                        document.addEventListener('DOMContentLoaded', function() {
-                                            var btn = document.getElementById('btnRefreshCaptcha');
-                                            if (btn) {
-                                                btn.addEventListener('click', refreshLoginCaptcha);
-                                            }
-                                        });
-                                        </script>
-
-                                        <?php if (setting('Auth.sessionConfig')['allowRemembering']) : ?>
-                                            <div class="col-12">
-                                                <div class="form-check">
-                                                    <input type="checkbox" name="remember" class="form-check-input" <?php if (old('remember')) : ?> checked<?php endif ?>>
-                                                    <label class="form-check-label" for="rememberMe"><?= lang('Auth.rememberMe') ?></label>
-                                                </div>
-                                            </div>
-                                        <?php endif; ?>
-
-                                        <div class="col-12">
-                                            <button type="submit" class="btn btn-primary w-100"><?= lang('Auth.login') ?></button>
-                                        </div>
-
-                                        <?php if (setting('Auth.allowMagicLinkLogins')) : ?>
-                                            <div class="col-12">
-                                                <p class="text-center"><?= lang('Auth.forgotPassword') ?> <a href="<?= url_to('magic-link') ?>"><?= lang('Auth.useMagicLink') ?></a></p>
-                                            </div>
-                                        <?php endif ?>
-
-                                        <!-- Mobile PWA Quick Scan Button inside Login Card -->
-                                        <hr class="my-2 opacity-25">
-                                        <div class="col-12 text-center">
-                                            <button type="button" class="btn btn-outline-primary w-100 py-2 d-flex align-items-center justify-content-center gap-2 fw-semibold shadow-sm" id="btn_open_mobile_qr_modal" data-bs-toggle="modal" data-bs-target="#loginMobileAppsModal" style="border-radius: 8px;">
-                                                <i class="bi bi-qr-code-scan fs-5"></i>
-                                                <span>Scan QR for Mobile Apps (PWA)</span>
-                                            </button>
-                                            <div class="small text-muted mt-1" style="font-size: 11px;">
-                                                <i class="bi bi-phone me-1"></i> Scan with phone camera &bull; Install to home screen
-                                            </div>
-                                        </div>
-
-                                    </form>
-
-                                </div>
-                            </div>
-
-                            <!-- Mobile Application QR & PWA Installation Card -->
-                            <div class="card border-0 shadow-sm mt-1 mb-2 w-100 text-center" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border-radius: 12px; color: white;">
-                                <div class="card-body p-3">
-                                    <div class="d-flex align-items-center justify-content-between mb-2">
-                                        <span class="badge bg-primary px-2 py-1" style="font-size: 10px;"><i class="bi bi-phone me-1"></i> Mobile PWA Suite</span>
-                                        <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 10px;"><i class="bi bi-download me-1"></i> Installable Apps</span>
-                                    </div>
-                                    <h6 class="fw-bold text-white mb-1" style="font-size: 14px;"><i class="bi bi-qr-code-scan me-1 text-info"></i> Hospital Mobile Apps &amp; QR Codes</h6>
-                                    <p class="text-light small mb-2 opacity-75" style="font-size: 11px; line-height: 1.4;">
-                                        Instant home-screen installation on Android &amp; iPhone. Scan QR code to launch Nursing, Doctor, Pharmacy POS &amp; Token Queue apps.
-                                    </p>
-                                    <button type="button" class="btn btn-primary btn-sm w-100 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm py-2" data-bs-toggle="modal" data-bs-target="#loginMobileAppsModal" style="border-radius: 8px;">
-                                        <i class="bi bi-qr-code"></i> View All Mobile Apps &amp; QR Codes
-                                    </button>
-                                </div>
-                            </div>
-
-                            <div class="text-center mt-1 mb-3">
-                                <a href="<?= base_url('HMS_FEATURES_PRESENTATION.html') ?>" target="_blank" rel="noopener"
-                                   class="text-muted small d-inline-flex align-items-center gap-1" style="text-decoration:none;">
-                                    <i class="bi bi-file-earmark-text"></i> View HMS Features &amp; Capabilities
-                                </a>
-                            </div>
-
+        <?php if ($hasWallpaper): ?>
+        <!-- Left Branding / Wallpaper Hero Section -->
+        <section class="login-hero-section has-wallpaper" style="background-image: url('<?= esc($wallpaperUrl) ?>');">
+            <div class="login-hero-inner">
+                <!-- Top Header / Hospital Tag -->
+                <div>
+                    <?php if ($hasLogo): ?>
+                        <div class="login-hero-badge">
+                            <img src="<?= esc($logoUrl) ?>" alt="Hospital Logo" style="max-height: 38px; max-width: 140px; object-fit: contain;">
+                            <?php if (!empty($hospitalName)): ?>
+                                <span class="fw-bold small"><?= esc($hospitalName) ?></span>
+                            <?php endif; ?>
                         </div>
+                    <?php elseif (!empty($hospitalName)): ?>
+                        <div class="login-hero-badge">
+                            <i class="bi bi-hospital fs-5 text-warning"></i>
+                            <span class="fw-bold small"><?= esc($hospitalName) ?></span>
+                        </div>
+                    <?php endif; ?>
+                </div>
+
+                <!-- Center / Bottom Hospital Branding Showcase -->
+                <div class="my-auto py-4">
+                    <?php if (!empty($hospitalName)): ?>
+                        <h1 class="login-hero-title mb-2"><?= esc($hospitalName) ?></h1>
+                    <?php else: ?>
+                        <h1 class="login-hero-title mb-2">Hospital Information Management System</h1>
+                    <?php endif; ?>
+
+                    <p class="login-hero-subtitle mb-4">
+                        Secure Healthcare Delivery, Digital EMR &amp; Clinical Management Portal
+                    </p>
+
+                    <?php if (!empty($hospitalAddress1) || !empty($hospitalPhone) || !empty($hospitalHfrId)): ?>
+                        <div class="d-flex flex-wrap gap-3 align-items-center mb-4 text-white-50 small">
+                            <?php if (!empty($hospitalAddress1)): ?>
+                                <span class="d-inline-flex align-items-center gap-1">
+                                    <i class="bi bi-geo-alt-fill text-warning"></i> <?= esc($hospitalAddress1) ?><?= !empty($hospitalAddress2) ? ', ' . esc($hospitalAddress2) : '' ?>
+                                </span>
+                            <?php endif; ?>
+                            <?php if (!empty($hospitalPhone)): ?>
+                                <span class="d-inline-flex align-items-center gap-1">
+                                    <i class="bi bi-telephone-fill text-success"></i> <?= esc($hospitalPhone) ?>
+                                </span>
+                            <?php endif; ?>
+                            <?php if (!empty($hospitalHfrId)): ?>
+                                <span class="badge bg-primary bg-opacity-75 border border-primary px-2 py-1">
+                                    <i class="bi bi-shield-check me-1"></i> HFR ID: <?= esc($hospitalHfrId) ?>
+                                </span>
+                            <?php endif; ?>
+                        </div>
+                    <?php endif; ?>
+
+                    <div class="d-flex flex-wrap gap-2">
+                        <span class="login-hero-pill">
+                            <i class="bi bi-shield-check text-success"></i> ABDM M1, M2 &amp; M3 Integrated
+                        </span>
+                        <span class="login-hero-pill">
+                            <i class="bi bi-hospital text-info"></i> OPD, IPD &amp; E-Prescription
+                        </span>
+                        <span class="login-hero-pill">
+                            <i class="bi bi-phone text-warning"></i> Mobile PWA &amp; Bedside Care
+                        </span>
                     </div>
                 </div>
 
-            </section>
+                <!-- Hero Footer Note -->
+                <div class="small text-white-50">
+                    <i class="bi bi-shield-lock me-1"></i> Government of India ABDM Compliant &bull; Digital Health Mission
+                </div>
+            </div>
+        </section>
+        <?php else: ?>
+        <!-- No Wallpaper: Simple Blank / Plain Color as requested by user -->
+        <section class="login-hero-section no-wallpaper">
+            <div class="login-hero-inner justify-content-center align-items-center text-center">
+                <!-- Clean Blank Neutral Surface -->
+            </div>
+        </section>
+        <?php endif; ?>
 
-        </div>
+        <!-- Right Side Login Form Section -->
+        <section class="login-form-section">
+            <div class="login-form-container">
+
+                <!-- System / E-Atria Branding Header -->
+                <div class="text-center mb-2">
+                    <a href="/" class="logo d-inline-flex align-items-center justify-content-center text-decoration-none">
+                        <img src="assets/img/logo.png" alt="E-Atria" style="height: 34px;">
+                        <span class="fs-4 fw-bold text-primary ms-2">E-Atria</span>
+                    </a>
+                </div>
+
+                <!-- Login Card -->
+                <div class="card mb-2 border-0 shadow-sm" style="border-radius: 12px; background: #ffffff;">
+                    <div class="card-body p-3">
+
+                        <div class="pb-1 text-center">
+                            <h5 class="card-title text-center pb-0 fs-5 fw-bold text-dark mb-1"><?= lang('Auth.loginTitle') ?></h5>
+                            <p class="text-center small text-muted mb-2" style="font-size: 12px;"><?= lang('Auth.loginSubtitle') ?></p>
+                        </div>
+
+                        <?php if (session('error') !== null) : ?>
+                            <div class="alert alert-danger" role="alert"><?= esc(session('error')) ?></div>
+                        <?php elseif (session('errors') !== null) : ?>
+                            <div class="alert alert-danger" role="alert">
+                                <?php if (is_array(session('errors'))) : ?>
+                                    <?php foreach (session('errors') as $error) : ?>
+                                        <?= esc($error) ?>
+                                        <br>
+                                    <?php endforeach ?>
+                                <?php else : ?>
+                                    <?= esc(session('errors')) ?>
+                                <?php endif ?>
+                            </div>
+                        <?php endif ?>
+
+                        <?php if (session('message') !== null) : ?>
+                            <div class="alert alert-success" role="alert"><?= esc(session('message')) ?></div>
+                        <?php endif ?>
+
+                        <form action="<?= url_to('login') ?>" method="post" class="row g-3 needs-validation" novalidate>
+                            <?= csrf_field() ?>
+
+                            <div class="col-12">
+                                <label for="floatingUsernameInput"><?= lang('Auth.username') ?></label>
+                                <div class="input-group has-validation">
+                                    <span class="input-group-text" id="inputGroupPrepend">@</span>
+                                    <input type="text" class="form-control" id="floatingUsernameInput" name="username" inputmode="text" autocomplete="username" placeholder="<?= lang('Auth.username') ?>" value="<?= old('username') ?>" required>
+                                    <div class="invalid-feedback">Please enter your username.</div>
+                                </div>
+                            </div>
+
+                            <div class="col-12">
+                                <label for="floatingPasswordInput"><?= lang('Auth.password') ?></label>
+                                <input type="password" name="password" class="form-control" id="floatingPasswordInput" autocomplete="current-password" required>
+                                <div class="invalid-feedback">Please enter your password!</div>
+                            </div>
+
+                            <!-- Security Verification CAPTCHA (WASA Brute-Force & Bot Defense) -->
+                            <div class="col-12">
+                                <div class="d-flex justify-content-between align-items-center mb-1">
+                                    <label for="captchaInput" class="form-label mb-0 small fw-semibold text-secondary">
+                                        <i class="bi bi-shield-check text-primary me-1"></i> Security Code
+                                    </label>
+                                    <button type="button" class="btn btn-sm btn-link p-0 text-decoration-none" id="btnRefreshCaptcha" style="font-size: 11px;">
+                                        <i class="bi bi-arrow-clockwise"></i> Change Code
+                                    </button>
+                                </div>
+                                <div class="input-group has-validation">
+                                    <span class="input-group-text p-1 bg-white border-end-0" style="cursor: pointer;" title="Click to change image code" onclick="refreshLoginCaptcha();">
+                                        <img src="<?= base_url('captcha') ?>" id="captchaImage" alt="Security CAPTCHA" style="height: 36px; border-radius: 4px;">
+                                    </span>
+                                    <input type="text" name="captcha" id="captchaInput" class="form-control form-control-lg text-uppercase fw-bold text-center border-start-0 fs-5" placeholder="Enter Code" maxlength="6" autocomplete="off" required style="letter-spacing: 2px;">
+                                    <div class="invalid-feedback">Please enter the security verification characters.</div>
+                                </div>
+                            </div>
+
+                            <script>
+                            function refreshLoginCaptcha() {
+                                var img = document.getElementById('captchaImage');
+                                if (img) {
+                                    img.src = '<?= base_url('captcha') ?>?' + Date.now();
+                                }
+                                var inp = document.getElementById('captchaInput');
+                                if (inp) {
+                                    inp.value = '';
+                                    inp.focus();
+                                }
+                            }
+                            document.addEventListener('DOMContentLoaded', function() {
+                                var btn = document.getElementById('btnRefreshCaptcha');
+                                if (btn) {
+                                    btn.addEventListener('click', refreshLoginCaptcha);
+                                }
+                            });
+                            </script>
+
+                            <?php if (setting('Auth.sessionConfig')['allowRemembering']) : ?>
+                                <div class="col-12">
+                                    <div class="form-check">
+                                        <input type="checkbox" name="remember" class="form-check-input" <?php if (old('remember')) : ?> checked<?php endif ?>>
+                                        <label class="form-check-label" for="rememberMe"><?= lang('Auth.rememberMe') ?></label>
+                                    </div>
+                                </div>
+                            <?php endif; ?>
+
+                            <div class="col-12">
+                                <button type="submit" class="btn btn-primary w-100 py-2 fw-semibold" style="border-radius: 8px;"><?= lang('Auth.login') ?></button>
+                            </div>
+
+                            <?php if (setting('Auth.allowMagicLinkLogins')) : ?>
+                                <div class="col-12">
+                                    <p class="text-center small"><?= lang('Auth.forgotPassword') ?> <a href="<?= url_to('magic-link') ?>"><?= lang('Auth.useMagicLink') ?></a></p>
+                                </div>
+                            <?php endif ?>
+
+                            <!-- Mobile PWA Quick Scan Button inside Login Card -->
+                            <hr class="my-2 opacity-25">
+                            <div class="col-12 text-center">
+                                <button type="button" class="btn btn-outline-primary w-100 py-2 d-flex align-items-center justify-content-center gap-2 fw-semibold shadow-sm" id="btn_open_mobile_qr_modal" data-bs-toggle="modal" data-bs-target="#loginMobileAppsModal" style="border-radius: 8px;">
+                                    <i class="bi bi-qr-code-scan fs-5"></i>
+                                    <span>Scan QR for Mobile Apps (PWA)</span>
+                                </button>
+                                <div class="small text-muted mt-1" style="font-size: 11px;">
+                                    <i class="bi bi-phone me-1"></i> Scan with phone camera &bull; Install to home screen
+                                </div>
+                            </div>
+
+                        </form>
+
+                    </div>
+                </div>
+
+                <!-- Mobile Application QR & PWA Installation Card -->
+                <div class="card border-0 shadow-sm mt-1 mb-2 w-100 text-center" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border-radius: 12px; color: white;">
+                    <div class="card-body p-3">
+                        <div class="d-flex align-items-center justify-content-between mb-2">
+                            <span class="badge bg-primary px-2 py-1" style="font-size: 10px;"><i class="bi bi-phone me-1"></i> Mobile PWA Suite</span>
+                            <span class="badge bg-success-subtle text-success border border-success-subtle" style="font-size: 10px;"><i class="bi bi-download me-1"></i> Installable Apps</span>
+                        </div>
+                        <h6 class="fw-bold text-white mb-1" style="font-size: 14px;"><i class="bi bi-qr-code-scan me-1 text-info"></i> Hospital Mobile Apps &amp; QR Codes</h6>
+                        <p class="text-light small mb-2 opacity-75" style="font-size: 11px; line-height: 1.4;">
+                            Instant home-screen installation on Android &amp; iPhone. Scan QR code to launch Nursing, Doctor, Pharmacy POS &amp; Token Queue apps.
+                        </p>
+                        <button type="button" class="btn btn-primary btn-sm w-100 fw-bold d-flex align-items-center justify-content-center gap-2 shadow-sm py-2" data-bs-toggle="modal" data-bs-target="#loginMobileAppsModal" style="border-radius: 8px;">
+                            <i class="bi bi-qr-code"></i> View All Mobile Apps &amp; QR Codes
+                        </button>
+                    </div>
+                </div>
+
+                <div class="text-center mt-1 mb-2">
+                    <a href="<?= base_url('HMS_FEATURES_PRESENTATION.html') ?>" target="_blank" rel="noopener"
+                       class="text-muted small d-inline-flex align-items-center gap-1" style="text-decoration:none;">
+                        <i class="bi bi-file-earmark-text"></i> View HMS Features &amp; Capabilities
+                    </a>
+                </div>
+
+            </div>
+
+            <!-- Panel Footer -->
+            <footer class="pt-3 text-center text-muted small border-top mt-auto" style="font-size: 11px;">
+                <div>&copy; 2017 - 2026 <strong><a href="https://www.e-atria.in" target="_blank" rel="noopener" class="text-decoration-none">E-Atria</a></strong>. All Rights Reserved.</div>
+                <div class="mt-1">
+                    <a href="<?= base_url('software-use-license.html') ?>" target="_blank" rel="noopener" class="text-muted text-decoration-none">Software Use License</a>
+                    &bull; Version: <span class="fw-semibold"><?= esc($footerVersion) ?></span>
+                </div>
+            </footer>
+        </section>
+
     </main>
 
     <?php
@@ -918,12 +1200,6 @@
         });
     })();
     </script>
-
-    <footer class="py-3 text-center text-muted small">
-        &copy; 2017 - 2026 <strong><a href="https://www.e-atria.in" target="_blank" rel="noopener">E-Atria</a></strong>. All Rights Reserved |
-        <a href="<?= base_url('software-use-license.html') ?>" target="_blank" rel="noopener">Software Use License</a> |
-        Version: <?= esc($footerVersion) ?>
-    </footer>
 
     <a href="#" class="back-to-top d-flex align-items-center justify-content-center"><i class="bi bi-arrow-up-short"></i></a>
 

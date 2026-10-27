@@ -15,6 +15,7 @@ class HospitalProfile extends BaseController
 
         $logo = $this->readSettingValue('H_logo');
         $pharmacyLogo = $this->readSettingValue('H_Med_logo');
+        $wallpaper = $this->readSettingValue('H_login_wallpaper');
         helper('common');
 
         return view('Setting/Admin/hospital_profile', [
@@ -29,6 +30,8 @@ class HospitalProfile extends BaseController
                 : hms_default_version_id(),
             'hospital_logo' => $logo,
             'hospital_logo_url' => $logo !== '' ? base_url('assets/images/' . rawurlencode($logo)) : '',
+            'hospital_wallpaper' => $wallpaper,
+            'hospital_wallpaper_url' => $wallpaper !== '' ? base_url('assets/images/' . rawurlencode($wallpaper)) : '',
             'pharmacy_name' => $this->readSettingValue('H_Med_Name'),
             'pharmacy_address' => $this->readSettingValue('H_Med_address_1'),
             'pharmacy_phone' => $this->readSettingValue('H_Med_phone_No'),
@@ -158,6 +161,24 @@ class HospitalProfile extends BaseController
             $savedCount++;
         }
 
+        $wallpaperResult = $this->processLogoUpload(
+            $this->request->getFile('hospital_wallpaper'),
+            'hospital_wallpaper',
+            'H_login_wallpaper',
+            'Login wallpaper'
+        );
+        if (! $wallpaperResult['ok']) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'error_text' => $wallpaperResult['error'],
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+        if ($wallpaperResult['changed']) {
+            $savedCount++;
+        }
+
         $pharmacyLogoResult = $this->processLogoUpload(
             $this->request->getFile('pharmacy_logo'),
             'pharmacy_logo',
@@ -181,6 +202,8 @@ class HospitalProfile extends BaseController
             'error_text' => $savedCount > 0 ? 'Hospital profile saved successfully.' : 'No changes detected.',
             'logo_url' => ($logo = $this->readSettingValue('H_logo')) !== '' ? base_url('assets/images/' . rawurlencode($logo)) : '',
             'logo_name' => $this->readSettingValue('H_logo'),
+            'wallpaper_url' => ($wp = $this->readSettingValue('H_login_wallpaper')) !== '' ? base_url('assets/images/' . rawurlencode($wp)) : '',
+            'wallpaper_name' => $this->readSettingValue('H_login_wallpaper'),
             'pharmacy_logo_url' => ($logo = $this->readSettingValue('H_Med_logo')) !== '' ? base_url('assets/images/' . rawurlencode($logo)) : '',
             'pharmacy_logo_name' => $this->readSettingValue('H_Med_logo'),
             'csrfName' => csrf_token(),
@@ -199,24 +222,30 @@ class HospitalProfile extends BaseController
         }
 
         $type = strtolower(trim((string) $this->request->getPost('type')));
-        if ($type !== 'pharmacy') {
+        if ($type === 'pharmacy') {
+            $settingKey = 'H_Med_logo';
+        } elseif ($type === 'wallpaper') {
+            $settingKey = 'H_login_wallpaper';
+        } else {
             $type = 'hospital';
+            $settingKey = 'H_logo';
         }
 
-        $settingKey = $type === 'pharmacy' ? 'H_Med_logo' : 'H_logo';
-        $oldLogo = $this->readSettingValue($settingKey);
+        $oldFile = $this->readSettingValue($settingKey);
         $ok = $this->upsertSettingValue($settingKey, '');
 
-        if ($oldLogo !== '') {
-            $oldPath = FCPATH . 'assets/images/' . basename($oldLogo);
+        if ($oldFile !== '') {
+            $oldPath = FCPATH . 'assets/images/' . basename($oldFile);
             if (is_file($oldPath)) {
                 @unlink($oldPath);
             }
         }
 
+        $label = $type === 'wallpaper' ? 'Login wallpaper' : ucfirst($type) . ' logo';
+
         return $this->response->setJSON([
             'update' => $ok ? 1 : 0,
-            'error_text' => $ok ? ucfirst($type) . ' logo deleted.' : 'Unable to delete logo.',
+            'error_text' => $ok ? $label . ' deleted.' : 'Unable to delete ' . strtolower($label) . '.',
             'csrfName' => csrf_token(),
             'csrfHash' => csrf_hash(),
         ]);
@@ -234,6 +263,7 @@ class HospitalProfile extends BaseController
 
         $logo = $this->readSettingValue('H_logo');
         $pharmacyLogo = $this->readSettingValue('H_Med_logo');
+        $wallpaper = $this->readSettingValue('H_login_wallpaper');
         $this->db->table('hospital_setting')->whereIn('s_name', [
             'H_Name',
             'H_address_1',
@@ -243,6 +273,7 @@ class HospitalProfile extends BaseController
             'H_HFR_ID',
             'HMS_UPDATE_ID',
             'H_logo',
+            'H_login_wallpaper',
             'H_Med_Name',
             'H_Med_address_1',
             'H_Med_phone_No',
@@ -263,6 +294,13 @@ class HospitalProfile extends BaseController
             $logoPath = FCPATH . 'assets/images/' . basename($pharmacyLogo);
             if (is_file($logoPath)) {
                 @unlink($logoPath);
+            }
+        }
+
+        if ($wallpaper !== '') {
+            $wpPath = FCPATH . 'assets/images/' . basename($wallpaper);
+            if (is_file($wpPath)) {
+                @unlink($wpPath);
             }
         }
 
