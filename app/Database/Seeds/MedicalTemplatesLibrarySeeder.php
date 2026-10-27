@@ -23,18 +23,48 @@ use App\Database\Seeds\Data\OpdPrintTemplateSeedData;
  *   6. OPD Doctor Clinical Templates (opd_clinical_templates)
  *   7. OPD Prescription Print Templates (hospital_setting)
  *
- * Safe to re-run (idempotent — updates existing templates and inserts missing ones).
+ * Safe to re-run (Insert-If-Not-Exists):
+ *   - Strictly checks if records already exist in the database.
+ *   - If a record exists, it is NEVER overwritten/updated by default, preserving all
+ *     doctor edits, customized normal ranges, and hospital modifications.
+ *   - If a record is missing (new template added to Data files), it is inserted seamlessly.
+ *   - Optional override: set SEED_FORCE_UPDATE=1 or call setForceUpdate(true).
  *
  * Usage:
  *   php spark db:seed MedicalTemplatesLibrarySeeder
  */
 class MedicalTemplatesLibrarySeeder extends Seeder
 {
+    /**
+     * When false (default), existing database records are preserved and never overwritten.
+     */
+    protected bool $forceUpdate = false;
+
+    /**
+     * Programmatically enable or disable force updating
+     */
+    public function setForceUpdate(bool $force): self
+    {
+        $this->forceUpdate = $force;
+        return $this;
+    }
+
     public function run(): void
     {
+        $forceEnv = getenv('SEED_FORCE_UPDATE') ?: ($_ENV['SEED_FORCE_UPDATE'] ?? ($_SERVER['SEED_FORCE_UPDATE'] ?? null));
+        if ($forceEnv === '1' || strtolower((string)$forceEnv) === 'true') {
+            $this->forceUpdate = true;
+        }
+
         CLI::write("=======================================================", 'cyan');
         CLI::write("  SEEDING COMPREHENSIVE MEDICAL TEMPLATES LIBRARY     ", 'yellow');
         CLI::write("=======================================================", 'cyan');
+
+        if ($this->forceUpdate) {
+            CLI::write("  [MODE] Force Update: ENABLED (Existing records will be updated)", 'yellow');
+        } else {
+            CLI::write("  [MODE] Safe Mode: Insert-If-Not-Exists (Existing records PRESERVED)", 'green');
+        }
 
         $now = date('Y-m-d H:i:s');
 
@@ -63,9 +93,11 @@ class MedicalTemplatesLibrarySeeder extends Seeder
 
         $panels = PathologySeedData::getPanels();
         $panelInserted = 0;
+        $panelSkipped  = 0;
         $panelUpdated  = 0;
-        $testInserted   = 0;
-        $testUpdated    = 0;
+        $testInserted  = 0;
+        $testSkipped   = 0;
+        $testUpdated   = 0;
 
         foreach ($panels as $p) {
             // A. Ensure Billing Charge in `hc_items`
@@ -127,7 +159,7 @@ class MedicalTemplatesLibrarySeeder extends Seeder
 </div>
 HTML;
 
-            // C. Insert or Update `lab_repo`
+            // C. Insert or Skip `lab_repo`
             $existingPanel = $db->table('lab_repo')
                 ->where('Title', $p['title'])
                 ->get(1)
@@ -146,15 +178,19 @@ HTML;
 
             if (! empty($existingPanel['mstRepoKey'])) {
                 $repoKey = (int) $existingPanel['mstRepoKey'];
-                $db->table('lab_repo')->where('mstRepoKey', $repoKey)->update($panelData);
-                $panelUpdated++;
+                if ($this->forceUpdate) {
+                    $db->table('lab_repo')->where('mstRepoKey', $repoKey)->update($panelData);
+                    $panelUpdated++;
+                } else {
+                    $panelSkipped++;
+                }
             } else {
                 $db->table('lab_repo')->insert($panelData);
                 $repoKey = (int) $db->insertID();
                 $panelInserted++;
             }
 
-            // D. Upsert individual tests in `lab_tests` and map in `lab_repotests`
+            // D. Upsert or Skip individual tests in `lab_tests` and map in `lab_repotests`
             $eOrder = 10;
             foreach ($p['tests'] as $t) {
                 $existingTest = $db->table('lab_tests')
@@ -175,8 +211,12 @@ HTML;
 
                 if (! empty($existingTest['mstTestKey'])) {
                     $testKey = (int) $existingTest['mstTestKey'];
-                    $db->table('lab_tests')->where('mstTestKey', $testKey)->update($testData);
-                    $testUpdated++;
+                    if ($this->forceUpdate) {
+                        $db->table('lab_tests')->where('mstTestKey', $testKey)->update($testData);
+                        $testUpdated++;
+                    } else {
+                        $testSkipped++;
+                    }
                 } else {
                     $db->table('lab_tests')->insert($testData);
                     $testKey = (int) $db->insertID();
@@ -191,9 +231,11 @@ HTML;
                     ->getRowArray();
 
                 if (! empty($existingLink['id'])) {
-                    $db->table('lab_repotests')
-                        ->where('id', $existingLink['id'])
-                        ->update(['EOrder' => $eOrder]);
+                    if ($this->forceUpdate) {
+                        $db->table('lab_repotests')
+                            ->where('id', $existingLink['id'])
+                            ->update(['EOrder' => $eOrder]);
+                    }
                 } else {
                     $db->table('lab_repotests')->insert([
                         'mstRepoKey' => $repoKey,
@@ -207,8 +249,13 @@ HTML;
         }
 
         CLI::write("  [OK] Pathology Library Seeded:", 'green');
-        CLI::write("       - Panels: {$panelInserted} added, {$panelUpdated} updated (Total: " . count($panels) . ")");
-        CLI::write("       - Test Parameters: {$testInserted} added, {$testUpdated} updated");
+        if ($this->forceUpdate) {
+            CLI::write("       - Panels: {$panelInserted} added, {$panelUpdated} updated (Total: " . count($panels) . ")");
+            CLI::write("       - Test Parameters: {$testInserted} added, {$testUpdated} updated");
+        } else {
+            CLI::write("       - Panels: {$panelInserted} added, {$panelSkipped} preserved (already existing) (Total: " . count($panels) . ")");
+            CLI::write("       - Test Parameters: {$testInserted} added, {$testSkipped} preserved (already existing)");
+        }
     }
 
     /**
@@ -249,9 +296,10 @@ HTML;
             }
         }
 
-        // B. Upsert Master Templates
+        // B. Insert or Skip Master Templates
         $templates = RadiologySeedData::getTemplates();
         $inserted = 0;
+        $skipped  = 0;
         $updated  = 0;
 
         foreach ($templates as $tpl) {
@@ -278,10 +326,14 @@ HTML;
             ];
 
             if (! empty($existing['id'])) {
-                $db->table('radiology_ultrasound_template')
-                    ->where('id', $existing['id'])
-                    ->update($data);
-                $updated++;
+                if ($this->forceUpdate) {
+                    $db->table('radiology_ultrasound_template')
+                        ->where('id', $existing['id'])
+                        ->update($data);
+                    $updated++;
+                } else {
+                    $skipped++;
+                }
             } else {
                 $db->table('radiology_ultrasound_template')->insert($data);
                 $inserted++;
@@ -289,7 +341,11 @@ HTML;
         }
 
         CLI::write("  [OK] Radiology Library Seeded (USG, ECHO, X-Ray, CT, MRI):", 'green');
-        CLI::write("       - Templates: {$inserted} added, {$updated} updated (Total: " . count($templates) . ")");
+        if ($this->forceUpdate) {
+            CLI::write("       - Templates: {$inserted} added, {$updated} updated (Total: " . count($templates) . ")");
+        } else {
+            CLI::write("       - Templates: {$inserted} added, {$skipped} preserved (already existing) (Total: " . count($templates) . ")");
+        }
     }
 
     /**
@@ -305,6 +361,7 @@ HTML;
 
         $templates = IpdDischargeSeedData::getTemplates();
         $inserted = 0;
+        $skipped  = 0;
         $updated  = 0;
 
         foreach ($templates as $tpl) {
@@ -337,10 +394,14 @@ HTML;
             ];
 
             if (! empty($existing['id'])) {
-                $db->table('ipd_discharge_templates')
-                    ->where('id', $existing['id'])
-                    ->update($data);
-                $updated++;
+                if ($this->forceUpdate) {
+                    $db->table('ipd_discharge_templates')
+                        ->where('id', $existing['id'])
+                        ->update($data);
+                    $updated++;
+                } else {
+                    $skipped++;
+                }
             } else {
                 $data['created_at'] = $now;
                 $db->table('ipd_discharge_templates')->insert($data);
@@ -348,7 +409,12 @@ HTML;
             }
         }
 
-        CLI::write("  [OK] IPD Discharge Templates Seeded: {$inserted} added, {$updated} updated (Total: " . count($templates) . ")", 'green');
+        CLI::write("  [OK] IPD Discharge Templates Seeded:", 'green');
+        if ($this->forceUpdate) {
+            CLI::write("       - Templates: {$inserted} added, {$updated} updated (Total: " . count($templates) . ")");
+        } else {
+            CLI::write("       - Templates: {$inserted} added, {$skipped} preserved (already existing) (Total: " . count($templates) . ")");
+        }
     }
 
     /**
@@ -364,6 +430,7 @@ HTML;
 
         $narratives = IpdDischargeSeedData::getNarratives();
         $inserted = 0;
+        $skipped  = 0;
         $updated  = 0;
 
         foreach ($narratives as $nar) {
@@ -384,10 +451,14 @@ HTML;
             ];
 
             if (! empty($existing['id'])) {
-                $db->table('ipd_discharge_narrative_templates')
-                    ->where('id', $existing['id'])
-                    ->update($data);
-                $updated++;
+                if ($this->forceUpdate) {
+                    $db->table('ipd_discharge_narrative_templates')
+                        ->where('id', $existing['id'])
+                        ->update($data);
+                    $updated++;
+                } else {
+                    $skipped++;
+                }
             } else {
                 $data['created_at'] = $now;
                 $db->table('ipd_discharge_narrative_templates')->insert($data);
@@ -395,7 +466,12 @@ HTML;
             }
         }
 
-        CLI::write("  [OK] IPD Clinical Narratives Seeded: {$inserted} added, {$updated} updated (Total: " . count($narratives) . ")", 'green');
+        CLI::write("  [OK] IPD Clinical Narratives Seeded:", 'green');
+        if ($this->forceUpdate) {
+            CLI::write("       - Narratives: {$inserted} added, {$updated} updated (Total: " . count($narratives) . ")");
+        } else {
+            CLI::write("       - Narratives: {$inserted} added, {$skipped} preserved (already existing) (Total: " . count($narratives) . ")");
+        }
     }
 
     /**
@@ -411,6 +487,7 @@ HTML;
 
         $forms = IpdDocumentSeedData::getForms();
         $inserted = 0;
+        $skipped  = 0;
         $updated  = 0;
 
         foreach ($forms as $frm) {
@@ -438,10 +515,14 @@ HTML;
             ];
 
             if (! empty($existing['id'])) {
-                $db->table('ipd_document_templates')
-                    ->where('id', $existing['id'])
-                    ->update($data);
-                $updated++;
+                if ($this->forceUpdate) {
+                    $db->table('ipd_document_templates')
+                        ->where('id', $existing['id'])
+                        ->update($data);
+                    $updated++;
+                } else {
+                    $skipped++;
+                }
             } else {
                 $data['created_at'] = $now;
                 $db->table('ipd_document_templates')->insert($data);
@@ -449,7 +530,12 @@ HTML;
             }
         }
 
-        CLI::write("  [OK] IPD Document Master Forms Seeded: {$inserted} added, {$updated} updated (Total: " . count($forms) . ")", 'green');
+        CLI::write("  [OK] IPD Document Master Forms Seeded:", 'green');
+        if ($this->forceUpdate) {
+            CLI::write("       - Forms: {$inserted} added, {$updated} updated (Total: " . count($forms) . ")");
+        } else {
+            CLI::write("       - Forms: {$inserted} added, {$skipped} preserved (already existing) (Total: " . count($forms) . ")");
+        }
     }
 
     /**
@@ -459,22 +545,53 @@ HTML;
     {
         $db = $this->db;
         if (! $db->tableExists('opd_clinical_templates')) {
-            $db->query("CREATE TABLE IF NOT EXISTS opd_clinical_templates (
-                id INT AUTO_INCREMENT PRIMARY KEY,
-                doc_id INT NOT NULL DEFAULT 0,
-                section_key VARCHAR(80) NOT NULL,
-                template_name VARCHAR(255) NOT NULL,
-                template_text TEXT NOT NULL,
-                is_active TINYINT NOT NULL DEFAULT 1,
-                created_at DATETIME NULL,
-                updated_at DATETIME NULL,
-                INDEX idx_doc_section (doc_id, section_key),
-                INDEX idx_section_active (section_key, is_active)
-            )");
+            $forge = \Config\Database::forge($db);
+            $forge->addField([
+                'id' => [
+                    'type'           => 'INT',
+                    'constraint'     => 11,
+                    'unsigned'       => true,
+                    'auto_increment' => true,
+                ],
+                'doc_id' => [
+                    'type'       => 'INT',
+                    'constraint' => 11,
+                    'default'    => 0,
+                ],
+                'section_key' => [
+                    'type'       => 'VARCHAR',
+                    'constraint' => 80,
+                ],
+                'template_name' => [
+                    'type'       => 'VARCHAR',
+                    'constraint' => 255,
+                ],
+                'template_text' => [
+                    'type' => 'TEXT',
+                ],
+                'is_active' => [
+                    'type'       => 'TINYINT',
+                    'constraint' => 1,
+                    'default'    => 1,
+                ],
+                'created_at' => [
+                    'type' => 'DATETIME',
+                    'null' => true,
+                ],
+                'updated_at' => [
+                    'type' => 'DATETIME',
+                    'null' => true,
+                ],
+            ]);
+            $forge->addKey('id', true);
+            $forge->addKey(['doc_id', 'section_key']);
+            $forge->addKey(['section_key', 'is_active']);
+            $forge->createTable('opd_clinical_templates', true);
         }
 
         $templates = OpdClinicalSeedData::getTemplates();
         $inserted = 0;
+        $skipped  = 0;
         $updated  = 0;
 
         foreach ($templates as $t) {
@@ -495,10 +612,14 @@ HTML;
             ];
 
             if (! empty($existing['id'])) {
-                $db->table('opd_clinical_templates')
-                    ->where('id', $existing['id'])
-                    ->update($data);
-                $updated++;
+                if ($this->forceUpdate) {
+                    $db->table('opd_clinical_templates')
+                        ->where('id', $existing['id'])
+                        ->update($data);
+                    $updated++;
+                } else {
+                    $skipped++;
+                }
             } else {
                 $data['created_at'] = $now;
                 $db->table('opd_clinical_templates')->insert($data);
@@ -506,7 +627,12 @@ HTML;
             }
         }
 
-        CLI::write("  [OK] OPD Doctor Clinical Templates Seeded: {$inserted} added, {$updated} updated (Total: " . count($templates) . ")", 'green');
+        CLI::write("  [OK] OPD Doctor Clinical Templates Seeded:", 'green');
+        if ($this->forceUpdate) {
+            CLI::write("       - Templates: {$inserted} added, {$updated} updated (Total: " . count($templates) . ")");
+        } else {
+            CLI::write("       - Templates: {$inserted} added, {$skipped} preserved (already existing) (Total: " . count($templates) . ")");
+        }
     }
 
     /**
@@ -522,6 +648,7 @@ HTML;
 
         $templates = OpdPrintTemplateSeedData::getTemplates();
         $inserted = 0;
+        $skipped  = 0;
         $updated  = 0;
 
         foreach ($templates as $key => $t) {
@@ -532,10 +659,14 @@ HTML;
                 ->getRowArray();
 
             if (! empty($existing)) {
-                $db->table('hospital_setting')
-                    ->where('s_name', $storageKey)
-                    ->update(['s_value' => $t['html']]);
-                $updated++;
+                if ($this->forceUpdate) {
+                    $db->table('hospital_setting')
+                        ->where('s_name', $storageKey)
+                        ->update(['s_value' => $t['html']]);
+                    $updated++;
+                } else {
+                    $skipped++;
+                }
             } else {
                 $db->table('hospital_setting')->insert([
                     's_name'  => $storageKey,
@@ -545,7 +676,12 @@ HTML;
             }
         }
 
-        CLI::write("  [OK] OPD Print Templates Seeded: {$inserted} added, {$updated} updated (Total: " . count($templates) . ")", 'green');
+        CLI::write("  [OK] OPD Print Templates Seeded:", 'green');
+        if ($this->forceUpdate) {
+            CLI::write("       - Templates: {$inserted} added, {$updated} updated (Total: " . count($templates) . ")");
+        } else {
+            CLI::write("       - Templates: {$inserted} added, {$skipped} preserved (already existing) (Total: " . count($templates) . ")");
+        }
     }
 }
 

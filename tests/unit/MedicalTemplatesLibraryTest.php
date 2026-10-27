@@ -118,5 +118,60 @@ class MedicalTemplatesLibraryTest extends CIUnitTestCase
             $this->assertStringContainsString('{{PATIENT_NAME}}', $t['html']);
         }
     }
+
+    public function testSeederPreservesExistingCustomizations(): void
+    {
+        $db = \Config\Database::connect('default');
+        if (! $db->tableExists('opd_clinical_templates')) {
+            $this->markTestSkipped('opd_clinical_templates table not present');
+        }
+
+        // 1. Pick or insert a custom clinical template simulating user edits
+        $customName = 'TEST_CUSTOM_EXAM_TPL_' . uniqid();
+        $customText = 'Patient exhibits custom examination notes that should never be overwritten.';
+        
+        $db->table('opd_clinical_templates')->insert([
+            'doc_id'        => 0,
+            'section_key'   => 'finding_examinations',
+            'template_name' => $customName,
+            'template_text' => $customText,
+            'is_active'     => 1,
+            'created_at'    => date('Y-m-d H:i:s'),
+            'updated_at'    => date('Y-m-d H:i:s'),
+        ]);
+        $customId = $db->insertID();
+
+        // Also test an existing standard template from OpdClinicalSeedData
+        $firstStandard = \App\Database\Seeds\Data\OpdClinicalSeedData::getTemplates()[0];
+        $standardRowBefore = $db->table('opd_clinical_templates')
+            ->where('doc_id', 0)
+            ->where('section_key', $firstStandard['section_key'])
+            ->where('template_name', $firstStandard['template_name'])
+            ->get(1)
+            ->getRowArray();
+
+        // 2. Run Seeder in Safe Mode (default)
+        $seeder = new \App\Database\Seeds\MedicalTemplatesLibrarySeeder(new \Config\Database());
+        $seeder->setForceUpdate(false);
+        $seeder->run();
+
+        // 3. Verify custom user record is 100% untouched
+        $customRowAfter = $db->table('opd_clinical_templates')->where('id', $customId)->get(1)->getRowArray();
+        $this->assertNotEmpty($customRowAfter);
+        $this->assertEquals($customText, $customRowAfter['template_text']);
+
+        // 4. Verify standard existing template was not modified/overwritten
+        if (! empty($standardRowBefore)) {
+            $standardRowAfter = $db->table('opd_clinical_templates')
+                ->where('id', $standardRowBefore['id'])
+                ->get(1)
+                ->getRowArray();
+            $this->assertEquals($standardRowBefore['template_text'], $standardRowAfter['template_text']);
+            $this->assertEquals($standardRowBefore['updated_at'], $standardRowAfter['updated_at']);
+        }
+
+        // Clean up test custom record
+        $db->table('opd_clinical_templates')->where('id', $customId)->delete();
+    }
 }
 
