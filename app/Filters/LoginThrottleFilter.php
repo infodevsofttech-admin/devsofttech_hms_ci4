@@ -51,6 +51,27 @@ class LoginThrottleFilter implements FilterInterface
             return;
         }
 
+        // Cleanse any stale or invalid beforeLoginUrl (e.g. from background AJAX polling)
+        $session = session();
+        $staleUrl = (string) ($session->getTempdata('beforeLoginUrl') ?? '');
+        if ($staleUrl !== '') {
+            $stalePath = strtolower((string) parse_url($staleUrl, PHP_URL_PATH));
+            if (
+                str_contains($stalePath, '/fetch')
+                || str_contains($stalePath, '/ajax')
+                || str_contains($stalePath, '/api')
+                || str_contains($stalePath, 'abdmopdqueue')
+                || str_contains($stalePath, 'abdmgateway')
+                || str_contains($stalePath, 'abdmhiu')
+                || str_contains($stalePath, 'abdmsync')
+                || str_contains($stalePath, 'auth/')
+                || str_contains($stalePath, 'captcha')
+                || str_contains($stalePath, 'doctor_work')
+            ) {
+                $session->removeTempdata('beforeLoginUrl');
+            }
+        }
+
         // Only throttle state-changing requests (POST)
         if (strtoupper($request->getMethod()) !== 'POST') {
             return;

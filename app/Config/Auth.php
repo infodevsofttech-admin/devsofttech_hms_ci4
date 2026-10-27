@@ -443,22 +443,88 @@ class Auth extends ShieldAuth
         $session = session();
         $beforeLoginUrl = (string) ($session->getTempdata('beforeLoginUrl') ?? '');
 
-        // Some temporary/internal URLs can be stored as beforeLoginUrl in production
-        // and then hijack post-login landing. Skip those and use configured default.
+        // Always consume and clear beforeLoginUrl so it is never reused across logins
+        if ($beforeLoginUrl !== '') {
+            $session->removeTempdata('beforeLoginUrl');
+        }
+
+        // Validate beforeLoginUrl: strictly prevent redirecting to API, AJAX, polling,
+        // background workers, static assets, or non-HTML endpoints that hijack post-login landing.
         if ($beforeLoginUrl !== '') {
             $path = (string) parse_url($beforeLoginUrl, PHP_URL_PATH);
             $path = '/' . ltrim($path, '/');
-            $blockedPaths = [
-                '/doctor_work/document_workspace',
-                '/opd/appointment',
+            $pathLower = strtolower($path);
+
+            $isInvalidLanding = false;
+
+            // 1. Root, login, or logout endpoints
+            if ($pathLower === '' || $pathLower === '/' || str_starts_with($pathLower, '/login') || str_starts_with($pathLower, '/logout')) {
+                $isInvalidLanding = true;
+            }
+
+            // 2. Action keywords associated with AJAX, JSON, or background requests
+            $invalidKeywords = [
+                '/fetch',
+                '/ajax',
+                '/api',
+                '/poll',
+                '/status',
+                '/sync',
+                '/token',
+                '/search',
+                '/lookup',
+                '/callback',
+                '/webhook',
+                '/check',
+                '/captcha',
+                '/verify',
             ];
-            if (in_array(strtolower($path), $blockedPaths, true)) {
+            foreach ($invalidKeywords as $kw) {
+                if (str_contains($pathLower, $kw)) {
+                    $isInvalidLanding = true;
+                    break;
+                }
+            }
+
+            // 3. Controllers or routes that perform background processing or modular sub-views
+            if (! $isInvalidLanding) {
+                $blockedPrefixes = [
+                    '/abdmopdqueue',
+                    '/abdmgateway',
+                    '/abdmhiu',
+                    '/abdmsync',
+                    '/abdmcodingpanel',
+                    '/abdmfhirinspector',
+                    '/abdmbridgelog',
+                    '/auth/',
+                    '/doctor_work/document_workspace',
+                    '/opd/appointment',
+                ];
+                foreach ($blockedPrefixes as $prefix) {
+                    if (str_starts_with($pathLower, $prefix)) {
+                        $isInvalidLanding = true;
+                        break;
+                    }
+                }
+            }
+
+            // 4. File extensions (assets, documents, JSON)
+            if (! $isInvalidLanding && preg_match('/\.(json|xml|csv|pdf|png|jpg|jpeg|gif|ico|css|js|woff|woff2|ttf|map)$/i', $pathLower)) {
+                $isInvalidLanding = true;
+            }
+
+            if ($isInvalidLanding) {
                 $beforeLoginUrl = '';
-                $session->removeTempdata('beforeLoginUrl');
             }
         }
 
-        $url = $beforeLoginUrl !== '' ? $beforeLoginUrl : (string) setting('Auth.redirects')['login'];
+        try {
+            $defaultLogin = (string) (setting('Auth.redirects')['login'] ?? '/');
+        } catch (\Throwable $e) {
+            $defaultLogin = (string) ($this->redirects['login'] ?? '/');
+        }
+
+        $url = $beforeLoginUrl !== '' ? $beforeLoginUrl : $defaultLogin;
 
         return $this->getUrl($url);
     }

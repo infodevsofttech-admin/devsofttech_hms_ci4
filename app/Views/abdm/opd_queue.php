@@ -391,17 +391,33 @@
     }
 
     function loadQueue() {
-        const date   = document.getElementById('queueDate').value;
-        const status = document.getElementById('queueStatus').value;
+        const bodyEl = document.getElementById('abdmQueueBody');
+        const dateEl = document.getElementById('queueDate');
+        if (!bodyEl || !dateEl) {
+            clearTimeout(autoTimer);
+            return;
+        }
+
+        const date   = dateEl.value;
+        const status = document.getElementById('queueStatus')?.value || '';
         const url    = BASE + 'AbdmOpdQueue/fetch?date=' + encodeURIComponent(date)
                              + '&status=' + encodeURIComponent(status);
 
-        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest' } })
-            .then(r => r.json())
+        fetch(url, { headers: { 'X-Requested-With': 'XMLHttpRequest', 'Accept': 'application/json' } })
+            .then(r => {
+                if (r.status === 401 || r.status === 403) {
+                    clearTimeout(autoTimer);
+                    throw new Error('Session unauthenticated. Polling stopped.');
+                }
+                return r.json();
+            })
             .then(renderQueue)
             .catch(err => {
-                document.getElementById('abdmQueueBody').innerHTML =
-                    `<tr><td colspan="9" class="text-danger text-center py-3 small">Failed to load: ${esc(err.message)}</td></tr>`;
+                const b = document.getElementById('abdmQueueBody');
+                if (b) {
+                    b.innerHTML =
+                        `<tr><td colspan="9" class="text-danger text-center py-3 small">Failed to load: ${esc(err.message)}</td></tr>`;
+                }
             });
         resetBar();
     }
@@ -831,6 +847,10 @@
 
     function resetBar() {
         const bar = document.getElementById('abdmQRefreshBar');
+        if (!bar || !document.getElementById('abdmQueueBody')) {
+            clearTimeout(autoTimer);
+            return;
+        }
         bar.style.transition = 'none';
         bar.style.width = '100%';
         void bar.offsetWidth;
