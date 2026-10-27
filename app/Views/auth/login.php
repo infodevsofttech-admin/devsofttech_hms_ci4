@@ -138,10 +138,11 @@ $footerVersion = hms_footer_version();
             background: rgba(255, 255, 255, 0.96);
             backdrop-filter: blur(16px);
             -webkit-backdrop-filter: blur(16px);
-            padding: 2.25rem 2rem 1.5rem;
+            padding: 1.75rem 2rem 1.25rem;
             margin: auto;
             position: relative;
             z-index: 5;
+            overflow: visible;
         }
         .login-page-wrapper.panel-center .login-form-container {
             max-width: 100%;
