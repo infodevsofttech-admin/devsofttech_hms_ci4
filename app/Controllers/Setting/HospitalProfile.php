@@ -211,6 +211,132 @@ class HospitalProfile extends BaseController
         ]);
     }
 
+    public function loginSettings()
+    {
+        if (! $this->canManageHospitalProfile()) {
+            return $this->response->setStatusCode(403)->setBody('Access denied');
+        }
+
+        $wallpaper = $this->readSettingValue('H_login_wallpaper');
+        $logo = $this->readSettingValue('H_logo');
+
+        $presets = [
+            [
+                'file' => 'hospital_wallpaper_20261027_203745_bf800456.jpg',
+                'title' => 'Client Deep Teal (Current)',
+                'desc' => 'Dark teal background with smooth geometric accents',
+            ],
+            [
+                'file' => 'hospital_wallpaper_soft_teal_leaves.jpg',
+                'title' => 'Johri Soft Teal Botanical',
+                'desc' => 'Ivory canvas with organic soft teal curved leaves (Brand Guide Option 02)',
+            ],
+            [
+                'file' => 'hospital_wallpaper_modern_facade.jpg',
+                'title' => 'Modern Hospital Facade',
+                'desc' => 'High-end architectural medical tower with landscaped grounds',
+            ],
+        ];
+
+        return view('Setting/Admin/login_settings', [
+            'hospital_name' => $this->readSettingValue('H_Name'),
+            'hospital_logo' => $logo,
+            'hospital_logo_url' => $logo !== '' ? base_url('assets/images/' . rawurlencode($logo)) : '',
+            'hospital_wallpaper' => $wallpaper,
+            'hospital_wallpaper_url' => $wallpaper !== '' ? base_url('assets/images/' . rawurlencode($wallpaper)) : '',
+            'login_panel_position' => $this->readSettingValue('LOGIN_PANEL_POSITION') ?: 'right',
+            'login_hero_theme' => $this->readSettingValue('LOGIN_HERO_THEME') ?: 'light',
+            'login_logo_style' => $this->readSettingValue('LOGIN_LOGO_STYLE') ?: '3d_box',
+            'login_hero_overlay' => $this->readSettingValue('LOGIN_HERO_OVERLAY') ?: 'dark',
+            'login_show_subtitle' => $this->readSettingValue('LOGIN_SHOW_SUBTITLE') !== '' ? $this->readSettingValue('LOGIN_SHOW_SUBTITLE') : '1',
+            'login_show_contact_meta' => $this->readSettingValue('LOGIN_SHOW_CONTACT_META') !== '' ? $this->readSettingValue('LOGIN_SHOW_CONTACT_META') : '1',
+            'login_show_pwa_card' => $this->readSettingValue('LOGIN_SHOW_PWA_CARD') !== '' ? $this->readSettingValue('LOGIN_SHOW_PWA_CARD') : '1',
+            'presets' => $presets,
+        ]);
+    }
+
+    public function saveLoginSettings()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        if (! $this->canManageHospitalProfile()) {
+            return $this->response->setStatusCode(403)->setJSON(['update' => 0, 'error_text' => 'Access denied']);
+        }
+
+        $panelPos = strtolower(trim((string) $this->request->getPost('login_panel_position')));
+        if (! in_array($panelPos, ['left', 'center', 'right'], true)) {
+            $panelPos = 'right';
+        }
+
+        $heroTheme = strtolower(trim((string) $this->request->getPost('login_hero_theme')));
+        if (! in_array($heroTheme, ['light', 'dark'], true)) {
+            $heroTheme = 'light';
+        }
+
+        $logoStyle = strtolower(trim((string) $this->request->getPost('login_logo_style')));
+        if (! in_array($logoStyle, ['3d_box', 'glass', 'transparent'], true)) {
+            $logoStyle = '3d_box';
+        }
+
+        $heroOverlay = strtolower(trim((string) $this->request->getPost('login_hero_overlay')));
+        if (! in_array($heroOverlay, ['dark', 'light', 'none'], true)) {
+            $heroOverlay = 'dark';
+        }
+
+        $showSubtitle = $this->request->getPost('login_show_subtitle') === '1' ? '1' : '0';
+        $showContactMeta = $this->request->getPost('login_show_contact_meta') === '1' ? '1' : '0';
+        $showPwaCard = $this->request->getPost('login_show_pwa_card') === '1' ? '1' : '0';
+
+        $this->upsertSettingValue('LOGIN_PANEL_POSITION', $panelPos);
+        $this->upsertSettingValue('LOGIN_HERO_THEME', $heroTheme);
+        $this->upsertSettingValue('LOGIN_LOGO_STYLE', $logoStyle);
+        $this->upsertSettingValue('LOGIN_HERO_OVERLAY', $heroOverlay);
+        $this->upsertSettingValue('LOGIN_SHOW_SUBTITLE', $showSubtitle);
+        $this->upsertSettingValue('LOGIN_SHOW_CONTACT_META', $showContactMeta);
+        $this->upsertSettingValue('LOGIN_SHOW_PWA_CARD', $showPwaCard);
+
+        // Check if preset selected
+        $presetWallpaper = trim((string) $this->request->getPost('preset_wallpaper'));
+        if ($presetWallpaper !== '') {
+            $presetFile = basename($presetWallpaper);
+            if (is_file(FCPATH . 'assets/images/' . $presetFile)) {
+                $this->upsertSettingValue('H_login_wallpaper', $presetFile);
+            }
+        }
+
+        // Process new wallpaper upload if present
+        $wpFile = $this->request->getFile('hospital_wallpaper');
+        if ($wpFile && $wpFile->isValid() && ! $wpFile->hasMoved()) {
+            $wallpaperResult = $this->processLogoUpload(
+                $wpFile,
+                'hospital_wallpaper',
+                'H_login_wallpaper',
+                'Login wallpaper'
+            );
+            if (! $wallpaperResult['ok']) {
+                return $this->response->setJSON([
+                    'update' => 0,
+                    'error_text' => $wallpaperResult['error'],
+                    'csrfName' => csrf_token(),
+                    'csrfHash' => csrf_hash(),
+                ]);
+            }
+        }
+
+        $currentWallpaper = $this->readSettingValue('H_login_wallpaper');
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'error_text' => 'Login page settings saved successfully.',
+            'wallpaper_url' => $currentWallpaper !== '' ? base_url('assets/images/' . rawurlencode($currentWallpaper)) : '',
+            'wallpaper_name' => $currentWallpaper,
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
     public function deleteLogo()
     {
         if (! $this->request->isAJAX()) {

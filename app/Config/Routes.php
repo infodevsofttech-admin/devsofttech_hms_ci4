@@ -1433,6 +1433,8 @@ $routes->group('setting', static function($routes) {
     $routes->post('admin/ipd-examination-fields/save', 'Setting\IpdExaminationFields::save', ['filter' => ['permission:ipd_discharge.master.manage', 'csrf']]);
     $routes->post('admin/ipd-examination-fields/toggle/(:num)', 'Setting\IpdExaminationFields::toggle/$1', ['filter' => ['permission:ipd_discharge.master.manage', 'csrf']]);
     $routes->get('admin/hospital-profile', 'Setting\\HospitalProfile::index');
+    $routes->get('admin/login-settings', 'Setting\\HospitalProfile::loginSettings');
+    $routes->post('admin/login-settings/save', 'Setting\\HospitalProfile::saveLoginSettings');
     $routes->get('admin/system-ops', 'SystemOps::index', ['filter' => $settingsAdminFilter]);
     $routes->get('admin/system-ops/panel', 'SystemOps::panel', ['filter' => $settingsAdminFilter]);
     $routes->get('admin/system-ops/diagnose', 'SystemOps::diagnose', ['filter' => $settingsAdminFilter]);

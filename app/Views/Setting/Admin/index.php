@@ -115,6 +115,12 @@
                 </a>
             </div>
             <div class="col-6 col-md-2 col-lg-2">
+                <a class="admin-tile" href="javascript:openAdminSubPage('<?= base_url('setting/admin/login-settings') ?>','Login Page Settings');">
+                    <i class="bi bi-palette" style="color:#059669;"></i>
+                    <span>Login Settings</span>
+                </a>
+            </div>
+            <div class="col-6 col-md-2 col-lg-2">
                 <a class="admin-tile" href="javascript:openAdminSubPage('<?= base_url('setting/admin/insurance') ?>','Insurance Master');">
                     <i class="bi bi-shield-check"></i>
                     <span>Insurance Master</span>

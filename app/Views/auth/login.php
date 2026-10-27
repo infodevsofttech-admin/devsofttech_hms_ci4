@@ -10,6 +10,15 @@ $hospitalHfrId = hospital_setting_value('H_HFR_ID', '');
 $hospitalLogo = hospital_setting_value('H_logo', '');
 $hospitalWallpaper = hospital_setting_value('H_login_wallpaper', '');
 
+// Login Customizer Settings
+$loginPanelPosition = hospital_setting_value('LOGIN_PANEL_POSITION', 'right'); // 'left', 'center', 'right'
+$loginHeroTheme = hospital_setting_value('LOGIN_HERO_THEME', 'light'); // 'light', 'dark'
+$loginLogoStyle = hospital_setting_value('LOGIN_LOGO_STYLE', '3d_box'); // '3d_box', 'glass', 'transparent'
+$loginHeroOverlay = hospital_setting_value('LOGIN_HERO_OVERLAY', 'dark'); // 'dark', 'light', 'none'
+$loginShowSubtitle = hospital_setting_value('LOGIN_SHOW_SUBTITLE', '1') !== '0';
+$loginShowContactMeta = hospital_setting_value('LOGIN_SHOW_CONTACT_META', '1') !== '0';
+$loginShowPwaCard = hospital_setting_value('LOGIN_SHOW_PWA_CARD', '1') !== '0';
+
 $hasLogo = false;
 $logoUrl = '';
 if ($hospitalLogo !== '' && is_file(FCPATH . 'assets/images/' . $hospitalLogo)) {
@@ -88,6 +97,56 @@ $footerVersion = hms_footer_version();
             background-color: #f1f5f9;
         }
 
+        /* Layout Positions */
+        .login-page-wrapper.panel-right {
+            flex-direction: row;
+        }
+
+        .login-page-wrapper.panel-left {
+            flex-direction: row-reverse;
+        }
+        .login-page-wrapper.panel-left .login-hero-section {
+            border-right: none;
+            border-left: 1px solid #e2e8f0;
+        }
+        .login-page-wrapper.panel-left .login-form-section {
+            border-left: none;
+            border-right: 1px solid #e2e8f0;
+            box-shadow: 10px 0 40px rgba(0, 0, 0, 0.05);
+        }
+
+        .login-page-wrapper.panel-center {
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            padding: 2.5rem 1rem;
+            position: relative;
+            background-size: cover;
+            background-position: center center;
+            background-repeat: no-repeat;
+        }
+        .login-page-wrapper.panel-center .login-hero-section {
+            display: none !important;
+        }
+        .login-page-wrapper.panel-center .login-form-section {
+            width: 100%;
+            max-width: 480px;
+            min-height: auto;
+            border: 1px solid rgba(255, 255, 255, 0.6);
+            border-radius: 20px;
+            box-shadow: 0 25px 60px rgba(0, 0, 0, 0.28);
+            background: rgba(255, 255, 255, 0.96);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            padding: 2.25rem 2rem 1.5rem;
+            margin: auto;
+            position: relative;
+            z-index: 5;
+        }
+        .login-page-wrapper.panel-center .login-form-container {
+            max-width: 100%;
+        }
+
         /* Left Hero/Branding section */
         .login-hero-section {
             flex: 1;
@@ -108,12 +167,28 @@ $footerVersion = hms_footer_version();
             color: #ffffff;
         }
 
-        .login-hero-section.has-wallpaper::before {
+        /* Overlay Shading Options */
+        .login-hero-section.has-wallpaper.overlay-dark::before,
+        .login-page-wrapper.panel-center.overlay-dark::before {
             content: '';
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: linear-gradient(180deg, rgba(7, 24, 43, 0.18) 0%, rgba(7, 24, 43, 0.42) 50%, rgba(7, 24, 43, 0.8) 100%);
+            background: linear-gradient(180deg, rgba(7, 24, 43, 0.2) 0%, rgba(7, 24, 43, 0.45) 50%, rgba(7, 24, 43, 0.82) 100%);
             z-index: 1;
+        }
+
+        .login-hero-section.has-wallpaper.overlay-light::before,
+        .login-page-wrapper.panel-center.overlay-light::before {
+            content: '';
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            background: linear-gradient(180deg, rgba(255, 255, 255, 0.28) 0%, rgba(255, 255, 255, 0.58) 50%, rgba(255, 255, 255, 0.88) 100%);
+            z-index: 1;
+        }
+
+        .login-hero-section.has-wallpaper.overlay-none::before,
+        .login-page-wrapper.panel-center.overlay-none::before {
+            display: none;
         }
 
         .login-hero-inner {
@@ -125,11 +200,16 @@ $footerVersion = hms_footer_version();
             height: 100%;
         }
 
-        /* 3D Format Box for Hospital Logo with curved corners */
+        /* Hospital Logo Wrap Styles */
         .login-hero-logo-wrap {
             display: inline-flex;
             align-items: center;
             justify-content: center;
+            transition: transform 0.25s ease, box-shadow 0.25s ease;
+        }
+
+        /* Style: 3D Raised Plaque (Default) */
+        .login-hero-logo-wrap.style-3d_box {
             padding: 16px 26px;
             border-radius: 20px;
             background: linear-gradient(150deg, #ffffff 0%, #edf6f7 100%);
@@ -139,16 +219,40 @@ $footerVersion = hms_footer_version();
                 0 4px 10px rgba(0, 0, 0, 0.22),
                 inset 0 2px 1px rgba(255, 255, 255, 1),
                 inset 0 -2px 4px rgba(7, 34, 53, 0.08);
-            transition: transform 0.25s ease, box-shadow 0.25s ease;
         }
-
-        .login-hero-logo-wrap:hover {
+        .login-hero-logo-wrap.style-3d_box:hover {
             transform: translateY(-2px);
             box-shadow: 
                 0 20px 42px rgba(0, 0, 0, 0.42),
                 0 6px 14px rgba(0, 0, 0, 0.25),
                 inset 0 2px 1px rgba(255, 255, 255, 1),
                 inset 0 -2px 4px rgba(7, 34, 53, 0.08);
+        }
+
+        /* Style: Frosted Glass Plate */
+        .login-hero-logo-wrap.style-glass {
+            padding: 16px 26px;
+            border-radius: 20px;
+            background: rgba(255, 255, 255, 0.25);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.5);
+            box-shadow: 0 12px 30px rgba(0, 0, 0, 0.2);
+        }
+        .login-hero-logo-wrap.style-glass:hover {
+            transform: translateY(-2px);
+            background: rgba(255, 255, 255, 0.35);
+        }
+
+        /* Style: Seamless / Direct */
+        .login-hero-logo-wrap.style-transparent {
+            padding: 6px 0;
+            background: transparent;
+            border: none;
+            box-shadow: none;
+        }
+        .login-hero-logo-wrap.style-transparent .login-hero-logo-img {
+            filter: drop-shadow(0 4px 12px rgba(0, 0, 0, 0.45));
         }
 
         .login-hero-logo-img {
@@ -161,12 +265,16 @@ $footerVersion = hms_footer_version();
             transition: transform 0.2s ease;
         }
 
-        /* Radiant, crisp heading on dark background with dark outline and ambient glow */
+        /* Heading & Typography Base */
         .login-hero-title {
             font-size: clamp(2.2rem, 3.8vw, 3.4rem);
             font-weight: 800;
             line-height: 1.18;
             letter-spacing: -0.015em;
+        }
+
+        /* Theme: Radiant White (Dark Backgrounds) */
+        .login-page-wrapper.theme-light .login-hero-title {
             color: #ffffff;
             -webkit-text-stroke: 1.2px #061c2e;
             paint-order: stroke fill;
@@ -175,18 +283,38 @@ $footerVersion = hms_footer_version();
                 0 8px 24px rgba(0, 0, 0, 0.6),
                 0 0 32px rgba(45, 212, 191, 0.3);
         }
-
-        .login-hero-subtitle {
+        .login-page-wrapper.theme-light .login-hero-subtitle {
             font-size: 1.15rem;
             color: #e2e8f0;
             text-shadow: 0 2px 8px rgba(0, 0, 0, 0.7);
             max-width: 620px;
         }
-
-        .login-hero-meta {
+        .login-page-wrapper.theme-light .login-hero-meta {
             color: #f1f5f9;
             text-shadow: 0 1px 4px rgba(0, 0, 0, 0.85);
             font-weight: 500;
+        }
+
+        /* Theme: Architectural Navy (Light / Ivory Backgrounds) */
+        .login-page-wrapper.theme-dark .login-hero-title {
+            color: #0c4a6e;
+            -webkit-text-stroke: 0.8px rgba(255, 255, 255, 0.95);
+            paint-order: stroke fill;
+            text-shadow: 
+                0 2px 8px rgba(255, 255, 255, 0.9),
+                0 1px 4px rgba(12, 74, 110, 0.25);
+        }
+        .login-page-wrapper.theme-dark .login-hero-subtitle {
+            font-size: 1.15rem;
+            color: #1e3a5f;
+            text-shadow: 0 1px 2px rgba(255, 255, 255, 0.8);
+            font-weight: 500;
+            max-width: 620px;
+        }
+        .login-page-wrapper.theme-dark .login-hero-meta {
+            color: #0f172a;
+            text-shadow: none;
+            font-weight: 600;
         }
 
         /* Hero Blank / Neutral State (First time / No Wallpaper) */
@@ -206,7 +334,7 @@ $footerVersion = hms_footer_version();
             text-shadow: none;
         }
 
-        /* Right Side Form Panel */
+        /* Form Panel Section */
         .login-form-section {
             width: 460px;
             max-width: 100%;
@@ -230,7 +358,7 @@ $footerVersion = hms_footer_version();
 
         @media (max-width: 991.98px) {
             .login-page-wrapper {
-                flex-direction: column;
+                flex-direction: column !important;
             }
             .login-hero-section {
                 min-height: auto;
@@ -241,11 +369,14 @@ $footerVersion = hms_footer_version();
                 display: none;
             }
             .login-form-section {
-                width: 100%;
-                min-height: auto;
-                border-left: none;
-                box-shadow: none;
-                padding: 1.5rem 1rem;
+                width: 100% !important;
+                max-width: 100% !important;
+                min-height: auto !important;
+                border-left: none !important;
+                border-right: none !important;
+                box-shadow: none !important;
+                padding: 1.5rem 1rem !important;
+                border-radius: 0 !important;
             }
         }
     </style>
@@ -253,16 +384,16 @@ $footerVersion = hms_footer_version();
 
 <body>
 
-    <main class="login-page-wrapper">
+    <main class="login-page-wrapper panel-<?= esc($loginPanelPosition) ?> theme-<?= esc($loginHeroTheme) ?><?= ($loginPanelPosition === 'center' && $hasWallpaper) ? ' overlay-' . esc($loginHeroOverlay) : '' ?>"<?= ($loginPanelPosition === 'center' && $hasWallpaper) ? ' style="background-image: url(\'' . esc($wallpaperUrl) . '\');"' : '' ?>>
 
         <?php if ($hasWallpaper): ?>
         <!-- Left Branding / Wallpaper Hero Section -->
-        <section class="login-hero-section has-wallpaper" style="background-image: url('<?= esc($wallpaperUrl) ?>');">
+        <section class="login-hero-section has-wallpaper overlay-<?= esc($loginHeroOverlay) ?>" style="background-image: url('<?= esc($wallpaperUrl) ?>');">
             <div class="login-hero-inner">
                 <!-- Top Header / Hospital Logo (Logo only, prominent with soft drop shadow) -->
                 <div>
                     <?php if ($hasLogo): ?>
-                        <div class="login-hero-logo-wrap">
+                        <div class="login-hero-logo-wrap style-<?= esc($loginLogoStyle) ?>">
                             <img src="<?= esc($logoUrl) ?>" alt="<?= esc($hospitalName) ?> Logo" class="login-hero-logo-img">
                         </div>
                     <?php endif; ?>
@@ -276,11 +407,13 @@ $footerVersion = hms_footer_version();
                         <h1 class="login-hero-title mb-3">Hospital Information Management System</h1>
                     <?php endif; ?>
 
+                    <?php if ($loginShowSubtitle): ?>
                     <p class="login-hero-subtitle mb-4">
                         Secure Healthcare Delivery, Digital EMR &amp; Clinical Management Portal
                     </p>
+                    <?php endif; ?>
 
-                    <?php if (!empty($hospitalAddress1) || !empty($hospitalPhone) || !empty($hospitalHfrId)): ?>
+                    <?php if ($loginShowContactMeta && (!empty($hospitalAddress1) || !empty($hospitalPhone) || !empty($hospitalHfrId))): ?>
                         <div class="d-flex flex-wrap gap-3 align-items-center text-white small login-hero-meta">
                             <?php if (!empty($hospitalAddress1)): ?>
                                 <span class="d-inline-flex align-items-center gap-1">
@@ -314,10 +447,28 @@ $footerVersion = hms_footer_version();
         </section>
         <?php endif; ?>
 
-        <!-- Right Side Login Form Section -->
+        <!-- Form Section -->
         <section class="login-form-section">
             <div class="login-form-container">
 
+                <?php if ($loginPanelPosition === 'center'): ?>
+                <!-- Centered Hospital Branding Showcase -->
+                <div class="text-center mb-3">
+                    <?php if ($hasLogo): ?>
+                        <div class="mb-2">
+                            <div class="login-hero-logo-wrap style-<?= esc($loginLogoStyle) ?>">
+                                <img src="<?= esc($logoUrl) ?>" alt="<?= esc($hospitalName) ?> Logo" class="login-hero-logo-img" style="max-height: 70px;">
+                            </div>
+                        </div>
+                    <?php endif; ?>
+                    <?php if (!empty($hospitalName)): ?>
+                        <h4 class="fw-bold text-dark mb-1" style="font-size: 1.35rem;"><?= esc($hospitalName) ?></h4>
+                    <?php endif; ?>
+                    <?php if ($loginShowSubtitle): ?>
+                        <p class="text-muted small mb-0" style="font-size: 12px;">Secure Healthcare Delivery &amp; Clinical Management Portal</p>
+                    <?php endif; ?>
+                </div>
+                <?php else: ?>
                 <!-- System / E-Atria Branding Header -->
                 <div class="text-center mb-2">
                     <a href="/" class="logo d-inline-flex align-items-center justify-content-center text-decoration-none">
@@ -325,6 +476,7 @@ $footerVersion = hms_footer_version();
                         <span class="fs-4 fw-bold text-primary ms-2">E-Atria</span>
                     </a>
                 </div>
+                <?php endif; ?>
 
                 <!-- Login Card -->
                 <div class="card mb-2 border-0 shadow-sm" style="border-radius: 12px; background: #ffffff;">
@@ -447,6 +599,7 @@ $footerVersion = hms_footer_version();
                     </div>
                 </div>
 
+                <?php if ($loginShowPwaCard): ?>
                 <!-- Mobile Application QR & PWA Installation Card -->
                 <div class="card border-0 shadow-sm mt-1 mb-2 w-100 text-center" style="background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%); border-radius: 12px; color: white;">
                     <div class="card-body p-3">
@@ -463,6 +616,7 @@ $footerVersion = hms_footer_version();
                         </button>
                     </div>
                 </div>
+                <?php endif; ?>
 
                 <div class="text-center mt-1 mb-2">
                     <a href="<?= base_url('HMS_FEATURES_PRESENTATION.html') ?>" target="_blank" rel="noopener"

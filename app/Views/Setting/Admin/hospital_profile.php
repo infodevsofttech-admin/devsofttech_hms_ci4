@@ -84,6 +84,15 @@
                 </div>
             </div>
 
+            <div class="col-12">
+                <div class="alert alert-info py-2 px-3 small d-flex align-items-center justify-content-between flex-wrap gap-2 mb-0">
+                    <div>
+                        <i class="bi bi-palette-fill me-1 text-primary"></i> <strong>Login Page Customizer:</strong> Set Left, Center, or Right panel layout, 3D/glass logo styling, dark/light font colors, and preview presets.
+                    </div>
+                    <a href="javascript:openAdminSubPage('<?= base_url('setting/admin/login-settings') ?>','Login Page Settings');" class="btn btn-sm btn-primary">Open Login Page Customizer &rarr;</a>
+                </div>
+            </div>
+
             <div class="col-12 mt-3"><hr><h6 class="mb-2">Pharmacy Information</h6></div>
             <div class="col-md-6">
                 <label class="form-label">Pharmacy Name</label>
