@@ -112,7 +112,7 @@ $footerVersion = hms_footer_version();
             content: '';
             position: absolute;
             top: 0; left: 0; right: 0; bottom: 0;
-            background: linear-gradient(135deg, rgba(15, 23, 42, 0.82) 0%, rgba(15, 23, 42, 0.45) 50%, rgba(15, 23, 42, 0.88) 100%);
+            background: linear-gradient(180deg, rgba(15, 23, 42, 0.2) 0%, rgba(15, 23, 42, 0.45) 50%, rgba(15, 23, 42, 0.85) 100%);
             z-index: 1;
         }
 
@@ -129,21 +129,21 @@ $footerVersion = hms_footer_version();
             display: inline-flex;
             align-items: center;
             justify-content: center;
-            padding: 10px 18px;
-            border-radius: 18px;
-            background: radial-gradient(ellipse at center, rgba(255, 255, 255, 0.24) 0%, rgba(255, 255, 255, 0.08) 55%, rgba(255, 255, 255, 0) 80%);
-            box-shadow: 0 8px 30px rgba(0, 0, 0, 0.18);
+            padding: 12px 22px;
+            border-radius: 16px;
+            background: rgba(255, 255, 255, 0.92);
+            backdrop-filter: blur(16px);
+            -webkit-backdrop-filter: blur(16px);
+            border: 1px solid rgba(255, 255, 255, 0.7);
+            box-shadow: 0 10px 28px rgba(0, 0, 0, 0.22), 0 2px 6px rgba(0, 0, 0, 0.12);
         }
 
         .login-hero-logo-img {
-            max-height: 105px;
-            max-width: 320px;
+            max-height: 85px;
+            max-width: 270px;
             width: auto;
             height: auto;
             object-fit: contain;
-            filter: 
-                drop-shadow(0 0 12px rgba(255, 255, 255, 0.5))
-                drop-shadow(0 4px 14px rgba(0, 0, 0, 0.65));
             transition: transform 0.2s ease;
         }
 
@@ -151,14 +151,13 @@ $footerVersion = hms_footer_version();
             font-size: clamp(2.2rem, 3.8vw, 3.4rem);
             font-weight: 800;
             line-height: 1.18;
-            letter-spacing: -0.02em;
+            letter-spacing: -0.01em;
             color: #ffffff;
+            -webkit-text-stroke: 1.2px #071e33;
+            paint-order: stroke fill;
             text-shadow: 
-                0 0 12px rgba(255, 255, 255, 0.6),
-                0 0 30px rgba(255, 255, 255, 0.4),
-                0 0 60px rgba(56, 189, 248, 0.4),
-                0 2px 4px rgba(0, 0, 0, 0.8),
-                0 4px 16px rgba(0, 0, 0, 0.65);
+                0 3px 8px rgba(0, 0, 0, 0.75),
+                0 8px 24px rgba(0, 0, 0, 0.5);
         }
 
         .login-hero-subtitle {
