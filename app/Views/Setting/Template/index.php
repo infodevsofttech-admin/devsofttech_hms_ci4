@@ -260,3 +260,41 @@ $hasTemplateAccess = $canPathology || $canUltrasound || $canXray || $canCt || $c
         <div class="col-12 admin-panel" id="maindiv"></div>
     </div>
 </section>
+
+<script>
+if (typeof window.load_form_div !== 'function') {
+    window.load_form_div = function(ourl, xdiv, top_title) {
+        var targetEl = document.getElementById(String(xdiv));
+        if (!targetEl) return;
+        targetEl.innerHTML = '<div class="text-center p-4 text-muted"><div class="spinner-border spinner-border-sm me-2 text-primary"></div>Loading ' + (top_title || 'template') + '...</div>';
+        fetch(ourl, {
+            headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        })
+        .then(function(res) {
+            if (!res.ok) throw new Error('HTTP ' + res.status);
+            return res.text();
+        })
+        .then(function(html) {
+            targetEl.innerHTML = html;
+            var scripts = targetEl.querySelectorAll('script');
+            scripts.forEach(function(s) {
+                var newScript = document.createElement('script');
+                Array.from(s.attributes).forEach(function(attr) {
+                    newScript.setAttribute(attr.name, attr.value);
+                });
+                newScript.textContent = s.textContent;
+                document.body.appendChild(newScript);
+                s.remove();
+            });
+            if (top_title) document.title = top_title;
+            if (typeof initfunc === 'function') {
+                try { initfunc(); } catch (e) { console.warn(e); }
+            }
+        })
+        .catch(function(err) {
+            console.error('load_form_div error:', err);
+            targetEl.innerHTML = '<div class="alert alert-danger m-3">Error loading content: ' + err.message + '</div>';
+        });
+    };
+}
+</script>

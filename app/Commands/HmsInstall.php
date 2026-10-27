@@ -77,7 +77,16 @@ class HmsInstall extends BaseCommand
         CLI::write("Setting Hospital Name: '{$hospitalName}'...", 'yellow');
         $this->configureHospitalSetting($db, 'H_Name', $hospitalName);
 
-        // 7. Success Banner
+        // 7. Seed Comprehensive Medical Templates Library
+        try {
+            CLI::write("Seeding comprehensive Medical Templates Library...", 'yellow');
+            $templatesSeeder = new \App\Database\Seeds\MedicalTemplatesLibrarySeeder(new \Config\Database());
+            $templatesSeeder->run();
+        } catch (\Throwable $e) {
+            CLI::write("Medical templates seeding notice: " . $e->getMessage(), 'yellow');
+        }
+
+        // 8. Success Banner
         CLI::write("\n==================================================", 'green');
         CLI::write("         HMS Installation Completed!              ", 'green');
         CLI::write("==================================================", 'green');
