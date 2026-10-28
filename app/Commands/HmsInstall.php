@@ -86,7 +86,11 @@ class HmsInstall extends BaseCommand
             CLI::write("Medical templates seeding notice: " . $e->getMessage(), 'yellow');
         }
 
-        // 8. Success Banner
+        // 8. Ensure Single Doctor ('Dr. Demo')
+        CLI::write("Configuring Single Doctor ('Dr. Demo')...", 'yellow');
+        $this->ensureSingleDemoDoctor($db);
+
+        // 9. Success Banner
         CLI::write("\n==================================================", 'green');
         CLI::write("         HMS Installation Completed!              ", 'green');
         CLI::write("==================================================", 'green');
@@ -364,6 +368,81 @@ class HmsInstall extends BaseCommand
             $db->table('hospital_setting')->where('s_name', $key)->update(['s_value' => $value]);
         } else {
             $db->table('hospital_setting')->insert(['s_name' => $key, 's_value' => $value]);
+        }
+    }
+
+    private function ensureSingleDemoDoctor($db): void
+    {
+        try {
+            if (! $db->tableExists('doctor_master')) {
+                return;
+            }
+
+            // Remove any extra doctors (keep only ID 1)
+            $db->table('doctor_master')->where('id >', 1)->delete();
+
+            if ($db->tableExists('doc_spec')) {
+                $db->table('doc_spec')->where('doc_id >', 1)->delete();
+            }
+            if ($db->tableExists('doc_opd_fee')) {
+                $db->table('doc_opd_fee')->where('doc_id >', 1)->delete();
+            }
+            if ($db->tableExists('doc_ipd_fee')) {
+                $db->table('doc_ipd_fee')->where('doc_id >', 1)->delete();
+            }
+            if ($db->tableExists('finance_doctor_agreements')) {
+                $db->table('finance_doctor_agreements')->emptyTable();
+            }
+
+            // Ensure Doctor ID 1 is configured with Name 'Dr. Demo'
+            $doc1 = $db->table('doctor_master')->where('id', 1)->get()->getRowArray();
+            if ($doc1) {
+                $db->table('doctor_master')->where('id', 1)->update([
+                    'p_title'  => 'Dr.',
+                    'p_fname'  => 'Demo',
+                    'p_mname'  => null,
+                    'p_lname'  => null,
+                    'doc_sign' => 'MBBS, MD',
+                    'active'   => '1',
+                ]);
+            } else {
+                $db->table('doctor_master')->insert([
+                    'id'               => 1,
+                    'p_code'           => 0,
+                    'p_title'          => 'Dr.',
+                    'p_fname'          => 'Demo',
+                    'p_mname'          => null,
+                    'p_lname'          => null,
+                    'doc_sign'         => 'MBBS, MD',
+                    'mphone1'          => '9876543210',
+                    'doctor_reg_no'    => 'REG12345',
+                    'gender'           => '1',
+                    'dob'              => '1980-01-01',
+                    'email1'           => 'demo@e-atria.com',
+                    'active'           => '1',
+                    'login_pin'        => '1234',
+                    'profile_photo'    => '1',
+                    'opd_print_format' => 'printonletterhead',
+                    'opd_blank_print'  => 'printonletterhead',
+                    'opd_valid_no_days'=> 5,
+                    'device_code'      => '974852',
+                ]);
+            }
+
+            // Ensure valid medical speciality for Doctor 1
+            if ($db->tableExists('doc_spec')) {
+                $specCount = $db->table('doc_spec')->where('doc_id', 1)->countAllResults();
+                if ($specCount === 0) {
+                    $db->table('doc_spec')->insert([
+                        'doc_id'      => 1,
+                        'med_spec_id' => 61,
+                    ]);
+                }
+            }
+
+            CLI::write("Single doctor 'Dr. Demo' (ID: 1) successfully configured.", 'green');
+        } catch (\Throwable $e) {
+            CLI::write("Demo doctor configuration notice: " . $e->getMessage(), 'yellow');
         }
     }
 }
