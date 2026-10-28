@@ -52,18 +52,35 @@ for (const app of apps) {
     console.log(`\n--- Processing ${app.name} ---`);
     const htmlContent = fs.readFileSync(htmlPath, 'utf8');
     const match = htmlContent.match(/<script type="text\/babel">([\s\S]*?)<\/script>/);
-    if (!match) {
-        console.warn(`No <script type="text/babel"> found in ${app.name}/index.html`);
+    let jsxSource = '';
+    if (match) {
+        jsxSource = match[1];
+    } else {
+        console.log(`No <script type="text/babel"> in current HTML, fetching from git history (c548c0d~1)...`);
+        try {
+            const { execSync } = require('child_process');
+            const gitCmd = `git show c548c0d~1:public/App/${app.name}/index.html`;
+            const gitHtml = execSync(gitCmd, { maxBuffer: 50 * 1024 * 1024 }).toString('utf8');
+            const gitMatch = gitHtml.match(/<script type="text\/babel">([\s\S]*?)<\/script>/);
+            if (gitMatch) {
+                jsxSource = gitMatch[1];
+            }
+        } catch (e) {
+            console.warn(`Could not read git history for ${app.name}: ${e.message}`);
+        }
+    }
+
+    if (!jsxSource) {
+        console.warn(`Could not find JSX source for ${app.name}`);
         continue;
     }
 
-    const jsxSource = match[1];
     console.log(`Found JSX code in ${app.name}, size: ${(jsxSource.length / 1024).toFixed(2)} KB`);
 
-    console.log(`Compiling JSX with Babel presets: ['react']...`);
+    console.log(`Compiling JSX with Babel presets: [['react', { runtime: 'classic' }]]...`);
     const startTime = Date.now();
     const result = Babel.transform(jsxSource, {
-        presets: ['react'],
+        presets: [['react', { runtime: 'classic' }]],
         compact: false
     });
     console.log(`Compilation finished in ${Date.now() - startTime}ms. Output JS size: ${(result.code.length / 1024).toFixed(2)} KB`);
