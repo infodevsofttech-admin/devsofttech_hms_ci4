@@ -594,6 +594,13 @@ window.AbhaMobileModal = (function () {
         postData.append('otp', otp);
         postData.append('auth_method', authMethod);
         postData.append('mobile', searchMobile);
+        if (selectedProfile) {
+            postData.append('selected_index', selectedProfile.index || '');
+            postData.append('selected_patient_id', selectedProfile.patient_id || '');
+            postData.append('selected_p_code', selectedProfile.p_code || '');
+            postData.append('selected_abha_number', selectedProfile.abha_number || '');
+            postData.append('selected_name', selectedProfile.name || '');
+        }
         postData.append('<?= csrf_token() ?>', csrf());
 
         fetch('<?= base_url('abha/find/mobile/verify-otp') ?>', {

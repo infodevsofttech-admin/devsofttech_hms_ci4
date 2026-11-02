@@ -969,10 +969,14 @@ class Abha extends BaseController
             return $this->response->setStatusCode(400)->setJSON(['ok' => 0, 'error_text' => 'Invalid request']);
         }
 
-        $txnId      = trim((string) ($this->request->getPost('txn_id') ?? $this->request->getPost('txnId') ?? ''));
-        $otp        = trim((string) ($this->request->getPost('otp') ?? ''));
-        $authMethod = strtoupper(trim((string) ($this->request->getPost('auth_method') ?? 'MOBILE_OTP')));
-        $mobile     = preg_replace('/\D/', '', trim((string) ($this->request->getPost('mobile') ?? '')));
+        $txnId               = trim((string) ($this->request->getPost('txn_id') ?? $this->request->getPost('txnId') ?? ''));
+        $otp                 = trim((string) ($this->request->getPost('otp') ?? ''));
+        $authMethod          = strtoupper(trim((string) ($this->request->getPost('auth_method') ?? 'MOBILE_OTP')));
+        $mobile              = preg_replace('/\D/', '', trim((string) ($this->request->getPost('mobile') ?? '')));
+        $selectedPatientId   = (int) ($this->request->getPost('selected_patient_id') ?? 0);
+        $selectedPCode       = trim((string) ($this->request->getPost('selected_p_code') ?? ''));
+        $selectedAbhaNumber  = trim((string) ($this->request->getPost('selected_abha_number') ?? ''));
+        $selectedName        = trim((string) ($this->request->getPost('selected_name') ?? ''));
 
         if ($txnId === '' || $otp === '') {
             return $this->response->setJSON(['ok' => 0, 'error_text' => 'Transaction ID and 6-digit OTP are required']);
@@ -1002,33 +1006,69 @@ class Abha extends BaseController
                 return '';
             };
 
+            // If multiple accounts were returned in $result['accounts'], pick the one matching fullProfile or selected profile
+            $targetLast4 = preg_replace('/\D/', '', substr(
+                $firstNonEmpty([
+                    $fullProfile['ABHANumber'] ?? null,
+                    $fullProfile['abhaNumber'] ?? null,
+                    $fullProfile['abha_id'] ?? null,
+                    $selectedAbhaNumber,
+                ]),
+                -4
+            ));
+            if (! empty($result['accounts']) && is_array($result['accounts'])) {
+                foreach ($result['accounts'] as $accCandidate) {
+                    if (! is_array($accCandidate)) {
+                        continue;
+                    }
+                    $candAbha = $firstNonEmpty([
+                        $accCandidate['ABHANumber'] ?? null,
+                        $accCandidate['abhaNumber'] ?? null,
+                        $accCandidate['abha_number'] ?? null,
+                        $accCandidate['abha_id'] ?? null,
+                    ]);
+                    $candLast4 = preg_replace('/\D/', '', substr($candAbha, -4));
+                    if ($targetLast4 !== '' && $candLast4 !== '' && $candLast4 === $targetLast4) {
+                        $account = $accCandidate;
+                        break;
+                    }
+                    $candName = trim((string) ($accCandidate['name'] ?? $accCandidate['fullName'] ?? ''));
+                    if ($targetLast4 === '' && $selectedName !== '' && $candName !== '' && strcasecmp($candName, $selectedName) === 0) {
+                        $account = $accCandidate;
+                        break;
+                    }
+                }
+            }
+
             $abhaNum = $firstNonEmpty([
+                $fullProfile['ABHANumber'] ?? null,
+                $fullProfile['abhaNumber'] ?? null,
+                $fullProfile['abha_id'] ?? null,
                 $account['ABHANumber'] ?? null,
                 $account['abhaNumber'] ?? null,
                 $account['abha_number'] ?? null,
                 $account['abha_id'] ?? null,
-                $fullProfile['ABHANumber'] ?? null,
-                $fullProfile['abhaNumber'] ?? null,
-                $fullProfile['abha_id'] ?? null,
+                $selectedAbhaNumber,
             ]);
 
             $abhaAddress = $firstNonEmpty([
-                $account['preferredAbhaAddress'] ?? null,
-                $account['preferredAddress'] ?? null,
-                $account['abhaAddress'] ?? null,
-                $account['abha_address'] ?? null,
                 $fullProfile['preferredAbhaAddress'] ?? null,
                 $fullProfile['preferredAddress'] ?? null,
                 $fullProfile['abhaAddress'] ?? null,
                 $fullProfile['abha_address'] ?? null,
+                $account['preferredAbhaAddress'] ?? null,
+                $account['preferredAddress'] ?? null,
+                $account['abhaAddress'] ?? null,
+                $account['abha_address'] ?? null,
             ]);
 
             $name = $firstNonEmpty([
+                $fullProfile['name'] ?? null,
+                trim(($fullProfile['firstName'] ?? '') . ' ' . ($fullProfile['middleName'] ?? '') . ' ' . ($fullProfile['lastName'] ?? '')),
                 $account['name'] ?? null,
                 $account['fullName'] ?? null,
                 $account['full_name'] ?? null,
-                $fullProfile['name'] ?? null,
-                trim(($fullProfile['firstName'] ?? '') . ' ' . ($fullProfile['middleName'] ?? '') . ' ' . ($fullProfile['lastName'] ?? '')),
+                $selectedName,
             ]);
 
             $genderRaw = $firstNonEmpty([
@@ -1160,12 +1200,43 @@ class Abha extends BaseController
             if ($abhaAddress !== '' && str_contains($abhaAddress, '@')) {
                 $allAbhaAddresses[$abhaAddress] = true;
             }
+            if (! empty($fullProfile['phrAddress']) && is_array($fullProfile['phrAddress'])) {
+                foreach ($fullProfile['phrAddress'] as $phrAddr) {
+                    if (is_string($phrAddr) && str_contains($phrAddr, '@')) {
+                        $allAbhaAddresses[trim($phrAddr)] = true;
+                    }
+                }
+            }
+
+            $cleanAbhaDigits = preg_replace('/\D/', '', $abhaNum);
+            $last4Digits     = strlen($cleanAbhaDigits) >= 4 ? substr($cleanAbhaDigits, -4) : '';
+
             if (! empty($result['accounts']) && is_array($result['accounts'])) {
                 foreach ($result['accounts'] as $acc) {
-                    if (is_array($acc)) {
-                        foreach (['preferredAbhaAddress', 'preferredAddress', 'abhaAddress', 'abha_address'] as $ak) {
-                            if (! empty($acc[$ak]) && is_string($acc[$ak]) && str_contains($acc[$ak], '@')) {
-                                $allAbhaAddresses[trim($acc[$ak])] = true;
+                    if (! is_array($acc)) {
+                        continue;
+                    }
+                    $accAbhaRaw    = (string) ($acc['ABHANumber'] ?? $acc['abhaNumber'] ?? $acc['abha_number'] ?? $acc['abha_id'] ?? '');
+                    $accAbhaDigits = preg_replace('/\D/', '', $accAbhaRaw);
+                    $accName       = trim((string) ($acc['name'] ?? $acc['fullName'] ?? ''));
+
+                    // Skip accounts belonging to other family members on the same mobile
+                    if ($last4Digits !== '' && $accAbhaDigits !== '' && ! str_ends_with($accAbhaDigits, $last4Digits)) {
+                        continue;
+                    }
+                    if ($last4Digits === '' && $name !== '' && $accName !== '' && stripos($accName, $name) === false && stripos($name, $accName) === false) {
+                        continue;
+                    }
+
+                    foreach (['preferredAbhaAddress', 'preferredAddress', 'abhaAddress', 'abha_address'] as $ak) {
+                        if (! empty($acc[$ak]) && is_string($acc[$ak]) && str_contains($acc[$ak], '@')) {
+                            $allAbhaAddresses[trim($acc[$ak])] = true;
+                        }
+                    }
+                    if (! empty($acc['phrAddress']) && is_array($acc['phrAddress'])) {
+                        foreach ($acc['phrAddress'] as $phrAddr) {
+                            if (is_string($phrAddr) && str_contains($phrAddr, '@')) {
+                                $allAbhaAddresses[trim($phrAddr)] = true;
                             }
                         }
                     }
@@ -1173,38 +1244,82 @@ class Abha extends BaseController
             }
 
             $db = \Config\Database::connect();
-            $patientIdForAddrs = $patientInfo !== null ? (int)($patientInfo['patient_id'] ?? 0) : 0;
-            $cleanAbhaDigits = preg_replace('/\D/', '', $abhaNum);
+            $patientIdForAddrs = $patientInfo !== null ? (int) ($patientInfo['patient_id'] ?? 0) : $selectedPatientId;
 
-            $pBuilder = $db->table('patient_master');
-            $pBuilder->groupStart();
-            if ($patientIdForAddrs > 0) {
-                $pBuilder->where('id', $patientIdForAddrs);
+            // Match ONLY the local patient record(s) belonging to this specific ABHA profile
+            // (never pull all family members who share the same mobile number).
+            $matchedPids   = [];
+            $matchedPCodes = [];
+            if ($selectedPCode !== '') {
+                $matchedPCodes[] = $selectedPCode;
             }
-            if ($cleanAbhaDigits !== '') {
-                $pBuilder->orWhere('abha_id', $cleanAbhaDigits);
+
+            $pRows = [];
+            if ($patientIdForAddrs > 0 || strlen($cleanAbhaDigits) === 14) {
+                $pBuilder = $db->table('patient_master');
+                $pBuilder->groupStart();
+                if ($patientIdForAddrs > 0) {
+                    $pBuilder->where('id', $patientIdForAddrs);
+                }
+                if (strlen($cleanAbhaDigits) === 14) {
+                    $pBuilder->orWhere('abha_id', $cleanAbhaDigits);
+                }
+                $pBuilder->groupEnd();
+                $pRows = $pBuilder->select('id, p_code, p_fname, abha_id, abha_address')->get()->getResultArray();
             }
-            if ($profileMobile !== '') {
-                $pBuilder->orWhere('mphone1', $profileMobile)->orWhere('mphone2', $profileMobile);
+
+            // Fallback: if not yet matched by patient_id or 14-digit abha_id, search by mobile AND filter strictly by last-4 ABHA digits or name
+            if (empty($pRows) && $profileMobile !== '') {
+                $mobCandidates = $db->table('patient_master')
+                    ->select('id, p_code, p_fname, abha_id, abha_address')
+                    ->groupStart()
+                        ->where('mphone1', $profileMobile)
+                        ->orWhere('mphone2', $profileMobile)
+                    ->groupEnd()
+                    ->get()->getResultArray();
+
+                foreach ($mobCandidates as $mc) {
+                    $mcAbha = preg_replace('/\D/', '', (string) ($mc['abha_id'] ?? ''));
+                    if ($last4Digits !== '' && $mcAbha !== '') {
+                        if (str_ends_with($mcAbha, $last4Digits)) {
+                            $pRows[] = $mc;
+                        }
+                        continue;
+                    }
+                    $mcName = trim((string) ($mc['p_fname'] ?? ''));
+                    if ($name !== '' && $mcName !== '' && (stripos($mcName, $name) !== false || stripos($name, $mcName) !== false)) {
+                        $pRows[] = $mc;
+                    }
+                }
             }
-            $pBuilder->groupEnd();
-            $pRows = $pBuilder->select('id, abha_address')->get()->getResultArray();
-            $matchedPids = [];
+
             foreach ($pRows as $pr) {
-                $matchedPids[] = (int)$pr['id'];
-                $pa = trim((string)($pr['abha_address'] ?? ''));
+                $matchedPids[] = (int) $pr['id'];
+                if (! empty($pr['p_code'])) {
+                    $matchedPCodes[] = trim((string) $pr['p_code']);
+                }
+                $pa = trim((string) ($pr['abha_address'] ?? ''));
                 if ($pa !== '' && str_contains($pa, '@')) {
                     $allAbhaAddresses[$pa] = true;
                 }
             }
 
-            if (! empty($matchedPids)) {
-                $txns = $db->table('abdm_link_transactions')
-                    ->select('abha_address')
-                    ->whereIn('patient_id', array_unique($matchedPids))
-                    ->get()->getResultArray();
+            $matchedPids   = array_values(array_filter(array_unique($matchedPids)));
+            $matchedPCodes = array_values(array_filter(array_unique($matchedPCodes)));
+
+            if (! empty($matchedPids) || ! empty($matchedPCodes)) {
+                $txnBuilder = $db->table('abdm_link_transactions')->select('abha_address');
+                $txnBuilder->groupStart();
+                if (! empty($matchedPids)) {
+                    $txnBuilder->whereIn('patient_id', $matchedPids);
+                }
+                if (! empty($matchedPCodes)) {
+                    $txnBuilder->orWhereIn('patient_ref', $matchedPCodes);
+                }
+                $txnBuilder->groupEnd();
+                $txns = $txnBuilder->get()->getResultArray();
                 foreach ($txns as $t) {
-                    $ta = trim((string)($t['abha_address'] ?? ''));
+                    $ta = trim((string) ($t['abha_address'] ?? ''));
                     if ($ta !== '' && str_contains($ta, '@')) {
                         $allAbhaAddresses[$ta] = true;
                     }
