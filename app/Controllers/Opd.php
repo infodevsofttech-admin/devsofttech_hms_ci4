@@ -2020,15 +2020,8 @@ class Opd extends BaseController
         }
 
         $data['print_layout_mode'] = $layoutMode;
-
-        if ($includeContent) {
-            try {
-                $rxCtrl = new \App\Controllers\Opd_prescription();
-                $rxCtrl->finalizeOpdPrescriptionOnPrint($opdId, $sessionId);
-            } catch (\Throwable $e) {
-                log_message('warning', '[opd_lettre_pdf] finalizeOpdPrescriptionOnPrint error: ' . $e->getMessage());
-            }
-        }
+        // OPD Consult Visit finalization and status completion happen exclusively in
+        // Opd_prescription::opd_prescription_print() (Prescription Rx print), never via OPD Head links.
 
         $isComposedTemplate = $templateKey !== '' && str_starts_with($templateKey, 'compose_');
         if ($isComposedTemplate) {

@@ -733,7 +733,7 @@ class Opd_prescription extends BaseController
             }
         }
 
-        $this->markOpdVisitedOnConsultCompletion((int) $opdId);
+        // OPD Consult Visit is marked Done (opd_status = 2) only on Prescription (Rx) print.
 
         // Queue background SNOMED coding (fail-open — do not block save response)
         try {
@@ -1818,6 +1818,14 @@ class Opd_prescription extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Rx group not found']);
         }
 
+        if (! empty($row) && isset($row['formulation'])) {
+            $row['formulation'] = $this->normalizeMedicineFormulation((string) $row['formulation'], (string) ($row['item_name'] ?? $row['med_name'] ?? ''));
+        }
+        foreach (['dosage', 'dosage_when', 'dosage_freq', 'dosage_where'] as $dosageField) {
+            if (! empty($row) && array_key_exists($dosageField, $row)) {
+                $row[$dosageField] = $this->sanitizeMedicineMasterDefaultField((string) ($row[$dosageField] ?? ''), $dosageField);
+            }
+        }
         return $this->response->setJSON(['update' => 1, 'row' => $row]);
     }
 
@@ -2045,6 +2053,14 @@ class Opd_prescription extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Rx medicine not found']);
         }
 
+        if (! empty($row) && isset($row['formulation'])) {
+            $row['formulation'] = $this->normalizeMedicineFormulation((string) $row['formulation'], (string) ($row['item_name'] ?? $row['med_name'] ?? ''));
+        }
+        foreach (['dosage', 'dosage_when', 'dosage_freq', 'dosage_where'] as $dosageField) {
+            if (! empty($row) && array_key_exists($dosageField, $row)) {
+                $row[$dosageField] = $this->sanitizeMedicineMasterDefaultField((string) ($row[$dosageField] ?? ''), $dosageField);
+            }
+        }
         return $this->response->setJSON(['update' => 1, 'row' => $row]);
     }
 
@@ -2275,6 +2291,12 @@ class Opd_prescription extends BaseController
             $builder->orLike($saltField, $q);
         }
         $rows = $builder->groupEnd()->orderBy($nameField, 'ASC')->limit(30)->get()->getResultArray();
+        foreach ($rows as &$row) {
+            if (isset($row['med_type'])) {
+                $row['med_type'] = $this->normalizeMedicineFormulation((string) $row['med_type'], (string) ($row['med_name'] ?? ''));
+            }
+        }
+        unset($row);
 
         return $this->response->setJSON(['rows' => $rows]);
     }
@@ -2632,6 +2654,9 @@ class Opd_prescription extends BaseController
         }
 
         foreach ($rows as &$row) {
+            if (isset($row['formulation'])) {
+                $row['formulation'] = $this->normalizeMedicineFormulation((string) $row['formulation'], (string) ($row['item_name'] ?? ''));
+            }
             $generic = trim((string) ($row['genericname'] ?? ''));
             if ($generic === '') {
                 $salt = trim((string) ($row['salt_name'] ?? ''));
@@ -2714,6 +2739,14 @@ class Opd_prescription extends BaseController
         $row = $this->db->table($table)->where('id', (int) $medId)->get(1)->getRowArray() ?? [];
         if (empty($row)) {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Medicine not found']);
+        }
+        if (! empty($row) && isset($row['formulation'])) {
+            $row['formulation'] = $this->normalizeMedicineFormulation((string) $row['formulation'], (string) ($row['item_name'] ?? $row['med_name'] ?? ''));
+        }
+        foreach (['dosage', 'dosage_when', 'dosage_freq', 'dosage_where'] as $dosageField) {
+            if (! empty($row) && array_key_exists($dosageField, $row)) {
+                $row[$dosageField] = $this->sanitizeMedicineMasterDefaultField((string) ($row[$dosageField] ?? ''), $dosageField);
+            }
         }
         return $this->response->setJSON(['update' => 1, 'row' => $row]);
     }
@@ -2808,7 +2841,7 @@ class Opd_prescription extends BaseController
 
         $id = (int) $this->request->getPost('id');
         $itemName = trim((string) $this->request->getPost('item_name'));
-        $formulation = trim((string) $this->request->getPost('formulation'));
+        $formulation = $this->normalizeMedicineFormulation(trim((string) $this->request->getPost('formulation')), $itemName);
         if ($itemName === '') {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Medicine name is required']);
         }
@@ -2861,7 +2894,11 @@ class Opd_prescription extends BaseController
 
         foreach (['dosage', 'dosage_when', 'dosage_freq', 'dosage_where', 'no_of_days', 'qty', 'remark'] as $dosageField) {
             if (in_array($dosageField, $fields, true)) {
-                $data[$dosageField] = trim((string) $this->request->getPost($dosageField));
+                $val = trim((string) $this->request->getPost($dosageField));
+                if (in_array($dosageField, ['dosage', 'dosage_when', 'dosage_freq', 'dosage_where'], true)) {
+                    $val = $this->sanitizeMedicineMasterDefaultField($val, $dosageField);
+                }
+                $data[$dosageField] = $val;
             }
         }
 
@@ -3496,6 +3533,14 @@ class Opd_prescription extends BaseController
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Advice not found']);
         }
 
+        if (! empty($row) && isset($row['formulation'])) {
+            $row['formulation'] = $this->normalizeMedicineFormulation((string) $row['formulation'], (string) ($row['item_name'] ?? $row['med_name'] ?? ''));
+        }
+        foreach (['dosage', 'dosage_when', 'dosage_freq', 'dosage_where'] as $dosageField) {
+            if (! empty($row) && array_key_exists($dosageField, $row)) {
+                $row[$dosageField] = $this->sanitizeMedicineMasterDefaultField((string) ($row[$dosageField] ?? ''), $dosageField);
+            }
+        }
         return $this->response->setJSON(['update' => 1, 'row' => $row]);
     }
 
@@ -8393,7 +8438,7 @@ class Opd_prescription extends BaseController
         }
 
         $userId = (int) ($this->getCurrentUserId() ?? 0);
-        $cacheKey = 'medicine_search_v4_' . md5(json_encode([
+        $cacheKey = 'medicine_search_v6_' . md5(json_encode([
             'q' => strtoupper($q),
             'scope' => $scope,
             'user' => $userId,
@@ -8468,6 +8513,14 @@ class Opd_prescription extends BaseController
         foreach ($rows as &$row) {
             $medId = (int) ($row['id'] ?? 0);
             $name = trim((string) ($row['med_name'] ?? ''));
+            if (array_key_exists('med_type', $row)) {
+                $row['med_type'] = $this->normalizeMedicineFormulation((string) ($row['med_type'] ?? ''), $name);
+            }
+            foreach (['dosage', 'dosage_when', 'dosage_freq', 'dosage_where'] as $dosageField) {
+                if (array_key_exists($dosageField, $row)) {
+                    $row[$dosageField] = $this->sanitizeMedicineMasterDefaultField((string) ($row[$dosageField] ?? ''), $dosageField);
+                }
+            }
             $nameUpper = strtoupper($name);
             $nameLoose = trim((string) (preg_replace('/[^A-Z0-9]+/', ' ', $nameUpper) ?? $nameUpper));
             $nameNormalized = trim((string) (preg_replace('/[^A-Z0-9]+/', '', $nameUpper) ?? $nameUpper));
@@ -8706,7 +8759,134 @@ class Opd_prescription extends BaseController
         }
 
         $rows = $builder->orderBy($nameField, 'ASC')->limit(25)->get()->getResultArray();
+        foreach ($rows as &$row) {
+            if (isset($row['med_type'])) {
+                $row['med_type'] = $this->normalizeMedicineFormulation((string) $row['med_type'], (string) ($row['med_name'] ?? ''));
+            }
+        }
+        unset($row);
         return $this->response->setJSON(['rows' => $rows]);
+    }
+
+    private function sanitizeMedicineMasterDefaultField(string $raw, string $field = ''): string
+    {
+        $val = trim($raw);
+        if ($val === '' || preg_match('/^\d+$/', $val) === 1) {
+            return '';
+        }
+
+        if ($field === 'dosage_freq') {
+            $upper = strtoupper($val);
+            $freqMap = [
+                '0D'                 => 'OD',
+                'OD (ONCE DAILY)'    => 'OD',
+                'BD (TWICE DAILY)'   => 'BD',
+                'TDS (THRICE DAILY)' => 'TDS',
+                'QID (4 TIMES/DAY)'  => 'QID',
+            ];
+            if (isset($freqMap[$upper])) {
+                return $freqMap[$upper];
+            }
+        }
+
+        return $val;
+    }
+
+    private function normalizeMedicineFormulation(string $raw, string $medName = ''): string
+    {
+        $form = strtoupper(trim($raw));
+        if ($form !== '' && preg_match('/^\d+$/', $form) === 1) {
+            $form = '';
+        }
+
+        $map = [
+            'TABLETS'            => 'TAB',
+            'TABLET'             => 'TAB',
+            'TABS'               => 'TAB',
+            'TA'                 => 'TAB',
+            '1 TAB'              => 'TAB',
+            'CAPSULES'           => 'CAP',
+            'CAPSULE'            => 'CAP',
+            'CAPS'               => 'CAP',
+            'SYRUP'              => 'SYR',
+            'SYRUPS'             => 'SYR',
+            'SYP'                => 'SYR',
+            'INJECTIONS'         => 'INJ',
+            'INJECTION'          => 'INJ',
+            '1 AMP'              => 'INJ',
+            'AMP'                => 'INJ',
+            'AMPOULE'            => 'INJ',
+            'VIAL'               => 'INJ',
+            'IV'                 => 'INJ',
+            'IM'                 => 'INJ',
+            'I V FLUD'           => 'IV FLUID',
+            'IV FLUIDS'          => 'IV FLUID',
+            'I V FLUD IN 24 HRS' => 'IV FLUID',
+            'INFUSION'           => 'IV FLUID',
+            'IV INFUSION'        => 'IV FLUID',
+            'OINTMENT'           => 'OINT',
+            'OINTMENTS'          => 'OINT',
+            'CREAMS'             => 'CREAM',
+            'GELS'               => 'GEL',
+            'JELLY'              => 'GEL',
+            'EYE DROPS'          => 'EYE DROP',
+            'EAR DROPS'          => 'EAR DROP',
+            'NASAL DROPS'        => 'NASAL DROP',
+            'NASAL SPRAYS'       => 'NASAL SPRAY',
+            'DROPS (PAEDIATRIC)' => 'DROPS',
+            'ORAL DROPS'         => 'DROPS',
+            'DROP'               => 'DROPS',
+            'POWDERS'            => 'POWDER',
+            'ORAL POWDER'        => 'POWDER',
+            'LOTIONS'            => 'LOTION',
+            'SPRAYS'             => 'SPRAY',
+            'PATCHES'            => 'PATCH',
+            'SACHETS'            => 'SACHET',
+            '1 SACHET'           => 'SACHET',
+            'GRANULES'           => 'SACHET',
+            'LOZENGES'           => 'LOZENGE',
+            'TROCHE'             => 'LOZENGE',
+            'SUSPENSION'         => 'SUSP',
+            'SUSPENSIONS'        => 'SUSP',
+            'SOLUTION'           => 'SOLN',
+            'SOLUTIONS'          => 'SOLN',
+            'ORAL SOLUTION'      => 'SOLN',
+            'SHAMPOOS'           => 'SHAMPOO',
+            'SOAPS'              => 'SOAP',
+            'SOAP BAR'           => 'SOAP',
+            'OILS'               => 'OIL',
+            'INHALERS'           => 'INHALER',
+            'ROTACAP'            => 'INHALER',
+            'ROTACAPS'           => 'INHALER',
+            'INHALTION'          => 'INHALER',
+            'INHALATION'         => 'INHALER',
+            'MDI'                => 'INHALER',
+            'RESPULE'            => 'RESPULES',
+            'NEBULISER'          => 'RESPULES',
+            'NEBULIZER'          => 'RESPULES',
+            'MOUTHWASH'          => 'GARGLE',
+            'MOUTH WASH'         => 'GARGLE',
+            'GARGLES'            => 'GARGLE',
+            'SUPPOSITORIES'      => 'SUPPOSITORY',
+            'PESSARIES'          => 'PESSARY',
+            'VAGINAL PESSARY'    => 'PESSARY',
+            'VAGINAL TAB'        => 'PESSARY',
+            'VAGINAL TABLET'     => 'PESSARY',
+        ];
+
+        if ($form !== '' && isset($map[$form])) {
+            return $map[$form];
+        }
+
+        if ($form === '' && $medName !== '') {
+            $upperName = strtoupper(trim($medName));
+            if (preg_match('/\((SYRUPS?|SYR|SYP|TABLETS?|TABS?|CAPSULES?|CAPS?|INJECTIONS?|INJ|DROPS?|OINTMENTS?|OINT|CREAMS?|GELS?|SUSPENSIONS?|SUSP|SOLUTIONS?|SOLN|LOTIONS?|POWDERS?|SACHETS?|INHALERS?|RESPULES?)\)/i', $upperName, $m)) {
+                $extracted = strtoupper($m[1]);
+                return $map[$extracted] ?? $extracted;
+            }
+        }
+
+        return $form;
     }
 
     public function medicine_favorite_toggle()

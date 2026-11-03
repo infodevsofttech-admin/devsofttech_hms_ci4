@@ -365,14 +365,14 @@
             if (desc && desc.toLowerCase() !== label.toLowerCase()) {
                 text += ' - ' + desc;
             }
-            html += '<option value="' + $('<div>').text(id).html() + '">' + $('<div>').text(text).html() + '</option>';
+            html += '<option value="' + $('<div>').text(label).html() + '">' + $('<div>').text(text).html() + '</option>';
         });
         $select.html(html);
     }
 
     function ensureDefaultMasterOption($select, value) {
         value = (value || '').toString().trim();
-        if (!value || value === '0') {
+        if (!value || /^\d+$/.test(value)) {
             return;
         }
         var safeValue = value.replace(/"/g, '&quot;');
@@ -384,7 +384,7 @@
 
     function setDefaultMasterValue($select, value) {
         var raw = (value || '').toString().trim();
-        if (!raw || raw === '0') {
+        if (!raw || /^\d+$/.test(raw)) {
             $select.val('');
             return;
         }
@@ -483,25 +483,29 @@
         $('#med_id').val(row.id || 0);
         $('#med_item_name').val(row.item_name || '');
         var rawForm = (row.formulation || '').toString().trim().toUpperCase();
-        if (rawForm === 'TABLETS' || rawForm === 'TABLET' || rawForm === 'TABS') {
+        if (rawForm === 'TABLETS' || rawForm === 'TABLET' || rawForm === 'TABS' || rawForm === 'TA' || rawForm === '1 TAB') {
             rawForm = 'TAB';
         } else if (rawForm === 'CAPSULES' || rawForm === 'CAPSULE' || rawForm === 'CAPS') {
             rawForm = 'CAP';
-        } else if (rawForm === 'SYRUP' || rawForm === 'SYRUPS') {
+        } else if (rawForm === 'SYRUP' || rawForm === 'SYRUPS' || rawForm === 'SYP') {
             rawForm = 'SYR';
-        } else if (rawForm === 'INJECTIONS' || rawForm === 'INJECTION') {
+        } else if (rawForm === 'INJECTIONS' || rawForm === 'INJECTION' || rawForm === '1 AMP' || rawForm === 'AMP' || rawForm === 'AMPOULE' || rawForm === 'VIAL' || rawForm === 'IV' || rawForm === 'IM') {
             rawForm = 'INJ';
+        } else if (rawForm === 'I V FLUD' || rawForm === 'IV FLUIDS' || rawForm === 'I V FLUD IN 24 HRS' || rawForm === 'INFUSION' || rawForm === 'IV INFUSION') {
+            rawForm = 'IV FLUID';
         } else if (rawForm === 'OINTMENT' || rawForm === 'OINTMENTS') {
             rawForm = 'OINT';
         } else if (rawForm === 'CREAMS') {
             rawForm = 'CREAM';
-        } else if (rawForm === 'GELS') {
+        } else if (rawForm === 'GELS' || rawForm === 'JELLY') {
             rawForm = 'GEL';
         } else if (rawForm === 'EYE DROPS') {
             rawForm = 'EYE DROP';
         } else if (rawForm === 'EAR DROPS') {
             rawForm = 'EAR DROP';
-        } else if (rawForm === 'POWDERS') {
+        } else if (rawForm === 'DROPS (PAEDIATRIC)' || rawForm === 'ORAL DROPS' || rawForm === 'DROP') {
+            rawForm = 'DROPS';
+        } else if (rawForm === 'POWDERS' || rawForm === 'ORAL POWDER') {
             rawForm = 'POWDER';
         } else if (rawForm === 'LOTIONS') {
             rawForm = 'LOTION';
@@ -509,11 +513,11 @@
             rawForm = 'SPRAY';
         } else if (rawForm === 'PATCHES') {
             rawForm = 'PATCH';
-        } else if (rawForm === 'SACHETS') {
+        } else if (rawForm === 'SACHETS' || rawForm === '1 SACHET' || rawForm === 'GRANULES') {
             rawForm = 'SACHET';
         } else if (rawForm === 'SUSPENSION' || rawForm === 'SUSPENSIONS') {
             rawForm = 'SUSP';
-        } else if (rawForm === 'SOLUTION' || rawForm === 'SOLUTIONS') {
+        } else if (rawForm === 'SOLUTION' || rawForm === 'SOLUTIONS' || rawForm === 'ORAL SOLUTION') {
             rawForm = 'SOLN';
         } else if (rawForm === 'SHAMPOOS') {
             rawForm = 'SHAMPOO';
@@ -521,13 +525,15 @@
             rawForm = 'SOAP';
         } else if (rawForm === 'OILS') {
             rawForm = 'OIL';
-        } else if (rawForm === 'INHALERS') {
+        } else if (rawForm === 'INHALERS' || rawForm === 'ROTACAP' || rawForm === 'ROTACAPS' || rawForm === 'INHALTION' || rawForm === 'INHALATION' || rawForm === 'MDI') {
             rawForm = 'INHALER';
+        } else if (rawForm === 'RESPULE' || rawForm === 'NEBULISER' || rawForm === 'NEBULIZER') {
+            rawForm = 'RESPULES';
         } else if (rawForm === 'MOUTHWASH' || rawForm === 'MOUTH WASH' || rawForm === 'GARGLES') {
             rawForm = 'GARGLE';
         } else if (rawForm === 'SUPPOSITORIES') {
             rawForm = 'SUPPOSITORY';
-        } else if (rawForm === 'PESSARIES') {
+        } else if (rawForm === 'PESSARIES' || rawForm === 'VAGINAL PESSARY' || rawForm === 'VAGINAL TAB' || rawForm === 'VAGINAL TABLET') {
             rawForm = 'PESSARY';
         }
         if (rawForm && !$('#med_formulation option[value="' + rawForm.replace(/"/g, '&quot;') + '"]').length) {

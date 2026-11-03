@@ -1870,7 +1870,7 @@
     var medicineSuggestRows = [];
     var medicineSearchCache = {};
     var medicineSearchCacheTtlMs = 120000;
-    var medicineSearchLocalDbKey = 'opd_medicine_search_cache_v1';
+    var medicineSearchLocalDbKey = 'opd_medicine_search_cache_v3';
     var medicineSearchCacheMaxEntries = 250;
     var medicineSearchLocalDbReady = false;
     var autotypeSuggestCache = {};
@@ -8948,11 +8948,75 @@
         }
     }
 
+    function normalizeMedFormType(raw, medName) {
+        var rawForm = (raw || '').toString().trim().toUpperCase();
+        if (rawForm && /^\d+$/.test(rawForm)) {
+            rawForm = '';
+        }
+        var map = {
+            'TABLETS': 'TAB', 'TABLET': 'TAB', 'TABS': 'TAB', 'TA': 'TAB', '1 TAB': 'TAB',
+            'CAPSULES': 'CAP', 'CAPSULE': 'CAP', 'CAPS': 'CAP',
+            'SYRUP': 'SYR', 'SYRUPS': 'SYR', 'SYP': 'SYR',
+            'INJECTIONS': 'INJ', 'INJECTION': 'INJ', '1 AMP': 'INJ', 'AMP': 'INJ', 'AMPOULE': 'INJ', 'VIAL': 'INJ', 'IV': 'INJ', 'IM': 'INJ',
+            'I V FLUD': 'IV FLUID', 'IV FLUIDS': 'IV FLUID', 'I V FLUD IN 24 HRS': 'IV FLUID', 'INFUSION': 'IV FLUID', 'IV INFUSION': 'IV FLUID',
+            'OINTMENT': 'OINT', 'OINTMENTS': 'OINT',
+            'CREAMS': 'CREAM',
+            'GELS': 'GEL', 'JELLY': 'GEL',
+            'EYE DROPS': 'EYE DROP',
+            'EAR DROPS': 'EAR DROP',
+            'NASAL DROPS': 'NASAL DROP',
+            'NASAL SPRAYS': 'NASAL SPRAY',
+            'DROPS (PAEDIATRIC)': 'DROPS', 'ORAL DROPS': 'DROPS', 'DROP': 'DROPS',
+            'POWDERS': 'POWDER', 'ORAL POWDER': 'POWDER',
+            'LOTIONS': 'LOTION',
+            'SPRAYS': 'SPRAY',
+            'PATCHES': 'PATCH',
+            'SACHETS': 'SACHET', '1 SACHET': 'SACHET', 'GRANULES': 'SACHET',
+            'LOZENGES': 'LOZENGE', 'TROCHE': 'LOZENGE',
+            'SUSPENSION': 'SUSP', 'SUSPENSIONS': 'SUSP',
+            'SOLUTION': 'SOLN', 'SOLUTIONS': 'SOLN', 'ORAL SOLUTION': 'SOLN',
+            'SHAMPOOS': 'SHAMPOO',
+            'SOAPS': 'SOAP', 'SOAP BAR': 'SOAP',
+            'OILS': 'OIL',
+            'INHALERS': 'INHALER', 'ROTACAP': 'INHALER', 'ROTACAPS': 'INHALER', 'INHALTION': 'INHALER', 'INHALATION': 'INHALER', 'MDI': 'INHALER',
+            'RESPULE': 'RESPULES', 'NEBULISER': 'RESPULES', 'NEBULIZER': 'RESPULES',
+            'MOUTHWASH': 'GARGLE', 'MOUTH WASH': 'GARGLE', 'GARGLES': 'GARGLE',
+            'SUPPOSITORIES': 'SUPPOSITORY',
+            'PESSARIES': 'PESSARY', 'VAGINAL PESSARY': 'PESSARY', 'VAGINAL TAB': 'PESSARY', 'VAGINAL TABLET': 'PESSARY'
+        };
+        if (rawForm && map[rawForm]) {
+            return map[rawForm];
+        }
+        if (!rawForm && medName) {
+            var m = (medName || '').toString().trim().toUpperCase().match(/\((SYRUPS?|SYR|SYP|TABLETS?|TABS?|CAPSULES?|CAPS?|INJECTIONS?|INJ|DROPS?|OINTMENTS?|OINT|CREAMS?|GELS?|SUSPENSIONS?|SUSP|SOLUTIONS?|SOLN|LOTIONS?|POWDERS?|SACHETS?|INHALERS?|RESPULES?)\)/i);
+            if (m && m[1]) {
+                var ext = m[1].toUpperCase();
+                return map[ext] || ext;
+            }
+        }
+        return rawForm;
+    }
+
+    function setMedTypeSelectValue($select, raw, medName) {
+        if (!$select || !$select.length) return '';
+        var norm = normalizeMedFormType(raw, medName);
+        if (!norm) {
+            $select.val('');
+            return '';
+        }
+        var safeVal = norm.replace(/"/g, '&quot;');
+        if (!$select.find('option[value="' + safeVal + '"]').length) {
+            $select.append('<option value="' + $('<div>').text(norm).html() + '">' + $('<div>').text(norm).html() + '</option>');
+        }
+        $select.val(norm);
+        return norm;
+    }
+
     function setMedicineEditMode(row) {
         $('#med_item_id').val(row.id || 0);
         $('#med_name').val(row.name || '');
         $('#med_name').removeData('med-id');
-        $('#med_type').val(row.type || '');
+        setMedTypeSelectValue($('#med_type'), row.type || '', row.name || '');
         ensureMedicineMasterOption($('#med_dosage'), row.dose || '');
         ensureMedicineMasterOption($('#med_when'), row.when || '');
         ensureMedicineMasterOption($('#med_freq_master'), row.freq || '');
@@ -9731,7 +9795,7 @@
     function applyMedicineSelection(rowData) {
         var medName = (rowData.med_name || '').toString().trim();
         if (medName) { $('#med_name').val(medName); }
-        $('#med_type').val((rowData.med_type || '').toString());
+        var resolvedMedType = setMedTypeSelectValue($('#med_type'), (rowData.med_type || '').toString(), medName);
 
         var dosage = (rowData.dosage || '').toString().trim();
         var whenValue = (rowData.dosage_when || '').toString().trim();
@@ -9740,6 +9804,10 @@
         var daysValue = (rowData.no_of_days || '').toString().trim();
         var qtyValue = (rowData.qty || '').toString().trim();
         var remarkValue = (rowData.remark || '').toString().trim();
+        if (/^\d+$/.test(dosage)) { dosage = ''; }
+        if (/^\d+$/.test(whenValue)) { whenValue = ''; }
+        if (/^\d+$/.test(freqValue)) { freqValue = ''; }
+        if (/^\d+$/.test(whereValue)) { whereValue = ''; }
 
         if (dosage) {
             ensureMedicineMasterOption($('#med_dosage'), dosage);
@@ -9764,7 +9832,7 @@
             $('#med_where').val(whereValue).trigger('change');
         } else {
             $('#med_where').val('').trigger('change');
-            autoSelectDefaultRoute(rowData.med_type || $('#med_type').val(), $('#med_where'));
+            autoSelectDefaultRoute(resolvedMedType || rowData.med_type || $('#med_type').val(), $('#med_where'));
         }
         if (daysValue) {
             $('#med_days').val(daysValue);
@@ -9987,7 +10055,7 @@
         if (matchedRow) {
             $('#med_name').data('med-id', parseInt(matchedRow.id || 0, 10));
             if (!($('#med_type').val() || '').trim()) {
-                $('#med_type').val((matchedRow.med_type || '').toString());
+                setMedTypeSelectValue($('#med_type'), (matchedRow.med_type || '').toString(), medName);
             }
         }
 
@@ -10129,7 +10197,7 @@
 
         $('#med_name').val(medName).data('med-id', medId).trigger('change');
         if (!($('#med_type').val() || '').trim()) {
-            $('#med_type').val(medType);
+            setMedTypeSelectValue($('#med_type'), medType, medName);
         }
     });
 
@@ -10187,7 +10255,7 @@
 
         $('#med_name').val(medName).data('med-id', medId).trigger('change');
         if (medType) {
-            $('#med_type').val(medType);
+            medType = setMedTypeSelectValue($('#med_type'), medType, medName);
         }
 
         $btn.prop('disabled', true).text('Adding...');
