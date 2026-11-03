@@ -4023,6 +4023,9 @@
     }
 
     function getPayload() {
+        if (typeof syncComplaintSnomedJson === 'function') {
+            syncComplaintSnomedJson();
+        }
         var normalizedVitals = normalizeVitalsInputs(true);
         var morbidities = [];
         var morbiditiesText = [];
@@ -4398,6 +4401,9 @@
     });
 
     function openLegacyPrescriptionPrint(printType) {
+        if (typeof syncComplaintSnomedJson === 'function') {
+            syncComplaintSnomedJson();
+        }
         var openPrint = function() {
             var opdId = $('#opd_id').val() || '0';
             var sessionId = $('#opd_session_id').val() || '0';
@@ -5266,6 +5272,22 @@
     }
 
     function syncComplaintSnomedJson() {
+        $('#complaint_tbody tr[data-idx]').each(function() {
+            var $tr = $(this);
+            var idx = parseInt($tr.attr('data-idx'), 10);
+            if (!isNaN(idx) && idx >= 0 && idx < selectedComplaintItems.length) {
+                var $nameInp = $tr.find('.complaint-name-input');
+                var $freqInp = $tr.find('.complaint-freq-input');
+                var $sevInp  = $tr.find('.complaint-sev-input');
+                var $durInp  = $tr.find('.complaint-dur-input');
+                var $dateInp = $tr.find('.complaint-date-input');
+                if ($nameInp.length) selectedComplaintItems[idx].term      = ($nameInp.val() || '').toString().trim();
+                if ($freqInp.length) selectedComplaintItems[idx].frequency = ($freqInp.val() || '').toString().trim();
+                if ($sevInp.length)  selectedComplaintItems[idx].severity  = ($sevInp.val()  || '').toString().trim();
+                if ($durInp.length)  selectedComplaintItems[idx].duration  = ($durInp.val()  || '').toString().trim();
+                if ($dateInp.length) selectedComplaintItems[idx].date      = ($dateInp.val() || '').toString().trim();
+            }
+        });
         var json = JSON.stringify(selectedComplaintItems.map(function(item) {
             return {
                 term:       item.term,
@@ -5579,7 +5601,16 @@
 
     var _freqDdIdx = -1;
 
-    $(document).on('input focus', '.complaint-freq-input', function() {
+    $(document).on('input focus', '.complaint-freq-input', function(e) {
+        if (e && e.type === 'input') {
+            var idxInp = parseInt($(this).attr('data-idx'), 10);
+            if (!isNaN(idxInp) && idxInp >= 0 && idxInp < selectedComplaintItems.length) {
+                selectedComplaintItems[idxInp].frequency = ($(this).val() || '').trim();
+                syncComplaintSnomedJson();
+                markDirty('Complaint detail updated');
+                scheduleAutoSave();
+            }
+        }
         _freqDdIdx = -1;
         var $inp = $(this);
         var q    = ($inp.val() || '').trim().toLowerCase();
@@ -5593,6 +5624,9 @@
                 $inp.val(val);
                 if (idx >= 0 && idx < selectedComplaintItems.length) {
                     selectedComplaintItems[idx].frequency = val;
+                    syncComplaintSnomedJson();
+                    markDirty('Complaint detail updated');
+                    scheduleAutoSave();
                     syncComplaintSnomedJson();
                 }
                 $('#_freq_dd').remove();
@@ -5630,6 +5664,9 @@
         if (idx >= 0 && idx < selectedComplaintItems.length) {
             selectedComplaintItems[idx].frequency = ($(this).val() || '').trim();
             syncComplaintSnomedJson();
+            markDirty('Complaint detail updated');
+            scheduleAutoSave();
+            syncComplaintSnomedJson();
         }
         setTimeout(function() { $('#_freq_dd').remove(); }, 150);
     });
@@ -5653,7 +5690,16 @@
     });
 
     // ─── Duration: event delegation on table rows ────────────────────────────
-    $(document).on('input focus', '.complaint-dur-input', function() {
+    $(document).on('input focus', '.complaint-dur-input', function(e) {
+        if (e && e.type === 'input') {
+            var idxInp = parseInt($(this).attr('data-idx'), 10);
+            if (!isNaN(idxInp) && idxInp >= 0 && idxInp < selectedComplaintItems.length) {
+                selectedComplaintItems[idxInp].duration = ($(this).val() || '').trim();
+                syncComplaintSnomedJson();
+                markDirty('Complaint detail updated');
+                scheduleAutoSave();
+            }
+        }
         _durDdIdx = -1;
         var $inp = $(this);
         var sugs = getDurationSuggestions($inp.val());
@@ -5665,6 +5711,9 @@
                 $inp.val(val);
                 if (idx >= 0 && idx < selectedComplaintItems.length) {
                     selectedComplaintItems[idx].duration = val;
+                    syncComplaintSnomedJson();
+                    markDirty('Complaint detail updated');
+                    scheduleAutoSave();
                     syncComplaintSnomedJson();
                 }
                 $dd.hide().empty();
@@ -5716,7 +5765,16 @@
         return _SEVERITY_OPTIONS.filter(function(s) { return s.startsWith(q); });
     }
 
-    $(document).on('input focus', '.complaint-sev-input', function() {
+    $(document).on('input focus', '.complaint-sev-input', function(e) {
+        if (e && e.type === 'input') {
+            var idxInp = parseInt($(this).attr('data-idx'), 10);
+            if (!isNaN(idxInp) && idxInp >= 0 && idxInp < selectedComplaintItems.length) {
+                selectedComplaintItems[idxInp].severity = ($(this).val() || '').trim();
+                syncComplaintSnomedJson();
+                markDirty('Complaint detail updated');
+                scheduleAutoSave();
+            }
+        }
         _sevDdIdx = -1;
         var $inp = $(this);
         var sugs = getSeveritySuggestions($inp.val());
@@ -5728,6 +5786,9 @@
                 $inp.val(val);
                 if (idx >= 0 && idx < selectedComplaintItems.length) {
                     selectedComplaintItems[idx].severity = val;
+                    syncComplaintSnomedJson();
+                    markDirty('Complaint detail updated');
+                    scheduleAutoSave();
                     syncComplaintSnomedJson();
                 }
                 $dd.hide().empty();

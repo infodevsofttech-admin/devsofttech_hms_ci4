@@ -3939,6 +3939,9 @@ class Opd extends BaseController
                 foreach ($detailMap as $detailKey => $detailLabel) {
                     $value = trim((string) ($item[$detailKey] ?? ''));
                     if ($value !== '') {
+                        if ($detailKey === 'date' && preg_match('/^\d{4}-\d{2}-\d{2}$/', $value) === 1 && ($ts = strtotime($value)) !== false) {
+                            $value = date('d-m-Y', $ts);
+                        }
                         $details[] = $detailLabel . ': ' . $value;
                     }
                 }
@@ -3966,6 +3969,19 @@ class Opd extends BaseController
         $tokens['next_visit_raw'] = (string) ($tokens['next_visit'] ?? '');
 
         $complaintItems = $parseClinicalJsonItems((string) ($tokens['complaint_snomed_json'] ?? ''));
+        if (empty($complaintItems)) {
+            $complaintItems = $splitClinicalText((string) ($tokens['Complaint_raw'] ?? ''));
+            if (! empty($complaintItems)) {
+                $legacySev = trim((string) ($tokens['complaint_severity'] ?? ''));
+                $legacyDur = trim((string) ($tokens['complaint_duration_days'] ?? ''));
+                if ($legacySev !== '' && empty($complaintItems[0]['severity'])) {
+                    $complaintItems[0]['severity'] = $legacySev;
+                }
+                if ($legacyDur !== '' && empty($complaintItems[0]['duration'])) {
+                    $complaintItems[0]['duration'] = is_numeric($legacyDur) ? ($legacyDur . ' days') : $legacyDur;
+                }
+            }
+        }
         if (empty($complaintItems)) {
             $complaintItems = $splitClinicalText((string) ($tokens['Complaint_raw'] ?? ''));
         }
@@ -3999,7 +4015,19 @@ class Opd extends BaseController
         foreach ($diagnosisItems as $item) {
             $term = trim((string) ($item['term'] ?? ''));
             if ($term !== '') {
-                $diagnosisTerms[] = $term;
+                $dxDetails = [];
+                $dxDur = trim((string) ($item['duration'] ?? ''));
+                $dxDate = trim((string) ($item['date'] ?? ''));
+                if ($dxDur !== '') {
+                    $dxDetails[] = 'Duration: ' . $dxDur;
+                }
+                if ($dxDate !== '') {
+                    if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dxDate) === 1 && ($ts = strtotime($dxDate)) !== false) {
+                        $dxDate = date('d-m-Y', $ts);
+                    }
+                    $dxDetails[] = 'Date: ' . $dxDate;
+                }
+                $diagnosisTerms[] = $term . (! empty($dxDetails) ? ' (' . implode(' | ', $dxDetails) . ')' : '');
             }
         }
         $tokens['diagnosis_list_compact'] = implode(', ', array_values(array_unique($diagnosisTerms)));
@@ -4008,11 +4036,21 @@ class Opd extends BaseController
         $vitalCoreRaw = (string) ($tokens['vital_content_raw'] ?? '');
         $tokens['vital_content'] = $vitalCoreRaw;
         $tokens['vital_content_block'] = $formatBlock('Vitals', $vitalCoreRaw, false);
-        $complaintBlockValue = trim((string) ($tokens['complaint_list_compact'] ?? ''));
+        $complaintBlockValue = trim((string) ($tokens['complaint_list'] ?? ''));
         if ($complaintBlockValue === '') {
-            $complaintBlockValue = trim((string) ($tokens['Complaint_raw'] ?? ''));
+            $rawComplaintFallback = trim(str_replace(["\r\n", "\r"], "\n", (string) ($tokens['Complaint_raw'] ?? '')));
+            $complaintBlockValue = $rawComplaintFallback !== '' ? nl2br($escape($rawComplaintFallback)) : '';
         }
-        $tokens['Complaint'] = $formatBlock('Complaint', $escape($complaintBlockValue), false);
+        $tokens['Complaint'] = $formatBlock('Complaint', $complaintBlockValue, true);
+        $tokens['complaint'] = $tokens['Complaint'];
+        $tokens['complaints'] = $tokens['Complaint'];
+        if ($complaintBlockValue === '') {
+        if ($complaintBlockValue === '') {
+            $rawComplaintFallback = trim(str_replace(["\r\n", "\r"], "\n", (string) ($tokens['Complaint_raw'] ?? '')));
+            $complaintBlockValue = $rawComplaintFallback !== '' ? nl2br($escape($rawComplaintFallback)) : '';
+        }
+        }
+        // Keep multi-line complaint list with Frequency, Severity, Duration, Date intact.
         $tokens['complaint'] = $tokens['Complaint'];
         $diagnosisBlockValue = trim((string) ($tokens['diagnosis_list_compact'] ?? ''));
         if ($diagnosisBlockValue === '') {

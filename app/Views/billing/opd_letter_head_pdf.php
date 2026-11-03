@@ -285,7 +285,36 @@ $toLocalText = static function (string $input): string {
 
     <?php if ($showPart3) : ?>
     <?php if (!empty($rx['complaints'] ?? '')) : ?>
+        <?php
+        $complaintRawJson = trim((string) ($rx['complaint_snomed_json'] ?? ''));
+        $complaintJsonRows = $complaintRawJson !== '' ? json_decode($complaintRawJson, true) : null;
+        if (is_array($complaintJsonRows) && ! empty($complaintJsonRows)) :
+        ?>
+        <div class="section-line">
+            <span class="label">Complaint :</span>
+            <ul style="margin:3px 0 0 16px;padding:0;">
+                <?php foreach ($complaintJsonRows as $cRow) :
+                    $cTerm = trim((string) ($cRow['term'] ?? $cRow['name'] ?? ''));
+                    if ($cTerm === '') continue;
+                    $cMeta = [];
+                    if (! empty($cRow['frequency'])) $cMeta[] = 'Freq: ' . trim((string) $cRow['frequency']);
+                    if (! empty($cRow['severity'])) $cMeta[] = 'Severity: ' . trim((string) $cRow['severity']);
+                    if (! empty($cRow['duration'])) $cMeta[] = 'Duration: ' . trim((string) $cRow['duration']);
+                    if (! empty($cRow['date'])) {
+                        $cDate = trim((string) $cRow['date']);
+                        if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $cDate) === 1 && ($ts = strtotime($cDate)) !== false) {
+                            $cDate = date('d-m-Y', $ts);
+                        }
+                        $cMeta[] = 'Date: ' . $cDate;
+                    }
+                ?>
+                <li><?= esc($cTerm) ?><?= ! empty($cMeta) ? ' <span class="muted">(' . esc(implode(' | ', $cMeta)) . ')</span>' : '' ?></li>
+                <?php endforeach; ?>
+            </ul>
+        </div>
+        <?php else : ?>
         <div class="section-line"><span class="label">Complaint :</span> <?= nl2br(esc((string) ($rx['complaints'] ?? ''))) ?></div>
+        <?php endif; ?>
     <?php endif; ?>
 
     <?php if (!empty($vitals)) : ?>
