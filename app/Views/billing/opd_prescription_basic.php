@@ -1072,6 +1072,8 @@
                                 <input type="hidden" id="complaint_duration_days" value="<?= esc($opd_prescription[0]->complaint_duration_days ?? '') ?>">
                                 <input type="hidden" id="complaint_severity"      value="<?= strtolower(trim((string)($opd_prescription[0]->complaint_severity ?? ''))) ?>">
                                 <input type="hidden" id="complaints"              value="<?= esc($opd_prescription[0]->complaints ?? '') ?>">
+                                <div class="rx-recent-chip-label">Recent complaints</div>
+                                <div class="rx-recent-chip-box" id="recent_chips_complaints"><span class="text-muted small">Loading...</span></div>
                             </div>
 
                             <div class="mb-3" id="rx_sec_examination">
