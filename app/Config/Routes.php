@@ -1092,6 +1092,7 @@ $routes->get('Opd_prescription/medicine_list/(:num)', 'Opd_prescription::medicin
 $routes->get('Opd_prescription/vitals_get/(:num)', 'Opd_prescription::vitals_get/$1');
 $routes->post('Opd_prescription/vitals_save', 'Opd_prescription::vitals_save');
 $routes->post('Opd_prescription/medicine_add', 'Opd_prescription::medicine_add');
+$routes->post('Opd_prescription/medicine_sync_master_defaults', 'Opd_prescription::medicine_sync_master_defaults');
 $routes->post('Opd_prescription/medicine_favorite_toggle', 'Opd_prescription::medicine_favorite_toggle');
 $routes->post('Opd_prescription/medicine_update/(:num)', 'Opd_prescription::medicine_update/$1');
 $routes->post('Opd_prescription/medicine_remove/(:num)', 'Opd_prescription::medicine_remove/$1');

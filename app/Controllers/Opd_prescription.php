@@ -165,6 +165,49 @@ class Opd_prescription extends BaseController
             }
         }
 
+        $nabhHistory = $this->getPatientNabhHistory($patientId, $opdId);
+        $nabhPrefilledFromHistory = false;
+        if (empty($prescription)) {
+            if ($this->hasMeaningfulNabhHistory($nabhHistory)) {
+                $prescription = [(object) $nabhHistory];
+                $nabhPrefilledFromHistory = true;
+            }
+        } else {
+            $first = $prescription[0];
+            $curStatus = strtolower(trim((string) ($first->drug_allergy_status ?? '')));
+            $curDetails = trim((string) ($first->drug_allergy_details ?? ''));
+            $curAdr = trim((string) ($first->adr_history ?? ''));
+            $curMeds = trim((string) ($first->current_medications ?? ''));
+
+            if (($curStatus === '' || in_array($curStatus, ['allergies not known', 'not known'], true)) && $curDetails === '' && ! empty($nabhHistory['drug_allergy_status'])) {
+                $histStatusNorm = strtolower(trim((string) $nabhHistory['drug_allergy_status']));
+                if (! in_array($histStatusNorm, ['', 'allergies not known', 'not known'], true) || ! empty($nabhHistory['drug_allergy_details'])) {
+                    $first->drug_allergy_status = (string) $nabhHistory['drug_allergy_status'];
+                    $nabhPrefilledFromHistory = true;
+                }
+            }
+            if ($curDetails === '' && ! empty($nabhHistory['drug_allergy_details']) && ! in_array(strtolower(trim((string) ($first->drug_allergy_status ?? ''))), ['no known drug allergy', 'none'], true)) {
+                $first->drug_allergy_details = (string) $nabhHistory['drug_allergy_details'];
+                if (in_array(strtolower(trim((string) ($first->drug_allergy_status ?? ''))), ['', 'allergies not known', 'not known'], true)) {
+                    $first->drug_allergy_status = 'Known';
+                }
+                $nabhPrefilledFromHistory = true;
+            }
+            if ($curAdr === '' && ! empty($nabhHistory['adr_history'])) {
+                $first->adr_history = (string) $nabhHistory['adr_history'];
+                $nabhPrefilledFromHistory = true;
+            }
+            if ($curMeds === '' && ! empty($nabhHistory['current_medications'])) {
+                $first->current_medications = (string) $nabhHistory['current_medications'];
+                $nabhPrefilledFromHistory = true;
+            }
+            $prescription[0] = $first;
+        }
+        if (false) {
+            if (false) {
+            }
+        }
+
         return view('billing/opd_prescription_basic', [
             'opd_id' => $opdId,
             'opd_master' => $opdMaster,
@@ -175,6 +218,7 @@ class Opd_prescription extends BaseController
             'addiction_flags' => $this->getPatientAddictionFlags($patientId),
             'co_morbidities' => $this->getCoMorbiditiesWithSelection($patientId),
             'co_morbidities_prefilled_from_history' => $this->hasHistoricalCoMorbiditySelection($patientId),
+            'nabh_prefilled_from_history' => $nabhPrefilledFromHistory ?? false,
             'history_alerts' => $this->buildPatientHistoryAlerts((int) ($opdRow->p_id ?? 0), $opdId),
             'left_remarks' => $this->fetchPatientRemarks((int) ($opdRow->p_id ?? 0), 8),
         ]);
@@ -490,6 +534,11 @@ class Opd_prescription extends BaseController
             ? mb_strtolower($allergyStatusNormalized)
             : strtolower($allergyStatusNormalized);
         $allergyDetails = trim((string) ($payload['drug_allergy_details'] ?? ''));
+        if ($allergyDetails !== '' && in_array($allergyStatusNorm, ['', 'allergies not known', 'not known'], true)) {
+            $payload['drug_allergy_status'] = 'Known';
+            $allergyStatusRaw = 'Known';
+            $allergyStatusNorm = 'known';
+        }
 
         if ($allergyStatusRaw === '') {
             return $this->response->setJSON([
@@ -720,6 +769,7 @@ class Opd_prescription extends BaseController
 
         $morbidityIds = $this->parseNumericList((string) $this->request->getPost('morbidities_list'));
         $this->syncPatientMorbidities((int) ($opdRow->p_id ?? 0), $morbidityIds);
+        $this->syncPatientNabhHistory((int) ($opdRow->p_id ?? 0), $nabhInput);
 
         if (in_array('Prescriber_Remarks', $fields, true)) {
             $coMorbiditiesText = trim((string) $this->request->getPost('morbidities_text'));
@@ -9054,6 +9104,12 @@ class Opd_prescription extends BaseController
         }
 
         $this->applyDoseMasterStringFields($insert, $fields);
+        if ($medId <= 0) {
+            $medId = $this->resolveMedicineMasterIdByName($medName);
+        }
+        if ($medId > 0) {
+            $this->syncMedicineMasterDefaults($medId, $insert);
+        }
 
         $user = auth()->user();
         if (in_array('update_by', $fields, true)) {
@@ -9203,6 +9259,9 @@ class Opd_prescription extends BaseController
 
             if (! empty($update)) {
                 $this->db->table($table)->where('id', $medId)->update($update);
+        foreach (glob(WRITEPATH . 'cache/medicine_search_*') ?: [] as $cacheFile) {
+            @unlink($cacheFile);
+        }
                 $detailsUpdated = true;
             }
         }
@@ -9283,6 +9342,49 @@ class Opd_prescription extends BaseController
      *
      * @param array<string, mixed> $defaults
      */
+    public function medicine_sync_master_defaults()
+    {
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
+        }
+
+        $medId = (int) $this->request->getPost('med_id');
+        $medName = trim((string) $this->request->getPost('med_name'));
+        $medType = trim((string) $this->request->getPost('med_type'));
+
+        if ($medId <= 0 && $medName !== '') {
+            $medId = $this->resolveMedicineMasterIdByName($medName);
+        }
+
+        if ($medId <= 0) {
+            return $this->response->setJSON([
+                'update' => 0,
+                'med_id' => 0,
+                'csrfName' => csrf_token(),
+                'csrfHash' => csrf_hash(),
+            ]);
+        }
+
+        $this->syncMedicineMasterDefaults($medId, [
+            'med_name' => $medName,
+            'med_type' => $medType,
+            'dosage' => trim((string) $this->request->getPost('dosage')),
+            'dosage_when' => trim((string) $this->request->getPost('dosage_when')),
+            'dosage_freq' => trim((string) $this->request->getPost('dosage_freq')),
+            'dosage_where' => trim((string) $this->request->getPost('dosage_where')),
+            'no_of_days' => trim((string) $this->request->getPost('no_of_days')),
+            'qty' => trim((string) $this->request->getPost('qty')),
+            'remark' => trim((string) $this->request->getPost('remark')),
+        ]);
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'med_id' => $medId,
+            'csrfName' => csrf_token(),
+            'csrfHash' => csrf_hash(),
+        ]);
+    }
+
     private function syncMedicineMasterDefaults(int $medId, array $defaults): void
     {
         if ($medId <= 0) {
@@ -9300,6 +9402,7 @@ class Opd_prescription extends BaseController
         }
 
         $fieldMap = [
+            'med_type' => $this->resolveFirstField($fields, ['formulation']),
             'dosage' => $this->resolveFirstField($fields, ['dosage']),
             'dosage_when' => $this->resolveFirstField($fields, ['dosage_when']),
             'dosage_freq' => $this->resolveFirstField($fields, ['dosage_freq']),
@@ -9316,6 +9419,11 @@ class Opd_prescription extends BaseController
             }
 
             $value = trim((string) ($defaults[$payloadKey] ?? ''));
+            if ($payloadKey === 'med_type') {
+                $value = $this->normalizeMedicineFormulation($value, (string) ($defaults['med_name'] ?? ''));
+            } elseif (in_array($payloadKey, ['dosage', 'dosage_when', 'dosage_freq', 'dosage_where'], true)) {
+                $value = $this->sanitizeMedicineMasterDefaultField($value, $payloadKey);
+            }
             if ($value === '') {
                 continue;
             }
@@ -9328,6 +9436,9 @@ class Opd_prescription extends BaseController
         }
 
         $this->db->table($table)->where('id', $medId)->update($update);
+        foreach (glob(WRITEPATH . 'cache/medicine_search_*') ?: [] as $cacheFile) {
+            @unlink($cacheFile);
+        }
     }
 
     /**
@@ -9495,6 +9606,7 @@ class Opd_prescription extends BaseController
         }
         if ($masterMedId > 0) {
             $this->trackMedicineUsage($masterMedId);
+            $this->syncMedicineMasterDefaults($masterMedId, array_replace($current, $update));
         }
 
         $sessionId = (int) ($current['opd_pre_id'] ?? 0);
@@ -10131,13 +10243,146 @@ class Opd_prescription extends BaseController
         return $unmapped;
     }
 
+    private function hasMeaningfulNabhHistory(array $history): bool
+    {
+        $statusNorm = strtolower(trim((string) ($history['drug_allergy_status'] ?? '')));
+        if (! in_array($statusNorm, ['', 'allergies not known', 'not known'], true)) {
+            return true;
+        }
+        return trim((string) ($history['drug_allergy_details'] ?? '')) !== ''
+            || trim((string) ($history['adr_history'] ?? '')) !== ''
+            || trim((string) ($history['current_medications'] ?? '')) !== '';
+    }
+
+    private function getPatientNabhHistory(int $patientId, int $currentOpdId = 0): array
+    {
+        $history = [
+            'drug_allergy_status' => '',
+            'drug_allergy_details' => '',
+            'adr_history' => '',
+            'current_medications' => '',
+        ];
+
+        if ($patientId <= 0) {
+            return $history;
+        }
+
+        if ($this->db->tableExists('patient_master')) {
+            $pFields = $this->db->getFieldNames('patient_master') ?? [];
+            $select = [];
+            foreach (array_keys($history) as $f) {
+                if (in_array($f, $pFields, true)) {
+                    $select[] = $f;
+                }
+            }
+            if (! empty($select)) {
+                $pRow = $this->db->table('patient_master')
+                    ->select(implode(',', $select))
+                    ->where('id', $patientId)
+                    ->get(1)
+                    ->getRowArray() ?? [];
+                foreach ($select as $f) {
+                    $val = trim((string) ($pRow[$f] ?? ''));
+                    if ($val !== '') {
+                        $history[$f] = $val;
+                    }
+                }
+            }
+        }
+
+        if ($this->db->tableExists('opd_prescription')) {
+            $builder = $this->db->table('opd_prescription')
+                ->where('p_id', $patientId);
+            if ($currentOpdId > 0) {
+                $builder->where('opd_id !=', $currentOpdId);
+            }
+            $rows = $builder->orderBy('id', 'DESC')->limit(20)->get()->getResultArray();
+            foreach ($rows as $row) {
+                $nabh = $this->hydrateNabhPrescriptionFields($row, (string) ($row['Prescriber_Remarks'] ?? ''));
+                $statusVal = trim((string) ($nabh['drug_allergy_status'] ?? ''));
+                $statusNorm = strtolower($statusVal);
+                $detailsVal = trim((string) ($nabh['drug_allergy_details'] ?? ''));
+                $adrVal = trim((string) ($nabh['adr_history'] ?? ''));
+                $medsVal = trim((string) ($nabh['current_medications'] ?? ''));
+
+                if (($history['drug_allergy_status'] === '' || in_array(strtolower($history['drug_allergy_status']), ['allergies not known', 'not known'], true))
+                    && (! in_array($statusNorm, ['', 'allergies not known', 'not known'], true) || $detailsVal !== '')
+                ) {
+                    $history['drug_allergy_status'] = $detailsVal !== '' && in_array($statusNorm, ['', 'allergies not known', 'not known'], true)
+                        ? 'Known'
+                        : $statusVal;
+                }
+                if ($history['drug_allergy_details'] === '' && $detailsVal !== '' && ! in_array(strtolower($history['drug_allergy_status']), ['no known drug allergy', 'none'], true)) {
+                    $history['drug_allergy_details'] = $detailsVal;
+                    if (in_array(strtolower($history['drug_allergy_status']), ['', 'allergies not known', 'not known'], true)) {
+                        $history['drug_allergy_status'] = 'Known';
+                    }
+                }
+                if ($history['adr_history'] === '' && $adrVal !== '') {
+                    $history['adr_history'] = $adrVal;
+                }
+                if ($history['current_medications'] === '' && $medsVal !== '') {
+                    $history['current_medications'] = $medsVal;
+                }
+
+                if ($history['drug_allergy_status'] !== '' && $history['adr_history'] !== '' && $history['current_medications'] !== '') {
+                    break;
+                }
+            }
+        }
+
+        return $history;
+    }
+
+    private function syncPatientNabhHistory(int $patientId, array $input): void
+    {
+        if ($patientId <= 0 || ! $this->db->tableExists('patient_master')) {
+            return;
+        }
+
+        $pFields = $this->db->getFieldNames('patient_master') ?? [];
+        $update = [];
+
+        $statusVal = trim((string) ($input['drug_allergy_status'] ?? ''));
+        $statusNorm = strtolower($statusVal);
+        $detailsVal = trim((string) ($input['drug_allergy_details'] ?? ''));
+        $adrVal = trim((string) ($input['adr_history'] ?? ''));
+        $medsVal = trim((string) ($input['current_medications'] ?? ''));
+
+        if ($detailsVal !== '' && in_array($statusNorm, ['', 'allergies not known', 'not known'], true)) {
+            $statusVal = 'Known';
+            $statusNorm = 'known';
+        }
+
+        if (in_array('drug_allergy_status', $pFields, true) && ($detailsVal !== '' || ! in_array($statusNorm, ['', 'allergies not known', 'not known'], true))) {
+            $update['drug_allergy_status'] = $statusVal;
+        }
+        if (in_array('drug_allergy_details', $pFields, true)) {
+            if (in_array($statusNorm, ['no known drug allergy', 'none'], true)) {
+                $update['drug_allergy_details'] = '';
+            } elseif ($detailsVal !== '') {
+                $update['drug_allergy_details'] = $detailsVal;
+            }
+        }
+        if (in_array('adr_history', $pFields, true) && $adrVal !== '') {
+            $update['adr_history'] = $adrVal;
+        }
+        if (in_array('current_medications', $pFields, true) && $medsVal !== '') {
+            $update['current_medications'] = $medsVal;
+        }
+
+        if (! empty($update)) {
+            $this->db->table('patient_master')->where('id', $patientId)->update($update);
+        }
+    }
+
     private function extractNabhFieldsFromRemarks(string $remarks): array
     {
         $extract = static function (string $pattern, string $source): string {
             if (preg_match($pattern, $source, $m) !== 1) {
                 return '';
             }
-            return trim((string) ($m[1] ?? ''));
+            return str_replace(' \\n ', "\n", trim((string) ($m[1] ?? '')));
         };
 
         return [
@@ -10151,6 +10396,9 @@ class Opd_prescription extends BaseController
     private function upsertNabhFieldsIntoRemarks(string $remarks, array $input): string
     {
         $clean = $this->stripNabhFieldsFromRemarks($remarks);
+        foreach ($input as $k => $v) {
+            $input[$k] = preg_replace('/\r\n|\r|\n/', ' \\n ', trim((string) $v)) ?? trim((string) $v);
+        }
 
         $lines = [];
         if (trim((string) ($input['drug_allergy_status'] ?? '')) !== '') {
@@ -10271,7 +10519,7 @@ class Opd_prescription extends BaseController
                 return '';
             }
 
-            return trim((string) ($m[1] ?? ''));
+            return str_replace(' \\n ', "\n", trim((string) ($m[1] ?? '')));
         };
 
         return [
@@ -13703,6 +13951,28 @@ OPD SNAPSHOT JSON: " . $payload;
                 $alerts[] = [
                     'type' => 'Vitals Trend',
                     'message' => $dateLabel . ': ' . implode(' | ', $vitalLine),
+                ];
+            }
+
+            $nabhAlerts = $this->hydrateNabhPrescriptionFields($row, (string) ($row['Prescriber_Remarks'] ?? ''));
+            $nabhAllergyDetails = trim((string) ($nabhAlerts['drug_allergy_details'] ?? ''));
+            $nabhAllergyStatus = trim((string) ($nabhAlerts['drug_allergy_status'] ?? ''));
+            if ($nabhAllergyDetails !== '' || in_array(strtolower($nabhAllergyStatus), ['known', 'no known drug allergy'], true)) {
+                $alerts[] = [
+                    'type' => 'Drug Allergy',
+                    'message' => $dateLabel . ': ' . ($nabhAllergyDetails !== '' ? ($nabhAllergyStatus !== '' ? $nabhAllergyStatus . ' - ' : '') . $nabhAllergyDetails : $nabhAllergyStatus),
+                ];
+            }
+            if (trim((string) ($nabhAlerts['adr_history'] ?? '')) !== '') {
+                $alerts[] = [
+                    'type' => 'ADR History',
+                    'message' => $dateLabel . ': ' . trim((string) $nabhAlerts['adr_history']),
+                ];
+            }
+            if (trim((string) ($nabhAlerts['current_medications'] ?? '')) !== '') {
+                $alerts[] = [
+                    'type' => 'Current Medications',
+                    'message' => $dateLabel . ': ' . trim((string) $nabhAlerts['current_medications']),
                 ];
             }
 

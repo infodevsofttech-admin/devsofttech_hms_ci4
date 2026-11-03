@@ -924,16 +924,22 @@
                                                 </div>
                                                 <div class="col-md-8">
                                                     <label class="form-label mb-1">Drug Allergy Details <span class="small text-muted">(when status = Known)</span></label>
-                                                    <input type="text" class="form-control form-control-sm rx-instant" id="drug_allergy_details" placeholder="e.g. Penicillin rash, NSAID gastritis" value="<?= esc($opd_prescription[0]->drug_allergy_details ?? '') ?>">
+                                                    <textarea class="form-control form-control-sm rx-instant rx-field" id="drug_allergy_details" rows="2" maxlength="4000" placeholder="e.g. Penicillin rash, NSAID gastritis (multiple lines allowed)"><?= esc($opd_prescription[0]->drug_allergy_details ?? '') ?></textarea>
+                                                    <div class="rx-counter" id="counter_drug_allergy_details">0/4000</div>
                                                     <div id="drug_allergy_details_error" class="invalid-feedback d-block" style="display:none;"></div>
                                                 </div>
                                                 <div class="col-md-6">
                                                     <label class="form-label mb-1">ADR History</label>
-                                                    <input type="text" class="form-control form-control-sm rx-instant" id="adr_history" placeholder="Previous adverse drug reaction details" value="<?= esc($opd_prescription[0]->adr_history ?? '') ?>">
+                                                    <textarea class="form-control form-control-sm rx-instant rx-field" id="adr_history" rows="2" maxlength="4000" placeholder="Previous adverse drug reaction details (multiple lines allowed)"><?= esc($opd_prescription[0]->adr_history ?? '') ?></textarea>
+                                                    <div class="rx-counter" id="counter_adr_history">0/4000</div>
                                                 </div>
                                                 <div class="col-md-6">
                                                     <label class="form-label mb-1">Current Medications</label>
-                                                    <input type="text" class="form-control form-control-sm rx-instant" id="current_medications" placeholder="Current/ongoing medicines" value="<?= esc($opd_prescription[0]->current_medications ?? '') ?>">
+                                                    <textarea class="form-control form-control-sm rx-instant rx-field" id="current_medications" rows="2" maxlength="4000" placeholder="Current/ongoing medicines (multiple lines allowed)"><?= esc($opd_prescription[0]->current_medications ?? '') ?></textarea>
+                                                    <div class="rx-counter" id="counter_current_medications">0/4000</div>
+                                                    <?php if (!empty($nabh_prefilled_from_history ?? false)) { ?>
+                                                        <div class="small text-muted mt-1">Prefilled from patient history.</div>
+                                                    <?php } ?>
                                                 </div>
                                             </div>
                                         </div>
@@ -2415,7 +2421,12 @@
 
         var matchedVal = '';
         $sel.find('option').each(function() {
+            var optVal = ($(this).val() || '').toString().trim().toLowerCase();
             var txt = ($(this).text() || '').toString().trim().toLowerCase();
+            if (optVal === probe) {
+                matchedVal = ($(this).val() || '').toString();
+                return false;
+            }
             if (!txt) {
                 return;
             }
@@ -4333,6 +4344,12 @@
     }
 
     $('#drug_allergy_status,#drug_allergy_details').on('input change', function() {
+        if (this.id === 'drug_allergy_details' && ($(this).val() || '').trim() !== '') {
+            var curStatus = ($('#drug_allergy_status').val() || '').trim().toLowerCase();
+            if (curStatus === '' || curStatus === 'allergies not known' || curStatus === 'not known') {
+                $('#drug_allergy_status').val('Known');
+            }
+        }
         $(this).removeClass('is-invalid');
         if (this.id === 'drug_allergy_status') {
             $('#drug_allergy_status_error').text('').hide();
@@ -9794,7 +9811,67 @@
         }
     });
 
+    var isApplyingMedicineSelection = false;
+    var medMasterSyncTimer = null;
+
+    function updateLocalMedicineMasterCache(medId, medName, defaults) {
+        var upperName = (medName || '').toString().trim().toUpperCase();
+        (medicineSuggestRows || []).forEach(function(r) {
+            if ((medId > 0 && parseInt(r.id || 0, 10) === medId) || (upperName && (r.med_name || '').toString().trim().toUpperCase() === upperName)) {
+                if (defaults.med_type) { r.med_type = defaults.med_type; }
+                if (defaults.dosage !== undefined && defaults.dosage !== '') { r.dosage = defaults.dosage; }
+                if (defaults.dosage_when !== undefined && defaults.dosage_when !== '') { r.dosage_when = defaults.dosage_when; }
+                if (defaults.dosage_freq !== undefined && defaults.dosage_freq !== '') { r.dosage_freq = defaults.dosage_freq; }
+                if (defaults.dosage_where !== undefined && defaults.dosage_where !== '') { r.dosage_where = defaults.dosage_where; }
+                if (defaults.no_of_days !== undefined && defaults.no_of_days !== '') { r.no_of_days = defaults.no_of_days; }
+                if (defaults.qty !== undefined && defaults.qty !== '') { r.qty = defaults.qty; }
+                if (defaults.remark !== undefined && defaults.remark !== '') { r.remark = defaults.remark; }
+            }
+        });
+        medicineSearchCache = {};
+        try {
+            localStorage.removeItem(medicineSearchLocalDbKey);
+        } catch (e) {}
+    }
+
+    function scheduleSyncMedicineMasterDefaults() {
+        if (isApplyingMedicineSelection) {
+            return;
+        }
+        var medName = ($('#med_name').val() || '').toString().trim();
+        var medId = parseInt($('#med_name').data('med-id') || '0', 10);
+        if (!medName && medId <= 0) {
+            return;
+        }
+        if (medMasterSyncTimer) {
+            clearTimeout(medMasterSyncTimer);
+        }
+        medMasterSyncTimer = setTimeout(function() {
+            medMasterSyncTimer = null;
+            var curName = ($('#med_name').val() || '').toString().trim();
+            var curId = parseInt($('#med_name').data('med-id') || '0', 10);
+            if (!curName && curId <= 0) {
+                return;
+            }
+            var defaults = {
+                med_id: curId,
+                med_name: curName,
+                med_type: ($('#med_type').val() || '').toString().trim(),
+                dosage: ($('#med_dosage').val() || '').toString().trim(),
+                dosage_when: ($('#med_when').val() || '').toString().trim(),
+                dosage_freq: ($('#med_freq').val() || '').toString().trim(),
+                dosage_where: ($('#med_where').val() || '').toString().trim(),
+                no_of_days: ($('#med_days').val() || '').toString().trim(),
+                qty: ($('#med_qty').val() || '').toString().trim(),
+                remark: ($('#med_remark').val() || '').toString().trim()
+            };
+            updateLocalMedicineMasterCache(curId, curName, defaults);
+            apiPost('<?= base_url('Opd_prescription/medicine_sync_master_defaults') ?>', defaults, function() {});
+        }, 350);
+    }
+
     function applyMedicineSelection(rowData) {
+        isApplyingMedicineSelection = true;
         var medName = (rowData.med_name || '').toString().trim();
         if (medName) { $('#med_name').val(medName); }
         var resolvedMedType = setMedTypeSelectValue($('#med_type'), (rowData.med_type || '').toString(), medName);
@@ -9819,7 +9896,7 @@
         }
         if (whenValue) {
             ensureMedicineMasterOption($('#med_when'), whenValue);
-            $('#med_when').val(whenValue).trigger('change');
+            setMedicineSelectByLabel('med_when', whenValue);
         } else {
             $('#med_when').val('').trigger('change');
         }
@@ -9831,13 +9908,15 @@
         }
         if (whereValue) {
             ensureMedicineMasterOption($('#med_where'), whereValue);
-            $('#med_where').val(whereValue).trigger('change');
+            setMedicineSelectByLabel('med_where', whereValue);
         } else {
             $('#med_where').val('').trigger('change');
             autoSelectDefaultRoute(resolvedMedType || rowData.med_type || $('#med_type').val(), $('#med_where'));
         }
         if (daysValue) {
             $('#med_days').val(daysValue);
+        } else {
+            $('#med_days').val('');
         }
         if (qtyValue) {
             $('#med_qty').val(qtyValue);
@@ -9846,8 +9925,11 @@
         }
         if (remarkValue) {
             $('#med_remark').val(remarkValue);
+        } else {
+            $('#med_remark').val('');
         }
 
+        isApplyingMedicineSelection = false;
         var medId = parseInt(rowData.id || 0, 10);
         var isFav = parseInt(rowData.is_favorite || 0, 10) === 1;
         if (medId > 0) {
@@ -9861,6 +9943,10 @@
             loadMedicineSubstitutes(medId, medName);
         }
     }
+
+    $('#med_type, #med_dosage, #med_freq, #med_when, #med_where, #med_days, #med_remark').on('change blur', function() {
+        scheduleSyncMedicineMasterDefaults();
+    });
 
     var medNameHighlightIdx = -1;
 
@@ -10096,6 +10182,7 @@
                     $('#opd_session_id').val(data.opd_session_id || sid);
                     clearMedicineForm(true);
                     loadMedicineList();
+                    updateLocalMedicineMasterCache(payload.med_id, payload.med_name, payload);
                     $('.jsError').removeClass('text-danger text-muted').addClass('text-success').text(data.error_text || 'Medicine saved.');
                     // Keep typing flow fast: move cursor back to medicine field.
                     setTimeout(function() {
