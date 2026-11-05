@@ -3906,7 +3906,7 @@ class AbdmGateway extends BaseController
     private function resolveDischargeMedSaltName(string $rawName, int $medId = 0): string
     {
         $rawName = trim($rawName);
-        if ($rawName === '' || in_array(strtoupper($rawName), ['0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
+        if ($rawName === '' || in_array(strtoupper($rawName), ['-', '--', '0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
             return '';
         }
 
@@ -3922,7 +3922,7 @@ class AbdmGateway extends BaseController
                             ->getRowArray();
                         if (!empty($mRow)) {
                             $gen = trim((string) (!empty($mRow['genericname']) ? $mRow['genericname'] : ($mRow['salt_name'] ?? '')));
-                            if ($gen !== '' && ! in_array(strtoupper($gen), ['0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
+                            if ($gen !== '' && ! in_array(strtoupper($gen), ['-', '--', '0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
                                 return $gen;
                             }
                         }
@@ -3935,7 +3935,7 @@ class AbdmGateway extends BaseController
                             ->getRowArray();
                         if (!empty($pRow)) {
                             $gen = trim((string) ($pRow['genericname'] ?? ''));
-                            if ($gen !== '' && ! in_array(strtoupper($gen), ['0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
+                            if ($gen !== '' && ! in_array(strtoupper($gen), ['-', '--', '0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
                                 return $gen;
                             }
                         }
@@ -3957,7 +3957,7 @@ class AbdmGateway extends BaseController
                             ->getRowArray();
                         if (!empty($mRow)) {
                             $gen = trim((string) (!empty($mRow['genericname']) ? $mRow['genericname'] : ($mRow['salt_name'] ?? '')));
-                            if ($gen !== '' && ! in_array(strtoupper($gen), ['0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
+                            if ($gen !== '' && ! in_array(strtoupper($gen), ['-', '--', '0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
                                 return $gen;
                             }
                         }
@@ -3975,7 +3975,7 @@ class AbdmGateway extends BaseController
                             ->getRowArray();
                         if (!empty($pRow)) {
                             $gen = trim((string) ($pRow['genericname'] ?? ''));
-                            if ($gen !== '' && ! in_array(strtoupper($gen), ['0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
+                            if ($gen !== '' && ! in_array(strtoupper($gen), ['-', '--', '0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
                                 return $gen;
                             }
                         }
@@ -3998,7 +3998,7 @@ class AbdmGateway extends BaseController
                                         ->getRowArray();
                                     if (!empty($wRow)) {
                                         $gen = trim((string) (!empty($wRow['genericname']) ? $wRow['genericname'] : ($wRow['salt_name'] ?? '')));
-                                        if ($gen !== '' && ! in_array(strtoupper($gen), ['0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
+                                        if ($gen !== '' && ! in_array(strtoupper($gen), ['-', '--', '0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
                                             return $gen;
                                         }
                                     }

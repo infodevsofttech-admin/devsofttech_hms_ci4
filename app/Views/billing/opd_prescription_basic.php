@@ -10050,6 +10050,9 @@
             var medName = (row.med_name || '').toString().trim();
             var medType = (row.med_type || '').toString().trim();
             var genericName = (row.genericname || row.med_salt || '').toString().trim();
+            if (['-', '--', '0', 'NA', 'N/A', 'NOT_FOUND'].indexOf(genericName.toUpperCase()) !== -1) {
+                genericName = '';
+            }
             var isFav = parseInt(row.is_favorite || 0, 10) === 1;
 
             var $item = $('<div class="px-3 py-2 border-bottom d-flex justify-content-between align-items-center med-name-dd-item" data-idx="' + idx + '" style="cursor:pointer;"></div>');

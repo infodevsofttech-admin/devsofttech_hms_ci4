@@ -2059,7 +2059,7 @@ class Opd_prescription extends BaseController
                     foreach ($medRows as $medRow) {
                         $id = (int) ($medRow['med_id'] ?? 0);
                         $label = trim((string) ($medRow['generic_fallback'] ?? ''));
-                        if ($id > 0 && $label !== '') {
+                        if ($id > 0 && $label !== '' && ! in_array(strtoupper($label), ['-', '--', '0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
                             $medGenericMap[$id] = $label;
                         }
                     }
@@ -2580,6 +2580,12 @@ class Opd_prescription extends BaseController
             if (! in_array('atc_code', $fields, true) && ! in_array('who_atc_code', $fields, true)) {
                 $this->db->query('ALTER TABLE `' . $table . '` ADD COLUMN `atc_code` VARCHAR(32) DEFAULT NULL');
             }
+            $genericField = $this->resolveFirstField($fields, ['genericname', 'generic_name']);
+            if ($genericField !== null) {
+                $this->db->table($table)
+                    ->where($genericField, 'NOT_FOUND')
+                    ->update([$genericField => '-']);
+            }
         } catch (\Throwable $e) {
             // Non-blocking if schema privileges are restricted
         }
@@ -2602,7 +2608,7 @@ class Opd_prescription extends BaseController
             'both_missing' => 0,
         ];
 
-        $unclearTokens = ['na', 'n/a', 'same', '-', '--', 'unknown', '?', '0'];
+        $unclearTokens = ['na', 'n/a', 'same', '--', 'unknown', '?', '0'];
 
         foreach ($rows as $row) {
             $summary['total']++;
@@ -2613,7 +2619,7 @@ class Opd_prescription extends BaseController
 
             $name = mb_strtolower(trim((string) ($row['item_name'] ?? '')));
             $generic = mb_strtolower(trim((string) ($row['genericname'] ?? '')));
-            if ($generic === 'not_found') {
+            if ($generic === '-' || $generic === 'not_found') {
                 $summary['salt_not_found']++;
             } elseif ($generic === '' || in_array($generic, $unclearTokens, true) || ($name !== '' && $generic === $name)) {
                 $summary['generic_missing']++;
@@ -2699,7 +2705,7 @@ class Opd_prescription extends BaseController
             ->get()
             ->getResultArray();
 
-        $unclearTokens = ['na', 'n/a', 'same', '-', '--', 'unknown', '?'];
+        $unclearTokens = ['na', 'n/a', 'same', '--', 'unknown', '?', '0'];
         $normalize = static function ($value): string {
             $text = trim((string) $value);
             if ($text === '') {
@@ -2714,6 +2720,9 @@ class Opd_prescription extends BaseController
                 $name = $normalize($row['item_name'] ?? '');
                 $generic = $normalize($row['genericname'] ?? '');
                 $salt = $normalize($row['salt_name'] ?? '');
+                if ($generic === '-' || $generic === 'not_found') {
+                    return false;
+                }
 
                 $genericUnclear = ($generic === '' || in_array($generic, $unclearTokens, true) || ($name !== '' && $generic === $name));
                 $saltUnclear = ($salt === '' || in_array($salt, $unclearTokens, true) || ($name !== '' && $salt === $name));
@@ -2791,7 +2800,10 @@ class Opd_prescription extends BaseController
         if ($filter === 'unused') {
             $rows = array_values(array_filter($rows, static fn(array $row): bool => (int) ($row['use_count'] ?? 0) <= 0));
         } elseif ($filter === 'salt_not_found') {
-            $rows = array_values(array_filter($rows, static fn(array $row): bool => strcasecmp(trim((string) ($row['genericname'] ?? '')), 'NOT_FOUND') === 0));
+            $rows = array_values(array_filter($rows, static function (array $row): bool {
+                $g = trim((string) ($row['genericname'] ?? ''));
+                return $g === '-' || strcasecmp($g, 'NOT_FOUND') === 0;
+            }));
         }
 
         if (! $showAll) {
@@ -3189,72 +3201,6 @@ class Opd_prescription extends BaseController
             }
         }
 
-        // 3. Live Web Indian Drug Catalog fallback when local + ABDM Bridge return few/no results
-        if (count($rows) < 5) {
-            $webItems = $this->queryWebIndianDrugCatalog($q, '', $limit);
-            foreach ($webItems as $wi) {
-                $display = trim((string) ($wi['display_name'] ?? ''));
-                $generic = trim((string) ($wi['generic_name'] ?? ''));
-                if ($display === '' || $generic === '') {
-                    continue;
-                }
-                $dedupKey = mb_strtolower($display . '|' . $generic);
-                if (isset($seenKeys[$dedupKey])) {
-                    continue;
-                }
-                $seenKeys[$dedupKey] = true;
-
-                $rows[] = [
-                    'display_name' => $display,
-                    'brand_name'   => (string) ($wi['brand_name'] ?? $display),
-                    'generic_name' => $generic,
-                    'formulation'  => (string) ($wi['formulation'] ?? ''),
-                    'company_name' => (string) ($wi['company_name'] ?? ''),
-                    'snomed_code'  => (string) ($wi['snomed_code'] ?? ''),
-                    'route'        => (string) ($wi['route'] ?? ''),
-                    'identifier'   => (string) ($wi['snomed_code'] ?? ''),
-                    'type'         => 'brand',
-                    'source'       => 'Web Drug Catalog',
-                ];
-                if (count($rows) >= $limit) {
-                    break;
-                }
-            }
-        }
-
-        // 3. Live Web Indian Drug Catalog fallback when local + ABDM Bridge return few/no results
-        if (count($rows) < 5) {
-            $webItems = $this->queryWebIndianDrugCatalog($q, '', $limit);
-            foreach ($webItems as $wi) {
-                $display = trim((string) ($wi['display_name'] ?? ''));
-                $generic = trim((string) ($wi['generic_name'] ?? ''));
-                if ($display === '' || $generic === '') {
-                    continue;
-                }
-                $dedupKey = mb_strtolower($display . '|' . $generic);
-                if (isset($seenKeys[$dedupKey])) {
-                    continue;
-                }
-                $seenKeys[$dedupKey] = true;
-
-                $rows[] = [
-                    'display_name' => $display,
-                    'brand_name'   => (string) ($wi['brand_name'] ?? $display),
-                    'generic_name' => $generic,
-                    'formulation'  => (string) ($wi['formulation'] ?? ''),
-                    'company_name' => (string) ($wi['company_name'] ?? ''),
-                    'snomed_code'  => (string) ($wi['snomed_code'] ?? ''),
-                    'route'        => (string) ($wi['route'] ?? ''),
-                    'identifier'   => (string) ($wi['snomed_code'] ?? ''),
-                    'type'         => 'brand',
-                    'source'       => 'Web Drug Catalog',
-                ];
-                if (count($rows) >= $limit) {
-                    break;
-                }
-            }
-        }
-
         return $this->response->setJSON([
             'update' => 1,
             'rows'   => $rows,
@@ -3374,7 +3320,8 @@ class Opd_prescription extends BaseController
             ->getResultArray();
 
         $usageMap = $userId > 0 ? $this->getUserMedicineUsageMap($userId) : [];
-        $unclearTokens = ['na', 'n/a', 'same', '-', '--', 'unknown', '?', '0'];
+        // Note: '-' is the "Salt Not Found" marker (already searched), so it is NOT in $unclearTokens
+        $unclearTokens = ['na', 'n/a', 'same', '--', 'unknown', '?', '0'];
 
         // If usage_mode is 'auto', check if any Used > 0 blank-salt rows exist; if none, automatically process Used = 0
         if ($usageMode === 'auto') {
@@ -3386,6 +3333,9 @@ class Opd_prescription extends BaseController
                 }
                 $rGen  = mb_strtolower(trim((string) ($r[$genericField] ?? '')));
                 $rSalt = $saltField !== null ? mb_strtolower(trim((string) ($r[$saltField] ?? ''))) : '';
+                if ($rGen === '-' || $rGen === 'not_found') {
+                    continue;
+                }
                 if (($rGen === '' || in_array($rGen, $unclearTokens, true)) && ($rSalt === '' || in_array($rSalt, $unclearTokens, true))) {
                     $hasUsedBlank = true;
                     break;
@@ -3413,6 +3363,9 @@ class Opd_prescription extends BaseController
             }
             $rGen  = mb_strtolower(trim((string) ($r[$genericField] ?? '')));
             $rSalt = $saltField !== null ? mb_strtolower(trim((string) ($r[$saltField] ?? ''))) : '';
+            if ($rGen === '-' || $rGen === 'not_found') {
+                continue;
+            }
             $genBlank  = ($rGen === '' || in_array($rGen, $unclearTokens, true));
             $saltBlank = ($rSalt === '' || in_array($rSalt, $unclearTokens, true));
             if ($genBlank && $saltBlank) {
@@ -3445,9 +3398,9 @@ class Opd_prescription extends BaseController
             $match = $this->lookupMedicineFromDrugMaster($itemName, $formulation, $rid, false);
             $newGeneric = trim((string) ($match['genericname'] ?? ''));
             if ($newGeneric === '') {
-                // Tag as NOT_FOUND so subsequent runs skip this medicine and proceed to Used=0
+                // Tag as '-' so subsequent runs skip this medicine and proceed to Used=0 without printing 'NOT_FOUND'
                 $this->db->table($table)->where('id', $rid)->update([
-                    $genericField => 'NOT_FOUND',
+                    $genericField => '-',
                 ]);
                 continue;
             }
@@ -3533,11 +3486,13 @@ class Opd_prescription extends BaseController
         // Phonetic equivalents common in Indian brand names
         $s = str_replace(['PH', 'CK', 'Z'], ['F', 'K', 'S'], $s);
         $s = preg_replace('/G(?=[EIY])/', 'J', $s) ?? $s;
+        // Collapse double letters (e.g. CARIPILL <-> CARIPIL, THYROWELL <-> THYROWEL)
+        $s = preg_replace('/([A-Z])\1+/', '$1', $s) ?? $s;
         return $s;
     }
 
     /**
-     * Consonant skeleton for fuzzy typo matching (e.g. MERABAT and MIRABET both -> MRBT).
+     * Consonant skeleton for fuzzy typo matching (e.g. MERABAT and MIRABET both -> MRBT; TAZZALE and TAZZLE -> TSL).
      */
     private function extractConsonantSkeleton(string $token): string
     {
@@ -3548,7 +3503,8 @@ class Opd_prescription extends BaseController
         // Keep first letter + all non-vowels + digits
         $first = $s[0];
         $rest  = preg_replace('/[AEIOUY]/', '', substr($s, 1)) ?? substr($s, 1);
-        return $first . $rest;
+        $skel  = $first . $rest;
+        return preg_replace('/([A-Z])\1+/', '$1', $skel) ?? $skel;
     }
 
     /**
@@ -4170,6 +4126,8 @@ class Opd_prescription extends BaseController
                     ->where('genericname IS NOT NULL', null, false)
                     ->where('genericname !=', '')
                     ->where('genericname !=', '0')
+                    ->where('genericname !=', '-')
+                    ->where('genericname !=', 'NOT_FOUND')
                     ->limit(25);
                 if ($excludeOpdMedId > 0) {
                     $opdBuilder->where('id !=', $excludeOpdMedId);
@@ -4351,8 +4309,14 @@ class Opd_prescription extends BaseController
                         CURLOPT_TIMEOUT        => 6,
                         CURLOPT_CONNECTTIMEOUT => 3,
                         CURLOPT_SSL_VERIFYPEER => false,
+                        CURLOPT_SSL_VERIFYHOST => 0,
+                        CURLOPT_HTTP_VERSION   => CURL_HTTP_VERSION_1_1,
                         CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
-                        CURLOPT_HTTPHEADER     => ['Accept: application/json'],
+                        CURLOPT_HTTPHEADER     => [
+                            'Accept: application/json',
+                            'Accept-Language: en-US,en;q=0.9',
+                            'Referer: https://pharmeasy.in/',
+                        ],
                     ]);
                     $body = (string) curl_exec($ch);
                     $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
@@ -9766,6 +9730,10 @@ class Opd_prescription extends BaseController
             $nameMetaphone = $nameAlpha !== '' ? metaphone($nameAlpha) : '';
 
             $saltName = trim((string) ($row['med_salt'] ?? ''));
+            if (in_array(strtoupper($saltName), ['-', '--', '0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
+                $saltName = '';
+                $row['med_salt'] = '';
+            }
             $saltUpper = strtoupper($saltName);
             $saltLoose = trim((string) (preg_replace('/[^A-Z0-9]+/', ' ', $saltUpper) ?? $saltUpper));
             $saltNormalized = trim((string) (preg_replace('/[^A-Z0-9]+/', '', $saltUpper) ?? $saltUpper));
@@ -9958,7 +9926,13 @@ class Opd_prescription extends BaseController
         }
 
         $generic = $genericField !== null ? trim((string) ($current[$genericField] ?? '')) : '';
+        if (in_array(strtoupper($generic), ['-', '--', '0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
+            $generic = '';
+        }
         $salt = $saltField !== null ? trim((string) ($current[$saltField] ?? '')) : '';
+        if (in_array(strtoupper($salt), ['-', '--', '0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
+            $salt = '';
+        }
         if ($generic === '' && $salt === '') {
             return $this->response->setJSON(['rows' => []]);
         }
@@ -13798,6 +13772,9 @@ class Opd_prescription extends BaseController
 
             $drugName = $rawDrugName !== '' ? $rawDrugName : trim((string) ($master['item_name'] ?? ''));
             $genericName = trim((string) ($master['genericname'] ?? ''));
+            if (in_array(strtoupper($genericName), ['-', '--', '0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
+                $genericName = '';
+            }
             $medType = trim((string) ($row['med_type'] ?? ''));
             if ($medType === '') {
                 $medType = trim((string) ($master['formulation'] ?? ''));

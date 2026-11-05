@@ -102,6 +102,8 @@ class Filters extends BaseFilters
                     'medical/mobile_save_audit',
                     'medical/stock_audit_reconcile',
                     'medical/mobile_*',
+                    'Opd_prescription/opd_medicince_*',
+                    'opd_prescription/opd_medicince_*',
                 ],
             ],
             // 'honeypot',

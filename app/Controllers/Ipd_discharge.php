@@ -2307,6 +2307,9 @@ class Ipd_discharge extends BaseController
 
                     if (!empty($masterRow)) {
                         $generic = trim((string) (!empty($masterRow['genericname']) ? $masterRow['genericname'] : ($masterRow['salt_name'] ?? '')));
+                        if (in_array(strtoupper($generic), ['-', '--', '0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
+                            $generic = '';
+                        }
                     }
 
                     // Fallback to matching first significant keyword (e.g. "PANTOP" or "ACILOC")
@@ -2327,6 +2330,9 @@ class Ipd_discharge extends BaseController
                                         ->getRowArray();
                                     if (!empty($kwRow)) {
                                         $generic = trim((string) (!empty($kwRow['genericname']) ? $kwRow['genericname'] : ($kwRow['salt_name'] ?? '')));
+                                        if (in_array(strtoupper($generic), ['-', '--', '0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
+                                            $generic = '';
+                                        }
                                         if ($generic !== '') {
                                             break;
                                         }

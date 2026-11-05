@@ -415,6 +415,9 @@ $toLocalText = static function (string $input): string {
                 }
 
                 $generic = trim((string) ($med['genericname'] ?? $med['generic_name'] ?? ''));
+                if (in_array(strtoupper($generic), ['-', '--', '0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
+                    $generic = '';
+                }
                 $dose    = trim((string) ($med['dosage_label'] ?? $med['dosage'] ?? $med['drug_dose'] ?? $med['dose'] ?? ''));
                 $freq    = trim((string) ($med['dosage_freq_label'] ?? $med['dosage_freq'] ?? $med['drug_freq'] ?? $med['frequency'] ?? ''));
                 $when    = trim((string) ($med['dosage_when_label'] ?? $med['dosage_when'] ?? ''));
