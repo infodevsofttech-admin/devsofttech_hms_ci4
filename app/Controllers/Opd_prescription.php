@@ -3334,19 +3334,25 @@ class Opd_prescription extends BaseController
             return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
         }
 
+        $userId = (int) ($this->getCurrentUserId() ?? 0);
+        $csrfName = csrf_token();
+        $csrfHash = csrf_hash();
+        @session_write_close();
+        @set_time_limit(120);
+
         $this->ensureOpdMedMasterCodingColumns();
         $table = $this->findExistingTable(['opd_med_master']);
         if ($table === null) {
             return $this->response->setJSON([
                 'update'     => 0,
                 'error_text' => 'OPD Medicine Master table not found',
-                'csrfName'   => csrf_token(),
-                'csrfHash'   => csrf_hash(),
+                'csrfName'   => $csrfName,
+                'csrfHash'   => $csrfHash,
             ]);
         }
 
         $lastId    = max(0, (int) ($this->request->getPost('last_id') ?? 0));
-        $batchSize = max(5, min(50, (int) ($this->request->getPost('batch_size') ?? 25)));
+        $batchSize = max(1, min(10, (int) ($this->request->getPost('batch_size') ?? 2)));
 
         $fields       = $this->db->getFieldNames($table);
         $nameField    = $this->resolveFirstField($fields, ['item_name', 'med_name']) ?? 'item_name';
@@ -3362,7 +3368,6 @@ class Opd_prescription extends BaseController
             ->getResultArray();
 
         // Only update medicines with Used > 0 and blank/missing Salt/Generic name
-        $userId = (int) ($this->getCurrentUserId() ?? 0);
         $usageMap = $userId > 0 ? $this->getUserMedicineUsageMap($userId) : [];
 
         $unclearTokens = ['na', 'n/a', 'same', '-', '--', 'unknown', '?', '0'];
@@ -3469,8 +3474,8 @@ class Opd_prescription extends BaseController
             'remaining'          => $remainingAfter,
             'has_more'           => $remainingAfter > 0 && $processedCount > 0,
             'updated_items'      => $updatedItems,
-            'csrfName'           => csrf_token(),
-            'csrfHash'           => csrf_hash(),
+            'csrfName'           => $csrfName,
+            'csrfHash'           => $csrfHash,
         ]);
     }
 
@@ -3992,7 +3997,10 @@ class Opd_prescription extends BaseController
             $bestBridgeScore = -1;
             $bestBridgeItem  = null;
 
-            foreach ($parsed['candidates'] as $candQuery) {
+            $bridgeCandidates = $fetchGatewaySubstitutes
+                ? $parsed['candidates']
+                : array_slice($parsed['candidates'], 0, 2);
+            foreach ($bridgeCandidates as $candQuery) {
                 $items = $this->queryAbdmBridgeDrugAutocomplete($candQuery, 'brand', 15);
                 foreach ($items as $it) {
                     $bName = trim((string) ($it['brand_name'] ?? ''));

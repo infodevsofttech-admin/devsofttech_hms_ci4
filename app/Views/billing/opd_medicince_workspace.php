@@ -307,10 +307,22 @@
         var csrf = getCsrfPair();
         payload = payload || {};
         payload[csrf.name] = csrf.value;
-        $.post(url, payload, function(data) {
+        $.ajax({
+            url: url,
+            type: 'POST',
+            data: payload,
+            dataType: 'json',
+            timeout: 45000
+        }).done(function(data) {
             updateCsrf(data);
             cb(data || {});
-        }, 'json');
+        }).fail(function(xhr, status) {
+            var errMsg = 'Request failed (' + (xhr.status || status || 'network error') + ')';
+            if (xhr.responseJSON && (xhr.responseJSON.error_text || xhr.responseJSON.message)) {
+                errMsg = xhr.responseJSON.error_text || xhr.responseJSON.message;
+            }
+            cb({ update: 0, error_text: errMsg });
+        });
     }
 
     function apiGet(url, cb) {
@@ -1307,7 +1319,7 @@
 
             apiPost('<?= base_url('Opd_prescription/opd_medicince_bulk_sync_drug_master') ?>', {
                 last_id: lastId,
-                batch_size: 25
+                batch_size: 2
             }, function(data) {
                 if ((data.update || 0) != 1) {
                     finishBulkSync('Sync stopped: ' + (data.error_text || 'Error'));
@@ -1318,6 +1330,8 @@
                 var upd = parseInt(data.updated_in_batch || 0, 10);
                 var rem = parseInt(data.remaining || 0, 10);
                 var nextLastId = parseInt(data.last_id || lastId, 10);
+                var items = (data && data.updated_items) ? data.updated_items : [];
+                var lastNames = items.map(function(it) { return it.item_name; }).join(', ');
 
                 totalProcessed += proc;
                 totalUpdated += upd;
@@ -1331,6 +1345,7 @@
                     'Processed: ' + totalProcessed + ' / ' + initialRemaining
                     + ' | Updated: ' + totalUpdated
                     + ' | Remaining: ' + rem
+                    + (lastNames ? (' — Last updated: ' + lastNames) : '')
                 );
 
                 if (data.has_more && proc > 0 && !bulkSyncStopRequested) {
