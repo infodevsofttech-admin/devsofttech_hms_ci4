@@ -3352,7 +3352,8 @@ class Opd_prescription extends BaseController
         }
 
         $lastId    = max(0, (int) ($this->request->getPost('last_id') ?? 0));
-        $batchSize = max(1, min(10, (int) ($this->request->getPost('batch_size') ?? 2)));
+        $batchSize = max(1, min(25, (int) ($this->request->getPost('batch_size') ?? 15)));
+        $usageMode = strtolower(trim((string) ($this->request->getPost('usage_mode') ?? 'auto')));
 
         $fields       = $this->db->getFieldNames($table);
         $nameField    = $this->resolveFirstField($fields, ['item_name', 'med_name']) ?? 'item_name';
@@ -3367,10 +3368,27 @@ class Opd_prescription extends BaseController
             ->get()
             ->getResultArray();
 
-        // Only update medicines with Used > 0 and blank/missing Salt/Generic name
         $usageMap = $userId > 0 ? $this->getUserMedicineUsageMap($userId) : [];
-
         $unclearTokens = ['na', 'n/a', 'same', '-', '--', 'unknown', '?', '0'];
+
+        // If usage_mode is 'auto', check if any Used > 0 blank-salt rows exist; if none, automatically process Used = 0
+        if ($usageMode === 'auto') {
+            $hasUsedBlank = false;
+            foreach ($allRows as $r) {
+                $rid = (int) ($r['id'] ?? 0);
+                if (((int) ($usageMap[$rid]['use_count'] ?? 0)) <= 0) {
+                    continue;
+                }
+                $rGen  = mb_strtolower(trim((string) ($r[$genericField] ?? '')));
+                $rSalt = $saltField !== null ? mb_strtolower(trim((string) ($r[$saltField] ?? ''))) : '';
+                if (($rGen === '' || in_array($rGen, $unclearTokens, true)) && ($rSalt === '' || in_array($rSalt, $unclearTokens, true))) {
+                    $hasUsedBlank = true;
+                    break;
+                }
+            }
+            $usageMode = $hasUsedBlank ? 'used' : 'unused';
+        }
+
         $candidates = [];
         foreach ($allRows as $r) {
             $rid = (int) ($r['id'] ?? 0);
@@ -3378,7 +3396,10 @@ class Opd_prescription extends BaseController
                 continue;
             }
             $useCount = (int) ($usageMap[$rid]['use_count'] ?? 0);
-            if ($useCount <= 0) {
+            if ($usageMode === 'used' && $useCount <= 0) {
+                continue;
+            }
+            if ($usageMode === 'unused' && $useCount > 0) {
                 continue;
             }
             $rName = mb_strtolower(trim((string) ($r[$nameField] ?? '')));
@@ -3401,8 +3422,14 @@ class Opd_prescription extends BaseController
         $updatedCount   = 0;
         $newLastId      = $lastId;
         $updatedItems   = [];
+        $batchStartTime = microtime(true);
 
         foreach ($batchRows as $row) {
+            // Time-budgeted batching: allow fast local DB matches to process up to 15-25 per batch,
+            // but stop the batch after 3.5 seconds when external HTTP calls are made so each step stays snappy
+            if ($processedCount > 0 && (microtime(true) - $batchStartTime) >= 3.5) {
+                break;
+            }
             $rid       = (int) ($row['id'] ?? 0);
             $newLastId = max($newLastId, $rid);
             $processedCount++;
@@ -3468,6 +3495,7 @@ class Opd_prescription extends BaseController
 
         return $this->response->setJSON([
             'update'             => 1,
+            'usage_mode'         => $usageMode,
             'processed_in_batch' => $processedCount,
             'updated_in_batch'   => $updatedCount,
             'last_id'            => $newLastId,

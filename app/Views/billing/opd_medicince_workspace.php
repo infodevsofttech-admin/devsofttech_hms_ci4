@@ -1283,7 +1283,11 @@
         if (bulkSyncRunning) {
             return;
         }
-        if (!window.confirm('Update blank Generic/Salt names for Used > 0 OPD medicines from Drug Master now?')) {
+        var requestedMode = (activeListFilter === 'unused') ? 'unused' : 'auto';
+        var confirmMsg = (requestedMode === 'unused')
+            ? 'Update blank Generic/Salt names for Unused (Used = 0) OPD medicines from Drug Master now?'
+            : 'Update blank Generic/Salt names from Drug Master now? (Prioritizes Used > 0 first, then Used = 0)';
+        if (!window.confirm(confirmMsg)) {
             return;
         }
 
@@ -1292,6 +1296,7 @@
         var totalProcessed = 0;
         var totalUpdated = 0;
         var initialRemaining = 0;
+        var lockedMode = requestedMode;
 
         $('#btn_med_bulk_sync_salt').prop('disabled', true).text('Syncing...');
         $('#btn_med_bulk_sync_stop').prop('disabled', false).text('Stop').show();
@@ -1319,8 +1324,17 @@
 
             apiPost('<?= base_url('Opd_prescription/opd_medicince_bulk_sync_drug_master') ?>', {
                 last_id: lastId,
-                batch_size: 2
+                batch_size: 15,
+                usage_mode: lockedMode
             }, function(data) {
+                if (data && data.usage_mode) {
+                    lockedMode = data.usage_mode;
+                    $('#med_bulk_sync_title').text(
+                        lockedMode === 'unused'
+                            ? 'Syncing missing Salt/Generic for Unused Medicines (Used = 0)...'
+                            : 'Syncing missing Salt/Generic for Active Medicines (Used > 0)...'
+                    );
+                }
                 if ((data.update || 0) != 1) {
                     finishBulkSync('Sync stopped: ' + (data.error_text || 'Error'));
                     return;
