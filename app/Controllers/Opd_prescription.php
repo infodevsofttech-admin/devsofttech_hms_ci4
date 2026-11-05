@@ -10355,64 +10355,17 @@ class Opd_prescription extends BaseController
             return ['med_id' => 0, 'is_new' => false, 'details_updated' => false, 'details_source' => ''];
         }
 
-        $detailsUpdated = false;
-        $detailsSource = '';
-
-        $genericField = $this->resolveFirstField($fields, ['genericname', 'generic_name']);
-        $saltField = $this->resolveFirstField($fields, ['salt_name', 'sal_name', 'salt', 'saltname']);
-        $restrictionField = $this->resolveFirstField($fields, ['dosage_restriction', 'dose_restriction', 'restriction_note', 'restriction']);
-
-        $row = $this->db->table($table)->where('id', $medId)->get(1)->getRowArray() ?? [];
-        $hasDetails = false;
-        if ($genericField !== null && trim((string) ($row[$genericField] ?? '')) !== '') {
-            $hasDetails = true;
-        }
-        if ($saltField !== null && trim((string) ($row[$saltField] ?? '')) !== '') {
-            $hasDetails = true;
-        }
-        if ($restrictionField !== null && trim((string) ($row[$restrictionField] ?? '')) !== '') {
-            $hasDetails = true;
-        }
-
-        if (! $hasDetails && ($genericField !== null || $saltField !== null || $restrictionField !== null)) {
-            $details = $this->lookupMedicineDetailsFromMaster($medName, $medType);
-            if (($details['genericname'] ?? '') !== '' || ($details['salt_name'] ?? '') !== '' || ($details['dosage_restriction'] ?? '') !== '') {
-                $detailsSource = 'local-master';
-            }
-
-            if (($details['genericname'] ?? '') === '' && ($details['salt_name'] ?? '') === '' && ($details['dosage_restriction'] ?? '') === '') {
-                $fallback = $this->inferMedicineDetailsFromBrandName($medName, $medType);
-                if (($fallback['genericname'] ?? '') !== '' || ($fallback['salt_name'] ?? '') !== '' || ($fallback['dosage_restriction'] ?? '') !== '') {
-                    $details = $fallback;
-                    $detailsSource = 'brand-fallback';
-                }
-            }
-
-            $update = [];
-            if ($genericField !== null && trim((string) ($details['genericname'] ?? '')) !== '') {
-                $update[$genericField] = trim((string) ($details['genericname'] ?? ''));
-            }
-            if ($saltField !== null && trim((string) ($details['salt_name'] ?? '')) !== '') {
-                $update[$saltField] = trim((string) ($details['salt_name'] ?? ''));
-            }
-            if ($restrictionField !== null && trim((string) ($details['dosage_restriction'] ?? '')) !== '') {
-                $update[$restrictionField] = trim((string) ($details['dosage_restriction'] ?? ''));
-            }
-
-            if (! empty($update)) {
-                $this->db->table($table)->where('id', $medId)->update($update);
-        foreach (glob(WRITEPATH . 'cache/medicine_search_*') ?: [] as $cacheFile) {
-            @unlink($cacheFile);
-        }
-                $detailsUpdated = true;
+        if ($isNew) {
+            foreach (glob(WRITEPATH . 'cache/medicine_search_*') ?: [] as $cacheFile) {
+                @unlink($cacheFile);
             }
         }
 
         return [
             'med_id' => $medId,
             'is_new' => $isNew,
-            'details_updated' => $detailsUpdated,
-            'details_source' => $detailsSource,
+            'details_updated' => false,
+            'details_source' => '',
         ];
     }
 
