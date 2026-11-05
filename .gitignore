@@ -55,6 +55,7 @@ CSNOtk_API_v9.0/
 #-------------------------
 # Temporary Files
 #-------------------------
+0.26.0
 writable/cache/*
 !writable/cache/index.html
 

@@ -356,6 +356,36 @@ window.AbhaMobileModal = (function () {
         var mobile = digits(value);
         return mobile.length === 10 ? mobile.replace(/(\d{6})(\d{4})/, '******$2') : (value || '-');
     }
+    function extractDob(profile) {
+        if (!profile) return '';
+        var raw = profile.dob || profile.date_of_birth || profile.dateOfBirth || profile.birthDate || profile.birthdate || '';
+        if (raw && raw !== '-') {
+            raw = String(raw).trim();
+            var m = raw.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+            if (m) {
+                return ('0' + m[3]).slice(-2) + '-' + ('0' + m[2]).slice(-2) + '-' + m[1];
+            }
+            var m2 = raw.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+            if (m2) {
+                return ('0' + m2[1]).slice(-2) + '-' + ('0' + m2[2]).slice(-2) + '-' + m2[3];
+            }
+            return raw;
+        }
+        var y = profile.yearOfBirth || profile.birthYear || profile.year_of_birth || '';
+        var m = profile.monthOfBirth || profile.birthMonth || profile.month_of_birth || '';
+        var d = profile.dayOfBirth || profile.birthDay || profile.day_of_birth || '';
+        if (y && m && d) {
+            return ('0' + d).slice(-2) + '-' + ('0' + m).slice(-2) + '-' + y;
+        }
+        if (y && m) {
+            return ('0' + m).slice(-2) + '-' + y;
+        }
+        if (y) {
+            return String(y);
+        }
+        return '';
+    }
+
 
     // Step 1: Search ABHA profiles by mobile number
     function searchProfiles() {
@@ -425,7 +455,8 @@ window.AbhaMobileModal = (function () {
             var name = prof.name || 'ABHA Profile #' + (index + 1);
             var abhaNum = prof.abha_number || prof.ABHANumber || prof.abha_id || '-';
             var gender = genderText(prof.gender);
-            var dob = prof.dob || '-';
+            var dob = extractDob(prof) || prof.dob || '-';
+            if (dob !== '-') { prof.dob = dob; }
             var isVerified = prof.kyc_verified !== false;
 
             var iconClass = (gender === 'Female') ? 'bi-person-standing-dress text-danger' : 'bi-person-standing text-primary';
@@ -649,7 +680,9 @@ window.AbhaMobileModal = (function () {
         if (elAddr) elAddr.textContent = profile.abha_address || '-';
         if (elNum) elNum.textContent = formatAbha(profile.abha_number) || '-';
         if (elId) elId.textContent = profile.abha_address || '-';
-        if (elDob) elDob.textContent = profile.dob || '-';
+        var extractedDob = extractDob(profile) || profile.dob || '';
+        if (extractedDob) { profile.dob = extractedDob; }
+        if (elDob) elDob.textContent = extractedDob || profile.dob || '-';
         if (elGender) elGender.textContent = genderText(profile.gender);
         if (elMobile) elMobile.textContent = maskMobile(profile.mobile || searchMobile);
         if (elFullAddr) elFullAddr.textContent = [profile.address, profile.district, profile.state, profile.zip].filter(Boolean).join(', ') || '-';

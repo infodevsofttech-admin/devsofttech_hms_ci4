@@ -13578,7 +13578,7 @@ class AbdmGateway extends BaseController
         ));
         $mobile = (string) ($payload['mobile'] ?? $payload['mobileNumber'] ?? $profile['mobile'] ?? ($gatewayPatientPayload['mobile'] ?? ''));
         $gender = (string) ($payload['gender'] ?? $profile['gender'] ?? ($gatewayPatientPayload['gender'] ?? ''));
-        $dob = (string) ($payload['dob'] ?? $payload['date_of_birth'] ?? $profile['dob'] ?? $profile['date_of_birth'] ?? ($gatewayPatientPayload['date_of_birth'] ?? ''));
+        $dob = $this->extractAbhaProfileDob($profile, $payload, $gatewayPatientPayload);
         $address = (string) (
             ($payload['address'] ?? '')
             ?: ($payload['address_line'] ?? '')
@@ -13694,6 +13694,91 @@ class AbdmGateway extends BaseController
     }
 
     // =========================================================================
+    /**
+     * @param array<string, mixed> $profile
+     * @param array<string, mixed> $payload
+     * @param array<string, mixed> $gatewayPatientPayload
+     */
+    private function extractAbhaProfileDob(array $profile, array $payload = [], array $gatewayPatientPayload = []): string
+    {
+        $sources = [
+            $profile,
+            $payload,
+            $gatewayPatientPayload,
+            $payload['data'] ?? [],
+            $payload['gateway_patient'] ?? [],
+            $payload['data']['gateway_patient'] ?? [],
+            $payload['patient_profile'] ?? [],
+            $payload['data']['patient_profile'] ?? [],
+            $payload['ABHAProfile'] ?? [],
+            $payload['data']['ABHAProfile'] ?? [],
+            $payload['profile'] ?? [],
+            $payload['data']['profile'] ?? [],
+            $payload['account'] ?? [],
+            $payload['data']['account'] ?? [],
+            $payload['accounts'][0] ?? [],
+            $payload['data']['accounts'][0] ?? [],
+            $payload['gateway_abha_profile'] ?? [],
+            $payload['data']['gateway_abha_profile'] ?? [],
+        ];
+
+        // 1. First pass: look for complete date of birth string across all sources
+        foreach ($sources as $source) {
+            if (! is_array($source)) {
+                continue;
+            }
+            foreach (['dob', 'date_of_birth', 'dateOfBirth', 'birthDate', 'birthdate'] as $key) {
+                $dob = trim((string) ($source[$key] ?? ''));
+                if ($dob !== '') {
+                    if (preg_match('/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/', $dob, $m)) {
+                        return sprintf('%02d-%02d-%04d', (int) $m[3], (int) $m[2], (int) $m[1]);
+                    }
+                    if (preg_match('/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/', $dob, $m)) {
+                        return sprintf('%02d-%02d-%04d', (int) $m[1], (int) $m[2], (int) $m[3]);
+                    }
+                    return $dob;
+                }
+            }
+        }
+
+        // 2. Second pass: look for day/month/year components across all sources
+        $year = null;
+        $month = null;
+        $day = null;
+        foreach ($sources as $source) {
+            if (! is_array($source)) {
+                continue;
+            }
+            if ($year === null) {
+                $y = $source['yearOfBirth'] ?? $source['year_of_birth'] ?? $source['birthYear'] ?? $source['birth_year'] ?? $source['yob'] ?? null;
+                if ($y !== null && (int) $y > 1900) {
+                    $year = (int) $y;
+                }
+            }
+            if ($month === null) {
+                $m = $source['monthOfBirth'] ?? $source['month_of_birth'] ?? $source['birthMonth'] ?? $source['birth_month'] ?? $source['mob'] ?? null;
+                if ($m !== null && (int) $m >= 1 && (int) $m <= 12) {
+                    $month = (int) $m;
+                }
+            }
+            if ($day === null) {
+                $d = $source['dayOfBirth'] ?? $source['day_of_birth'] ?? $source['birthDay'] ?? $source['birth_day'] ?? null;
+                if ($d !== null && (int) $d >= 1 && (int) $d <= 31) {
+                    $day = (int) $d;
+                }
+            }
+        }
+
+        if ($year !== null) {
+            if ($month !== null && $day !== null) {
+                return sprintf('%02d-%02d-%04d', $day, $month, $year);
+            }
+            return (string) $year;
+        }
+
+        return '';
+    }
+
     // Gateway status - hospital info + ABDM connectivity
     // GET /AbdmGateway/gateway_status
     // =========================================================================

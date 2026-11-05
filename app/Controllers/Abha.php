@@ -154,7 +154,7 @@ class Abha extends BaseController
             $mobileSource = 'enrolment';
         }
         $profileGender    = (string) ($profile['gender'] ?? $payload['gender'] ?? '');
-        $profileDob       = (string) ($profile['dob'] ?? $profile['date_of_birth'] ?? $payload['dob'] ?? $payload['date_of_birth'] ?? '');
+        $profileDob       = $this->extractAbhaProfileDob($profile, $payload);
         $verifiedStatus   = (string) (($payload['gateway_abha_profile']['status'] ?? '') ?: ($profile['verifiedStatus'] ?? '') ?: ($profile['status'] ?? '') ?: ($payload['verifiedStatus'] ?? '') ?: ($payload['status'] ?? ''));
         $verificationType = (string) (($payload['gateway_abha_profile']['abha_type'] ?? '') ?: ($profile['verificationType'] ?? '') ?: ($profile['abhaType'] ?? '') ?: ($payload['verificationType'] ?? '') ?: ($payload['abhaType'] ?? ''));
         $kycVerified      = $profile['kycVerified'] ?? $payload['kycVerified'] ?? null;
@@ -427,7 +427,7 @@ class Abha extends BaseController
         $name             = $this->extractAbhaProfileName($profile, $payload);
         $photo            = $this->extractAbhaProfilePhoto($profile, $payload);
         $gender           = (string) ($profile['gender'] ?? $payload['gender'] ?? '');
-        $dob              = (string) ($profile['dob'] ?? $profile['date_of_birth'] ?? $payload['dob'] ?? $payload['date_of_birth'] ?? '');
+        $dob              = $this->extractAbhaProfileDob($profile, $payload);
         // Bridge/gateway verify-otp responses don't always echo the mobile back;
         // fall back to the mobile the user actually typed and OTP-verified.
         $mobile           = (string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? $requestMobile ?? '');
@@ -594,7 +594,7 @@ class Abha extends BaseController
                 'preferredAbhaAddress' => $clientAccount['preferredAbhaAddress'] ?? $clientAccount['preferredAddress'] ?? $clientAccount['abhaAddress'] ?? $clientAccount['abha_address'] ?? $abhaAddress,
                 'name'                 => $clientAccount['name'] ?? '',
                 'gender'               => $clientAccount['gender'] ?? '',
-                'dob'                  => $clientAccount['dob'] ?? $clientAccount['date_of_birth'] ?? '',
+                'dob'                  => $this->extractAbhaProfileDob($clientAccount, $payload),
                 'profilePhoto'         => $clientAccount['profilePhoto'] ?? $clientAccount['photo'] ?? '',
                 'mobile'               => $mobile,
                 'status'               => $clientAccount['status'] ?? 'ACTIVE',
@@ -621,7 +621,7 @@ class Abha extends BaseController
         $name             = $this->extractAbhaProfileName($profile, $payload);
         $photo            = $this->extractAbhaProfilePhoto($profile, $payload);
         $gender           = (string) ($profile['gender'] ?? $payload['gender'] ?? '');
-        $dob              = (string) ($profile['dob'] ?? $profile['date_of_birth'] ?? $payload['dob'] ?? $payload['date_of_birth'] ?? '');
+        $dob              = $this->extractAbhaProfileDob($profile, $payload);
         $resMobile        = (string) ($profile['mobile'] ?? $payload['mobile'] ?? $payload['mobileNumber'] ?? $mobile);
         $verifiedStatus   = (string) (($payload['gateway_abha_profile']['status'] ?? '') ?: ($profile['verifiedStatus'] ?? '') ?: ($profile['status'] ?? '') ?: ($payload['verifiedStatus'] ?? '') ?: ($payload['status'] ?? ''));
         $verificationType = (string) (($payload['gateway_abha_profile']['abha_type'] ?? '') ?: ($profile['verificationType'] ?? '') ?: ($profile['abhaType'] ?? '') ?: ($payload['verificationType'] ?? '') ?: ($payload['abhaType'] ?? ''));
@@ -2913,7 +2913,16 @@ class Abha extends BaseController
             if ($dobDb !== '') {
                 $existingUpdates['dob'] = $dobDb;
                 if (in_array('estimate_dob', $fields, true)) {
-                    $existingUpdates['estimate_dob'] = 0;
+                    $existingUpdates['estimate_dob'] = preg_match('/^\d{4}$/', trim($dob)) ? 1 : 0;
+                }
+                if (in_array('age', $fields, true)) {
+                    try {
+                        $diff = (new \DateTime($dobDb))->diff(new \DateTime('today'));
+                        $existingUpdates['age'] = $diff->y;
+                        if (in_array('age_in_month', $fields, true)) {
+                            $existingUpdates['age_in_month'] = $diff->m;
+                        }
+                    } catch (\Throwable $e) {}
                 }
             }
         }
@@ -2969,7 +2978,16 @@ class Abha extends BaseController
         $dobDb = $this->normalizeDobToDb($dob);
         if ($dobDb !== '') {
             $repairData['dob'] = $dobDb;
-            $repairData['estimate_dob'] = 0;
+            $repairData['estimate_dob'] = preg_match('/^\d{4}$/', trim($dob)) ? 1 : 0;
+            if (in_array('age', $fields, true)) {
+                try {
+                    $diff = (new \DateTime($dobDb))->diff(new \DateTime('today'));
+                    $repairData['age'] = $diff->y;
+                    if (in_array('age_in_month', $fields, true)) {
+                        $repairData['age_in_month'] = $diff->m;
+                    }
+                } catch (\Throwable $e) {}
+            }
         }
 
         if ($abhaField && $abhaNumClean !== '') {
@@ -3015,16 +3033,25 @@ class Abha extends BaseController
     ): array {
         $genderDb = $this->toPatientGenderValue($gender);
         $dobDb    = $this->normalizeDobToDb($dob);
+        $isEstimate = ($dobDb !== '' && preg_match('/^\d{4}$/', trim($dob))) ? 1 : ($dobDb !== '' ? 0 : 1);
 
         $insertData = [
             'p_fname'      => strtoupper($name !== '' ? $name : 'ABHA PATIENT'),
             'mphone1'      => $mobile,
             'gender'       => $genderDb,
             'blood_group'  => 'Not Define',
-            'estimate_dob' => $dobDb !== '' ? 0 : 1,
+            'estimate_dob' => $isEstimate,
         ];
         if ($dobDb !== '') {
             $insertData['dob'] = $dobDb;
+            try {
+                $diff = (new \DateTime($dobDb))->diff(new \DateTime('today'));
+                $insertData['age']          = $diff->y;
+                $insertData['age_in_month'] = $diff->m;
+            } catch (\Throwable $e) {
+                $insertData['age']          = 0;
+                $insertData['age_in_month'] = 0;
+            }
         } else {
             $insertData['age']          = 0;
             $insertData['age_in_month'] = 0;
@@ -3170,11 +3197,17 @@ class Abha extends BaseController
             return '';
         }
 
-        if (preg_match('/^(\d{2})-(\d{2})-(\d{4})$/', $dob, $m)) {
-            return $m[3] . '-' . $m[2] . '-' . $m[1];
+        if (preg_match('/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/', $dob, $m)) {
+            return sprintf('%04d-%02d-%02d', (int) $m[3], (int) $m[2], (int) $m[1]);
+        }
+        if (preg_match('/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/', $dob, $m)) {
+            return sprintf('%04d-%02d-%02d', (int) $m[1], (int) $m[2], (int) $m[3]);
         }
         if (preg_match('/^\d{4}-\d{2}-\d{2}$/', $dob)) {
             return $dob;
+        }
+        if (preg_match('/^(\d{4})$/', $dob, $m) && (int) $m[1] > 1900) {
+            return $m[1] . '-01-01';
         }
 
         return '';
@@ -3471,6 +3504,7 @@ class Abha extends BaseController
         $sources = [
             $profile,
             $payload,
+            $payload['data'] ?? [],
             $payload['gateway_patient'] ?? [],
             $payload['data']['gateway_patient'] ?? [],
             $payload['patient_profile'] ?? [],
@@ -3483,8 +3517,11 @@ class Abha extends BaseController
             $payload['data']['account'] ?? [],
             $payload['accounts'][0] ?? [],
             $payload['data']['accounts'][0] ?? [],
+            $payload['gateway_abha_profile'] ?? [],
+            $payload['data']['gateway_abha_profile'] ?? [],
         ];
 
+        // 1. First pass: look for complete date of birth string across all sources
         foreach ($sources as $source) {
             if (! is_array($source)) {
                 continue;
@@ -3501,16 +3538,41 @@ class Abha extends BaseController
                     return $dob;
                 }
             }
+        }
 
-            $y = $source['yearOfBirth'] ?? $source['year_of_birth'] ?? null;
-            $m = $source['monthOfBirth'] ?? $source['month_of_birth'] ?? null;
-            $d = $source['dayOfBirth'] ?? $source['day_of_birth'] ?? null;
-            if ($y !== null && (int) $y > 1900) {
-                if ($m !== null && $d !== null && (int) $m > 0 && (int) $d > 0) {
-                    return sprintf('%02d-%02d-%04d', (int) $d, (int) $m, (int) $y);
-                }
-                return (string) $y;
+        // 2. Second pass: look for day/month/year components across all sources
+        $year = null;
+        $month = null;
+        $day = null;
+        foreach ($sources as $source) {
+            if (! is_array($source)) {
+                continue;
             }
+            if ($year === null) {
+                $y = $source['yearOfBirth'] ?? $source['year_of_birth'] ?? $source['birthYear'] ?? $source['birth_year'] ?? $source['yob'] ?? null;
+                if ($y !== null && (int) $y > 1900) {
+                    $year = (int) $y;
+                }
+            }
+            if ($month === null) {
+                $m = $source['monthOfBirth'] ?? $source['month_of_birth'] ?? $source['birthMonth'] ?? $source['birth_month'] ?? $source['mob'] ?? null;
+                if ($m !== null && (int) $m >= 1 && (int) $m <= 12) {
+                    $month = (int) $m;
+                }
+            }
+            if ($day === null) {
+                $d = $source['dayOfBirth'] ?? $source['day_of_birth'] ?? $source['birthDay'] ?? $source['birth_day'] ?? null;
+                if ($d !== null && (int) $d >= 1 && (int) $d <= 31) {
+                    $day = (int) $d;
+                }
+            }
+        }
+
+        if ($year !== null) {
+            if ($month !== null && $day !== null) {
+                return sprintf('%02d-%02d-%04d', $day, $month, $year);
+            }
+            return (string) $year;
         }
 
         return '';

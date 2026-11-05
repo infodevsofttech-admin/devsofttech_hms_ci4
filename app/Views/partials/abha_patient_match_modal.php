@@ -132,6 +132,35 @@ window.AbhaPatientMatchModal = (function () {
         return '<div class="alert alert-' + type + ' py-2">' + msg + '</div>';
     }
     function profileValue(value) { return String(value == null ? '' : value).trim().toUpperCase(); }
+    function extractDob(profile) {
+        if (!profile) return '';
+        var raw = profile.dob || profile.date_of_birth || profile.dateOfBirth || profile.birthDate || profile.birthdate || '';
+        if (raw && raw !== '—' && raw !== '-') {
+            raw = String(raw).trim();
+            var m = raw.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+            if (m) {
+                return ('0' + m[3]).slice(-2) + '-' + ('0' + m[2]).slice(-2) + '-' + m[1];
+            }
+            var m2 = raw.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+            if (m2) {
+                return ('0' + m2[1]).slice(-2) + '-' + ('0' + m2[2]).slice(-2) + '-' + m2[3];
+            }
+            return raw;
+        }
+        var y = profile.yearOfBirth || profile.birthYear || profile.year_of_birth || '';
+        var m = profile.monthOfBirth || profile.birthMonth || profile.month_of_birth || '';
+        var d = profile.dayOfBirth || profile.birthDay || profile.day_of_birth || '';
+        if (y && m && d) {
+            return ('0' + d).slice(-2) + '-' + ('0' + m).slice(-2) + '-' + y;
+        }
+        if (y && m) {
+            return ('0' + m).slice(-2) + '-' + y;
+        }
+        if (y) {
+            return String(y);
+        }
+        return '';
+    }
     function normalizedGender(value) {
         var gender = profileValue(value);
         if (gender === '1' || gender === 'M' || gender === 'MALE') return 'M';
@@ -156,10 +185,14 @@ window.AbhaPatientMatchModal = (function () {
     function renderProfile(p) {
         var abhaNum = p.abha_number || '';
         var disp = abhaNum.replace(/(\d{2})(\d{4})(\d{4})(\d{4})/, '$1-$2-$3-$4');
+        var dob = extractDob(p) || p.dob || '';
+        if (dob) {
+            p.dob = dob;
+        }
         $('#abhaMatch_name').text(p.name || '—');
         $('#abhaMatch_abha').text(disp || '—');
         $('#abhaMatch_gender').text(genderText(p.gender));
-        $('#abhaMatch_dob').text(p.dob || '—');
+        $('#abhaMatch_dob').text(dob || '—');
         $('#abhaMatch_mobile').text(maskMobile(p.mobile));
         $('#abhaMatch_address').text([p.address, p.district, p.state].filter(Boolean).join(', ') || '—');
         if (p.photo) {
@@ -257,7 +290,7 @@ window.AbhaPatientMatchModal = (function () {
             name: _profile.name || '',
             mobile: _profile.mobile || '',
             gender: _profile.gender || '',
-            dob: _profile.dob || '',
+            dob: extractDob(_profile) || _profile.dob || '',
             abha_address: _profile.abha_address || '',
             photo: _profile.photo || '',
             card_base64: _profile.card_base64 || '',
@@ -321,6 +354,10 @@ window.AbhaPatientMatchModal = (function () {
     return {
         open: function (profile, candidates, onResolved, preferredPatientId) {
             _profile = profile || {};
+            var dob = extractDob(_profile);
+            if (dob) {
+                _profile.dob = dob;
+            }
             window._abhaMatchCandidates = candidates || [];
             _selectedId = 0;
             _onResolved = onResolved;

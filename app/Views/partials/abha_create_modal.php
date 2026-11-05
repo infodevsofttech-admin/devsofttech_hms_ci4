@@ -517,6 +517,35 @@ window.AbhaCreateModal = (function () {
         return gender || '-';
     }
     function formatAbha(value) { return String(value || '').replace(/(\d{2})(\d{4})(\d{4})(\d{4})/, '$1-$2-$3-$4'); }
+    function extractDob(profile) {
+        if (!profile) return '';
+        var raw = profile.dob || profile.date_of_birth || profile.dateOfBirth || profile.birthDate || profile.birthdate || '';
+        if (raw && raw !== '-') {
+            raw = String(raw).trim();
+            var m = raw.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+            if (m) {
+                return ('0' + m[3]).slice(-2) + '-' + ('0' + m[2]).slice(-2) + '-' + m[1];
+            }
+            var m2 = raw.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+            if (m2) {
+                return ('0' + m2[1]).slice(-2) + '-' + ('0' + m2[2]).slice(-2) + '-' + m2[3];
+            }
+            return raw;
+        }
+        var y = profile.yearOfBirth || profile.birthYear || profile.year_of_birth || '';
+        var m = profile.monthOfBirth || profile.birthMonth || profile.month_of_birth || '';
+        var d = profile.dayOfBirth || profile.birthDay || profile.day_of_birth || '';
+        if (y && m && d) {
+            return ('0' + d).slice(-2) + '-' + ('0' + m).slice(-2) + '-' + y;
+        }
+        if (y && m) {
+            return ('0' + m).slice(-2) + '-' + y;
+        }
+        if (y) {
+            return String(y);
+        }
+        return '';
+    }
     function photoSrc(value) {
         if (!value) return '';
         return String(value).indexOf('data:') === 0 ? value : 'data:image/jpeg;base64,' + value;
@@ -878,12 +907,16 @@ window.AbhaCreateModal = (function () {
 
     function renderProfile(profile) {
         createdProfile = profile;
+        var dob = extractDob(profile);
+        if (dob) {
+            createdProfile.dob = dob;
+        }
         $('#abhaCreateProfileName').text(profile.name || '-');
         $('#abhaCreateProfileFullName').text(profile.name || '-');
         $('#abhaCreateProfileAddress').text(profile.abha_address || '-');
         $('#abhaCreateProfileNumber').text(formatAbha(profile.abha_number) || '-');
         $('#abhaCreateProfileId').text(profile.abha_address || '-');
-        $('#abhaCreateProfileDob').text(profile.dob || '-');
+        $('#abhaCreateProfileDob').text(dob || profile.dob || '-');
         $('#abhaCreateProfileGender').text(genderText(profile.gender));
         var mobileVal = profile.mobile || communicationMobile || '';
         var mobileHtml = mobileVal ? maskMobile(mobileVal) : '-';

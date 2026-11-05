@@ -430,8 +430,39 @@ window.AbhaAadhaarModal = (function () {
         });
     }
 
+    function extractDob(profile) {
+        if (!profile) return '';
+        var raw = profile.dob || profile.date_of_birth || profile.dateOfBirth || profile.birthDate || profile.birthdate || '';
+        if (raw && raw !== '-') {
+            raw = String(raw).trim();
+            var m = raw.match(/^(\d{4})[-\/](\d{1,2})[-\/](\d{1,2})$/);
+            if (m) {
+                return ('0' + m[3]).slice(-2) + '-' + ('0' + m[2]).slice(-2) + '-' + m[1];
+            }
+            var m2 = raw.match(/^(\d{1,2})[-\/](\d{1,2})[-\/](\d{4})$/);
+            if (m2) {
+                return ('0' + m2[1]).slice(-2) + '-' + ('0' + m2[2]).slice(-2) + '-' + m2[3];
+            }
+            return raw;
+        }
+        var y = profile.yearOfBirth || profile.birthYear || profile.year_of_birth || '';
+        var m = profile.monthOfBirth || profile.birthMonth || profile.month_of_birth || '';
+        var d = profile.dayOfBirth || profile.birthDay || profile.day_of_birth || '';
+        if (y && m && d) {
+            return ('0' + d).slice(-2) + '-' + ('0' + m).slice(-2) + '-' + y;
+        }
+        if (y && m) {
+            return ('0' + m).slice(-2) + '-' + y;
+        }
+        if (y) {
+            return String(y);
+        }
+        return '';
+    }
     function renderProfile(profile) {
         verifiedProfile = profile;
+        var dob = extractDob(profile);
+        if (dob) { verifiedProfile.dob = dob; }
         stopTimer();
 
         var photo = profile.photo || profile.profile_photo || '';
@@ -446,7 +477,7 @@ window.AbhaAadhaarModal = (function () {
         $('#abhaAadhaarProfileAddress').text(profile.abha_address || '-');
         $('#abhaAadhaarProfileNumber').text(profile.abha_number || '-');
         $('#abhaAadhaarProfileId').text(profile.abha_address || '-');
-        $('#abhaAadhaarProfileDob').text(profile.dob || '-');
+        $('#abhaAadhaarProfileDob').text(dob || profile.dob || '-');
         $('#abhaAadhaarProfileGender').text(profile.gender || '-');
         $('#abhaAadhaarProfileMobile').text(profile.mobile || '-');
 
