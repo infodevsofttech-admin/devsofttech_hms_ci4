@@ -2,9 +2,9 @@
     <div class="row g-3">
         <div class="col-md-8">
             <div class="card">
-                <div class="card-header d-flex justify-content-between align-items-center">
+                <div class="card-header d-flex justify-content-between align-items-center flex-wrap gap-2">
                     <strong>List of Medicine</strong>
-                    <div class="d-flex gap-2">
+                    <div class="d-flex flex-wrap gap-2">
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="all">All</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="generic_issue">Generic/Salt Issue</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="generic_same_name">Generic=Name</button>
@@ -12,6 +12,7 @@
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="coding_missing">SNOMED/ATC Missing</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="snomed_missing">SNOMED Missing</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="atc_missing">ATC Missing</button>
+                        <button type="button" class="btn btn-success btn-sm" id="btn_med_bulk_sync_salt" title="Bulk update missing Generic/Salt, Substitute, Company &amp; SNOMED from Pharmacy &amp; ABDM Drug Master">Update Salt (Drug Master)</button>
                         <button type="button" class="btn btn-outline-primary btn-sm" id="btn_med_export">Export</button>
                         <button type="button" class="btn btn-outline-danger btn-sm" id="btn_med_check_duplicates">Check Duplicates</button>
                         <button type="button" class="btn btn-warning btn-sm" id="btn_med_add_mode">Add Medicine</button>
@@ -21,6 +22,16 @@
                 <div class="px-3 pt-2 pb-1">
                     <div class="small mb-1" id="med_coding_summary">
                         <span class="badge bg-secondary">Loading coding summary...</span>
+                    </div>
+                    <div id="med_bulk_sync_box" class="alert alert-info py-2 px-3 mb-2 small" style="display:none;">
+                        <div class="d-flex justify-content-between align-items-center mb-1">
+                            <strong id="med_bulk_sync_title">Syncing missing Salt/Generic from Drug Master...</strong>
+                            <button type="button" class="btn btn-sm btn-outline-danger py-0 px-2" id="btn_med_bulk_sync_stop">Stop</button>
+                        </div>
+                        <div class="progress mb-1" style="height: 8px;">
+                            <div id="med_bulk_sync_bar" class="progress-bar progress-bar-striped progress-bar-animated bg-success" role="progressbar" style="width: 0%;"></div>
+                        </div>
+                        <div id="med_bulk_sync_status" class="text-muted">Preparing batch...</div>
                     </div>
                     <div class="small text-muted" id="med_dup_status">Duplicate scan not run yet.</div>
                 </div>
@@ -82,7 +93,13 @@
 
                     <div class="mb-2">
                         <label class="form-label">Medicine Name</label>
-                        <input type="text" id="med_item_name" class="form-control form-control-sm" placeholder="Enter Medicine Name">
+                        <div class="input-group input-group-sm">
+                            <input type="text" id="med_item_name" class="form-control form-control-sm" placeholder="Enter Medicine Name" autocomplete="off">
+                            <button type="button" class="btn btn-outline-success" id="btn_drug_master_search" title="Search Pharmacy &amp; ABDM Drug Master">
+                                <i class="fa fa-search"></i> Drug Master
+                            </button>
+                        </div>
+                        <div id="drug_master_suggest_panel" class="border rounded bg-white shadow-sm mt-1 p-0" style="display:none;max-height:260px;overflow-y:auto;position:relative;z-index:220;"></div>
                     </div>
                     <div class="mb-2">
                         <label class="form-label">Formulation / Type</label>
@@ -221,9 +238,9 @@
                         </div>
                     </div>
 
-                    <div class="d-flex gap-2">
+                    <div class="d-flex gap-2 flex-wrap">
                         <button type="button" class="btn btn-primary btn-sm" id="btn_med_save">Update</button>
-                        <button type="button" class="btn btn-outline-info btn-sm" id="btn_med_ai_details">Use AI</button>
+                        <button type="button" class="btn btn-outline-success btn-sm" id="btn_med_ai_details" title="Auto-fill Generic/Salt, Substitute, Company &amp; SNOMED from Pharmacy &amp; ABDM Drug Master">Fetch from Drug Master</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm" id="btn_med_reset">Reset</button>
                     </div>
 
@@ -579,6 +596,7 @@
     function renderCodingSummary(summary) {
         summary = summary || {};
         var total = parseInt(summary.total || 0, 10);
+        var genericMissing = parseInt(summary.generic_missing || 0, 10);
         var codingMissing = parseInt(summary.coding_missing || 0, 10);
         var snomedMissing = parseInt(summary.snomed_missing || 0, 10);
         var atcMissing = parseInt(summary.atc_missing || 0, 10);
@@ -586,9 +604,10 @@
 
         var html = ''
             + '<span class="badge bg-light text-dark border me-1">Total: ' + total + '</span>'
-            + '<span class="badge bg-danger me-1">Any Missing: ' + codingMissing + '</span>'
+            + '<span class="badge bg-danger me-1">Generic/Salt Missing: ' + genericMissing + '</span>'
             + '<span class="badge bg-warning text-dark me-1">SNOMED Missing: ' + snomedMissing + '</span>'
             + '<span class="badge bg-info text-dark me-1">ATC Missing: ' + atcMissing + '</span>'
+            + '<span class="badge bg-secondary me-1">Any Coding Missing: ' + codingMissing + '</span>'
             + '<span class="badge bg-dark">Both Missing: ' + bothMissing + '</span>';
 
         $('#med_coding_summary').html(html);
@@ -1036,67 +1055,288 @@
         }
     });
 
-    // ── AI details button ─────────────────────────────────────────────────────
-    $('#btn_med_ai_details').on('click', function() {
+    // ── Drug Master Search, Auto-Fill & Bulk Sync ─────────────────────────────
+    var drugMasterSuggestTimer = null;
+    var bulkSyncRunning = false;
+    var bulkSyncStopRequested = false;
+
+    function closeDrugMasterPanel() {
+        $('#drug_master_suggest_panel').hide().empty();
+    }
+
+    function applyDrugMasterDetailsToForm(details, messageText) {
+        details = details || {};
+        var gen = String(details.genericname || details.generic_name || '').trim();
+        var salt = String(details.salt_name || '').trim();
+        var form = String(details.formulation || '').trim().toUpperCase();
+        var comp = String(details.company_name || '').trim();
+        var snomed = String(details.snomed_code || details.identifier || '').trim();
+        var route = String(details.route || '').trim();
+        var restriction = String(details.dosage_restriction || '').trim();
+
+        if (gen !== '') {
+            $('#med_genericname').val(gen);
+        }
+        if (salt !== '') {
+            $('#med_salt_name').val(salt);
+        } else {
+            // Clear salt_name if it was previously a duplicate of genericname
+            var curSalt = ($('#med_salt_name').val() || '').trim();
+            if (curSalt !== '' && gen !== '' && curSalt.toLowerCase() === gen.toLowerCase()) {
+                $('#med_salt_name').val('');
+            }
+        }
+        if (form !== '') {
+            if (!$('#med_formulation option[value="' + form.replace(/"/g, '&quot;') + '"]').length) {
+                $('#med_formulation').append('<option value="' + $('<div>').text(form).html() + '">' + $('<div>').text(form).html() + '</option>');
+            }
+            $('#med_formulation').val(form);
+        }
+        if (comp !== '' && comp !== '0') {
+            $('#med_company_name').val(comp);
+        }
+        if (snomed !== '') {
+            $('#med_snomed_code').val(snomed);
+            $('#snomed_fsn_display').text('▶ Drug Master ID: ' + snomed).show();
+        }
+        if (route !== '' && ($('#med_default_where').val() || '').trim() === '') {
+            setDefaultMasterValue($('#med_default_where'), route);
+        }
+        if (restriction !== '' && ($('#med_dosage_restriction').val() || '').trim() === '') {
+            $('#med_dosage_restriction').val(restriction);
+        }
+
+        if (messageText) {
+            setMsg('ok', messageText);
+        }
+    }
+
+    function fetchDrugMasterDetails(extraParams) {
         var itemName = ($('#med_item_name').val() || '').trim();
-        if (!itemName) {
-            setMsg('err', 'Enter medicine name first for AI lookup.');
+        var identifier = (extraParams && extraParams.identifier) ? String(extraParams.identifier) : '';
+        if (!itemName && !identifier) {
+            setMsg('err', 'Enter medicine name first to fetch from Drug Master.');
             return;
         }
 
-        var $btn = $(this);
-        $btn.prop('disabled', true).text('AI...');
-        apiPost('<?= base_url('Opd_prescription/opd_medicince_ai_details') ?>', {
+        var $btn = $('#btn_med_ai_details');
+        $btn.prop('disabled', true).text('Fetching...');
+        apiPost('<?= base_url('Opd_prescription/opd_medicince_drug_master_fetch') ?>', {
             item_name: itemName,
-            formulation: ($('#med_formulation').val() || '').trim()
+            formulation: ($('#med_formulation').val() || '').trim(),
+            med_id: parseInt($('#med_id').val() || '0', 10),
+            identifier: identifier,
+            type: (extraParams && extraParams.type) ? String(extraParams.type) : 'brand'
         }, function(data) {
-            $btn.prop('disabled', false).text('Use AI');
+            $btn.prop('disabled', false).text('Fetch from Drug Master');
             if ((data.update || 0) != 1) {
-                setMsg('err', data.error_text || 'AI details not available');
+                setMsg('err', data.error_text || 'No match found in Drug Master');
                 return;
             }
 
-            var details = data.details || {};
-            if (($('#med_genericname').val() || '').trim() === '' && (details.genericname || '').trim() !== '') {
-                $('#med_genericname').val(details.genericname || '');
-            }
-            if (($('#med_salt_name').val() || '').trim() === '' && (details.salt_name || '').trim() !== '') {
-                $('#med_salt_name').val(details.salt_name || '');
-            }
-            if (($('#med_dosage_restriction').val() || '').trim() === '' && (details.dosage_restriction || '').trim() !== '') {
-                $('#med_dosage_restriction').val(details.dosage_restriction || '');
-            }
-
-            setMsg('ok', (data.error_text || 'AI details prepared') + '. Review and click Update.');
-
-            var provider = String(data.provider || '');
-            var confidence = String(data.match_confidence || '');
-            var medId = parseInt($('#med_id').val() || '0', 10);
-            var isNewMedicine = medId <= 0;
-
-            if (provider === 'local-master' && confidence === 'exact') {
-                var matchedName = String(data.matched_item_name || '').trim();
-                var askExact = 'Exact local match found';
-                if (matchedName) {
-                    askExact += ' (' + matchedName + ')';
-                }
-                askExact += '. Auto-save now?';
-                if (window.confirm(askExact)) {
-                    saveMedicine(buildMedicinePayload(), function() {
-                        setMsg('ok', 'Auto-saved using exact local master match.');
-                    });
-                }
-                return;
-            }
-
-            if (isNewMedicine && (provider === 'ai-server' || provider === 'local-brand-fallback')) {
-                if (window.confirm('Details prepared for a new medicine. Save this new master entry now?')) {
-                    saveMedicine(buildMedicinePayload(), function() {
-                        setMsg('ok', 'New medicine saved with suggested generic/salt details.');
-                    });
-                }
-            }
+            applyDrugMasterDetailsToForm(
+                data.details || {},
+                (data.error_text || 'Details fetched from Drug Master') + '. Review and click Update.'
+            );
         });
+    }
+
+    function renderDrugMasterPanel(rows) {
+        var $panel = $('#drug_master_suggest_panel');
+        $panel.empty();
+
+        if (!rows || !rows.length) {
+            $panel.append('<div class="px-3 py-2 text-muted small">No matches found in Pharmacy / ABDM Drug Master.</div>');
+            $panel.show();
+            return;
+        }
+
+        rows.forEach(function(row) {
+            var display = String(row.display_name || row.brand_name || '');
+            var brand = String(row.brand_name || display);
+            var generic = String(row.generic_name || '');
+            var form = String(row.formulation || '');
+            var comp = String(row.company_name || '');
+            var snomed = String(row.snomed_code || row.identifier || '');
+            var source = String(row.source || 'Drug Master');
+            var badgeCls = (source === 'Pharmacy Master') ? 'bg-success' : 'bg-primary';
+
+            var $item = $('<div class="px-3 py-2 border-bottom drug-master-suggest-item" style="cursor:pointer;">').data('row', row);
+            $item.html(
+                '<div class="d-flex justify-content-between align-items-start">'
+                + '<div>'
+                + '<span class="fw-semibold">' + $('<div>').text(display).html() + '</span>'
+                + (form ? ' <span class="badge bg-light text-dark border">' + $('<div>').text(form).html() + '</span>' : '')
+                + '</div>'
+                + '<span class="badge ' + badgeCls + ' ms-2 flex-shrink-0">' + $('<div>').text(source).html() + '</span>'
+                + '</div>'
+                + '<div class="text-success small">Salt: ' + $('<div>').text(generic || 'N/A').html() + '</div>'
+                + '<div class="text-muted small">'
+                + (comp ? 'Mfg: ' + $('<div>').text(comp).html() : '')
+                + (snomed ? (comp ? ' | ' : '') + 'Code: ' + $('<div>').text(snomed).html() : '')
+                + '</div>'
+            );
+
+            $item.on('mouseenter', function() { $(this).addClass('bg-light'); })
+                 .on('mouseleave', function() { $(this).removeClass('bg-light'); });
+
+            $item.on('click', function() {
+                var r = $(this).data('row') || {};
+                if (($('#med_id').val() || '0') === '0' && r.brand_name) {
+                    $('#med_item_name').val(r.brand_name);
+                }
+                applyDrugMasterDetailsToForm({
+                    genericname: r.generic_name || '',
+                    formulation: r.formulation || '',
+                    company_name: r.company_name || '',
+                    snomed_code: r.snomed_code || '',
+                    route: r.route || ''
+                }, 'Selected from ' + (r.source || 'Drug Master') + '. Fetching substitutes...');
+                closeDrugMasterPanel();
+
+                // Also fetch substitute brands from backend
+                fetchDrugMasterDetails({
+                    identifier: r.identifier || '',
+                    type: r.type || 'brand'
+                });
+            });
+
+            $panel.append($item);
+        });
+
+        $panel.show();
+    }
+
+    function searchDrugMasterAutocomplete(term) {
+        term = (term || '').trim();
+        if (term.length < 2) {
+            closeDrugMasterPanel();
+            return;
+        }
+        var $btn = $('#btn_drug_master_search');
+        $btn.prop('disabled', true).text('...');
+        apiGet('<?= base_url('Opd_prescription/opd_medicince_drug_master_search') ?>?q=' + encodeURIComponent(term) + '&limit=10', function(data) {
+            $btn.prop('disabled', false).html('<i class="fa fa-search"></i> Drug Master');
+            renderDrugMasterPanel((data && data.rows) ? data.rows : []);
+        });
+    }
+
+    $('#btn_drug_master_search').on('click', function() {
+        var term = ($('#med_item_name').val() || '').trim();
+        if (!term) {
+            setMsg('err', 'Enter a medicine name first.');
+            return;
+        }
+        searchDrugMasterAutocomplete(term);
+    });
+
+    $('#med_item_name').on('input', function() {
+        var term = String($(this).val() || '').trim();
+        if (drugMasterSuggestTimer) {
+            clearTimeout(drugMasterSuggestTimer);
+        }
+        if (term.length < 3) {
+            closeDrugMasterPanel();
+            return;
+        }
+        drugMasterSuggestTimer = setTimeout(function() {
+            searchDrugMasterAutocomplete(term);
+        }, 320);
+    });
+
+    $(document).on('click', function(e) {
+        if (!$(e.target).closest('#drug_master_suggest_panel, #btn_drug_master_search, #med_item_name').length) {
+            closeDrugMasterPanel();
+        }
+    });
+
+    $('#btn_med_ai_details').on('click', function() {
+        fetchDrugMasterDetails({});
+    });
+
+    // ── Bulk Sync Missing Salt from Drug Master ──────────────────────────────
+    $('#btn_med_bulk_sync_stop').on('click', function() {
+        bulkSyncStopRequested = true;
+        $(this).prop('disabled', true).text('Stopping...');
+    });
+
+    $('#btn_med_bulk_sync_salt').on('click', function() {
+        if (bulkSyncRunning) {
+            return;
+        }
+        if (!window.confirm('Update missing Generic/Salt, Substitute brands, Company Name & SNOMED codes for OPD medicines from Pharmacy Drug Master and ABDM Drug Master API now?')) {
+            return;
+        }
+
+        bulkSyncRunning = true;
+        bulkSyncStopRequested = false;
+        var totalProcessed = 0;
+        var totalUpdated = 0;
+        var initialRemaining = 0;
+
+        $('#btn_med_bulk_sync_salt').prop('disabled', true).text('Syncing...');
+        $('#btn_med_bulk_sync_stop').prop('disabled', false).text('Stop').show();
+        $('#med_bulk_sync_title').text('Syncing missing Salt/Generic from Drug Master...');
+        $('#med_bulk_sync_bar').css('width', '5%').addClass('progress-bar-animated');
+        $('#med_bulk_sync_status').text('Starting batch sync...');
+        $('#med_bulk_sync_box').show();
+
+        function finishBulkSync(reasonText) {
+            bulkSyncRunning = false;
+            $('#btn_med_bulk_sync_salt').prop('disabled', false).text('Update Salt (Drug Master)');
+            $('#btn_med_bulk_sync_stop').hide();
+            $('#med_bulk_sync_bar').removeClass('progress-bar-animated').css('width', '100%');
+            $('#med_bulk_sync_title').text(reasonText || 'Drug Master Sync Completed');
+            $('#med_bulk_sync_status').text('Processed: ' + totalProcessed + ' | Updated: ' + totalUpdated + ' medicine(s) with Salt/Generic details.');
+            showToast('Updated ' + totalUpdated + ' medicine(s) from Drug Master.', 'ok');
+            loadList();
+        }
+
+        function runNextBatch(lastId) {
+            if (bulkSyncStopRequested) {
+                finishBulkSync('Drug Master Sync Stopped by User');
+                return;
+            }
+
+            apiPost('<?= base_url('Opd_prescription/opd_medicince_bulk_sync_drug_master') ?>', {
+                last_id: lastId,
+                batch_size: 25
+            }, function(data) {
+                if ((data.update || 0) != 1) {
+                    finishBulkSync('Sync stopped: ' + (data.error_text || 'Error'));
+                    return;
+                }
+
+                var proc = parseInt(data.processed_in_batch || 0, 10);
+                var upd = parseInt(data.updated_in_batch || 0, 10);
+                var rem = parseInt(data.remaining || 0, 10);
+                var nextLastId = parseInt(data.last_id || lastId, 10);
+
+                totalProcessed += proc;
+                totalUpdated += upd;
+                if (initialRemaining <= 0) {
+                    initialRemaining = totalProcessed + rem;
+                }
+
+                var pct = initialRemaining > 0 ? Math.min(99, Math.round((totalProcessed / initialRemaining) * 100)) : 100;
+                $('#med_bulk_sync_bar').css('width', pct + '%');
+                $('#med_bulk_sync_status').text(
+                    'Processed: ' + totalProcessed + ' / ' + initialRemaining
+                    + ' | Updated: ' + totalUpdated
+                    + ' | Remaining: ' + rem
+                );
+
+                if (data.has_more && proc > 0 && !bulkSyncStopRequested) {
+                    setTimeout(function() {
+                        runNextBatch(nextLastId);
+                    }, 120);
+                } else {
+                    finishBulkSync('Drug Master Sync Completed');
+                }
+            });
+        }
+
+        runNextBatch(0);
     });
 
     $('#med_company_name').on('focus', function() {

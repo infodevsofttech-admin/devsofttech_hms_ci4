@@ -1027,6 +1027,10 @@ $routes->get('Opd_prescription/opd_medicince_get/(:num)', 'Opd_prescription::opd
 $routes->get('Opd_prescription/opd_medicince_snomed_lookup', 'Opd_prescription::opd_medicince_snomed_lookup');
 $routes->post('Opd_prescription/opd_medicince_save', 'Opd_prescription::opd_medicince_save');
 $routes->post('Opd_prescription/opd_medicince_ai_details', 'Opd_prescription::opd_medicince_ai_details');
+$routes->get('Opd_prescription/opd_medicince_coding_summary', 'Opd_prescription::opd_medicince_coding_summary');
+$routes->get('Opd_prescription/opd_medicince_drug_master_search', 'Opd_prescription::opd_medicince_drug_master_search');
+$routes->post('Opd_prescription/opd_medicince_drug_master_fetch', 'Opd_prescription::opd_medicince_drug_master_fetch');
+$routes->post('Opd_prescription/opd_medicince_bulk_sync_drug_master', 'Opd_prescription::opd_medicince_bulk_sync_drug_master');
 $routes->post('Opd_prescription/opd_medicince_remove/(:num)', 'Opd_prescription::opd_medicince_remove/$1');
 $routes->get('Opd_prescription/opd_medicince_duplicate_report', 'Opd_prescription::opd_medicince_duplicate_report');
 $routes->post('Opd_prescription/opd_medicince_merge_duplicates', 'Opd_prescription::opd_medicince_merge_duplicates');

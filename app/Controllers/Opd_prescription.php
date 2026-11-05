@@ -2558,20 +2558,57 @@ class Opd_prescription extends BaseController
             ->setBody($csv);
     }
 
+    private bool $opdMedMasterColumnsEnsured = false;
+
+    private function ensureOpdMedMasterCodingColumns(): void
+    {
+        if ($this->opdMedMasterColumnsEnsured) {
+            return;
+        }
+        $this->opdMedMasterColumnsEnsured = true;
+
+        $table = $this->findExistingTable(['opd_med_master']);
+        if ($table === null) {
+            return;
+        }
+
+        try {
+            $fields = $this->db->getFieldNames($table);
+            if (! in_array('snomed_code', $fields, true) && ! in_array('medicine_snomed_code', $fields, true)) {
+                $this->db->query('ALTER TABLE `' . $table . '` ADD COLUMN `snomed_code` VARCHAR(64) DEFAULT NULL');
+            }
+            if (! in_array('atc_code', $fields, true) && ! in_array('who_atc_code', $fields, true)) {
+                $this->db->query('ALTER TABLE `' . $table . '` ADD COLUMN `atc_code` VARCHAR(32) DEFAULT NULL');
+            }
+        } catch (\Throwable $e) {
+            // Non-blocking if schema privileges are restricted
+        }
+    }
+
     public function opd_medicince_coding_summary()
     {
+        $this->ensureOpdMedMasterCodingColumns();
         $rows = $this->getOpdMedicineRows('all', 'all', true);
 
         $summary = [
             'total' => 0,
+            'generic_missing' => 0,
             'coding_missing' => 0,
             'snomed_missing' => 0,
             'atc_missing' => 0,
             'both_missing' => 0,
         ];
 
+        $unclearTokens = ['na', 'n/a', 'same', '-', '--', 'unknown', '?', '0'];
+
         foreach ($rows as $row) {
             $summary['total']++;
+
+            $name = mb_strtolower(trim((string) ($row['item_name'] ?? '')));
+            $generic = mb_strtolower(trim((string) ($row['genericname'] ?? '')));
+            if ($generic === '' || in_array($generic, $unclearTokens, true) || ($name !== '' && $generic === $name)) {
+                $summary['generic_missing']++;
+            }
 
             $snomed = strtoupper(trim((string) ($row['snomed_code'] ?? '')));
             $atc = strtoupper(trim((string) ($row['atc_code'] ?? '')));
@@ -2601,6 +2638,7 @@ class Opd_prescription extends BaseController
 
     private function getOpdMedicineRows(string $filter = '', string $scope = 'all', bool $showAll = false): array
     {
+        $this->ensureOpdMedMasterCodingColumns();
         $table = $this->findExistingTable(['opd_med_master']);
         if ($table === null) {
             return [];
@@ -2884,6 +2922,7 @@ class Opd_prescription extends BaseController
         if (! $this->request->isAJAX()) {
             return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
         }
+        $this->ensureOpdMedMasterCodingColumns();
         $table = $this->findExistingTable(['opd_med_master']);
         if ($table === null) {
             return $this->response->setJSON(['update' => 0, 'error_text' => 'Medicine table not found']);
@@ -2971,549 +3010,1173 @@ class Opd_prescription extends BaseController
         ]);
     }
 
+    /**
+     * Live autocomplete search against Local Pharmacy Drug Master (`med_product_master`)
+     * + ABDM Bridge Drug Master API (`/v3/drugs/autocomplete`).
+     *
+     * GET /Opd_prescription/opd_medicince_drug_master_search?q=...&limit=10
+     */
+    public function opd_medicince_drug_master_search()
+    {
+        session_write_close();
+
+        $q = trim((string) ($this->request->getGet('q') ?? $this->request->getPost('q') ?? ''));
+        $limit = max(1, min(20, (int) ($this->request->getGet('limit') ?? 10)));
+
+        if (mb_strlen($q) < 2) {
+            return $this->response->setJSON([
+                'update' => 1,
+                'rows'   => [],
+            ]);
+        }
+
+        $parsed = $this->parseOpdDrugSearchQuery($q, '');
+        $searchTerm = $parsed['clean_name'] !== '' ? $parsed['clean_name'] : $q;
+
+        $rows = [];
+        $seenKeys = [];
+
+        // 1. Local Pharmacy Drug Master (`med_product_master`) — prioritize ABDM-linked rows first
+        if ($this->db->tableExists('med_product_master')) {
+            $localRows = $this->db->table('med_product_master')
+                ->groupStart()
+                ->like('item_name', $searchTerm, 'after')
+                ->orLike('item_name', $searchTerm)
+                ->orLike('abdm_drug_display', $searchTerm)
+                ->orLike('genericname', $searchTerm, 'after')
+                ->groupEnd()
+                ->where('genericname !=', '')
+                ->where('genericname !=', '0')
+                ->orderBy('abdm_drug_identifier IS NOT NULL AND abdm_drug_identifier != ""', 'DESC', false)
+                ->limit($limit)
+                ->get()
+                ->getResultArray();
+
+            foreach ($localRows as $lr) {
+                $itemName = trim((string) ($lr['item_name'] ?? ''));
+                $display  = trim((string) ($lr['abdm_drug_display'] ?? '')) ?: $itemName;
+                $generic  = trim((string) ($lr['genericname'] ?? ''));
+                $company  = trim((string) ($lr['company_name'] ?? ''));
+                if ($company === '0') {
+                    $company = '';
+                }
+                $formRaw  = trim((string) ($lr['formulation'] ?? ''));
+                if ($formRaw === '0') {
+                    $formRaw = '';
+                }
+                $formNorm = $this->normalizeMedicineFormulation($formRaw, $itemName);
+                $snomed   = trim((string) ($lr['abdm_drug_identifier'] ?? ''));
+                if ($snomed !== '' && ! preg_match('/^\d{5,22}$/', $snomed)) {
+                    $snomed = '';
+                }
+
+                $dedupKey = mb_strtolower($itemName . '|' . $generic);
+                if (isset($seenKeys[$dedupKey])) {
+                    continue;
+                }
+                $seenKeys[$dedupKey] = true;
+
+                $rows[] = [
+                    'display_name' => $display,
+                    'brand_name'   => $itemName,
+                    'generic_name' => $generic,
+                    'formulation'  => $formNorm,
+                    'company_name' => $company,
+                    'snomed_code'  => $snomed,
+                    'route'        => '',
+                    'identifier'   => $snomed,
+                    'type'         => trim((string) ($lr['abdm_drug_type'] ?? 'brand')) ?: 'brand',
+                    'source'       => $snomed !== '' ? 'ABDM Pharmacy Master' : 'Pharmacy Master',
+                ];
+            }
+        }
+
+        // 2. Live ABDM Bridge Drug Master API (`/v3/drugs/autocomplete`)
+        if (count($rows) < $limit) {
+            $bridgeItems = $this->queryAbdmBridgeDrugAutocomplete($searchTerm, 'brand', $limit);
+            if (empty($bridgeItems)) {
+                $bridgeItems = $this->queryAbdmBridgeDrugAutocomplete($searchTerm, 'generic', $limit);
+            }
+
+            foreach ($bridgeItems as $it) {
+                $brand   = trim((string) ($it['brand_name'] ?? ''));
+                $display = trim((string) ($it['display_name'] ?? '')) ?: $brand;
+                $generic = trim((string) ($it['generic_name'] ?? ''));
+                $company = trim((string) ($it['company_name'] ?? $it['manufacturer_name'] ?? ''));
+                $formRaw = trim((string) ($it['short_formulation'] ?? $it['dosage_form'] ?? $it['formulation'] ?? ''));
+                $formNorm = $this->normalizeMedicineFormulation($formRaw, $display);
+                $snomed  = trim((string) ($it['identifier'] ?? ''));
+                $route   = trim((string) ($it['route'] ?? ''));
+                $type    = trim((string) ($it['type'] ?? 'brand')) ?: 'brand';
+
+                if ($display === '' && $brand === '') {
+                    continue;
+                }
+
+                $dedupKey = mb_strtolower(($brand ?: $display) . '|' . $generic);
+                if (isset($seenKeys[$dedupKey])) {
+                    continue;
+                }
+                $seenKeys[$dedupKey] = true;
+
+                $rows[] = [
+                    'display_name' => $display,
+                    'brand_name'   => $brand ?: $display,
+                    'generic_name' => $generic,
+                    'formulation'  => $formNorm,
+                    'company_name' => $company,
+                    'snomed_code'  => $snomed,
+                    'route'        => $route,
+                    'identifier'   => $snomed,
+                    'type'         => $type,
+                    'source'       => 'ABDM Drug Master',
+                ];
+
+                if (count($rows) >= $limit) {
+                    break;
+                }
+            }
+        }
+
+        return $this->response->setJSON([
+            'update' => 1,
+            'rows'   => $rows,
+        ]);
+    }
+
+    /**
+     * Fetch Salt/Generic, Substitute brands, Formulation, Company Name, and SNOMED CT code
+     * for a single OPD medicine from Local Pharmacy Drug Master (`med_product_master`)
+     * + ABDM Bridge Drug Master API (`abdm-bridge.e-atria.in`).
+     *
+     * Replaces the legacy "Use AI" endpoint (`opd_medicince_ai_details`).
+     */
+    public function opd_medicince_drug_master_fetch()
+    {
+        return $this->opd_medicince_ai_details();
+    }
+
     public function opd_medicince_ai_details()
     {
         if (! $this->request->isAJAX()) {
             return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
         }
 
-        $name = trim((string) $this->request->getPost('item_name'));
+        $this->ensureOpdMedMasterCodingColumns();
+
+        $name        = trim((string) $this->request->getPost('item_name'));
         $formulation = trim((string) $this->request->getPost('formulation'));
-        if ($name === '') {
-            return $this->response->setJSON(['update' => 0, 'error_text' => 'Medicine name is required']);
-        }
+        $medId       = (int) ($this->request->getPost('med_id') ?? 0);
+        $identifier  = trim((string) ($this->request->getPost('identifier') ?? ''));
+        $drugType    = trim((string) ($this->request->getPost('type') ?? 'brand')) ?: 'brand';
 
-        $local = $this->lookupMedicineDetailsFromMaster($name, $formulation);
-        if (($local['genericname'] ?? '') !== '' || ($local['salt_name'] ?? '') !== '') {
+        if ($name === '' && $identifier === '') {
             return $this->response->setJSON([
-                'update' => 1,
-                'provider' => 'local-master',
-                'match_confidence' => (string) ($local['match_confidence'] ?? 'partial'),
-                'matched_item_name' => (string) ($local['matched_item_name'] ?? ''),
-                'details' => [
-                    'genericname' => trim((string) ($local['genericname'] ?? '')),
-                    'salt_name' => trim((string) ($local['salt_name'] ?? '')),
-                    'dosage_restriction' => trim((string) ($local['dosage_restriction'] ?? '')),
-                    'caution_note' => trim((string) ($local['caution_note'] ?? '')),
-                ],
-                'error_text' => 'Medicine details found from local master data',
-                'csrfName' => csrf_token(),
-                'csrfHash' => csrf_hash(),
+                'update'     => 0,
+                'error_text' => 'Medicine name is required',
+                'csrfName'   => csrf_token(),
+                'csrfHash'   => csrf_hash(),
             ]);
         }
 
-        $serverDetails = $this->fetchMedicineDetailsFromAiServer($name, $formulation);
-        if (($serverDetails['genericname'] ?? '') !== '' || ($serverDetails['salt_name'] ?? '') !== '') {
+        $match = $this->lookupMedicineFromDrugMaster($name, $formulation, $medId, true, $identifier, $drugType);
+        if (($match['genericname'] ?? '') === '' && ($match['salt_name'] ?? '') === '') {
             return $this->response->setJSON([
-                'update' => 1,
-                'provider' => 'ai-server',
-                'match_confidence' => 'ai-server',
-                'matched_item_name' => '',
-                'details' => [
-                    'genericname' => trim((string) ($serverDetails['genericname'] ?? '')),
-                    'salt_name' => trim((string) ($serverDetails['salt_name'] ?? '')),
-                    'dosage_restriction' => trim((string) ($serverDetails['dosage_restriction'] ?? '')),
-                    'caution_note' => trim((string) ($serverDetails['caution_note'] ?? '')),
-                ],
-                'error_text' => 'Medicine details prepared from AI server',
-                'csrfName' => csrf_token(),
-                'csrfHash' => csrf_hash(),
+                'update'     => 0,
+                'error_text' => 'No match found in Pharmacy Drug Master or ABDM Drug Master for "' . $name . '". Try typing the brand or generic name in the search box.',
+                'csrfName'   => csrf_token(),
+                'csrfHash'   => csrf_hash(),
             ]);
-        }
-
-        $prompt = "You are a medicine data enrichment assistant for OPD master data in India.\n"
-            . "For this medicine, provide structured details based on public medical references and standard labeling guidance.\n"
-            . "Medicine Name: {$name}\n"
-            . "Formulation: {$formulation}\n"
-            . "Return ONLY valid JSON object with keys: genericname, salt_name, dosage_restriction, caution_note.\n"
-            . "Use short plain text values. If unsure for a field, keep empty string.";
-
-        $this->lastAiProvider = 'none';
-        $aiText = $this->generateClinicalTextWithAi($prompt, 280);
-        if ($aiText === null || trim($aiText) === '') {
-            $fallback = $this->inferMedicineDetailsFromBrandName($name, $formulation);
-            if (($fallback['genericname'] ?? '') !== '' || ($fallback['salt_name'] ?? '') !== '') {
-                return $this->response->setJSON([
-                    'update' => 1,
-                    'provider' => 'local-brand-fallback',
-                    'match_confidence' => 'brand-fallback',
-                    'matched_item_name' => '',
-                    'details' => [
-                        'genericname' => trim((string) ($fallback['genericname'] ?? '')),
-                        'salt_name' => trim((string) ($fallback['salt_name'] ?? '')),
-                        'dosage_restriction' => trim((string) ($fallback['dosage_restriction'] ?? '')),
-                        'caution_note' => trim((string) ($fallback['caution_note'] ?? '')),
-                    ],
-                    'error_text' => 'AI unavailable. Fallback generic/salt suggestion prepared.',
-                    'csrfName' => csrf_token(),
-                    'csrfHash' => csrf_hash(),
-                ]);
-            }
-
-            $aiServerHint = $this->lastAiServerError !== ''
-                ? (' AI-server attempts: ' . $this->lastAiServerError)
-                : '';
-
-            return $this->response->setJSON([
-                'update' => 0,
-                'error_text' => 'AI unavailable and no local match found. Check AI settings (DIAGNOSIS_AI_SERVER_URL or DIAGNOSIS_AI_MEDICINE_ENDPOINT).' . $aiServerHint,
-            ]);
-        }
-
-        $parsed = $this->parseJsonFromAiResponse($aiText);
-        if ($parsed === null) {
-            $fallback = $this->inferMedicineDetailsFromBrandName($name, $formulation);
-            if (($fallback['genericname'] ?? '') !== '' || ($fallback['salt_name'] ?? '') !== '') {
-                return $this->response->setJSON([
-                    'update' => 1,
-                    'provider' => 'local-brand-fallback',
-                    'match_confidence' => 'brand-fallback',
-                    'matched_item_name' => '',
-                    'details' => [
-                        'genericname' => trim((string) ($fallback['genericname'] ?? '')),
-                        'salt_name' => trim((string) ($fallback['salt_name'] ?? '')),
-                        'dosage_restriction' => trim((string) ($fallback['dosage_restriction'] ?? '')),
-                        'caution_note' => trim((string) ($fallback['caution_note'] ?? '')),
-                    ],
-                    'error_text' => 'AI parse failed. Fallback generic/salt suggestion prepared.',
-                    'csrfName' => csrf_token(),
-                    'csrfHash' => csrf_hash(),
-                ]);
-            }
-
-            return $this->response->setJSON(['update' => 0, 'error_text' => 'AI response parse failed. Try again.']);
         }
 
         return $this->response->setJSON([
-            'update' => 1,
-            'provider' => $this->lastAiProvider,
-            'match_confidence' => 'ai',
-            'matched_item_name' => '',
-            'details' => [
-                'genericname' => trim((string) ($parsed['genericname'] ?? '')),
-                'salt_name' => trim((string) ($parsed['salt_name'] ?? '')),
-                'dosage_restriction' => trim((string) ($parsed['dosage_restriction'] ?? '')),
-                'caution_note' => trim((string) ($parsed['caution_note'] ?? '')),
+            'update'            => 1,
+            'provider'          => (string) ($match['provider'] ?? 'drug-master'),
+            'match_confidence'  => (string) ($match['match_confidence'] ?? 'exact'),
+            'matched_item_name' => (string) ($match['matched_item_name'] ?? ''),
+            'details'           => [
+                'genericname'        => trim((string) ($match['genericname'] ?? '')),
+                'salt_name'          => trim((string) ($match['salt_name'] ?? '')),
+                'formulation'        => trim((string) ($match['formulation'] ?? '')),
+                'company_name'       => trim((string) ($match['company_name'] ?? '')),
+                'snomed_code'        => trim((string) ($match['snomed_code'] ?? '')),
+                'route'              => trim((string) ($match['route'] ?? '')),
+                'dosage_restriction' => trim((string) ($match['dosage_restriction'] ?? '')),
+                'caution_note'       => '',
             ],
-            'error_text' => 'AI details prepared',
-            'csrfName' => csrf_token(),
-            'csrfHash' => csrf_hash(),
+            'error_text' => (string) ($match['message'] ?? 'Fetched from Drug Master'),
+            'csrfName'   => csrf_token(),
+            'csrfHash'   => csrf_hash(),
         ]);
     }
 
     /**
-     * @return array<string, string>
+     * Batch-sync missing Generic/Salt, Substitute brands, Company, Formulation, and SNOMED CT codes
+     * in `opd_med_master` using Local Pharmacy Drug Master (`med_product_master`) + ABDM Bridge Drug Master API.
+     *
+     * POST /Opd_prescription/opd_medicince_bulk_sync_drug_master
      */
-    private function fetchMedicineDetailsFromAiServer(string $itemName, string $formulation): array
+    public function opd_medicince_bulk_sync_drug_master()
     {
-        $this->lastAiServerError = '';
-        $itemName = trim($itemName);
-        if ($itemName === '') {
-            return [];
+        if (! $this->request->isAJAX()) {
+            return $this->response->setStatusCode(400)->setJSON(['update' => 0, 'error_text' => 'Invalid request']);
         }
 
-        $configuredEndpointsRaw = trim($this->readAiSettingValue([
-            'DIAGNOSIS_AI_MEDICINE_ENDPOINT',
-            'DIAGNOSIS_AI_MEDICINE_DETAILS_ENDPOINT',
-            'AI_SERVER_MEDICINE_ENDPOINT',
-        ]));
-
-        $token = trim($this->readAiSettingValue(['DIAGNOSIS_AI_PARSE_TOKEN', 'AI_SERVER_TOKEN']));
-        if ($token === '') {
-            $token = trim((string) getenv('DIAGNOSIS_AI_PARSE_TOKEN'));
-        }
-        if ($token === '') {
-            $token = trim((string) getenv('AI_SERVER_TOKEN'));
+        $this->ensureOpdMedMasterCodingColumns();
+        $table = $this->findExistingTable(['opd_med_master']);
+        if ($table === null) {
+            return $this->response->setJSON([
+                'update'     => 0,
+                'error_text' => 'OPD Medicine Master table not found',
+                'csrfName'   => csrf_token(),
+                'csrfHash'   => csrf_hash(),
+            ]);
         }
 
-        $payload = [
-            'item_name' => $itemName,
-            'medicine_name' => $itemName,
-            'name' => $itemName,
-            'formulation' => trim($formulation),
-            'mode' => 'medicine-details',
-        ];
+        $lastId    = max(0, (int) ($this->request->getPost('last_id') ?? 0));
+        $batchSize = max(5, min(50, (int) ($this->request->getPost('batch_size') ?? 25)));
 
-        $headers = [
-            'Accept' => 'application/json',
-            'Content-Type' => 'application/json',
-        ];
-        if ($token !== '') {
-            $headers['Authorization'] = 'Bearer ' . $token;
-        }
+        $fields       = $this->db->getFieldNames($table);
+        $nameField    = $this->resolveFirstField($fields, ['item_name', 'med_name']) ?? 'item_name';
+        $genericField = $this->resolveFirstField($fields, ['genericname', 'generic_name']) ?? 'genericname';
+        $saltField    = $this->resolveFirstField($fields, ['salt_name', 'sal_name', 'salt', 'saltname']);
+        $companyField = $this->resolveFirstField($fields, ['company_name', 'company']);
+        $formField    = $this->resolveFirstField($fields, ['formulation', 'med_type']);
+        $snomedField  = $this->resolveFirstField($fields, ['snomed_code', 'medicine_snomed_code', 'snomed_ct_code', 'sctid']);
 
-        $baseCandidates = $this->resolveAiServerBaseCandidates();
-        $defaultPaths = [
-            '/medicine-details',
-            '/medicine/details',
-            '/medicine/enrich',
-            '/medicine/lookup',
-            '/api/medicine/details',
-            '/api/medicine/enrich',
-            '/api/medicine/lookup',
-            '/api/v1/medicine/details',
-            '/api/v1/medicine/enrich',
-            '/api/v1/medicine/lookup',
-            '/v1/medicine/details',
-            '/v1/medicine/enrich',
-            '/v1/medicine/lookup',
-        ];
+        $allRows = $this->db->table($table)
+            ->orderBy('id', 'ASC')
+            ->get()
+            ->getResultArray();
 
-        $endpointCandidates = [];
-        if ($configuredEndpointsRaw !== '') {
-            $parts = preg_split('/[\r\n,]+/', $configuredEndpointsRaw) ?: [];
-            foreach ($parts as $part) {
-                $candidate = trim((string) $part);
-                if ($candidate === '') {
-                    continue;
-                }
-
-                // Normalize accidental Windows-style slashes from settings values.
-                $candidate = str_replace('\\', '/', $candidate);
-
-                if (preg_match('#^https?://#i', $candidate) === 1) {
-                    $endpointCandidates[] = rtrim($candidate, '/');
-                    continue;
-                }
-
-                $path = '/' . ltrim($candidate, '/');
-                foreach ($baseCandidates as $base) {
-                    $endpointCandidates[] = rtrim($base, '/') . $path;
-                }
+        $unclearTokens = ['na', 'n/a', 'same', '-', '--', 'unknown', '?', '0'];
+        $candidates = [];
+        foreach ($allRows as $r) {
+            $rid = (int) ($r['id'] ?? 0);
+            if ($rid <= $lastId) {
+                continue;
+            }
+            $rName = mb_strtolower(trim((string) ($r[$nameField] ?? '')));
+            if ($rName === '') {
+                continue;
+            }
+            $rGen = mb_strtolower(trim((string) ($r[$genericField] ?? '')));
+            if ($rGen === '' || in_array($rGen, $unclearTokens, true) || $rGen === $rName) {
+                $candidates[] = $r;
             }
         }
 
-        foreach ($baseCandidates as $base) {
-            foreach ($defaultPaths as $path) {
-                $endpointCandidates[] = rtrim($base, '/') . $path;
-            }
-        }
+        $totalRemainingBefore = count($candidates);
+        $batchRows = array_slice($candidates, 0, $batchSize);
 
-        $endpointCandidates = array_values(array_unique($endpointCandidates));
-        $endpointCandidates = array_values(array_filter($endpointCandidates, static function ($url): bool {
-            $text = (string) $url;
-            if ($text === '') {
-                return false;
-            }
+        $processedCount = 0;
+        $updatedCount   = 0;
+        $newLastId      = $lastId;
+        $updatedItems   = [];
 
-            $lower = strtolower($text);
-            if (strpos($text, '\\') !== false || strpos($lower, '%5c') !== false) {
-                return false;
-            }
+        foreach ($batchRows as $row) {
+            $rid       = (int) ($row['id'] ?? 0);
+            $newLastId = max($newLastId, $rid);
+            $processedCount++;
 
-            return true;
-        }));
-        $statusTrail = [];
+            $itemName    = trim((string) ($row[$nameField] ?? ''));
+            $formulation = $formField !== null ? trim((string) ($row[$formField] ?? '')) : '';
 
-        foreach ($endpointCandidates as $endpointUrl) {
-            if (strpos($endpointUrl, '\\') !== false || strpos(strtolower($endpointUrl), '%5c') !== false) {
-                $statusTrail[] = 'skipped-malformed @ ' . $endpointUrl;
+            $match = $this->lookupMedicineFromDrugMaster($itemName, $formulation, $rid, false);
+            $newGeneric = trim((string) ($match['genericname'] ?? ''));
+            if ($newGeneric === '') {
                 continue;
             }
 
-            try {
-                $options = [
-                    'timeout' => 20,
-                    'http_errors' => false,
-                ];
-                if (defined('ENVIRONMENT') && in_array((string) ENVIRONMENT, ['development', 'testing'], true)) {
-                    $options['verify'] = false;
+            $updateData = [
+                $genericField => $newGeneric,
+            ];
+
+            if ($saltField !== null) {
+                $curSalt = trim((string) ($row[$saltField] ?? ''));
+                $newSalt = trim((string) ($match['salt_name'] ?? ''));
+                if ($newSalt !== '' && ($curSalt === '' || strcasecmp($curSalt, $newGeneric) === 0 || strcasecmp($curSalt, $itemName) === 0)) {
+                    $updateData[$saltField] = $newSalt;
                 }
+            }
 
-                $client = service('curlrequest', $options);
-                $response = $client->post($endpointUrl, [
-                    'headers' => $headers,
-                    'json' => $payload,
-                ]);
-
-                $status = (int) $response->getStatusCode();
-                $statusTrail[] = $status . ' @ ' . $endpointUrl;
-                if ($status < 200 || $status >= 300) {
-                    continue;
+            if ($companyField !== null) {
+                $curCompany = trim((string) ($row[$companyField] ?? ''));
+                $newCompany = trim((string) ($match['company_name'] ?? ''));
+                if ($newCompany !== '' && ($curCompany === '' || $curCompany === '0')) {
+                    $updateData[$companyField] = $newCompany;
                 }
+            }
 
-                $decoded = json_decode((string) $response->getBody(), true);
-                if (!is_array($decoded)) {
-                    continue;
+            if ($formField !== null) {
+                $curForm = trim((string) ($row[$formField] ?? ''));
+                $newForm = trim((string) ($match['formulation'] ?? ''));
+                if ($newForm !== '' && ($curForm === '' || $curForm === '0')) {
+                    $updateData[$formField] = $newForm;
                 }
+            }
 
-                $details = is_array($decoded['details'] ?? null) ? $decoded['details'] : $decoded;
-                $data = is_array($decoded['data'] ?? null) ? $decoded['data'] : [];
-
-                $generic = trim((string) (
-                    $details['genericname']
-                    ?? $details['generic_name']
-                    ?? $data['genericname']
-                    ?? $data['generic_name']
-                    ?? $data['medicine_name']
-                    ?? ''
-                ));
-
-                $salt = trim((string) (
-                    $details['salt_name']
-                    ?? $details['salt']
-                    ?? $data['salt_name']
-                    ?? $data['salt']
-                    ?? ''
-                ));
-
-                if ($salt === '' && is_array($data['brand_names'] ?? null)) {
-                    $salt = trim(implode(', ', array_slice(array_map('strval', $data['brand_names']), 0, 3)));
+            if ($snomedField !== null) {
+                $curSnomed = trim((string) ($row[$snomedField] ?? ''));
+                $newSnomed = trim((string) ($match['snomed_code'] ?? ''));
+                if ($newSnomed !== '' && $curSnomed === '') {
+                    $updateData[$snomedField] = $newSnomed;
                 }
+            }
 
-                $dosage = trim((string) (
-                    $details['dosage_restriction']
-                    ?? $details['restriction']
-                    ?? $data['dosage_restriction']
-                    ?? $data['restriction']
-                    ?? ((is_array($data['dosage'] ?? null) ? ($data['dosage']['adult_dose'] ?? '') : ''))
-                    ?? ''
-                ));
+            $this->db->table($table)->where('id', $rid)->update($updateData);
+            $updatedCount++;
 
-                $caution = trim((string) (
-                    $details['caution_note']
-                    ?? $details['caution']
-                    ?? $data['caution_note']
-                    ?? $data['caution']
-                    ?? ''
-                ));
+            $updatedItems[] = [
+                'id'           => $rid,
+                'item_name'    => $itemName,
+                'genericname'  => $newGeneric,
+                'company_name' => (string) ($updateData[$companyField ?? ''] ?? ($row[$companyField ?? ''] ?? '')),
+                'provider'     => (string) ($match['provider'] ?? ''),
+            ];
+        }
 
-                if ($caution === '') {
-                    $pieces = [];
-                    if (is_array($data['contraindications'] ?? null) && !empty($data['contraindications'])) {
-                        $pieces[] = 'Contra: ' . implode(', ', array_slice(array_map('strval', $data['contraindications']), 0, 2));
-                    }
-                    if (is_array($data['precautions'] ?? null) && !empty($data['precautions'])) {
-                        $pieces[] = 'Prec: ' . implode(', ', array_slice(array_map('strval', $data['precautions']), 0, 2));
-                    }
-                    if (is_array($data['drug_interactions'] ?? null) && !empty($data['drug_interactions'])) {
-                        $pieces[] = 'Interacts: ' . implode(', ', array_slice(array_map('strval', $data['drug_interactions']), 0, 2));
-                    }
-                    $caution = trim(implode(' | ', $pieces));
+        $remainingAfter = max(0, $totalRemainingBefore - $processedCount);
+
+        return $this->response->setJSON([
+            'update'             => 1,
+            'processed_in_batch' => $processedCount,
+            'updated_in_batch'   => $updatedCount,
+            'last_id'            => $newLastId,
+            'remaining'          => $remainingAfter,
+            'has_more'           => $remainingAfter > 0 && $processedCount > 0,
+            'updated_items'      => $updatedItems,
+            'csrfName'           => csrf_token(),
+            'csrfHash'           => csrf_hash(),
+        ]);
+    }
+
+    /**
+     * Parse and normalize an OPD medicine name into brand core, first word, strengths,
+     * detected formulation, and ordered search query candidates.
+     *
+     * @return array{
+     *   clean_name: string,
+     *   brand_core: string,
+     *   compact_brand: string,
+     *   compact_brand_alt: string,
+     *   first_word: string,
+     *   first_word_alt: string,
+     *   strengths: array<int, string>,
+     *   strengths_mg: array<int, float>,
+     *   formulation: string,
+     *   candidates: array<int, string>
+     * }
+     */
+    private function parseOpdDrugSearchQuery(string $rawName, string $formulation = ''): array
+    {
+        $name = trim($rawName);
+        $detectedForm = strtoupper(trim($formulation));
+
+        // 1. Strip parenthetical formulation tags like (TAB), (INJ), (IV FLUID), (INJECTIONS)
+        while (preg_match('/\s*\(([^)]+)\)\s*$/i', $name, $m)) {
+            $tag = strtoupper(trim((string) $m[1]));
+            if ($detectedForm === '' && preg_match('/^(TAB|TABLET|TABLETS|CAP|CAPSULE|CAPSULES|INJ|INJECTION|INJECTIONS|IV FLUID|IV FLUIDS|SYR|SYP|SYRUP|SUSP|SUSPENSION|DROPS|DROP|CREAM|OINT|OINTMENT|GEL|LOTION|SPRAY|RESPULES|INHALER|SACHET|POWDER|SOAP|SHAMPOO|EYE DROP|EAR DROP|NASAL SPRAY|NASAL DROP)$/', $tag)) {
+                $detectedForm = $tag;
+            }
+            $name = trim(substr($name, 0, -strlen($m[0])));
+        }
+
+        // 2. Strip leading formulation prefixes like "TAB ", "INJ ", "CAP ", "SYP "
+        if (preg_match('/^(TAB|TABLET|CAP|CAPSULE|INJ|INJECTION|SYP|SYR|SYRUP|CREAM|OINT|GEL|DROPS|SUSP|SACHET)[\s.\-]+(.+)$/i', $name, $m)) {
+            if ($detectedForm === '') {
+                $detectedForm = strtoupper(trim((string) $m[1]));
+            }
+            $name = trim((string) $m[2]);
+        }
+
+        // 3. Strip trailing bare formulation words like "CREAM", "SOAP", "POWDER", "GEL", "SYRUP", "DROPS", "KIT"
+        if (preg_match('/^(.+?)\s+(CREAM|SOAP|POWDER|OINTMENT|OINT|GEL|SYRUP|SYP|SYR|DROPS|DROP|LOTION|SPRAY|INHALER|RESPULES|SACHET|INJ|INJECTION|TAB|TABLET|CAP|CAPSULE|KIT|IV FLUID|SUSPENSION)$/i', $name, $m)) {
+            if ($detectedForm === '') {
+                $detectedForm = strtoupper(trim((string) $m[2]));
+            }
+            $name = trim((string) $m[1]);
+        }
+
+        $name = preg_replace('/\s+/', ' ', $name) ?? $name;
+        $normForm = $this->normalizeMedicineFormulation($detectedForm, $rawName);
+
+        // 4. Extract strength numbers (e.g. 500, 625, 1.2, 40, 0.5) and convert GM/G to mg equivalents
+        // Ignore pure volume (ML) when extracting active drug strength unless no other unit exists
+        preg_match_all('/(\d+(?:\.\d+)?)\s*(MG|GM|G|MCG|ML|IU|%)?\b/i', $name, $sm, PREG_SET_ORDER);
+        $strengths = [];
+        $strengthsMg = [];
+        foreach ($sm as $match) {
+            $numStr = (string) $match[1];
+            $unit   = strtoupper(trim((string) ($match[2] ?? '')));
+            if ($unit === 'ML' && $normForm === 'IV FLUID') {
+                // For IV fluids like "METROGYL 50 ML", 50 ML is bottle volume, not mg strength
+                continue;
+            }
+            $strengths[] = $numStr;
+            $numVal = (float) $numStr;
+            if ($numVal > 0 && $unit !== 'ML') {
+                if ($unit === 'GM' || $unit === 'G' || ($unit === '' && $numVal >= 1.0 && $numVal <= 4.5 && str_contains($numStr, '.'))) {
+                    $strengthsMg[] = round($numVal * 1000, 2);
+                } else {
+                    $strengthsMg[] = round($numVal, 2);
                 }
+            }
+        }
+        $strengths = array_values(array_unique($strengths));
+        $strengthsMg = array_values(array_unique($strengthsMg));
 
-                $out = [
-                    'genericname' => $generic,
-                    'salt_name' => $salt,
-                    'dosage_restriction' => $this->formatMedicineNote($dosage, 420),
-                    'caution_note' => $this->formatMedicineNote($caution, 520),
-                ];
+        // 5. Extract brand core (remove numbers/units and pure release modifiers like SR/ER/XR/DT/FORTE/IV)
+        $brandCore = preg_replace('/[\s\-]*\d+(?:\.\d+)?\s*(?:MG|GM|G|MCG|ML|IU|%)?\b.*$/i', '', $name);
+        $brandCore = trim((string) $brandCore, " \t\n\r\0\x0B-_/.");
+        $brandCore = preg_replace('/\s+\b(SR|ER|XR|CR|PR|MR|OD|DT|MD|DS|LA|RETARD|FORTE|INSTA|JUNIOR|KID|PAED|IV|IM)\b$/i', '', (string) $brandCore) ?? (string) $brandCore;
+        $brandCore = trim((string) $brandCore, " \t\n\r\0\x0B-_/.");
+        if ($brandCore === '') {
+            $brandCore = $name;
+        }
 
-                if ($out['genericname'] !== '' || $out['salt_name'] !== '') {
-                    $this->lastAiProvider = 'ai-server';
-                    $this->lastAiServerError = '';
-                    return $out;
-                }
+        $words = preg_split('/[\s\-]+/', $brandCore) ?: [];
+        $firstWord = strtoupper(trim((string) ($words[0] ?? '')));
+        $firstWordAlt = $firstWord;
+        if (strlen($firstWord) >= 6 && str_ends_with($firstWord, 'INE')) {
+            $firstWordAlt = substr($firstWord, 0, -1);
+        }
 
-                $statusTrail[] = 'empty-payload @ ' . $endpointUrl;
-            } catch (\Throwable $e) {
-                $statusTrail[] = 'error @ ' . $endpointUrl . ' :: ' . $e->getMessage();
+        $compactBrand = strtoupper((string) preg_replace('/[^A-Z0-9]/i', '', $brandCore));
+        $compactBrandAlt = $compactBrand;
+        if ($firstWordAlt !== $firstWord && str_starts_with($compactBrand, $firstWord)) {
+            $compactBrandAlt = $firstWordAlt . substr($compactBrand, strlen($firstWord));
+        }
+
+        $candidates = [];
+        // Put hyphenated suffix variant first if brandCore has a short suffix like "CEFTAS O" -> "CEFTAS-O"
+        if (preg_match('/^([A-Z]{3,})\s+([A-Z0-9]{1,3})$/i', $brandCore, $bm)) {
+            $candidates[] = $bm[1] . '-' . $bm[2];
+            $candidates[] = $bm[1] . ' ' . $bm[2];
+        } elseif (preg_match('/^([A-Z]{3,})-([A-Z0-9]{1,3})$/i', $brandCore, $bm)) {
+            $candidates[] = $bm[1] . '-' . $bm[2];
+            $candidates[] = $bm[1] . ' ' . $bm[2];
+        }
+
+        $normUnits = preg_replace_callback('/(\d+(?:\.\d+)?)\s*(GM|G|MG|MCG|ML)\b/i', static function (array $m): string {
+            $u = strtolower((string) $m[2]);
+            if ($u === 'gm') {
+                $u = 'g';
+            }
+            return $m[1] . ' ' . $u;
+        }, $name) ?? $name;
+
+        $candidates[] = $normUnits;
+        if ($name !== $normUnits) {
+            $candidates[] = $name;
+        }
+
+        if ($brandCore !== '') {
+            $candidates[] = $brandCore;
+        }
+        if ($firstWordAlt !== $firstWord && strlen($firstWordAlt) >= 3) {
+            $candidates[] = $firstWordAlt . (! empty($strengths) ? (' ' . $strengths[0]) : '');
+            $candidates[] = $firstWordAlt;
+        }
+        if (strlen($firstWord) >= 3) {
+            $candidates[] = $firstWord;
+        }
+
+        $candidates = array_values(array_unique(array_filter(array_map('trim', $candidates), static fn(string $c): bool => strlen($c) >= 3)));
+
+        return [
+            'clean_name'        => $name,
+            'brand_core'        => $brandCore,
+            'compact_brand'     => $compactBrand,
+            'compact_brand_alt' => $compactBrandAlt,
+            'first_word'        => $firstWord,
+            'first_word_alt'    => $firstWordAlt,
+            'strengths'         => $strengths,
+            'strengths_mg'      => $strengthsMg,
+            'formulation'       => $normForm,
+            'candidates'        => $candidates,
+        ];
+    }
+
+    /**
+     * Score how well a candidate's strength matches the requested strengths (including summed combo strengths like 500+125=625 or 1000+200=1200=1.2g).
+     *
+     * @param array<int, string> $strengths
+     * @param array<int, float>  $strengthsMg
+     */
+    private function scoreCandidateStrengthMatch(string $displayName, string $genericName, array $strengths, array $strengthsMg): int
+    {
+        if (empty($strengths) && empty($strengthsMg)) {
+            return 0;
+        }
+
+        foreach ($strengths as $st) {
+            if ($st !== '' && (
+                preg_match('/\b' . preg_quote($st, '/') . '\s*(?:mg|g|gm|mcg|iu|%)\b/i', $displayName)
+                || preg_match('/\b' . preg_quote($st, '/') . '\s*(?:mg|g|gm|mcg|iu|%)\b/i', $genericName)
+            )) {
+                return 260;
             }
         }
 
-        if (! empty($statusTrail)) {
-            $this->lastAiServerError = implode(' | ', array_slice($statusTrail, 0, 5));
+        // Check summed mg components in candidate (e.g. "500 mg + 125 mg" = 625 mg; "1000 mg ... + 200 mg" = 1200 mg = 1.2 g)
+        if (! empty($strengthsMg) && preg_match_all('/(\d+(?:\.\d+)?)\s*(mg|g|gm)\b/i', $displayName . ' ' . $genericName, $cm, PREG_SET_ORDER)) {
+            $candMgValues = [];
+            foreach ($cm as $cMatch) {
+                $v = (float) $cMatch[1];
+                $u = strtolower($cMatch[2]);
+                if ($u === 'g' || $u === 'gm') {
+                    $v *= 1000.0;
+                }
+                $candMgValues[] = round($v, 2);
+            }
+            if (preg_match_all('/(\d+(?:\.\d+)?)\s*(mg|g|gm)\b/i', $displayName, $dm, PREG_SET_ORDER) && count($dm) >= 2) {
+                $sumMg = 0.0;
+                foreach ($dm as $dMatch) {
+                    $v = (float) $dMatch[1];
+                    $u = strtolower($dMatch[2]);
+                    if ($u === 'g' || $u === 'gm') {
+                        $v *= 1000.0;
+                    }
+                    $sumMg += $v;
+                }
+                $sumMg = round($sumMg, 2);
+                foreach ($strengthsMg as $targetMg) {
+                    if (abs($sumMg - $targetMg) < 0.5) {
+                        return 260;
+                    }
+                }
+            }
+            foreach ($strengthsMg as $targetMg) {
+                foreach ($candMgValues as $cMg) {
+                    if (abs($cMg - $targetMg) < 0.5) {
+                        return 240;
+                    }
+                }
+            }
         }
 
-        return [];
+        return -80;
     }
 
-    private function formatMedicineNote(string $value, int $maxLen = 500): string
+    /**
+     * Score formulation compatibility between target formulation and candidate formulation/display.
+     */
+    private function scoreFormulationCompatibility(string $targetForm, string $candForm, string $displayName): int
     {
-        $text = trim($value);
-        if ($text === '') {
+        if ($targetForm === '' || $candForm === '') {
+            return 0;
+        }
+        if ($targetForm === $candForm) {
+            return 180;
+        }
+        if ($targetForm === 'IV FLUID' && ($candForm === 'INJ' || stripos($displayName, 'infusion') !== false)) {
+            return stripos($displayName, 'infusion') !== false ? 200 : 140;
+        }
+        if ($targetForm === 'INJ' && $candForm === 'IV FLUID') {
+            return 120;
+        }
+        $parenteral = ['INJ', 'IV FLUID'];
+        $oralSolid  = ['TAB', 'CAP'];
+        $oralLiquid = ['SYR', 'DROPS'];
+        if (in_array($targetForm, $parenteral, true) && (in_array($candForm, $oralSolid, true) || in_array($candForm, $oralLiquid, true))) {
+            return -220;
+        }
+        if (in_array($targetForm, $oralSolid, true) && in_array($candForm, $parenteral, true)) {
+            return -220;
+        }
+        return -60;
+    }
+
+    /**
+     * Extract compact brand core from a Drug Master candidate brand/item name for safe comparison.
+     */
+    private function extractCandidateCompactBrand(string $candidateBrandOrItem): string
+    {
+        $text = trim($candidateBrandOrItem);
+        // If parenthetical generic exists e.g. "Ceftas O (cefixime and ofloxacin) 200 mg...", take the part before "("
+        if (strpos($text, '(') !== false) {
+            $beforeParen = trim((string) strstr($text, '(', true));
+            if ($beforeParen !== '') {
+                $text = $beforeParen;
+            }
+        }
+        // Strip leading route prefixes like "I.V. ", "IV ", "I.M. ", "IM "
+        $text = preg_replace('/^(?:I\.?V\.?|I\.?M\.?|S\.?C\.?)\s+/i', '', $text) ?? $text;
+        // Strip formulation suffixes and strengths
+        $text = preg_replace('/[\s\-]*\d+(?:\.\d+)?\s*(?:MG|GM|G|MCG|ML|IU|%)?\b.*$/i', '', $text) ?? $text;
+        $text = preg_replace('/\s+\b(TABLET|TABLETS|TAB|CAPSULE|CAPSULES|CAP|INJECTION|INJ|SYRUP|SYR|SYP|SUSPENSION|SUSP|CREAM|OINTMENT|OINT|GEL|DROPS|DROP|LOTION|SPRAY|INHALER|RESPULES|SACHET|POWDER|SOAP|ORAL|SOLUTION|SOLN|SR|ER|XR|CR|PR|MR|OD|DT|MD|DS|LA|RETARD|FORTE|INSTA|IV|IM)\b.*$/i', '', $text) ?? $text;
+        return strtoupper((string) preg_replace('/[^A-Z0-9]/i', '', trim($text)));
+    }
+
+    /**
+     * 3-Tier Drug Master Lookup:
+     *   Tier 1: Local HMS Pharmacy Drug Master (`med_product_master`) — ABDM-verified rows prioritized
+     *   Tier 2: Live ABDM Bridge Drug Master API (`/v3/drugs/autocomplete` & `/v3/drugs/detail`)
+     *   Tier 3: Local unverified `med_product_master` / `opd_med_master` fallback
+     *
+     * @return array<string, string>
+     */
+    private function lookupMedicineFromDrugMaster(
+        string $rawName,
+        string $formulation = '',
+        int $excludeOpdMedId = 0,
+        bool $fetchGatewaySubstitutes = false,
+        string $explicitIdentifier = '',
+        string $explicitType = 'brand'
+    ): array {
+        $parsed = $this->parseOpdDrugSearchQuery($rawName, $formulation);
+        $firstWord    = $parsed['first_word'];
+        $firstWordAlt = $parsed['first_word_alt'];
+        $compactBrand = $parsed['compact_brand'];
+        $compactAlt   = $parsed['compact_brand_alt'];
+        $strengths    = $parsed['strengths'];
+        $strengthsMg  = $parsed['strengths_mg'];
+        $targetForm   = $parsed['formulation'];
+
+        $bestMatch = null;
+        $unverifiedFallbackMatch = null;
+
+        // 0. If an explicit ABDM Drug Master identifier was selected from autocomplete
+        if ($explicitIdentifier !== '') {
+            try {
+                $connector = new \App\Libraries\Abdm\EAtriaBridgeConnector();
+                $detailRes = $connector->drugsDetail($explicitType ?: 'brand', $explicitIdentifier);
+                $record    = $detailRes['data'] ?? $detailRes['result'] ?? $detailRes;
+                if (is_array($record) && ! empty($record)) {
+                    $gen  = trim((string) ($record['generic_name'] ?? $record['composition_text'] ?? $record['generic'] ?? ''));
+                    $disp = trim((string) ($record['display_name'] ?? $record['brand_name'] ?? $rawName));
+                    $comp = trim((string) ($record['company_name'] ?? $record['manufacturer_name'] ?? ''));
+                    $form = $this->normalizeMedicineFormulation(
+                        trim((string) ($record['short_formulation'] ?? $record['dosage_form'] ?? $record['formulation'] ?? '')),
+                        $disp
+                    );
+                    $route = trim((string) ($record['route'] ?? ''));
+                    if ($gen !== '') {
+                        $bestMatch = [
+                            'genericname'       => $gen,
+                            'company_name'      => $comp,
+                            'formulation'       => $form ?: $targetForm,
+                            'snomed_code'       => $explicitIdentifier,
+                            'route'             => $route,
+                            'matched_item_name' => $disp,
+                            'provider'          => 'abdm-drug-master',
+                            'match_confidence'  => 'exact',
+                            'message'           => 'Fetched from ABDM Drug Master (' . $disp . ')',
+                        ];
+                    }
+                }
+            } catch (\Throwable $e) {
+                // Continue to standard lookup
+            }
+        }
+
+        // 1. Check Local HMS Pharmacy Drug Master (`med_product_master`)
+        if ($bestMatch === null && strlen($firstWord) >= 3 && $this->db->tableExists('med_product_master')) {
+            $builder = $this->db->table('med_product_master')
+                ->groupStart()
+                ->like('item_name', $firstWord, 'after');
+            if ($firstWordAlt !== $firstWord && strlen($firstWordAlt) >= 3) {
+                $builder->orLike('item_name', $firstWordAlt, 'after');
+            }
+            $builder->groupEnd()
+                ->where('genericname !=', '')
+                ->where('genericname !=', '0')
+                ->limit(50);
+
+            $pharmRows = $builder->get()->getResultArray();
+            $bestVerifiedScore = -1;
+            $bestVerifiedStrengthMatched = false;
+            $bestVerifiedPharm = null;
+            $bestUnverifiedScore = -1;
+            $bestUnverifiedPharm = null;
+
+            foreach ($pharmRows as $pr) {
+                $pName = trim((string) ($pr['item_name'] ?? ''));
+                $pDisp = trim((string) ($pr['abdm_drug_display'] ?? '')) ?: $pName;
+                $pGen  = trim((string) ($pr['genericname'] ?? ''));
+                if ($pName === '' || $pGen === '' || $pGen === '0' || strcasecmp($pGen, $pName) === 0 || strlen($pGen) < 4) {
+                    continue;
+                }
+
+                $candCompact = $this->extractCandidateCompactBrand($pDisp ?: $pName);
+                if ($candCompact === '' || ($candCompact !== $compactBrand && $candCompact !== $compactAlt)) {
+                    continue;
+                }
+
+                $score = 600;
+                $isComboGen = (stripos($pGen, ' and ') !== false || strpos($pGen, '+') !== false || strpos($pGen, '&') !== false);
+                if (strlen($compactBrand) === strlen($firstWord) && ! $isComboGen) {
+                    $score += 80;
+                }
+
+                $stScore = $this->scoreCandidateStrengthMatch($pDisp, $pGen, $strengths, $strengthsMg);
+                $score += $stScore;
+
+                $pForm = $this->normalizeMedicineFormulation((string) ($pr['formulation'] ?? ''), $pName);
+                $score += $this->scoreFormulationCompatibility($targetForm, $pForm, $pDisp);
+
+                $pSnomed = trim((string) ($pr['abdm_drug_identifier'] ?? ''));
+                $isAbdmVerified = ($pSnomed !== '' && preg_match('/^\d{5,22}$/', $pSnomed) === 1);
+                $pComp = trim((string) ($pr['company_name'] ?? ''));
+                if ($pComp !== '' && $pComp !== '0') {
+                    $score += 40;
+                }
+
+                if ($isAbdmVerified) {
+                    if ($score > $bestVerifiedScore) {
+                        $bestVerifiedScore = $score;
+                        $bestVerifiedStrengthMatched = (empty($strengths) || $stScore > 0);
+                        $bestVerifiedPharm = $pr;
+                    }
+                } else {
+                    if ($score > $bestUnverifiedScore) {
+                        $bestUnverifiedScore = $score;
+                        $bestUnverifiedPharm = $pr;
+                    }
+                }
+            }
+
+            // Use local ABDM-verified row immediately ONLY if it also matches the requested strength (when a strength is specified)
+            if ($bestVerifiedPharm !== null && $bestVerifiedStrengthMatched && $bestVerifiedScore >= 600) {
+                $pName   = trim((string) ($bestVerifiedPharm['item_name'] ?? ''));
+                $pDisp   = trim((string) ($bestVerifiedPharm['abdm_drug_display'] ?? '')) ?: $pName;
+                $pGen    = trim((string) ($bestVerifiedPharm['genericname'] ?? ''));
+                $pComp   = trim((string) ($bestVerifiedPharm['company_name'] ?? ''));
+                if ($pComp === '0') {
+                    $pComp = '';
+                }
+                $pForm   = $this->normalizeMedicineFormulation((string) ($bestVerifiedPharm['formulation'] ?? ''), $pName);
+                $pSnomed = trim((string) ($bestVerifiedPharm['abdm_drug_identifier'] ?? ''));
+
+                $bestMatch = [
+                    'genericname'       => $pGen,
+                    'company_name'      => $pComp,
+                    'formulation'       => $pForm ?: $targetForm,
+                    'snomed_code'       => $pSnomed,
+                    'route'             => '',
+                    'matched_item_name' => $pDisp,
+                    'provider'          => 'pharmacy-drug-master',
+                    'match_confidence'  => 'exact',
+                    'message'           => 'Matched from HMS Pharmacy Drug Master (' . $pDisp . ')',
+                ];
+            } elseif ($bestVerifiedPharm !== null && $bestVerifiedScore >= 450) {
+                $pName   = trim((string) ($bestVerifiedPharm['item_name'] ?? ''));
+                $pDisp   = trim((string) ($bestVerifiedPharm['abdm_drug_display'] ?? '')) ?: $pName;
+                $pGen    = trim((string) ($bestVerifiedPharm['genericname'] ?? ''));
+                $pComp   = trim((string) ($bestVerifiedPharm['company_name'] ?? ''));
+                if ($pComp === '0') {
+                    $pComp = '';
+                }
+                $pForm   = $this->normalizeMedicineFormulation((string) ($bestVerifiedPharm['formulation'] ?? ''), $pName);
+                $pSnomed = trim((string) ($bestVerifiedPharm['abdm_drug_identifier'] ?? ''));
+
+                $unverifiedFallbackMatch = [
+                    'score'             => $bestVerifiedScore,
+                    'genericname'       => $pGen,
+                    'company_name'      => $pComp,
+                    'formulation'       => $pForm ?: $targetForm,
+                    'snomed_code'       => $pSnomed,
+                    'route'             => '',
+                    'matched_item_name' => $pDisp,
+                    'provider'          => 'pharmacy-drug-master',
+                    'match_confidence'  => 'close',
+                    'message'           => 'Matched from HMS Pharmacy Drug Master (' . $pDisp . ')',
+                ];
+            } elseif ($bestUnverifiedPharm !== null && $bestUnverifiedScore >= 520) {
+                $pName = trim((string) ($bestUnverifiedPharm['item_name'] ?? ''));
+                $pGen  = trim((string) ($bestUnverifiedPharm['genericname'] ?? ''));
+                $pComp = trim((string) ($bestUnverifiedPharm['company_name'] ?? ''));
+                if ($pComp === '0') {
+                    $pComp = '';
+                }
+                $pForm = $this->normalizeMedicineFormulation((string) ($bestUnverifiedPharm['formulation'] ?? ''), $pName);
+
+                $unverifiedFallbackMatch = [
+                    'score'             => $bestUnverifiedScore,
+                    'genericname'       => $pGen,
+                    'company_name'      => $pComp,
+                    'formulation'       => $pForm ?: $targetForm,
+                    'snomed_code'       => '',
+                    'route'             => '',
+                    'matched_item_name' => $pName,
+                    'provider'          => 'pharmacy-drug-master',
+                    'match_confidence'  => 'close',
+                    'message'           => 'Matched from HMS Pharmacy Drug Master (' . $pName . ')',
+                ];
+            }
+        }
+
+        // 2. Live ABDM Bridge Drug Master API (`/v3/drugs/autocomplete`)
+        if ($bestMatch === null && ! empty($parsed['candidates'])) {
+            $bestBridgeScore = -1;
+            $bestBridgeItem  = null;
+
+            foreach ($parsed['candidates'] as $candQuery) {
+                $items = $this->queryAbdmBridgeDrugAutocomplete($candQuery, 'brand', 15);
+                foreach ($items as $it) {
+                    $bName = trim((string) ($it['brand_name'] ?? ''));
+                    $dName = trim((string) ($it['display_name'] ?? '')) ?: $bName;
+                    $gName = trim((string) ($it['generic_name'] ?? ''));
+                    if ($gName === '' || ($bName === '' && $dName === '')) {
+                        continue;
+                    }
+
+                    $candCompact = $this->extractCandidateCompactBrand($dName ?: $bName);
+                    $score = 0;
+
+                    if ($candCompact !== '' && ($candCompact === $compactBrand || $candCompact === $compactAlt)) {
+                        $score += 650;
+                    } elseif ($candCompact !== '' && (str_starts_with($candCompact, $compactBrand) || str_starts_with($candCompact, $compactAlt)) && strlen($compactBrand) >= 5) {
+                        $score += 420;
+                    } else {
+                        continue;
+                    }
+
+                    $stScore = $this->scoreCandidateStrengthMatch($dName, $gName, $strengths, $strengthsMg);
+                    $score += $stScore;
+
+                    $itForm = $this->normalizeMedicineFormulation(
+                        trim((string) ($it['short_formulation'] ?? $it['dosage_form'] ?? $it['formulation'] ?? '')),
+                        $dName
+                    );
+                    $score += $this->scoreFormulationCompatibility($targetForm, $itForm, $dName);
+
+                    if ($score > $bestBridgeScore) {
+                        $bestBridgeScore = $score;
+                        $bestBridgeItem  = $it;
+                    }
+                }
+
+                // Stop early only if we got an exact brand match AND strength/formulation match
+                if ($bestBridgeScore >= (empty($strengths) ? 750 : 900)) {
+                    break;
+                }
+            }
+
+            // If brand search didn't match, check if the medicine name itself is a generic substance (e.g. "ATORVASTATIN 10MG", "METFORMIN 500")
+            if ($bestBridgeItem === null && strlen($firstWord) >= 4) {
+                $genItems = $this->queryAbdmBridgeDrugAutocomplete($parsed['clean_name'], 'generic', 10);
+                foreach ($genItems as $it) {
+                    $gName = trim((string) ($it['generic_name'] ?? $it['display_name'] ?? ''));
+                    if ($gName === '' || ! str_starts_with(strtoupper($gName), $firstWord)) {
+                        continue;
+                    }
+                    $score = 500;
+                    $score += $this->scoreCandidateStrengthMatch($gName, $gName, $strengths, $strengthsMg);
+                    $itForm = $this->normalizeMedicineFormulation(
+                        trim((string) ($it['short_formulation'] ?? $it['dosage_form'] ?? $it['formulation'] ?? '')),
+                        $gName
+                    );
+                    $score += $this->scoreFormulationCompatibility($targetForm, $itForm, $gName);
+                    if ($score > $bestBridgeScore) {
+                        $bestBridgeScore = $score;
+                        $bestBridgeItem  = $it;
+                    }
+                }
+            }
+
+            if ($bestBridgeItem !== null && $bestBridgeScore >= 400) {
+                $disp   = trim((string) ($bestBridgeItem['display_name'] ?? $bestBridgeItem['brand_name'] ?? ''));
+                $gen    = trim((string) ($bestBridgeItem['generic_name'] ?? ''));
+                $comp   = trim((string) ($bestBridgeItem['company_name'] ?? $bestBridgeItem['manufacturer_name'] ?? ''));
+                $snomed = trim((string) ($bestBridgeItem['identifier'] ?? ''));
+                $route  = trim((string) ($bestBridgeItem['route'] ?? ''));
+                $itForm = $this->normalizeMedicineFormulation(
+                    trim((string) ($bestBridgeItem['short_formulation'] ?? $bestBridgeItem['dosage_form'] ?? $bestBridgeItem['formulation'] ?? '')),
+                    $disp
+                );
+                if ($targetForm === 'IV FLUID' && stripos($disp, 'infusion') !== false) {
+                    $itForm = 'IV FLUID';
+                }
+
+                $bestMatch = [
+                    'genericname'       => $gen,
+                    'company_name'      => $comp,
+                    'formulation'       => $itForm ?: $targetForm,
+                    'snomed_code'       => $snomed,
+                    'route'             => $route,
+                    'matched_item_name' => $disp,
+                    'provider'          => 'abdm-drug-master',
+                    'match_confidence'  => $bestBridgeScore >= 650 ? 'exact' : 'close',
+                    'message'           => 'Matched from ABDM Drug Master (' . $disp . ')',
+                ];
+
+                // Also cache into local `med_product_master` if not already present
+                $this->cacheAbdmDrugIntoPharmacyMaster($bestBridgeItem, $itForm ?: $targetForm);
+            }
+        }
+
+        // 3. Fallback to local match or existing OPD Medicine Master (`opd_med_master`)
+        if ($bestMatch === null && $unverifiedFallbackMatch !== null) {
+            unset($unverifiedFallbackMatch['score']);
+            $bestMatch = $unverifiedFallbackMatch;
+        }
+
+        if ($bestMatch === null && strlen($firstWord) >= 3) {
+            $opdTable = $this->findExistingTable(['opd_med_master']);
+            if ($opdTable !== null) {
+                $opdBuilder = $this->db->table($opdTable)
+                    ->like('item_name', $firstWord, 'after')
+                    ->where('genericname IS NOT NULL', null, false)
+                    ->where('genericname !=', '')
+                    ->where('genericname !=', '0')
+                    ->limit(25);
+                if ($excludeOpdMedId > 0) {
+                    $opdBuilder->where('id !=', $excludeOpdMedId);
+                }
+                foreach ($opdBuilder->get()->getResultArray() as $or) {
+                    $oName = trim((string) ($or['item_name'] ?? ''));
+                    $oGen  = trim((string) ($or['genericname'] ?? ''));
+                    if ($oGen === '' || strcasecmp($oGen, $oName) === 0 || strlen($oGen) < 4) {
+                        continue;
+                    }
+                    $candCompact = $this->extractCandidateCompactBrand($oName);
+                    if ($candCompact !== '' && ($candCompact === $compactBrand || $candCompact === $compactAlt)) {
+                        $oComp = trim((string) ($or['company_name'] ?? ''));
+                        if ($oComp === '0') {
+                            $oComp = '';
+                        }
+                        $oForm = $this->normalizeMedicineFormulation((string) ($or['formulation'] ?? ''), $oName);
+                        $bestMatch = [
+                            'genericname'       => $oGen,
+                            'company_name'      => $oComp,
+                            'formulation'       => $oForm ?: $targetForm,
+                            'snomed_code'       => trim((string) ($or['snomed_code'] ?? '')),
+                            'route'             => '',
+                            'matched_item_name' => $oName,
+                            'provider'          => 'opd-med-master',
+                            'match_confidence'  => 'exact',
+                            'message'           => 'Matched from existing OPD Medicine Master (' . $oName . ')',
+                        ];
+                        break;
+                    }
+                }
+            }
+        }
+
+        if ($bestMatch === null) {
+            return [];
+        }
+
+        // Compute real Substitute brand names sharing the same composition (`salt_name`)
+        $substitutes = $this->findSubstituteBrandsForComposition(
+            (string) ($bestMatch['genericname'] ?? ''),
+            (string) ($bestMatch['matched_item_name'] ?? ''),
+            $firstWord,
+            $fetchGatewaySubstitutes
+        );
+
+        $bestMatch['salt_name']          = $substitutes;
+        $bestMatch['dosage_restriction'] = '';
+
+        return $bestMatch;
+    }
+
+    /**
+     * Query ABDM Bridge `/v3/drugs/autocomplete` with 7-day local cache.
+     *
+     * @return array<int, array<string, mixed>>
+     */
+    private function queryAbdmBridgeDrugAutocomplete(string $query, string $type = 'brand', int $limit = 10): array
+    {
+        $query = trim($query);
+        if ($query === '') {
+            return [];
+        }
+
+        $cacheKey = 'opd_abdm_drug_ac_' . md5(strtolower($type) . '_' . mb_strtolower($query) . '_' . $limit);
+        try {
+            $cached = cache($cacheKey);
+            if (is_array($cached)) {
+                return $cached;
+            }
+        } catch (\Throwable $e) {
+        }
+
+        try {
+            $connector = new \App\Libraries\Abdm\EAtriaBridgeConnector();
+            $res = $connector->drugsAutocomplete($query, $type, $limit);
+            $items = [];
+            if (is_array($res['results'] ?? null)) {
+                $items = $res['results'];
+            } elseif (is_array($res['data']['items'] ?? null)) {
+                $items = $res['data']['items'];
+            } elseif (is_array($res['data'] ?? null) && array_is_list($res['data'])) {
+                $items = $res['data'];
+            }
+
+            if (! empty($items)) {
+                try {
+                    cache()->save($cacheKey, $items, 86400 * 7);
+                } catch (\Throwable $e) {
+                }
+            }
+
+            return $items;
+        } catch (\Throwable $e) {
+            return [];
+        }
+    }
+
+    /**
+     * Non-blocking cache of an ABDM Bridge Drug Master item into `med_product_master`.
+     *
+     * @param array<string, mixed> $item
+     */
+    private function cacheAbdmDrugIntoPharmacyMaster(array $item, string $normalizedFormulation = ''): void
+    {
+        if (! $this->db->tableExists('med_product_master')) {
+            return;
+        }
+
+        $identifier = trim((string) ($item['identifier'] ?? ''));
+        $display    = trim((string) ($item['display_name'] ?? $item['brand_name'] ?? ''));
+        $generic    = trim((string) ($item['generic_name'] ?? ''));
+        if ($identifier === '' || $display === '' || $generic === '') {
+            return;
+        }
+
+        try {
+            $exists = $this->db->table('med_product_master')
+                ->where('abdm_drug_identifier', $identifier)
+                ->countAllResults();
+            if ($exists > 0) {
+                return;
+            }
+
+            $company = trim((string) ($item['company_name'] ?? $item['manufacturer_name'] ?? ''));
+            $formRaw = trim((string) ($item['short_formulation'] ?? $item['dosage_form'] ?? $normalizedFormulation ?: 'Tablet'));
+
+            $this->db->table('med_product_master')->insert([
+                'item_name'                => mb_substr($display, 0, 190),
+                'genericname'              => mb_substr($generic, 0, 990),
+                'formulation'              => mb_substr($formRaw, 0, 48),
+                'company_name'             => mb_substr($company, 0, 195),
+                'abdm_drug_type'           => trim((string) ($item['type'] ?? 'brand')) ?: 'brand',
+                'abdm_drug_identifier'     => $identifier,
+                'abdm_drug_display'        => mb_substr($display, 0, 250),
+                'abdm_drug_generic'        => mb_substr($generic, 0, 250),
+                'abdm_drug_payload_json'   => json_encode($item, JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES),
+                'abdm_drug_last_synced_at' => date('Y-m-d H:i:s'),
+                'is_continue'              => 1,
+                'batch_applicable'         => 1,
+                'exp_date_applicable'      => 1,
+                'insert_by'                => 'opd_drug_master_sync',
+            ]);
+        } catch (\Throwable $e) {
+            // Ignore duplicate item_name or schema constraints
+        }
+    }
+
+    /**
+     * Find up to 5 real alternative brand names (Substitutes) that share the same salt/generic composition.
+     * Never returns the generic/salt name itself or route abbreviations like "I.V.".
+     */
+    private function findSubstituteBrandsForComposition(
+        string $genericName,
+        string $matchedDisplayName,
+        string $currentBrandWord,
+        bool $allowGatewayLookup = false
+    ): string {
+        $genericName = trim($genericName);
+        if ($genericName === '') {
             return '';
         }
 
-        // Normalize separators for UI readability while preserving meaning.
-        $text = str_replace(["\r\n", "\n", "\r"], ' | ', $text);
-        $text = preg_replace('/\s*\|\s*/', ' | ', $text) ?? $text;
-        $text = preg_replace('/\s+/', ' ', $text) ?? $text;
-        $text = trim($text, " \t\n\r\0\x0B|");
+        $currentBrandUpper = strtoupper(trim($currentBrandWord));
+        $brands = [];
 
-        if ($maxLen < 80) {
-            $maxLen = 80;
-        }
-
-        if (mb_strlen($text) <= $maxLen) {
-            return $text;
-        }
-
-        $short = mb_substr($text, 0, $maxLen);
-        $lastSep = mb_strrpos($short, ' | ');
-        if ($lastSep !== false && $lastSep > (int) ($maxLen * 0.6)) {
-            $short = mb_substr($short, 0, $lastSep);
-        }
-
-        return rtrim($short, " ,;|.") . '...';
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private function lookupMedicineDetailsFromMaster(string $name, string $formulation = ''): array
-    {
-        $table = $this->findExistingTable(['opd_med_master']);
-        if ($table === null) {
-            return [];
-        }
-
-        $fields = $this->db->getFieldNames($table);
-        $nameField = $this->resolveFirstField($fields, ['item_name', 'med_name']);
-        $formField = $this->resolveFirstField($fields, ['formulation', 'med_type']);
-        $genericField = $this->resolveFirstField($fields, ['genericname', 'generic_name']);
-        $saltField = $this->resolveFirstField($fields, ['salt_name', 'sal_name', 'salt', 'saltname']);
-        $restrictionField = $this->resolveFirstField($fields, ['dosage_restriction', 'dose_restriction', 'restriction_note', 'restriction']);
-
-        if ($nameField === null || ($genericField === null && $saltField === null)) {
-            return [];
-        }
-
-        $name = trim($name);
-        if ($name === '') {
-            return [];
-        }
-
-        $exact = $this->db->table($table)
-            ->where('UPPER(' . $nameField . ')', strtoupper($name));
-
-        if ($formField !== null && trim($formulation) !== '') {
-            $exact->where('UPPER(' . $formField . ')', strtoupper(trim($formulation)));
-        }
-
-        $row = $exact->get(1)->getRowArray() ?? [];
-        $matchConfidence = 'partial';
-
-        if (empty($row)) {
-            $builder = $this->db->table($table);
-            $builder->groupStart()
-                ->like($nameField, $name)
-                ->orLike($nameField, preg_replace('/\s+/', ' ', $name) ?? $name)
-                ->groupEnd();
-
-            if ($formField !== null && trim($formulation) !== '') {
-                $builder->like($formField, trim($formulation));
+        $addBrand = static function (string $rawBrand) use (&$brands, $currentBrandUpper, $genericName): void {
+            $clean = trim($rawBrand);
+            // Strip parenthetical generic e.g. "Dolo (paracetamol) 650 mg oral tablet" -> "Dolo"
+            $clean = preg_replace('/\s*\([^)]*\).*$/', '', $clean) ?? $clean;
+            // Strip trailing dosage & formulation words
+            $clean = preg_replace('/\s+\d+(?:\.\d+)?\s*(?:mg|g|gm|mcg|ml|iu|%).*$/i', '', $clean) ?? $clean;
+            $clean = preg_replace('/\s+\b(tablet|tablets|tab|capsule|capsules|cap|injection|inj|syrup|syr|syp|suspension|susp|cream|ointment|oint|gel|drops|drop|oral|solution)\b.*$/i', '', $clean) ?? $clean;
+            $clean = trim($clean, " \t\n\r\0\x0B-_/.");
+            if ($clean === '' || strlen($clean) < 3) {
+                return;
             }
+            $upper = strtoupper($clean);
+            if (in_array($upper, ['I.V', 'IV', 'IM', 'I.M', 'TAB', 'CAP', 'INJ', 'SYP', 'SYR'], true)) {
+                return;
+            }
+            if ($currentBrandUpper !== '' && (str_starts_with($upper, $currentBrandUpper) || str_starts_with($currentBrandUpper, $upper))) {
+                return;
+            }
+            if (strcasecmp($clean, $genericName) === 0 || stripos($genericName, $clean) === 0) {
+                return;
+            }
+            if (! isset($brands[$upper])) {
+                $brands[$upper] = $clean;
+            }
+        };
 
-            $candidates = $builder->limit(15)->get()->getResultArray();
-            if (! empty($candidates)) {
-                $target = strtoupper($name);
-                usort($candidates, static function (array $a, array $b) use ($nameField, $target): int {
-                    $aName = strtoupper(trim((string) ($a[$nameField] ?? '')));
-                    $bName = strtoupper(trim((string) ($b[$nameField] ?? '')));
-                    $aScore = 0;
-                    $bScore = 0;
-                    if ($aName === $target) {
-                        $aScore += 1000;
-                    } elseif (str_starts_with($aName, $target)) {
-                        $aScore += 600;
-                    } elseif (str_contains($aName, $target)) {
-                        $aScore += 400;
-                    }
-                    if ($bName === $target) {
-                        $bScore += 1000;
-                    } elseif (str_starts_with($bName, $target)) {
-                        $bScore += 600;
-                    } elseif (str_contains($bName, $target)) {
-                        $bScore += 400;
-                    }
-
-                    if ($aScore !== $bScore) {
-                        return $bScore <=> $aScore;
-                    }
-
-                    return strlen($aName) <=> strlen($bName);
-                });
-                $row = $candidates[0] ?? [];
-                $picked = strtoupper(trim((string) ($row[$nameField] ?? '')));
-                $target = strtoupper($name);
-                if ($picked === $target) {
-                    $matchConfidence = 'exact';
-                } elseif (str_starts_with($picked, $target) || str_contains($picked, $target)) {
-                    $matchConfidence = 'close';
+        // 1. Check local `med_product_master` for exact same `genericname`
+        if ($this->db->tableExists('med_product_master')) {
+            $rows = $this->db->table('med_product_master')
+                ->select('item_name, abdm_drug_display')
+                ->where('genericname', $genericName)
+                ->limit(15)
+                ->get()
+                ->getResultArray();
+            foreach ($rows as $r) {
+                $addBrand((string) ($r['item_name'] ?? ''));
+                if (count($brands) >= 5) {
+                    break;
                 }
             }
-        } else {
-            $matchConfidence = 'exact';
         }
 
-        if (empty($row)) {
-            return [];
-        }
-
-        return [
-            'genericname' => $genericField !== null ? trim((string) ($row[$genericField] ?? '')) : '',
-            'salt_name' => $saltField !== null ? trim((string) ($row[$saltField] ?? '')) : '',
-            'dosage_restriction' => $restrictionField !== null ? trim((string) ($row[$restrictionField] ?? '')) : '',
-            'caution_note' => '',
-            'match_confidence' => $matchConfidence,
-            'matched_item_name' => trim((string) ($row[$nameField] ?? '')),
-        ];
-    }
-
-    /**
-     * @return array<string, string>
-     */
-    private function inferMedicineDetailsFromBrandName(string $name, string $formulation = ''): array
-    {
-        $text = strtoupper(trim($name));
-        if ($text === '') {
-            return [];
-        }
-
-        preg_match('/(\d{2,4})\s*MG/i', $name, $m);
-        $strength = isset($m[1]) ? trim((string) $m[1]) : '';
-
-        $map = [
-            'DOLO' => 'Paracetamol',
-            'CROCIN' => 'Paracetamol',
-            'CALPOL' => 'Paracetamol',
-            'PARACIP' => 'Paracetamol',
-            'PANTOCID' => 'Pantoprazole',
-            'PAN' => 'Pantoprazole',
-            'AZEE' => 'Azithromycin',
-            'AZTOR' => 'Atorvastatin',
-            'MONTAIR' => 'Montelukast',
-            'LEVOCET' => 'Levocetirizine',
-            'AUGMENTIN' => 'Amoxicillin + Clavulanic Acid',
-        ];
-
-        $generic = '';
-        foreach ($map as $brand => $gen) {
-            if (str_contains($text, $brand)) {
-                $generic = $gen;
-                break;
+        // 2. Check local `opd_med_master` for exact same `genericname`
+        if (count($brands) < 5) {
+            $opdTable = $this->findExistingTable(['opd_med_master']);
+            if ($opdTable !== null) {
+                $rows = $this->db->table($opdTable)
+                    ->select('item_name')
+                    ->where('genericname', $genericName)
+                    ->limit(15)
+                    ->get()
+                    ->getResultArray();
+                foreach ($rows as $r) {
+                    $addBrand((string) ($r['item_name'] ?? ''));
+                    if (count($brands) >= 5) {
+                        break;
+                    }
+                }
             }
         }
 
-        if ($generic === '') {
-            return [];
-        }
-
-        $salt = $generic;
-        if ($strength !== '') {
-            if ($generic === 'Amoxicillin + Clavulanic Acid' && $strength === '625') {
-                $salt = 'Amoxicillin 500 mg + Clavulanic Acid 125 mg';
-            } else {
-                $salt = $generic . ' ' . $strength . ' mg';
+        // 3. When single-item fetch is used and fewer than 3 local substitutes exist, query ABDM Bridge by parenthetical salt
+        if ($allowGatewayLookup && count($brands) < 3) {
+            $saltQuery = '';
+            if (preg_match('/\(([^)]+)\)/', $matchedDisplayName, $m)) {
+                $saltQuery = trim((string) $m[1]);
+            }
+            if ($saltQuery === '') {
+                $saltQuery = preg_replace('/\b\d+(?:\.\d+)?\s*(?:mg|g|gm|mcg|ml|iu|vial|tablet|capsule|oral|injection|solution|suspension|syrup)\b.*$/i', '', $genericName) ?? '';
+                $saltQuery = trim($saltQuery);
+            }
+            if (strlen($saltQuery) >= 4) {
+                $gwItems = $this->queryAbdmBridgeDrugAutocomplete($saltQuery, 'brand', 10);
+                foreach ($gwItems as $it) {
+                    $bName = trim((string) ($it['brand_name'] ?? $it['display_name'] ?? ''));
+                    $dName = trim((string) ($it['display_name'] ?? ''));
+                    if (preg_match('/\(([^)]+)\)/', $dName, $dm)) {
+                        if (strcasecmp(trim((string) $dm[1]), $saltQuery) !== 0) {
+                            continue;
+                        }
+                    }
+                    $addBrand($bName);
+                    if (count($brands) >= 5) {
+                        break;
+                    }
+                }
             }
         }
 
-        $doseRestriction = '';
-        if ($generic === 'Paracetamol') {
-            $doseRestriction = 'Adults: usually max 4 g/day total from all paracetamol-containing products.';
-        } elseif ($generic === 'Pantoprazole') {
-            $doseRestriction = 'Usually once daily before food unless specifically advised otherwise.';
-        } elseif ($generic === 'Azithromycin') {
-            $doseRestriction = 'Follow fixed daily schedule and complete full course.';
-        }
-
-        return [
-            'genericname' => $generic,
-            'salt_name' => $salt,
-            'dosage_restriction' => $doseRestriction,
-            'caution_note' => '',
-        ];
+        return implode(', ', array_slice(array_values($brands), 0, 5));
     }
 
     public function opd_medicince_remove(int $medId)
