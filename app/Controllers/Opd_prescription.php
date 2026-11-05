@@ -2593,6 +2593,8 @@ class Opd_prescription extends BaseController
         $summary = [
             'total' => 0,
             'generic_missing' => 0,
+            'used_generic_missing' => 0,
+            'unused_count' => 0,
             'coding_missing' => 0,
             'snomed_missing' => 0,
             'atc_missing' => 0,
@@ -2603,11 +2605,18 @@ class Opd_prescription extends BaseController
 
         foreach ($rows as $row) {
             $summary['total']++;
+            $useCount = (int) ($row['use_count'] ?? 0);
+            if ($useCount <= 0) {
+                $summary['unused_count']++;
+            }
 
             $name = mb_strtolower(trim((string) ($row['item_name'] ?? '')));
             $generic = mb_strtolower(trim((string) ($row['genericname'] ?? '')));
             if ($generic === '' || in_array($generic, $unclearTokens, true) || ($name !== '' && $generic === $name)) {
                 $summary['generic_missing']++;
+                if ($useCount > 0) {
+                    $summary['used_generic_missing']++;
+                }
             }
 
             $snomed = strtoupper(trim((string) ($row['snomed_code'] ?? '')));
@@ -2775,6 +2784,10 @@ class Opd_prescription extends BaseController
             $row['last_used_at'] = (string) ($usageMap[$medId]['last_used_at'] ?? '');
         }
         unset($row);
+
+        if ($filter === 'unused') {
+            $rows = array_values(array_filter($rows, static fn(array $row): bool => (int) ($row['use_count'] ?? 0) <= 0));
+        }
 
         if (! $showAll) {
             if ($scope === 'favorite') {
@@ -3138,6 +3151,105 @@ class Opd_prescription extends BaseController
             }
         }
 
+        // 3. Live Web Indian Drug Catalog fallback when local + ABDM Bridge return few/no results
+        if (count($rows) < 5) {
+            $webItems = $this->queryWebIndianDrugCatalog($q, '', $limit);
+            foreach ($webItems as $wi) {
+                $display = trim((string) ($wi['display_name'] ?? ''));
+                $generic = trim((string) ($wi['generic_name'] ?? ''));
+                if ($display === '' || $generic === '') {
+                    continue;
+                }
+                $dedupKey = mb_strtolower($display . '|' . $generic);
+                if (isset($seenKeys[$dedupKey])) {
+                    continue;
+                }
+                $seenKeys[$dedupKey] = true;
+
+                $rows[] = [
+                    'display_name' => $display,
+                    'brand_name'   => (string) ($wi['brand_name'] ?? $display),
+                    'generic_name' => $generic,
+                    'formulation'  => (string) ($wi['formulation'] ?? ''),
+                    'company_name' => (string) ($wi['company_name'] ?? ''),
+                    'snomed_code'  => (string) ($wi['snomed_code'] ?? ''),
+                    'route'        => (string) ($wi['route'] ?? ''),
+                    'identifier'   => (string) ($wi['snomed_code'] ?? ''),
+                    'type'         => 'brand',
+                    'source'       => 'Web Drug Catalog',
+                ];
+                if (count($rows) >= $limit) {
+                    break;
+                }
+            }
+        }
+
+        // 3. Live Web Indian Drug Catalog fallback when local + ABDM Bridge return few/no results
+        if (count($rows) < 5) {
+            $webItems = $this->queryWebIndianDrugCatalog($q, '', $limit);
+            foreach ($webItems as $wi) {
+                $display = trim((string) ($wi['display_name'] ?? ''));
+                $generic = trim((string) ($wi['generic_name'] ?? ''));
+                if ($display === '' || $generic === '') {
+                    continue;
+                }
+                $dedupKey = mb_strtolower($display . '|' . $generic);
+                if (isset($seenKeys[$dedupKey])) {
+                    continue;
+                }
+                $seenKeys[$dedupKey] = true;
+
+                $rows[] = [
+                    'display_name' => $display,
+                    'brand_name'   => (string) ($wi['brand_name'] ?? $display),
+                    'generic_name' => $generic,
+                    'formulation'  => (string) ($wi['formulation'] ?? ''),
+                    'company_name' => (string) ($wi['company_name'] ?? ''),
+                    'snomed_code'  => (string) ($wi['snomed_code'] ?? ''),
+                    'route'        => (string) ($wi['route'] ?? ''),
+                    'identifier'   => (string) ($wi['snomed_code'] ?? ''),
+                    'type'         => 'brand',
+                    'source'       => 'Web Drug Catalog',
+                ];
+                if (count($rows) >= $limit) {
+                    break;
+                }
+            }
+        }
+
+        // 3. Live Web Indian Drug Catalog fallback when local + ABDM Bridge return few/no results
+        if (count($rows) < 5) {
+            $webItems = $this->queryWebIndianDrugCatalog($q, '', $limit);
+            foreach ($webItems as $wi) {
+                $display = trim((string) ($wi['display_name'] ?? ''));
+                $generic = trim((string) ($wi['generic_name'] ?? ''));
+                if ($display === '' || $generic === '') {
+                    continue;
+                }
+                $dedupKey = mb_strtolower($display . '|' . $generic);
+                if (isset($seenKeys[$dedupKey])) {
+                    continue;
+                }
+                $seenKeys[$dedupKey] = true;
+
+                $rows[] = [
+                    'display_name' => $display,
+                    'brand_name'   => (string) ($wi['brand_name'] ?? $display),
+                    'generic_name' => $generic,
+                    'formulation'  => (string) ($wi['formulation'] ?? ''),
+                    'company_name' => (string) ($wi['company_name'] ?? ''),
+                    'snomed_code'  => (string) ($wi['snomed_code'] ?? ''),
+                    'route'        => (string) ($wi['route'] ?? ''),
+                    'identifier'   => (string) ($wi['snomed_code'] ?? ''),
+                    'type'         => 'brand',
+                    'source'       => 'Web Drug Catalog',
+                ];
+                if (count($rows) >= $limit) {
+                    break;
+                }
+            }
+        }
+
         return $this->response->setJSON([
             'update' => 1,
             'rows'   => $rows,
@@ -3249,6 +3361,10 @@ class Opd_prescription extends BaseController
             ->get()
             ->getResultArray();
 
+        // Only update medicines with Used > 0 and blank/missing Salt/Generic name
+        $userId = (int) ($this->getCurrentUserId() ?? 0);
+        $usageMap = $userId > 0 ? $this->getUserMedicineUsageMap($userId) : [];
+
         $unclearTokens = ['na', 'n/a', 'same', '-', '--', 'unknown', '?', '0'];
         $candidates = [];
         foreach ($allRows as $r) {
@@ -3256,12 +3372,19 @@ class Opd_prescription extends BaseController
             if ($rid <= $lastId) {
                 continue;
             }
+            $useCount = (int) ($usageMap[$rid]['use_count'] ?? 0);
+            if ($useCount <= 0) {
+                continue;
+            }
             $rName = mb_strtolower(trim((string) ($r[$nameField] ?? '')));
             if ($rName === '') {
                 continue;
             }
-            $rGen = mb_strtolower(trim((string) ($r[$genericField] ?? '')));
-            if ($rGen === '' || in_array($rGen, $unclearTokens, true) || $rGen === $rName) {
+            $rGen  = mb_strtolower(trim((string) ($r[$genericField] ?? '')));
+            $rSalt = $saltField !== null ? mb_strtolower(trim((string) ($r[$saltField] ?? ''))) : '';
+            $genBlank  = ($rGen === '' || in_array($rGen, $unclearTokens, true));
+            $saltBlank = ($rSalt === '' || in_array($rSalt, $unclearTokens, true));
+            if ($genBlank && $saltBlank) {
                 $candidates[] = $r;
             }
         }
@@ -3352,6 +3475,41 @@ class Opd_prescription extends BaseController
     }
 
     /**
+     * Phonetic normalization of a brand token so hospital spelling typos like
+     * NERVIGEN <-> NERVIJEN, MERABAT <-> MIRABET, SUPER SPASE <-> SUPERSPAS match cleanly.
+     */
+    private function normalizeBrandPhonetic(string $token): string
+    {
+        $s = strtoupper((string) preg_replace('/[^A-Z0-9]/i', '', $token));
+        if ($s === '') {
+            return '';
+        }
+        // Trailing silent E on >5 char words (e.g. AUGMENTINE -> AUGMENTIN, SUPERSPASE -> SUPERSPAS)
+        if (strlen($s) >= 6 && str_ends_with($s, 'E') && ! str_ends_with($s, 'ONE') && ! str_ends_with($s, 'ATE')) {
+            $s = substr($s, 0, -1);
+        }
+        // Phonetic equivalents common in Indian brand names
+        $s = str_replace(['PH', 'CK', 'Z'], ['F', 'K', 'S'], $s);
+        $s = preg_replace('/G(?=[EIY])/', 'J', $s) ?? $s;
+        return $s;
+    }
+
+    /**
+     * Consonant skeleton for fuzzy typo matching (e.g. MERABAT and MIRABET both -> MRBT).
+     */
+    private function extractConsonantSkeleton(string $token): string
+    {
+        $s = $this->normalizeBrandPhonetic($token);
+        if (strlen($s) <= 3) {
+            return $s;
+        }
+        // Keep first letter + all non-vowels + digits
+        $first = $s[0];
+        $rest  = preg_replace('/[AEIOUY]/', '', substr($s, 1)) ?? substr($s, 1);
+        return $first . $rest;
+    }
+
+    /**
      * Parse and normalize an OPD medicine name into brand core, first word, strengths,
      * detected formulation, and ordered search query candidates.
      *
@@ -3360,6 +3518,7 @@ class Opd_prescription extends BaseController
      *   brand_core: string,
      *   compact_brand: string,
      *   compact_brand_alt: string,
+     *   phonetic_brand: string,
      *   first_word: string,
      *   first_word_alt: string,
      *   strengths: array<int, string>,
@@ -3402,15 +3561,14 @@ class Opd_prescription extends BaseController
         $normForm = $this->normalizeMedicineFormulation($detectedForm, $rawName);
 
         // 4. Extract strength numbers (e.g. 500, 625, 1.2, 40, 0.5) and convert GM/G to mg equivalents
-        // Ignore pure volume (ML) when extracting active drug strength unless no other unit exists
-        preg_match_all('/(\d+(?:\.\d+)?)\s*(MG|GM|G|MCG|ML|IU|%)?\b/i', $name, $sm, PREG_SET_ORDER);
+        // Do not treat alphanumeric short brands like "O2" or "B12" or "D3" as standalone strength numbers
+        preg_match_all('/(?<![A-Z])(\d+(?:\.\d+)?)\s*(MG|GM|G|MCG|ML|IU|%)?\b/i', $name, $sm, PREG_SET_ORDER);
         $strengths = [];
         $strengthsMg = [];
         foreach ($sm as $match) {
             $numStr = (string) $match[1];
             $unit   = strtoupper(trim((string) ($match[2] ?? '')));
             if ($unit === 'ML' && $normForm === 'IV FLUID') {
-                // For IV fluids like "METROGYL 50 ML", 50 ML is bottle volume, not mg strength
                 continue;
             }
             $strengths[] = $numStr;
@@ -3426,8 +3584,8 @@ class Opd_prescription extends BaseController
         $strengths = array_values(array_unique($strengths));
         $strengthsMg = array_values(array_unique($strengthsMg));
 
-        // 5. Extract brand core (remove numbers/units and pure release modifiers like SR/ER/XR/DT/FORTE/IV)
-        $brandCore = preg_replace('/[\s\-]*\d+(?:\.\d+)?\s*(?:MG|GM|G|MCG|ML|IU|%)?\b.*$/i', '', $name);
+        // 5. Extract brand core (remove standalone numbers/units and pure release modifiers like SR/ER/XR/DT/FORTE/IV)
+        $brandCore = preg_replace('/[\s\-]+\d+(?:\.\d+)?\s*(?:MG|GM|G|MCG|ML|IU|%)?\b.*$/i', '', $name);
         $brandCore = trim((string) $brandCore, " \t\n\r\0\x0B-_/.");
         $brandCore = preg_replace('/\s+\b(SR|ER|XR|CR|PR|MR|OD|DT|MD|DS|LA|RETARD|FORTE|INSTA|JUNIOR|KID|PAED|IV|IM)\b$/i', '', (string) $brandCore) ?? (string) $brandCore;
         $brandCore = trim((string) $brandCore, " \t\n\r\0\x0B-_/.");
@@ -3440,22 +3598,38 @@ class Opd_prescription extends BaseController
         $firstWordAlt = $firstWord;
         if (strlen($firstWord) >= 6 && str_ends_with($firstWord, 'INE')) {
             $firstWordAlt = substr($firstWord, 0, -1);
+        } elseif (preg_match('/G[EIY]/i', $firstWord)) {
+            $firstWordAlt = (string) preg_replace('/G(?=[EIY])/i', 'J', $firstWord);
+        } elseif (preg_match('/J[EIY]/i', $firstWord)) {
+            $firstWordAlt = (string) preg_replace('/J(?=[EIY])/i', 'G', $firstWord);
         }
 
         $compactBrand = strtoupper((string) preg_replace('/[^A-Z0-9]/i', '', $brandCore));
         $compactBrandAlt = $compactBrand;
         if ($firstWordAlt !== $firstWord && str_starts_with($compactBrand, $firstWord)) {
             $compactBrandAlt = $firstWordAlt . substr($compactBrand, strlen($firstWord));
+        } elseif (strlen($compactBrand) >= 6 && str_ends_with($compactBrand, 'E')) {
+            $compactBrandAlt = substr($compactBrand, 0, -1);
         }
 
+        $phoneticBrand = $this->normalizeBrandPhonetic($compactBrand);
+
         $candidates = [];
-        // Put hyphenated suffix variant first if brandCore has a short suffix like "CEFTAS O" -> "CEFTAS-O"
         if (preg_match('/^([A-Z]{3,})\s+([A-Z0-9]{1,3})$/i', $brandCore, $bm)) {
             $candidates[] = $bm[1] . '-' . $bm[2];
             $candidates[] = $bm[1] . ' ' . $bm[2];
         } elseif (preg_match('/^([A-Z]{3,})-([A-Z0-9]{1,3})$/i', $brandCore, $bm)) {
             $candidates[] = $bm[1] . '-' . $bm[2];
             $candidates[] = $bm[1] . ' ' . $bm[2];
+        }
+
+        // If 2 words like "SUPER SPASE", also add joined/de-spaced candidate "SUPERSPAS" / "SUPERSPASE"
+        if (count($words) === 2 && strlen($words[0]) >= 3 && strlen($words[1]) >= 3) {
+            $joined = $words[0] . $words[1];
+            $candidates[] = $joined;
+            if (str_ends_with(strtoupper($joined), 'E')) {
+                $candidates[] = substr($joined, 0, -1);
+            }
         }
 
         $normUnits = preg_replace_callback('/(\d+(?:\.\d+)?)\s*(GM|G|MG|MCG|ML)\b/i', static function (array $m): string {
@@ -3474,21 +3648,22 @@ class Opd_prescription extends BaseController
         if ($brandCore !== '') {
             $candidates[] = $brandCore;
         }
-        if ($firstWordAlt !== $firstWord && strlen($firstWordAlt) >= 3) {
+        if ($firstWordAlt !== $firstWord && strlen($firstWordAlt) >= 2) {
             $candidates[] = $firstWordAlt . (! empty($strengths) ? (' ' . $strengths[0]) : '');
             $candidates[] = $firstWordAlt;
         }
-        if (strlen($firstWord) >= 3) {
+        if (strlen($firstWord) >= 2) {
             $candidates[] = $firstWord;
         }
 
-        $candidates = array_values(array_unique(array_filter(array_map('trim', $candidates), static fn(string $c): bool => strlen($c) >= 3)));
+        $candidates = array_values(array_unique(array_filter(array_map('trim', $candidates), static fn(string $c): bool => strlen($c) >= 2)));
 
         return [
             'clean_name'        => $name,
             'brand_core'        => $brandCore,
             'compact_brand'     => $compactBrand,
             'compact_brand_alt' => $compactBrandAlt,
+            'phonetic_brand'    => $phoneticBrand,
             'first_word'        => $firstWord,
             'first_word_alt'    => $firstWordAlt,
             'strengths'         => $strengths,
@@ -3603,17 +3778,21 @@ class Opd_prescription extends BaseController
         }
         // Strip leading route prefixes like "I.V. ", "IV ", "I.M. ", "IM "
         $text = preg_replace('/^(?:I\.?V\.?|I\.?M\.?|S\.?C\.?)\s+/i', '', $text) ?? $text;
-        // Strip formulation suffixes and strengths
-        $text = preg_replace('/[\s\-]*\d+(?:\.\d+)?\s*(?:MG|GM|G|MCG|ML|IU|%)?\b.*$/i', '', $text) ?? $text;
-        $text = preg_replace('/\s+\b(TABLET|TABLETS|TAB|CAPSULE|CAPSULES|CAP|INJECTION|INJ|SYRUP|SYR|SYP|SUSPENSION|SUSP|CREAM|OINTMENT|OINT|GEL|DROPS|DROP|LOTION|SPRAY|INHALER|RESPULES|SACHET|POWDER|SOAP|ORAL|SOLUTION|SOLN|SR|ER|XR|CR|PR|MR|OD|DT|MD|DS|LA|RETARD|FORTE|INSTA|IV|IM)\b.*$/i', '', $text) ?? $text;
+        // Strip PharmEasy/packaging suffixes like "Strip Of 15 Tablets", "Ampoule Of 2Ml Injection", "Bottle Of 200Ml..."
+        $text = preg_replace('/\s+\b(STRIP|BOTTLE|AMPOULE|VIAL|PACK|BOX|TUBE|SACHET|JAR)\s+OF\b.*$/i', '', $text) ?? $text;
+        $text = preg_replace('/\s+\b(LEMON|ORANGE|MINT|MANGO|STRAWBERRY|MIXED FRUIT|SUGAR FREE|FLAVOUR|FLAVOR)\b.*$/i', '', $text) ?? $text;
+        // Strip formulation suffixes and standalone strengths (preserve short alphanumeric brands like O2)
+        $text = preg_replace('/[\s\-]+\d+(?:\.\d+)?\s*(?:MG|GM|G|MCG|ML|IU|%)?\b.*$/i', '', $text) ?? $text;
+        $text = preg_replace('/\s+\b(TABLET|TABLETS|TAB|CAPSULE|CAPSULES|CAP|INJECTION|INJ|SYRUP|SYR|SYP|SUSPENSION|SUSP|CREAM|OINTMENT|OINT|GEL|DROPS|DROP|LOTION|SPRAY|INHALER|RESPULES|SACHET|POWDER|SOAP|ORAL|SOLUTION|SOLN|SR|ER|XR|CR|PR|MR|OD|DT|MD|DS|LA|RETARD|FORTE|INSTA|IV|IM|RF)\b.*$/i', '', $text) ?? $text;
         return strtoupper((string) preg_replace('/[^A-Z0-9]/i', '', trim($text)));
     }
 
     /**
-     * 3-Tier Drug Master Lookup:
+     * 4-Tier Drug Master Lookup:
      *   Tier 1: Local HMS Pharmacy Drug Master (`med_product_master`) — ABDM-verified rows prioritized
      *   Tier 2: Live ABDM Bridge Drug Master API (`/v3/drugs/autocomplete` & `/v3/drugs/detail`)
-     *   Tier 3: Local unverified `med_product_master` / `opd_med_master` fallback
+     *   Tier 3: Live Web Indian Drug Catalog (`queryWebIndianDrugCatalog`) + ABDM SNOMED cross-mapping
+     *   Tier 4: Local unverified `med_product_master` / `opd_med_master` fallback
      *
      * @return array<string, string>
      */
@@ -3626,13 +3805,14 @@ class Opd_prescription extends BaseController
         string $explicitType = 'brand'
     ): array {
         $parsed = $this->parseOpdDrugSearchQuery($rawName, $formulation);
-        $firstWord    = $parsed['first_word'];
-        $firstWordAlt = $parsed['first_word_alt'];
-        $compactBrand = $parsed['compact_brand'];
-        $compactAlt   = $parsed['compact_brand_alt'];
-        $strengths    = $parsed['strengths'];
-        $strengthsMg  = $parsed['strengths_mg'];
-        $targetForm   = $parsed['formulation'];
+        $firstWord     = $parsed['first_word'];
+        $firstWordAlt  = $parsed['first_word_alt'];
+        $compactBrand  = $parsed['compact_brand'];
+        $compactAlt    = $parsed['compact_brand_alt'];
+        $phoneticBrand = $parsed['phonetic_brand'];
+        $strengths     = $parsed['strengths'];
+        $strengthsMg   = $parsed['strengths_mg'];
+        $targetForm    = $parsed['formulation'];
 
         $bestMatch = null;
         $unverifiedFallbackMatch = null;
@@ -3672,11 +3852,11 @@ class Opd_prescription extends BaseController
         }
 
         // 1. Check Local HMS Pharmacy Drug Master (`med_product_master`)
-        if ($bestMatch === null && strlen($firstWord) >= 3 && $this->db->tableExists('med_product_master')) {
+        if ($bestMatch === null && strlen($firstWord) >= 2 && $this->db->tableExists('med_product_master')) {
             $builder = $this->db->table('med_product_master')
                 ->groupStart()
                 ->like('item_name', $firstWord, 'after');
-            if ($firstWordAlt !== $firstWord && strlen($firstWordAlt) >= 3) {
+            if ($firstWordAlt !== $firstWord && strlen($firstWordAlt) >= 2) {
                 $builder->orLike('item_name', $firstWordAlt, 'after');
             }
             $builder->groupEnd()
@@ -3699,12 +3879,13 @@ class Opd_prescription extends BaseController
                     continue;
                 }
 
-                $candCompact = $this->extractCandidateCompactBrand($pDisp ?: $pName);
-                if ($candCompact === '' || ($candCompact !== $compactBrand && $candCompact !== $compactAlt)) {
+                $candCompact  = $this->extractCandidateCompactBrand($pDisp ?: $pName);
+                $candPhonetic = $this->normalizeBrandPhonetic($candCompact);
+                if ($candCompact === '' || ($candCompact !== $compactBrand && $candCompact !== $compactAlt && ($phoneticBrand === '' || $candPhonetic !== $phoneticBrand))) {
                     continue;
                 }
 
-                $score = 600;
+                $score = ($candCompact === $compactBrand || $candCompact === $compactAlt) ? 600 : 560;
                 $isComboGen = (stripos($pGen, ' and ') !== false || strpos($pGen, '+') !== false || strpos($pGen, '&') !== false);
                 if (strlen($compactBrand) === strlen($firstWord) && ! $isComboGen) {
                     $score += 80;
@@ -3737,7 +3918,6 @@ class Opd_prescription extends BaseController
                 }
             }
 
-            // Use local ABDM-verified row immediately ONLY if it also matches the requested strength (when a strength is specified)
             if ($bestVerifiedPharm !== null && $bestVerifiedStrengthMatched && $bestVerifiedScore >= 600) {
                 $pName   = trim((string) ($bestVerifiedPharm['item_name'] ?? ''));
                 $pDisp   = trim((string) ($bestVerifiedPharm['abdm_drug_display'] ?? '')) ?: $pName;
@@ -3822,13 +4002,19 @@ class Opd_prescription extends BaseController
                         continue;
                     }
 
-                    $candCompact = $this->extractCandidateCompactBrand($dName ?: $bName);
+                    $candCompact  = $this->extractCandidateCompactBrand($dName ?: $bName);
+                    $candPhonetic = $this->normalizeBrandPhonetic($candCompact);
                     $score = 0;
 
+                    $isComboCand = (stripos($gName, ' and ') !== false || strpos($gName, '+') !== false);
                     if ($candCompact !== '' && ($candCompact === $compactBrand || $candCompact === $compactAlt)) {
                         $score += 650;
-                    } elseif ($candCompact !== '' && (str_starts_with($candCompact, $compactBrand) || str_starts_with($candCompact, $compactAlt)) && strlen($compactBrand) >= 5) {
+                    } elseif ($candPhonetic !== '' && $phoneticBrand !== '' && $candPhonetic === $phoneticBrand) {
+                        $score += 610;
+                    } elseif (! $isComboCand && $candCompact !== '' && (str_starts_with($candCompact, $compactBrand) || str_starts_with($candCompact, $compactAlt)) && strlen($compactBrand) >= 5) {
                         $score += 420;
+                    } elseif (! $isComboCand && $candPhonetic !== '' && $phoneticBrand !== '' && str_starts_with($candPhonetic, $phoneticBrand) && strlen($phoneticBrand) >= 5) {
+                        $score += 400;
                     } else {
                         continue;
                     }
@@ -3848,7 +4034,6 @@ class Opd_prescription extends BaseController
                     }
                 }
 
-                // Stop early only if we got an exact brand match AND strength/formulation match
                 if ($bestBridgeScore >= (empty($strengths) ? 750 : 900)) {
                     break;
                 }
@@ -3898,22 +4083,41 @@ class Opd_prescription extends BaseController
                     'route'             => $route,
                     'matched_item_name' => $disp,
                     'provider'          => 'abdm-drug-master',
-                    'match_confidence'  => $bestBridgeScore >= 650 ? 'exact' : 'close',
+                    'match_confidence'  => $bestBridgeScore >= 600 ? 'exact' : 'close',
                     'message'           => 'Matched from ABDM Drug Master (' . $disp . ')',
                 ];
 
-                // Also cache into local `med_product_master` if not already present
                 $this->cacheAbdmDrugIntoPharmacyMaster($bestBridgeItem, $itForm ?: $targetForm);
             }
         }
 
-        // 3. Fallback to local match or existing OPD Medicine Master (`opd_med_master`)
+        // 3. Tier 3: Live Web Indian Drug Catalog fallback (covers nutraceuticals, newer brands & phonetic typos like NERVIGEN / TRICIUM ACTIVE / MERABAT 50 / SUPER SPASE / SETFLOW)
+        if ($bestMatch === null && $unverifiedFallbackMatch === null) {
+            $webMatches = $this->queryWebIndianDrugCatalog($rawName, $targetForm, 10);
+            if (! empty($webMatches)) {
+                $topWeb = $webMatches[0];
+                $bestMatch = [
+                    'genericname'       => (string) ($topWeb['generic_name'] ?? ''),
+                    'company_name'      => (string) ($topWeb['company_name'] ?? ''),
+                    'formulation'       => (string) (($topWeb['formulation'] ?? '') ?: $targetForm),
+                    'snomed_code'       => (string) ($topWeb['snomed_code'] ?? ''),
+                    'route'             => (string) ($topWeb['route'] ?? ''),
+                    'matched_item_name' => (string) ($topWeb['display_name'] ?? $rawName),
+                    'web_substitutes'   => (string) ($topWeb['substitutes'] ?? ''),
+                    'provider'          => 'web-drug-catalog',
+                    'match_confidence'  => 'close',
+                    'message'           => 'Matched from Web Drug Catalog (' . ($topWeb['display_name'] ?? $rawName) . ')',
+                ];
+            }
+        }
+
+        // 4. Fallback to local match or existing OPD Medicine Master (`opd_med_master`)
         if ($bestMatch === null && $unverifiedFallbackMatch !== null) {
             unset($unverifiedFallbackMatch['score']);
             $bestMatch = $unverifiedFallbackMatch;
         }
 
-        if ($bestMatch === null && strlen($firstWord) >= 3) {
+        if ($bestMatch === null && strlen($firstWord) >= 2) {
             $opdTable = $this->findExistingTable(['opd_med_master']);
             if ($opdTable !== null) {
                 $opdBuilder = $this->db->table($opdTable)
@@ -3960,17 +4164,294 @@ class Opd_prescription extends BaseController
         }
 
         // Compute real Substitute brand names sharing the same composition (`salt_name`)
-        $substitutes = $this->findSubstituteBrandsForComposition(
-            (string) ($bestMatch['genericname'] ?? ''),
-            (string) ($bestMatch['matched_item_name'] ?? ''),
-            $firstWord,
-            $fetchGatewaySubstitutes
-        );
+        $substitutes = trim((string) ($bestMatch['web_substitutes'] ?? ''));
+        unset($bestMatch['web_substitutes']);
+        if ($substitutes === '') {
+            $substitutes = $this->findSubstituteBrandsForComposition(
+                (string) ($bestMatch['genericname'] ?? ''),
+                (string) ($bestMatch['matched_item_name'] ?? ''),
+                $firstWord,
+                $fetchGatewaySubstitutes
+            );
+        }
 
         $bestMatch['salt_name']          = $substitutes;
         $bestMatch['dosage_restriction'] = '';
 
         return $bestMatch;
+    }
+
+    /**
+     * Clean verbose synonym-separated salt strings from online Indian drug catalogs
+     * e.g. "Vitamin B12 / Mecobalamin / Cynocobalamin / Methylcobalamin(1500.0 Mcg)+Nicotinamide(12.0 Mg)"
+     * -> "Methylcobalamin (1500 mcg) + Nicotinamide (12 mg)"
+     */
+    private function cleanWebDrugComposition(string $rawComp): string
+    {
+        $rawComp = trim($rawComp);
+        if ($rawComp === '') {
+            return '';
+        }
+
+        $parts = explode('+', $rawComp);
+        $cleanedParts = [];
+        foreach ($parts as $part) {
+            $part = trim($part);
+            if ($part === '') {
+                continue;
+            }
+            $strength = '';
+            if (preg_match('/\(([^)]+)\)\s*$/', $part, $sm)) {
+                $strength = trim((string) $sm[1]);
+                // Clean ".0 " in strengths e.g. "1500.0 Mcg" -> "1500 mcg"
+                $strength = preg_replace('/\.0+\b/', '', $strength) ?? $strength;
+                $strength = preg_replace_callback('/\b(Mg|Mcg|Gm|Ml|Iu)\b/i', static function (array $m): string {
+                    $u = strtolower($m[1]);
+                    return $u === 'iu' ? 'IU' : $u;
+                }, $strength) ?? $strength;
+                $part = trim(substr($part, 0, -strlen($sm[0])));
+            }
+
+            // If slash-separated synonyms exist (e.g. "Vitamin B12 / Mecobalamin / Cynocobalamin / Methylcobalamin"),
+            // pick the most specific clinical name (prefer Methylcobalamin, Cholecalciferol, Folic Acid, Dicyclomine)
+            if (strpos($part, '/') !== false) {
+                $syns = array_values(array_filter(array_map('trim', explode('/', $part))));
+                $chosen = end($syns) ?: $part;
+                foreach ($syns as $syn) {
+                    if (preg_match('/^(Methylcobalamin|Cholecalciferol|Folic Acid|Dicyclomine|Paracetamol)$/i', $syn)) {
+                        $chosen = $syn;
+                        break;
+                    }
+                }
+                $part = $chosen;
+            }
+
+            $part = ucwords(strtolower($part));
+            $cleanedParts[] = $strength !== '' ? ($part . ' (' . $strength . ')') : $part;
+        }
+
+        return implode(' + ', $cleanedParts);
+    }
+
+    /**
+     * Live Web Indian Drug Catalog lookup (PharmEasy API) with phonetic/fuzzy brand verification
+     * and automatic ABDM Drug Master SNOMED CT cross-mapping.
+     *
+     * @return array<int, array<string, string>>
+     */
+    private function queryWebIndianDrugCatalog(string $rawName, string $targetForm = '', int $limit = 8): array
+    {
+        $parsed = $this->parseOpdDrugSearchQuery($rawName, $targetForm);
+        $compactBrand  = $parsed['compact_brand'];
+        $compactAlt    = $parsed['compact_brand_alt'];
+        $phoneticBrand = $parsed['phonetic_brand'];
+        $firstWord     = $parsed['first_word'];
+        $firstWordAlt  = $parsed['first_word_alt'];
+        $strengths     = $parsed['strengths'];
+        $strengthsMg   = $parsed['strengths_mg'];
+        $normForm      = $parsed['formulation'];
+        $skeletonBrand = $this->extractConsonantSkeleton($compactBrand);
+        $skeletonFirst = $this->extractConsonantSkeleton($firstWord);
+
+        if (strlen($compactBrand) < 2) {
+            return [];
+        }
+
+        $formHint = match ($normForm) {
+            'INJ'      => 'Inj',
+            'IV FLUID' => 'Infusion',
+            'SYR'      => 'Syrup',
+            'CAP'      => 'Cap',
+            'TAB'      => 'Tab',
+            'DROPS'    => 'Drops',
+            'CREAM'    => 'Cream',
+            'GEL'      => 'Gel',
+            'OINT'     => 'Ointment',
+            default    => '',
+        };
+
+        $searchQueries = [];
+        $searchQueries[] = trim($parsed['clean_name'] . ($formHint !== '' ? (' ' . $formHint) : ''));
+        if ($firstWordAlt !== $firstWord) {
+            $searchQueries[] = trim($firstWordAlt . ($formHint !== '' ? (' ' . $formHint) : ''));
+        }
+        // If 2 words like "SUPER SPASE", also query joined "SUPERSPAS Inj"
+        foreach ($parsed['candidates'] as $cand) {
+            if (! str_contains($cand, ' ') && strlen($cand) >= 5 && strtoupper($cand) !== $firstWord) {
+                $searchQueries[] = trim($cand . ($formHint !== '' ? (' ' . $formHint) : ''));
+            }
+        }
+        $searchQueries = array_slice(array_values(array_unique(array_filter($searchQueries))), 0, 3);
+
+        $scoredResults = [];
+
+        foreach ($searchQueries as $sq) {
+            $cacheKey = 'opd_web_drug_pe_' . md5(mb_strtolower($sq));
+            $products = null;
+            try {
+                $cached = cache($cacheKey);
+                if (is_array($cached)) {
+                    $products = $cached;
+                }
+            } catch (\Throwable $e) {
+            }
+
+            if ($products === null) {
+                try {
+                    $url = 'https://pharmeasy.in/api/search/search/?intent_id=1&q=' . rawurlencode($sq) . '&page=1';
+                    $ch = curl_init($url);
+                    curl_setopt_array($ch, [
+                        CURLOPT_RETURNTRANSFER => true,
+                        CURLOPT_FOLLOWLOCATION => true,
+                        CURLOPT_TIMEOUT        => 6,
+                        CURLOPT_CONNECTTIMEOUT => 3,
+                        CURLOPT_SSL_VERIFYPEER => false,
+                        CURLOPT_USERAGENT      => 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36',
+                        CURLOPT_HTTPHEADER     => ['Accept: application/json'],
+                    ]);
+                    $body = (string) curl_exec($ch);
+                    $code = (int) curl_getinfo($ch, CURLINFO_HTTP_CODE);
+                    curl_close($ch);
+
+                    if ($code === 200 && $body !== '') {
+                        $json = json_decode($body, true);
+                        $products = is_array($json['data']['products'] ?? null) ? $json['data']['products'] : [];
+                        if (! empty($products)) {
+                            try {
+                                cache()->save($cacheKey, $products, 86400 * 7);
+                            } catch (\Throwable $e) {
+                            }
+                        }
+                    } else {
+                        $products = [];
+                    }
+                } catch (\Throwable $e) {
+                    $products = [];
+                }
+            }
+
+            if (empty($products)) {
+                continue;
+            }
+
+            // Group substitute brands by composition id inside this product list
+            $subsByCompId = [];
+            foreach ($products as $p) {
+                $cId = (string) ($p['compositions'][0]['id'] ?? '');
+                $bRaw = trim((string) ($p['consumerBrandName'] ?? ''));
+                if ($cId !== '' && $bRaw !== '') {
+                    $subsByCompId[$cId][] = ucwords(strtolower($bRaw));
+                }
+            }
+
+            foreach ($products as $p) {
+                $pName = trim((string) ($p['name'] ?? ''));
+                $pBrand = trim((string) ($p['consumerBrandName'] ?? ''));
+                $pMfg   = trim((string) ($p['manufacturer'] ?? ''));
+                $compRaw = trim((string) ($p['compositions'][0]['name'] ?? $p['moleculeName'] ?? ''));
+                $compId  = (string) ($p['compositions'][0]['id'] ?? '');
+                if ($pName === '' || $compRaw === '') {
+                    continue;
+                }
+
+                $candCompact   = $this->extractCandidateCompactBrand($pName);
+                $brandCompact  = strtoupper((string) preg_replace('/[^A-Z0-9]/i', '', $pBrand));
+                $candPhonetic  = $this->normalizeBrandPhonetic($candCompact);
+                $brandPhonetic = $this->normalizeBrandPhonetic($brandCompact);
+                $candSkeleton  = $this->extractConsonantSkeleton($candCompact);
+                $brandSkeleton = $this->extractConsonantSkeleton($brandCompact);
+
+                $score = 0;
+                if ($candCompact === $compactBrand || $candCompact === $compactAlt || $brandCompact === $compactBrand || $brandCompact === $compactAlt) {
+                    $score = 650;
+                } elseif ($phoneticBrand !== '' && ($candPhonetic === $phoneticBrand || $brandPhonetic === $phoneticBrand)) {
+                    $score = 620;
+                } elseif ($phoneticBrand !== '' && (str_starts_with($candPhonetic, $phoneticBrand) || str_starts_with($brandPhonetic, $phoneticBrand)) && strlen($phoneticBrand) >= 5) {
+                    $score = 540;
+                } elseif (strlen($skeletonBrand) >= 4 && ($candSkeleton === $skeletonBrand || $brandSkeleton === $skeletonBrand || $brandSkeleton === $skeletonFirst)) {
+                    // Consonant skeleton match (e.g. MERABAT -> MRBT == MIRABET -> MRBT)
+                    $lev = levenshtein($phoneticBrand, $brandPhonetic ?: $candPhonetic);
+                    if ($lev <= 2) {
+                        $score = 520 - ($lev * 20);
+                    }
+                } elseif (strlen($phoneticBrand) >= 5) {
+                    $targetCmp = $brandPhonetic ?: $candPhonetic;
+                    $lev = levenshtein(substr($phoneticBrand, 0, strlen($targetCmp)), $targetCmp);
+                    if ($lev <= 1 && strlen($targetCmp) >= 5) {
+                        $score = 480;
+                    }
+                }
+
+                if ($score <= 0) {
+                    continue;
+                }
+
+                $cleanGen = $this->cleanWebDrugComposition($compRaw);
+                if ($cleanGen === '') {
+                    continue;
+                }
+
+                $score += $this->scoreCandidateStrengthMatch($pName, $cleanGen, $strengths, $strengthsMg);
+                $pForm = $this->normalizeMedicineFormulation('', $pName . ' ' . (string) ($p['measurementUnit'] ?? ''));
+                $score += $this->scoreFormulationCompatibility($normForm, $pForm, $pName);
+
+                // Collect substitute brands from the same composition ID
+                $subList = [];
+                foreach ($subsByCompId[$compId] ?? [] as $sb) {
+                    if (strcasecmp($sb, $pBrand) !== 0 && ! in_array($sb, $subList, true)) {
+                        $subList[] = $sb;
+                    }
+                }
+
+                $scoredResults[] = [
+                    'score'        => $score,
+                    'display_name' => $pName,
+                    'brand_name'   => $pBrand !== '' ? ucwords(strtolower($pBrand)) : $pName,
+                    'generic_name' => $cleanGen,
+                    'formulation'  => $pForm ?: $normForm,
+                    'company_name' => $pMfg !== '' ? ucwords(strtolower($pMfg)) : '',
+                    'substitutes'  => implode(', ', array_slice($subList, 0, 5)),
+                    'snomed_code'  => '',
+                    'route'        => '',
+                ];
+            }
+
+            if (! empty($scoredResults)) {
+                usort($scoredResults, static fn(array $a, array $b): int => $b['score'] <=> $a['score']);
+                if ($scoredResults[0]['score'] >= 600) {
+                    break;
+                }
+            }
+        }
+
+        if (empty($scoredResults)) {
+            return [];
+        }
+
+        usort($scoredResults, static fn(array $a, array $b): int => $b['score'] <=> $a['score']);
+        $topResults = array_slice($scoredResults, 0, $limit);
+
+        // Cross-check the top match against ABDM Bridge Drug Master by corrected brand or generic name to enrich SNOMED CT code
+        $top = &$topResults[0];
+        if ($top['snomed_code'] === '' && $top['brand_name'] !== '') {
+            $abdmCheck = $this->queryAbdmBridgeDrugAutocomplete($top['brand_name'], 'brand', 5);
+            if (empty($abdmCheck)) {
+                $firstGenericSalt = trim((string) preg_replace('/\s*\([^)]*\).*$/', '', explode('+', $top['generic_name'])[0] ?? ''));
+                if (strlen($firstGenericSalt) >= 4 && ! str_contains($top['generic_name'], '+')) {
+                    $abdmCheck = $this->queryAbdmBridgeDrugAutocomplete($firstGenericSalt, 'generic', 5);
+                }
+            }
+            foreach ($abdmCheck as $ait) {
+                $aId = trim((string) ($ait['identifier'] ?? ''));
+                if ($aId !== '' && preg_match('/^\d{5,22}$/', $aId)) {
+                    $top['snomed_code'] = $aId;
+                    break;
+                }
+            }
+        }
+        unset($top);
+
+        return $topResults;
     }
 
     /**
@@ -4089,13 +4570,11 @@ class Opd_prescription extends BaseController
 
         $addBrand = static function (string $rawBrand) use (&$brands, $currentBrandUpper, $genericName): void {
             $clean = trim($rawBrand);
-            // Strip parenthetical generic e.g. "Dolo (paracetamol) 650 mg oral tablet" -> "Dolo"
             $clean = preg_replace('/\s*\([^)]*\).*$/', '', $clean) ?? $clean;
-            // Strip trailing dosage & formulation words
             $clean = preg_replace('/\s+\d+(?:\.\d+)?\s*(?:mg|g|gm|mcg|ml|iu|%).*$/i', '', $clean) ?? $clean;
             $clean = preg_replace('/\s+\b(tablet|tablets|tab|capsule|capsules|cap|injection|inj|syrup|syr|syp|suspension|susp|cream|ointment|oint|gel|drops|drop|oral|solution)\b.*$/i', '', $clean) ?? $clean;
             $clean = trim($clean, " \t\n\r\0\x0B-_/.");
-            if ($clean === '' || strlen($clean) < 3) {
+            if ($clean === '' || strlen($clean) < 2) {
                 return;
             }
             $upper = strtoupper($clean);

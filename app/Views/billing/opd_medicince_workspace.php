@@ -12,7 +12,8 @@
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="coding_missing">SNOMED/ATC Missing</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="snomed_missing">SNOMED Missing</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="atc_missing">ATC Missing</button>
-                        <button type="button" class="btn btn-success btn-sm" id="btn_med_bulk_sync_salt" title="Bulk update missing Generic/Salt, Substitute, Company &amp; SNOMED from Pharmacy &amp; ABDM Drug Master">Update Salt (Drug Master)</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="unused">Unused Medicine</button>
+                        <button type="button" class="btn btn-success btn-sm" id="btn_med_bulk_sync_salt" title="Bulk update blank Generic/Salt for Used &gt; 0 medicines from Drug Master">Update Salt (Drug Master)</button>
                         <button type="button" class="btn btn-outline-primary btn-sm" id="btn_med_export">Export</button>
                         <button type="button" class="btn btn-outline-danger btn-sm" id="btn_med_check_duplicates">Check Duplicates</button>
                         <button type="button" class="btn btn-warning btn-sm" id="btn_med_add_mode">Add Medicine</button>
@@ -597,6 +598,8 @@
         summary = summary || {};
         var total = parseInt(summary.total || 0, 10);
         var genericMissing = parseInt(summary.generic_missing || 0, 10);
+        var usedGenericMissing = parseInt(summary.used_generic_missing || 0, 10);
+        var unusedCount = parseInt(summary.unused_count || 0, 10);
         var codingMissing = parseInt(summary.coding_missing || 0, 10);
         var snomedMissing = parseInt(summary.snomed_missing || 0, 10);
         var atcMissing = parseInt(summary.atc_missing || 0, 10);
@@ -604,10 +607,10 @@
 
         var html = ''
             + '<span class="badge bg-light text-dark border me-1">Total: ' + total + '</span>'
-            + '<span class="badge bg-danger me-1">Generic/Salt Missing: ' + genericMissing + '</span>'
+            + '<span class="badge bg-danger me-1">Generic/Salt Missing (Used&gt;0): ' + usedGenericMissing + ' / ' + genericMissing + '</span>'
+            + '<span class="badge bg-secondary me-1">Unused Medicine: ' + unusedCount + '</span>'
             + '<span class="badge bg-warning text-dark me-1">SNOMED Missing: ' + snomedMissing + '</span>'
             + '<span class="badge bg-info text-dark me-1">ATC Missing: ' + atcMissing + '</span>'
-            + '<span class="badge bg-secondary me-1">Any Coding Missing: ' + codingMissing + '</span>'
             + '<span class="badge bg-dark">Both Missing: ' + bothMissing + '</span>';
 
         $('#med_coding_summary').html(html);
@@ -675,6 +678,8 @@
                             setMsg('normal', 'No record found with missing SNOMED code.');
                         } else if (activeListFilter === 'atc_missing') {
                             setMsg('normal', 'No record found with missing ATC code.');
+                        } else if (activeListFilter === 'unused') {
+                            setMsg('normal', 'No unused medicine found.');
                         } else {
                             setMsg('normal', 'No medicine found.');
                         }
@@ -690,6 +695,8 @@
                         setMsg('normal', total + ' record(s) with missing SNOMED code.');
                     } else if (activeListFilter === 'atc_missing') {
                         setMsg('normal', total + ' record(s) with missing ATC code.');
+                    } else if (activeListFilter === 'unused') {
+                        setMsg('normal', total + ' unused medicine(s) (Used = 0).');
                     } else {
                         setMsg('normal', '');
                     }
@@ -1264,7 +1271,7 @@
         if (bulkSyncRunning) {
             return;
         }
-        if (!window.confirm('Update missing Generic/Salt, Substitute brands, Company Name & SNOMED codes for OPD medicines from Pharmacy Drug Master and ABDM Drug Master API now?')) {
+        if (!window.confirm('Update blank Generic/Salt names for Used > 0 OPD medicines from Drug Master now?')) {
             return;
         }
 
