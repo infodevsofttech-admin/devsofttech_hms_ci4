@@ -2758,6 +2758,9 @@ class Opd extends BaseController
                 }
 
                 $generic = trim((string) ($med['genericname'] ?? $med['generic_name'] ?? ''));
+                if (in_array(strtoupper($generic), ['0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
+                    $generic = '';
+                }
                 $dose    = trim((string) ($med['dosage_label'] ?? $med['dosage'] ?? $med['drug_dose'] ?? $med['dose'] ?? ''));
                 $freq    = trim((string) ($med['dosage_freq_label'] ?? $med['dosage_freq'] ?? $med['drug_freq'] ?? $med['frequency'] ?? ''));
                 $when    = trim((string) ($med['dosage_when_label'] ?? $med['dosage_when'] ?? ''));
@@ -5022,7 +5025,7 @@ class Opd extends BaseController
                             foreach ($rows as $r) {
                                 $id = (int) ($r['med_id'] ?? 0);
                                 $label = trim((string) ($r['generic_fallback'] ?? ''));
-                                if ($id > 0 && $label !== '') {
+                                if ($id > 0 && $label !== '' && ! in_array(strtoupper($label), ['0', 'NA', 'N/A', 'NOT_FOUND'], true)) {
                                     $medGenericMap[$id] = $label;
                                 }
                                 $formulation = trim((string) ($r['formulation_fallback'] ?? ''));

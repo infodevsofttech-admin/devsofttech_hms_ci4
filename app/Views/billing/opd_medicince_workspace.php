@@ -13,7 +13,8 @@
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="snomed_missing">SNOMED Missing</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="atc_missing">ATC Missing</button>
                         <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="unused">Unused Medicine</button>
-                        <button type="button" class="btn btn-success btn-sm" id="btn_med_bulk_sync_salt" title="Bulk update blank Generic/Salt for Used &gt; 0 medicines from Drug Master">Update Salt (Drug Master)</button>
+                        <button type="button" class="btn btn-outline-secondary btn-sm med-filter" data-filter="salt_not_found">Salt Not Found</button>
+                        <button type="button" class="btn btn-success btn-sm" id="btn_med_bulk_sync_salt" title="Bulk update blank Generic/Salt from Drug Master (Used &gt; 0 first, then Used = 0)">Update Salt (Drug Master)</button>
                         <button type="button" class="btn btn-outline-primary btn-sm" id="btn_med_export">Export</button>
                         <button type="button" class="btn btn-outline-danger btn-sm" id="btn_med_check_duplicates">Check Duplicates</button>
                         <button type="button" class="btn btn-warning btn-sm" id="btn_med_add_mode">Add Medicine</button>
@@ -611,6 +612,7 @@
         var total = parseInt(summary.total || 0, 10);
         var genericMissing = parseInt(summary.generic_missing || 0, 10);
         var usedGenericMissing = parseInt(summary.used_generic_missing || 0, 10);
+        var saltNotFound = parseInt(summary.salt_not_found || 0, 10);
         var unusedCount = parseInt(summary.unused_count || 0, 10);
         var codingMissing = parseInt(summary.coding_missing || 0, 10);
         var snomedMissing = parseInt(summary.snomed_missing || 0, 10);
@@ -620,6 +622,7 @@
         var html = ''
             + '<span class="badge bg-light text-dark border me-1">Total: ' + total + '</span>'
             + '<span class="badge bg-danger me-1">Generic/Salt Missing (Used&gt;0): ' + usedGenericMissing + ' / ' + genericMissing + '</span>'
+            + (saltNotFound > 0 ? '<span class="badge bg-dark me-1">Salt Not Found: ' + saltNotFound + '</span>' : '')
             + '<span class="badge bg-secondary me-1">Unused Medicine: ' + unusedCount + '</span>'
             + '<span class="badge bg-warning text-dark me-1">SNOMED Missing: ' + snomedMissing + '</span>'
             + '<span class="badge bg-info text-dark me-1">ATC Missing: ' + atcMissing + '</span>'
@@ -1366,6 +1369,14 @@
                     setTimeout(function() {
                         runNextBatch(nextLastId);
                     }, 120);
+                } else if (lockedMode === 'used' && requestedMode === 'auto' && !bulkSyncStopRequested) {
+                    // Finished all Used > 0 medicines — automatically transition to Used = 0!
+                    lockedMode = 'unused';
+                    initialRemaining = 0;
+                    totalProcessed = 0;
+                    setTimeout(function() {
+                        runNextBatch(0);
+                    }, 150);
                 } else {
                     finishBulkSync('Drug Master Sync Completed');
                 }

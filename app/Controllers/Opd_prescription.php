@@ -2594,6 +2594,7 @@ class Opd_prescription extends BaseController
             'total' => 0,
             'generic_missing' => 0,
             'used_generic_missing' => 0,
+            'salt_not_found' => 0,
             'unused_count' => 0,
             'coding_missing' => 0,
             'snomed_missing' => 0,
@@ -2612,7 +2613,9 @@ class Opd_prescription extends BaseController
 
             $name = mb_strtolower(trim((string) ($row['item_name'] ?? '')));
             $generic = mb_strtolower(trim((string) ($row['genericname'] ?? '')));
-            if ($generic === '' || in_array($generic, $unclearTokens, true) || ($name !== '' && $generic === $name)) {
+            if ($generic === 'not_found') {
+                $summary['salt_not_found']++;
+            } elseif ($generic === '' || in_array($generic, $unclearTokens, true) || ($name !== '' && $generic === $name)) {
                 $summary['generic_missing']++;
                 if ($useCount > 0) {
                     $summary['used_generic_missing']++;
@@ -2787,6 +2790,8 @@ class Opd_prescription extends BaseController
 
         if ($filter === 'unused') {
             $rows = array_values(array_filter($rows, static fn(array $row): bool => (int) ($row['use_count'] ?? 0) <= 0));
+        } elseif ($filter === 'salt_not_found') {
+            $rows = array_values(array_filter($rows, static fn(array $row): bool => strcasecmp(trim((string) ($row['genericname'] ?? '')), 'NOT_FOUND') === 0));
         }
 
         if (! $showAll) {
@@ -3440,6 +3445,10 @@ class Opd_prescription extends BaseController
             $match = $this->lookupMedicineFromDrugMaster($itemName, $formulation, $rid, false);
             $newGeneric = trim((string) ($match['genericname'] ?? ''));
             if ($newGeneric === '') {
+                // Tag as NOT_FOUND so subsequent runs skip this medicine and proceed to Used=0
+                $this->db->table($table)->where('id', $rid)->update([
+                    $genericField => 'NOT_FOUND',
+                ]);
                 continue;
             }
 
